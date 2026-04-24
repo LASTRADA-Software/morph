@@ -1,0 +1,55 @@
+name: Docs
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'include/**'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'include/**'
+      - 'docs/**'
+      - '.github/workflows/docs.yml'
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-docs:
+    name: Build documentation
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y cmake ninja-build doxygen g++-14
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 14
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 14
+
+      - name: Configure (docs target only)
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DMORPH_BUILD_DOCUMENTATION=ON \
+            -DMORPH_BUILD_TESTS=OFF \
+            -DMORPH_BUILD_EXAMPLES=OFF
+
+      - name: Build documentation (fails on undocumented public symbols)
+        run: cmake --build build --target doc
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/master'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: build/html/html

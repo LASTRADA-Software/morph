@@ -1,0 +1,23 @@
+# LLVM sanitizer ignorelist for MSan.
+# Syntax: https://clang.llvm.org/docs/SanitizerSpecialCaseList.html
+#
+# morph::ModelRegistryFactory::registerModel and morph::ActionDispatcher::registerAction
+# trigger a libc++ SSO false positive: std::hash<std::string> reads the full
+# internal SSO buffer (including padding bytes) via a bulk hash. The padding is never
+# explicitly initialized by the std::string constructor, which MSan flags. This is a
+# known libc++ + MSan interaction, not a bug in user code.
+#
+# All Catch2 entries are false positives from Catch2's own internals (SSO padding
+# in ReporterRegistry, Clara option parser, and test registration machinery).
+# fun: patterns match against mangled symbol names using glob syntax.
+[memory]
+fun:*morph*ModelRegistryFactory*registerModel*
+fun:*morph*ActionDispatcher*registerAction*
+fun:*ReporterRegistry*
+fun:*RegistryHub*
+fun:*Singleton*getMutable*
+fun:*AutoReg*
+fun:*ParserRefImpl*
+fun:*Clara*Parser*
+fun:*makeCommandLineParser*
+fun:*Session*Session*

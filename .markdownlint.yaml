@@ -1,0 +1,6 @@
+default: true
+MD013:
+  line_length: 119
+  code_blocks: false
+  tables: false
+MD033: false  # inline HTML allowed in architecture docs

@@ -1,0 +1,302 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  SCCACHE_DIR: /home/runner/.cache/sccache
+  CLANG_VERSION: "20"
+
+jobs:
+  # ── Windows: MSVC + clang-cl ──────────────────────────────────────────
+  windows:
+    name: Windows / ${{ matrix.preset }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [cl-debug, cl-release, clangcl-debug, clangcl-release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: c3867e714dd3a51c272826eea77267876517ed99
+
+      - name: Export vcpkg GHA binary cache vars
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        if: matrix.preset == 'cl-debug' || matrix.preset == 'clangcl-debug'
+        run: ctest --preset ${{ matrix.preset }}
+
+  # ── Linux: GCC and Clang plain builds ────────────────────────────────
+  linux-compilers:
+    name: Linux / ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [gcc-debug, gcc-release, clang-debug, clang-release]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-compilers-${{ matrix.preset }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-compilers-${{ matrix.preset }}-
+
+      - name: Install GCC 14 and ninja
+        if: startsWith(matrix.preset, 'gcc-')
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-14 g++-14 ninja-build catch2
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 14
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 14
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
+        if: startsWith(matrix.preset, 'clang-')
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-compilers-${{ matrix.preset }}-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure (gcc)
+        if: startsWith(matrix.preset, 'gcc-')
+        run: |
+          cmake --preset ${{ matrix.preset }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Configure (clang)
+        if: startsWith(matrix.preset, 'clang-')
+        run: |
+          cmake --preset ${{ matrix.preset }} \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        if: endsWith(matrix.preset, '-debug')
+        run: ctest --preset ${{ matrix.preset }}
+
+  # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
+  linux-sanitizers:
+    name: Linux / ${{ matrix.preset }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [clang-asan, clang-tsan, clang-ubsan, clang-coverage]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-sanitizers-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-sanitizers-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} and libc++ from apt.llvm.org
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          sudo apt-get install -y libc++-${{ env.CLANG_VERSION }}-dev libc++abi-${{ env.CLANG_VERSION }}-dev
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-sanitizers-${{ matrix.preset }}-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure
+        run: |
+          cmake --preset ${{ matrix.preset }} \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: |
+          if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
+            LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
+          else
+            ctest --preset ${{ matrix.preset }}
+          fi
+
+      - name: Generate coverage report
+        if: matrix.preset == 'clang-coverage'
+        run: bash scripts/coverage.sh
+
+      - name: Upload coverage to Codecov
+        if: matrix.preset == 'clang-coverage'
+        uses: codecov/codecov-action@v5
+        with:
+          files: build/clang-coverage/coverage.lcov
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage HTML
+        if: matrix.preset == 'clang-coverage'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: build/clang-coverage/html/
+
+  # ── Valgrind (memcheck) ───────────────────────────────────────────────
+  valgrind:
+    name: Valgrind memcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-valgrind-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-valgrind-
+
+      - name: Install GCC 14, ninja, catch2, valgrind
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-14 g++-14 ninja-build catch2 valgrind
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-14 14
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 14
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-valgrind-${{ github.sha }}
+          restore-keys: sccache-valgrind-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure
+        run: cmake --preset gcc-debug -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset gcc-debug
+
+      - name: Run tests under Valgrind
+        run: |
+          valgrind \
+            --tool=memcheck \
+            --leak-check=full \
+            --show-leak-kinds=definite,indirect \
+            --errors-for-leak-kinds=definite,indirect \
+            --error-exitcode=1 \
+            --suppressions=cmake/valgrind.supp \
+            build/gcc-debug/tests/morph_tests
+
+  # ── clang-tidy static analysis ────────────────────────────────────────
+  clang-tidy:
+    name: clang-tidy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-clang-tidy-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-clang-tidy-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} and clang-tidy from apt.llvm.org
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          sudo apt-get install -y clang-tidy-${{ env.CLANG_VERSION }}
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-clang-tidy-${{ github.sha }}
+          restore-keys: sccache-clang-tidy-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure (generates compile_commands.json)
+        run: |
+          cmake --preset clang-debug \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset clang-debug
+
+      - name: Run clang-tidy on library headers and source
+        run: |
+          find include/morph src tests -name "*.cpp" -o -name "*.hpp" | \
+            grep -v '/qt/' | \
+            xargs clang-tidy-${{ env.CLANG_VERSION }} \
+              -p build/clang-debug \
+              --extra-arg=-std=c++23 \
+              --warnings-as-errors='*' \
+              2>&1 | tee clang-tidy-report.txt
+          grep -q "error:" clang-tidy-report.txt && exit 1 || exit 0
+
+      - name: Upload clang-tidy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-tidy-report
+          path: clang-tidy-report.txt

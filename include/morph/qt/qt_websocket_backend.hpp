@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+#include <QEventLoop>
+#include <QSslConfiguration>
+#include <QUrl>
+#include <QWebSocket>
+#include <morph/backend.hpp>
+#include <morph/registry.hpp>
+#include <functional>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <unordered_map>
+
+namespace morph::qt {
+
+/// @brief `IBackend` implementation that communicates with a `RemoteServer` over WebSocket.
+///
+/// All `registerModel()` and `deregisterModel()` calls are synchronous (block the
+/// calling thread via a nested `QEventLoop` until the server replies). `execute()`
+/// is asynchronous: it assigns a call-id, sends the message, and resolves the
+/// returned `Completion` when the matching reply arrives.
+///
+/// @par TLS
+/// Pass a `QSslConfiguration` to enable `wss://`. For self-signed certificates
+/// set `QSslSocket::VerifyNone` on the configuration before passing it in.
+///
+/// @par Threading
+/// Must be used from the Qt event loop thread. `execute()` and the internal
+/// message handler are both called on that thread.
+class QtWebSocketBackend : public ::morph::backend::detail::IBackend {
+public:
+    /// @brief Constructs the backend and opens a WebSocket connection to @p serverUrl.
+    ///
+    /// @param serverUrl   `ws://` or `wss://` URL of the remote `RemoteServer`.
+    /// @param dispatcher  Action dispatcher (defaults to the process-level singleton).
+    /// @param registry    Model registry (defaults to the process-level singleton).
+    /// @param tls         If non-null, enables TLS and applies this configuration.
+    explicit QtWebSocketBackend(
+        QUrl serverUrl,
+        ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
+        ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
+        std::optional<QSslConfiguration> tls = std::nullopt);
+
+    /// @brief Closes the socket and cleans up pending operations.
+    ~QtWebSocketBackend() override;
+
+    /// @brief Pumps the Qt event loop until the socket is connected or @p timeoutMs elapses.
+    ///
+    /// Must be called on the Qt event loop thread after construction.
+    ///
+    /// @param timeoutMs Maximum time to wait in milliseconds.
+    /// @return `true` if connected before the timeout, `false` otherwise.
+    bool waitForConnected(int timeoutMs = 5000);
+
+    /// @brief Sends a `register` message to the server and blocks until the reply arrives.
+    ///
+    /// @param typeId  String type-id of the model to register.
+    /// @param factory Ignored — model construction is delegated to the server.
+    /// @return `ModelId` assigned by the server.
+    /// @throws std::runtime_error if the server replies with an error or the socket is not connected.
+    ::morph::exec::detail::ModelId registerModel(
+        const std::string& typeId,
+        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override;
+
+    /// @brief Sends a `deregister` message and blocks until the server acknowledges.
+    ///
+    /// @param mid Id of the model to remove on the server.
+    void deregisterModel(::morph::exec::detail::ModelId mid) override;
+
+    /// @brief Sends an `execute` message and returns a `Completion` that resolves on reply.
+    ///
+    /// Assigns a monotonically increasing call-id so that concurrent calls can be
+    /// matched to their replies. The `Completion` callbacks are posted via @p cbExec.
+    ///
+    /// @param mid    Target model id on the server.
+    /// @param call   Bundled action; `serializeAction` and `deserializeResult` are used.
+    /// @param cbExec Executor for delivering the completion callbacks.
+    /// @return Completion resolved asynchronously when the server reply arrives.
+    ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                              ::morph::backend::detail::ActionCall call,
+                                                              ::morph::exec::IExecutor* cbExec) override;
+
+    /// @brief No-op — this backend holds no local model objects.
+    void notifyBackendChanged() override {}
+
+private:
+    /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
+    std::string sendSync(const std::string& msg);
+
+    /// @brief Slot called by `QWebSocket` when a text frame arrives.
+    void onTextMessage(const QString& message);
+
+    QWebSocket _socket;
+    bool _connected{false};
+
+    std::string _pendingReply;
+    QEventLoop* _syncLoop{nullptr};
+
+    struct PendingExecute {
+        std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
+        std::function<std::shared_ptr<void>(std::string_view)> deserialize;
+        ::morph::exec::IExecutor* cbExec;
+    };
+    uint64_t _nextCallId{0};
+    std::unordered_map<uint64_t, PendingExecute> _pending;
+    std::mutex _pendingMtx;
+};
+
+}  // namespace morph::qt

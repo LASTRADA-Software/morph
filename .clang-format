@@ -1,0 +1,19 @@
+---
+BasedOnStyle: Google
+ColumnLimit: 119
+IndentWidth: 4
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlwaysBreakTemplateDeclarations: Yes
+BraceWrapping:
+  AfterClass: false
+  AfterFunction: false
+  AfterNamespace: false
+BreakBeforeBraces: Attach
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+SpaceBeforeParens: ControlStatements
+TabWidth: 4
+UseTab: Never

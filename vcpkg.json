@@ -1,0 +1,10 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
+  "name": "async-framework",
+  "version": "0.1.0",
+  "dependencies": [
+    "glaze",
+    "catch2"
+  ],
+  "builtin-baseline": "c3867e714dd3a51c272826eea77267876517ed99"
+}

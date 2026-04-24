@@ -1,0 +1,21 @@
+# Valgrind suppressions for known false positives.
+# Catch2 v3 uses deliberate one-time allocations for its registry singletons
+# that are never freed (intentional — they live for the process lifetime).
+# Suppressing these keeps the report focused on user code.
+
+{
+   catch2_registry_singleton
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*Catch*
+}
+
+{
+   catch2_reporter_registry
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   obj:*morph_tests*
+   fun:_dl_init
+}

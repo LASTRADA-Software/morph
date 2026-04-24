@@ -1,0 +1,5 @@
+# Suppress bugprone-chained-comparison inside the tests/ directory.
+# Catch2's REQUIRE(a == b) macro expansion is parsed by clang-tidy as a
+# chained comparison. This is a false positive — not a real code issue.
+Checks: '-bugprone-chained-comparison'
+InheritParentConfig: true
