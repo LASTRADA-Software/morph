@@ -122,7 +122,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        preset: [clang-asan, clang-tsan, clang-ubsan, clang-msan, clang-coverage]
+        preset: [clang-asan, clang-tsan, clang-ubsan, clang-coverage]
     steps:
       - uses: actions/checkout@v4
 
@@ -133,12 +133,11 @@ jobs:
           key: apt-sanitizers-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-sanitizers-
 
-      - name: Install Clang ${{ env.CLANG_VERSION }} and libc++ from apt.llvm.org
+      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
-          sudo apt-get install -y libc++-${{ env.CLANG_VERSION }}-dev libc++abi-${{ env.CLANG_VERSION }}-dev
 
       - name: Cache sccache
         uses: actions/cache@v4

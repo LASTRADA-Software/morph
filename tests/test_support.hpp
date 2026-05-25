@@ -31,7 +31,7 @@ struct InlineExecutor : ::morph::exec::IExecutor {
 };
 
 /// @brief Default polling budget for `waitUntil`. Picked to cover the slowest
-///        TSan/MSan runs without making green tests visibly slow.
+///        TSan/Valgrind runs without making green tests visibly slow.
 inline constexpr std::chrono::milliseconds kDefaultWaitBudget{2000};
 
 /// @brief Default polling step for `waitUntil`.

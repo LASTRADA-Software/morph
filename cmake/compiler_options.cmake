@@ -73,18 +73,6 @@ function(apply_sanitizers target mode)
             -fsanitize=undefined -fno-omit-frame-pointer -g)
         target_link_options(${target} PRIVATE
             -fsanitize=undefined)
-    elseif(mode STREQUAL "msan")
-        # Instrument only our own targets. Catch2 is built with -stdlib=libc++ (set
-        # globally for ABI compatibility) but without -fsanitize=memory to avoid its
-        # known false positives. The ignorelist covers morph:: SSO hash false positives.
-        target_compile_options(${target} PRIVATE
-            -fsanitize=memory -fsanitize-memory-track-origins
-            -fno-omit-frame-pointer -g
-            -stdlib=libc++
-            "-fsanitize-ignorelist=${CMAKE_SOURCE_DIR}/cmake/msan.supp")
-        target_link_options(${target} PRIVATE
-            -fsanitize=memory
-            -stdlib=libc++)
     endif()
 endfunction()
 

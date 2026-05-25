@@ -100,11 +100,13 @@ struct IBackend {
 /// or surface a "backend changed" message — there is no public cancel API on
 /// `Completion` itself.
 struct BackendChangedError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
     BackendChangedError() : std::runtime_error{"backend changed before completion resolved"} {}
 };
 
 /// @brief Thrown to in-flight `Completion`s when `Bridge` is destroyed.
 struct BridgeDestroyedError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
     BridgeDestroyedError() : std::runtime_error{"bridge destroyed before completion resolved"} {}
 };
 
@@ -112,6 +114,7 @@ struct BridgeDestroyedError : std::runtime_error {
 ///        Qt WebSocket disconnect). The framework retries the call on reconnect if
 ///        the backend supports it; otherwise the GUI's `.onError(...)` runs.
 struct DisconnectedError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
     DisconnectedError() : std::runtime_error{"transport disconnected before completion resolved"} {}
 };
 
@@ -201,6 +204,7 @@ public:
     }
 
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
         std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
         {

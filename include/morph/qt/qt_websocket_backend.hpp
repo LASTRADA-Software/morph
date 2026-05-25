@@ -116,9 +116,13 @@ public:
     /// Called by `Bridge::switchBackend()` on the outgoing backend, by `~Bridge`,
     /// and internally when the socket disconnects. Late replies arriving for
     /// already-cancelled call ids are dropped silently.
+    ///
+    /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override;
 
     /// @brief Installs the handler `Bridge` uses to re-register handlers after a reconnect.
+    /// @param handler Callable invoked on the Qt thread after every successful reconnect.
+    ///                Pass `nullptr` to clear.
     void setReconnectHandler(std::function<void()> handler) override;
 
 private:

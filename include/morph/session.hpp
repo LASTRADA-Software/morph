@@ -46,6 +46,11 @@ struct IAuthorizer {
     virtual ~IAuthorizer() = default;
 
     /// @brief Returns `true` if @p ctx is allowed to invoke @p actionType on @p modelType.
+    ///
+    /// @param ctx        Per-call session attached by the client.
+    /// @param modelType  String id of the target model type.
+    /// @param actionType String id of the action being invoked.
+    /// @return `true` to allow dispatch, `false` to reject with `err|unauthorized`.
     [[nodiscard]] virtual bool authorize(const Context& ctx, std::string_view modelType,
                                          std::string_view actionType) const = 0;
 };
@@ -55,8 +60,14 @@ struct IAuthorizer {
 /// Wire it explicitly via `RemoteServer(pool, dispatcher, registry, allowAll)`
 /// for documentation, or rely on the server's default (which uses this type).
 struct AllowAllAuthorizer : IAuthorizer {
-    [[nodiscard]] bool authorize(const Context& /*ctx*/, std::string_view /*modelType*/,
-                                 std::string_view /*actionType*/) const override {
+    /// @brief Permits every call.
+    /// @param ctx        Ignored.
+    /// @param modelType  Ignored.
+    /// @param actionType Ignored.
+    /// @return Always `true`.
+    [[nodiscard]] bool authorize([[maybe_unused]] const Context& ctx,
+                                 [[maybe_unused]] std::string_view modelType,
+                                 [[maybe_unused]] std::string_view actionType) const override {
         return true;
     }
 };
@@ -81,7 +92,10 @@ inline const Context*& tlsCurrent() {
 /// @brief RAII helper that sets the thread-local `Context` for its scope.
 class ScopedContext {
 public:
+    /// @brief Installs @p ctx as the thread-local context until the scope exits.
+    /// @param ctx Context whose address is stored; must outlive this object.
     explicit ScopedContext(const Context& ctx) : _prev{tlsCurrent()} { tlsCurrent() = &ctx; }
+    /// @brief Restores the previously active thread-local context.
     ~ScopedContext() { tlsCurrent() = _prev; }
     ScopedContext(const ScopedContext&) = delete;
     ScopedContext& operator=(const ScopedContext&) = delete;

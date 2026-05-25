@@ -35,6 +35,10 @@ namespace morph::backend {
 class RemoteServer : public std::enable_shared_from_this<RemoteServer> {
 public:
     /// @brief Constructs a server backed by @p workerPool with allow-all authorization.
+    ///
+    /// @param workerPool Pool used to process messages asynchronously.
+    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
+    /// @param registry   Model factory registry; defaults to the process-level singleton.
     explicit RemoteServer(
         ::morph::exec::IExecutor& workerPool,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
@@ -267,6 +271,7 @@ public:
     void notifyBackendChanged() override {}
 
     /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    /// @param exc Exception delivered to every pending completion's error sink.
     void cancelPending(const std::exception_ptr& exc) override {
         std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
         {

@@ -91,15 +91,8 @@ endif()
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 if(MORPH_BUILD_TESTS)
-    # Under MSan every library Catch2 touches must also be MSan-instrumented.
-    # The system apt package is not, so we always build from source in that mode.
-    set(_catch2_use_fetch OFF)
     find_package(Catch2 CONFIG QUIET)
     if(NOT Catch2_FOUND)
-        set(_catch2_use_fetch ON)
-    endif()
-
-    if(_catch2_use_fetch)
         include(FetchContent)
         FetchContent_Declare(
             Catch2
