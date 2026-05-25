@@ -80,7 +80,7 @@ public:
     /// @param backend Initial backend. Ownership is transferred.
     explicit Bridge(std::unique_ptr<::morph::backend::detail::IBackend> backend)
         : _backend{std::shared_ptr<::morph::backend::detail::IBackend>(std::move(backend))} {
-        installReconnectHandler(_backend.load());
+        installReconnectHandler(_backend);
     }
 
     /// @brief Cancels every still-pending completion on the active backend.
@@ -89,7 +89,7 @@ public:
     /// server replies that arrive after destruction are no-ops because each
     /// `CompletionState::setValue`/`setException` is idempotent.
     ~Bridge() {
-        if (auto active = _backend.load()) {
+        if (auto active = loadBackend()) {
             active->cancelPending(std::make_exception_ptr(::morph::backend::BridgeDestroyedError{}));
         }
     }
@@ -110,7 +110,7 @@ public:
         binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
         std::scoped_lock lock{_mtx};
-        binding->currentId.store(_backend.load()->registerModel(binding->typeId, binding->modelFactory).v);
+        binding->currentId.store(loadBackend()->registerModel(binding->typeId, binding->modelFactory).v);
         _handlers.push_back(binding);
         return binding;
     }
@@ -122,8 +122,28 @@ public:
     /// @param binding Pre-constructed binding. Its `typeId` and `modelFactory` must be set.
     void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
         std::scoped_lock lock{_mtx};
-        binding->currentId.store(_backend.load()->registerModel(binding->typeId, binding->modelFactory).v);
+        binding->currentId.store(loadBackend()->registerModel(binding->typeId, binding->modelFactory).v);
         _handlers.push_back(binding);
+    }
+
+    /// @brief Installs a default session context applied to every call that does
+    ///        not provide one explicitly via `BridgeHandler::executeWith(...)`.
+    ///
+    /// Typical pattern: call this once after login to bind the user's principal
+    /// and locale, then every subsequent `handler.execute(action)` carries the
+    /// session automatically. Thread-safe.
+    ///
+    /// @param session The new default. Pass `{}` to clear.
+    void setDefaultSession(::morph::session::Context session) {
+        std::scoped_lock lock{_sessionMtx};
+        _defaultSession = std::move(session);
+    }
+
+    /// @brief Returns a copy of the currently installed default session. Thread-safe.
+    /// @return Snapshot of the default `Context`.
+    [[nodiscard]] ::morph::session::Context defaultSession() const {
+        std::scoped_lock lock{_sessionMtx};
+        return _defaultSession;
     }
 
     /// @brief Atomically replaces the active backend with @p newBackend.
@@ -139,25 +159,6 @@ public:
     ///       also acquire `_mtx` and would deadlock.
     ///
     /// @param newBackend Replacement backend. Ownership is transferred.
-    /// @brief Installs a default session context applied to every call that does
-    ///        not provide one explicitly via `BridgeHandler::executeWith(...)`.
-    ///
-    /// Typical pattern: call this once after login to bind the user's principal
-    /// and locale, then every subsequent `handler.execute(action)` carries the
-    /// session automatically. Thread-safe.
-    ///
-    /// @param session The new default. Pass `{}` to clear.
-    void setDefaultSession(::morph::session::Context session) {
-        std::scoped_lock lock{_sessionMtx};
-        _defaultSession = std::move(session);
-    }
-
-    /// @brief Returns a copy of the currently installed default session. Thread-safe.
-    [[nodiscard]] ::morph::session::Context defaultSession() const {
-        std::scoped_lock lock{_sessionMtx};
-        return _defaultSession;
-    }
-
     void switchBackend(std::unique_ptr<::morph::backend::detail::IBackend> newBackend) {
         auto newShared = std::shared_ptr<::morph::backend::detail::IBackend>(std::move(newBackend));
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
@@ -176,7 +177,7 @@ public:
             }
             _handlers = std::move(live);
 
-            previous = _backend.exchange(newShared);
+            previous = exchangeBackend(newShared);
             newShared->notifyBackendChanged();
         }
         installReconnectHandler(newShared);
@@ -200,7 +201,7 @@ public:
         std::scoped_lock lock{_mtx};
         uint64_t raw = binding->currentId.load();
         if (raw != 0U) {
-            _backend.load()->deregisterModel(::morph::exec::detail::ModelId{raw});
+            loadBackend()->deregisterModel(::morph::exec::detail::ModelId{raw});
         }
         auto iter = std::ranges::find_if(_handlers, [&](auto& weak) {
             auto sptr = weak.lock();
@@ -230,7 +231,7 @@ public:
                ::morph::exec::IExecutor* cbExec) {
         using R = ::morph::model::ActionTraits<Action>::Result;
 
-        auto backend = _backend.load();
+        auto backend = loadBackend();
         uint64_t raw = binding->currentId.load();
 
         auto typedState = std::make_shared<::morph::async::detail::CompletionState<R>>();
@@ -265,6 +266,19 @@ public:
     }
 
 private:
+    std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
+        std::scoped_lock lock{_backendMtx};
+        return _backend;
+    }
+
+    std::shared_ptr<::morph::backend::detail::IBackend> exchangeBackend(
+        std::shared_ptr<::morph::backend::detail::IBackend> next) {
+        std::scoped_lock lock{_backendMtx};
+        auto previous = std::move(_backend);
+        _backend = std::move(next);
+        return previous;
+    }
+
     void installReconnectHandler(const std::shared_ptr<::morph::backend::detail::IBackend>& backend) {
         if (!backend) {
             return;
@@ -276,7 +290,7 @@ private:
         backend->setReconnectHandler([this, weakBackend] {
             auto pinned = weakBackend.lock();
             std::scoped_lock lock{_mtx};
-            if (!pinned || pinned != _backend.load()) {
+            if (!pinned || pinned != loadBackend()) {
                 return;  // We've moved on to a different backend; ignore.
             }
             for (auto& weak : _handlers) {
@@ -290,7 +304,8 @@ private:
         });
     }
 
-    std::atomic<std::shared_ptr<::morph::backend::detail::IBackend>> _backend;
+    mutable std::mutex _backendMtx;
+    std::shared_ptr<::morph::backend::detail::IBackend> _backend;
     std::mutex _mtx;
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
     mutable std::mutex _sessionMtx;

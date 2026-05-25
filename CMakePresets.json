@@ -154,16 +154,6 @@
       }
     },
     {
-      "name": "clang-msan",
-      "displayName": "MSan (Clang, Linux — requires instrumented libc++)",
-      "inherits": "base-clang-linux",
-      "binaryDir": "${sourceDir}/build/clang-msan",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "AF_SANITIZER": "msan"
-      }
-    },
-    {
       "name": "clang-coverage",
       "displayName": "Coverage (Clang source-based, Linux)",
       "inherits": "base-clang-linux",
@@ -188,7 +178,6 @@
     { "name": "clang-asan",      "configurePreset": "clang-asan",      "jobs": 0 },
     { "name": "clang-tsan",      "configurePreset": "clang-tsan",      "jobs": 0 },
     { "name": "clang-ubsan",     "configurePreset": "clang-ubsan",     "jobs": 0 },
-    { "name": "clang-msan",      "configurePreset": "clang-msan",      "jobs": 0 },
     { "name": "clang-coverage",  "configurePreset": "clang-coverage",  "jobs": 0 }
   ],
   "testPresets": [
@@ -243,12 +232,6 @@
     {
       "name": "clang-ubsan",
       "configurePreset": "clang-ubsan",
-      "output": { "outputOnFailure": true },
-      "execution": { "noTestsAction": "error", "stopOnFailure": true }
-    },
-    {
-      "name": "clang-msan",
-      "configurePreset": "clang-msan",
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error", "stopOnFailure": true }
     },

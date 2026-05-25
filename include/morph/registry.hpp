@@ -80,6 +80,9 @@ struct ActionValidator {
     ///
     /// Auto-detects a `bool validate() const` member on @p action via the
     /// `morph::model::detail::HasValidate` concept. Falls back to `true`.
+    ///
+    /// @param action Draft action whose readiness is being checked.
+    /// @return `true` if the action should fire, `false` to keep collecting fields.
     static constexpr bool ready(const Action& action) {
         if constexpr (detail::HasValidate<Action>) {
             return action.validate();

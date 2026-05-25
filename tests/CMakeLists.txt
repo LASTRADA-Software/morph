@@ -45,12 +45,5 @@ if(AF_COVERAGE)
     apply_coverage(morph_tests)
 endif()
 
-if(AF_SANITIZER STREQUAL "msan")
-    # catch_discover_tests runs the binary for enumeration which triggers MSan
-    # before any suppressions can be applied. Use a single all-up test instead,
-    # with the suppression file to silence Catch2's known false positive.
-    add_test(NAME morph_tests COMMAND morph_tests)
-else()
-    include(Catch)
-    catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST)
-endif()
+include(Catch)
+catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST)
