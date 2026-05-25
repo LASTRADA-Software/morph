@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <concepts>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -30,26 +31,63 @@ struct ModelTraits;
 template <typename Action>
 struct ActionTraits;
 
+namespace detail {
+
+/// @brief Concept satisfied by actions that expose a `bool validate() const` member.
+///
+/// Drives the default `ActionValidator::ready(...)` path: if the action supplies
+/// a `validate()` method, it is called automatically; otherwise readiness defaults
+/// to `true` (matching the existing one-shot semantics).
+template <typename A>
+concept HasValidate = requires(const A& act) {
+    { act.validate() } -> std::convertible_to<bool>;
+};
+
+}  // namespace detail
+
 /// @brief Per-action validator used by `BridgeHandler::set<...>` to decide
 ///        whether the in-progress draft is ready to execute.
 ///
-/// The primary template returns `true` unconditionally, which matches the
-/// existing one-shot semantics: the first `set<>` lands and the action fires.
-/// Specialise (or use `BRIDGE_REGISTER_VALIDATOR`) when an action requires
-/// multiple fields populated before it makes sense to execute.
+/// Resolution order (highest-priority first):
+///   1. **Explicit specialisation** of `ActionValidator<Action>` — typically via
+///      `BRIDGE_REGISTER_VALIDATOR(Action, fn)`. Wins over everything.
+///   2. **`bool validate() const`** member on `Action` — picked up automatically.
+///      Co-locates the predicate with the data it inspects; preferred when you
+///      own the action type.
+///   3. **Default** — returns `true`, matching one-shot semantics (the first
+///      `set<>` lands and the action fires).
 ///
 /// Validation is intentionally a property of the **action**, not the model:
 /// different actions on the same model have different readiness requirements,
 /// and keeping the predicate next to the action keeps the GUI side oblivious
 /// to model internals.
 ///
+/// @par Example — member function
+/// @code
+/// struct FormAction {
+///     double a;
+///     double b;
+///     double c;
+///     bool validate() const { return a != 0.0 && b != 0.0 && c != 0.0; }
+/// };
+/// // No macro needed; ActionValidator<FormAction>::ready calls .validate() automatically.
+/// @endcode
+///
 /// @tparam Action Concrete action type.
 template <typename Action>
 struct ActionValidator {
     /// @brief Returns `true` if the action is in a state that should be executed.
     ///
-    /// @return `true` if ready (default); specialise to gate firing.
-    static bool ready(const Action& /*action*/) noexcept { return true; }
+    /// Auto-detects a `bool validate() const` member on @p action via the
+    /// `morph::model::detail::HasValidate` concept. Falls back to `true`.
+    static constexpr bool ready(const Action& action) {
+        if constexpr (detail::HasValidate<Action>) {
+            return action.validate();
+        } else {
+            (void)action;
+            return true;
+        }
+    }
 };
 
 namespace detail {

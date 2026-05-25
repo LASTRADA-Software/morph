@@ -1,5 +1,6 @@
 add_executable(morph_tests
     test_executor.cpp
+    test_example.cpp
     test_executor_extra.cpp
     test_strand.cpp
     test_strand_extra.cpp
@@ -21,12 +22,12 @@ add_executable(morph_tests
     test_offline_integration.cpp
     test_conflict_resolution.cpp
     test_completion_branches.cpp
-    test_task.cpp
     test_issues.cpp
     test_concurrency_invariants.cpp
     test_subscription.cpp
     test_coverage_gaps.cpp
     test_coverage_extra.cpp
+    test_server_limits.cpp
 )
 
 target_link_libraries(morph_tests

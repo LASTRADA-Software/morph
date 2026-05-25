@@ -7,11 +7,9 @@
 #include <stdexcept>
 #include <thread>
 
+#include "test_support.hpp"
 
-// Inline executor that runs callbacks immediately on the calling thread
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExecutor = morph::testing::InlineExecutor;
 
 TEST_CASE("morph::async::Completion then fires with value", "[completion]") {
     SyncExecutor exec;

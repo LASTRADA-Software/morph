@@ -2,18 +2,20 @@
 
 #pragma once
 #include <atomic>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "completion.hpp"
 #include "model.hpp"
 #include "registry.hpp"
+#include "session.hpp"
 #include "strand.hpp"
-#include "task.hpp"
 
 namespace morph::backend {
 
@@ -38,6 +40,12 @@ struct ActionCall {
 
     /// @brief Executes the action directly against a model holder. Used on the local path.
     std::function<std::shared_ptr<void>(::morph::model::detail::IModelHolder&)> localOp;
+
+    /// @brief Session context attached to this call.
+    ///
+    /// Local backends thread it through a thread-local before invoking `localOp`;
+    /// remote backends serialise it into the wire envelope.
+    ::morph::session::Context session;
 };
 
 /// @brief Abstract interface for execution backends (local, remote, …).
@@ -62,9 +70,50 @@ struct IBackend {
 
     /// @brief Called by `Bridge::switchBackend()` after all handlers are re-registered.
     virtual void notifyBackendChanged() = 0;
+
+    /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    ///
+    /// Called by `Bridge::switchBackend()` on the outgoing backend after the swap,
+    /// and by `Bridge`'s destructor. After this call, any later `setValue` /
+    /// `setException` on those states is a no-op (the state is already ready), so
+    /// in-flight server replies cannot resurrect a cancelled completion.
+    virtual void cancelPending(const std::exception_ptr& exc) = 0;
+
+    /// @brief Installs a callback invoked when the backend reconnects to its peer.
+    ///
+    /// Used by backends that may lose and re-establish their transport (e.g.
+    /// `QtWebSocketBackend`). `Bridge` installs a handler that re-registers every
+    /// live `HandlerBinding` so model ids stay valid after the reconnect.
+    ///
+    /// Default implementation: store-and-ignore. Backends with no transport (e.g.
+    /// `LocalBackend`) never invoke it.
+    /// @param handler Callable invoked on the backend's transport thread after a
+    ///                successful reconnect. Pass `nullptr` to clear.
+    virtual void setReconnectHandler(std::function<void()> handler) { (void)handler; }
 };
 
 }  // namespace detail
+
+/// @brief Thrown to in-flight `Completion`s when `Bridge::switchBackend()` runs.
+///
+/// Surfaces in the `.onError(...)` callback so the GUI can retry on the new backend
+/// or surface a "backend changed" message — there is no public cancel API on
+/// `Completion` itself.
+struct BackendChangedError : std::runtime_error {
+    BackendChangedError() : std::runtime_error{"backend changed before completion resolved"} {}
+};
+
+/// @brief Thrown to in-flight `Completion`s when `Bridge` is destroyed.
+struct BridgeDestroyedError : std::runtime_error {
+    BridgeDestroyedError() : std::runtime_error{"bridge destroyed before completion resolved"} {}
+};
+
+/// @brief Thrown to in-flight `Completion`s when a transport drops mid-call (e.g. a
+///        Qt WebSocket disconnect). The framework retries the call on reconnect if
+///        the backend supports it; otherwise the GUI's `.onError(...)` runs.
+struct DisconnectedError : std::runtime_error {
+    DisconnectedError() : std::runtime_error{"transport disconnected before completion resolved"} {}
+};
 
 /// @brief In-process backend that executes model actions on a thread pool strand.
 ///
@@ -136,27 +185,50 @@ public:
                 std::make_exception_ptr(std::runtime_error("model not found: id=" + std::to_string(mid.v))));
             return comp;
         }
+        trackPending(compState);
         auto localOp = std::move(call.localOp);
-        _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState]() mutable {
-            auto task = [&]() -> ::morph::async::detail::Task<std::shared_ptr<void>> { co_return localOp(*holder); }();
-            task.state()->attach([compState](auto& taskState) {
-                if (taskState.value) {
-                    compState->setValue(std::move(*taskState.value));
-                } else {
-                    compState->setException(taskState.error);
-                }
-            });
+        auto session = std::move(call.session);
+        _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
+                           session = std::move(session)]() mutable {
+            try {
+                ::morph::session::detail::ScopedContext scoped{session};
+                compState->setValue(localOp(*holder));
+            } catch (...) {
+                compState->setException(std::current_exception());
+            }
         });
         return comp;
     }
 
+    /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    void cancelPending(const std::exception_ptr& exc) override {
+        std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
+        {
+            std::scoped_lock lock{_pendingMtx};
+            snapshot.swap(_pending);
+        }
+        for (auto& weak : snapshot) {
+            if (auto state = weak.lock()) {
+                state->setException(exc);
+            }
+        }
+    }
+
 private:
+    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
+        std::scoped_lock lock{_pendingMtx};
+        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+        _pending.emplace_back(state);
+    }
+
     ::morph::exec::detail::StrandExecutor _strand;
     std::mutex _regMtx;
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
         _models;
     std::atomic<uint64_t> _nextId{0};
+    std::mutex _pendingMtx;
+    std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
 };
 
 }  // namespace morph::backend

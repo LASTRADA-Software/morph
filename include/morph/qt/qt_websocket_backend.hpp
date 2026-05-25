@@ -3,10 +3,12 @@
 #pragma once
 #include <QEventLoop>
 #include <QSslConfiguration>
+#include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
 #include <morph/backend.hpp>
 #include <morph/registry.hpp>
+#include <chrono>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -14,6 +16,25 @@
 #include <unordered_map>
 
 namespace morph::qt {
+
+/// @brief Reconnect tuning for `QtWebSocketBackend`.
+///
+/// Declared outside `QtWebSocketBackend` so its default initialisers are fully
+/// parsed before any constructor default argument that names `Config{}` is
+/// evaluated (same rationale as `morph::offline::NetworkMonitorConfig`).
+struct QtWebSocketBackendConfig {
+    /// @brief Whether to attempt automatic reconnect after an unsolicited disconnect.
+    bool reconnectEnabled = true;
+
+    /// @brief Delay before the first reconnect attempt after a disconnect.
+    std::chrono::milliseconds initialReconnectDelay = std::chrono::milliseconds{500};
+
+    /// @brief Upper bound on the exponential backoff between reconnect attempts.
+    std::chrono::milliseconds maxReconnectDelay = std::chrono::seconds{30};
+
+    /// @brief Multiplier applied to the delay after each failed attempt.
+    double backoffMultiplier = 2.0;
+};
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer` over WebSocket.
 ///
@@ -31,17 +52,22 @@ namespace morph::qt {
 /// message handler are both called on that thread.
 class QtWebSocketBackend : public ::morph::backend::detail::IBackend {
 public:
+    /// @brief Alias for the reconnect configuration struct.
+    using Config = QtWebSocketBackendConfig;
+
     /// @brief Constructs the backend and opens a WebSocket connection to @p serverUrl.
     ///
     /// @param serverUrl   `ws://` or `wss://` URL of the remote `RemoteServer`.
     /// @param dispatcher  Action dispatcher (defaults to the process-level singleton).
     /// @param registry    Model registry (defaults to the process-level singleton).
     /// @param tls         If non-null, enables TLS and applies this configuration.
+    /// @param cfg         Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
     explicit QtWebSocketBackend(
         QUrl serverUrl,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
-        std::optional<QSslConfiguration> tls = std::nullopt);
+        std::optional<QSslConfiguration> tls = std::nullopt,
+        Config cfg = Config{});
 
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
@@ -85,6 +111,16 @@ public:
     /// @brief No-op — this backend holds no local model objects.
     void notifyBackendChanged() override {}
 
+    /// @brief Resolves every pending execute call's `Completion` with @p exc.
+    ///
+    /// Called by `Bridge::switchBackend()` on the outgoing backend, by `~Bridge`,
+    /// and internally when the socket disconnects. Late replies arriving for
+    /// already-cancelled call ids are dropped silently.
+    void cancelPending(const std::exception_ptr& exc) override;
+
+    /// @brief Installs the handler `Bridge` uses to re-register handlers after a reconnect.
+    void setReconnectHandler(std::function<void()> handler) override;
+
 private:
     /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
     std::string sendSync(const std::string& msg);
@@ -92,8 +128,22 @@ private:
     /// @brief Slot called by `QWebSocket` when a text frame arrives.
     void onTextMessage(const QString& message);
 
+    /// @brief Schedules a reconnect attempt with exponential backoff.
+    void scheduleReconnect();
+
+    /// @brief Attempts to reopen the socket using the saved URL/TLS config.
+    void attemptReconnect();
+
+    QUrl _serverUrl;
+    std::optional<QSslConfiguration> _tls;
+    Config _cfg;
     QWebSocket _socket;
+    QTimer _reconnectTimer;
+    std::chrono::milliseconds _currentReconnectDelay;
     bool _connected{false};
+    bool _everConnected{false};
+    bool _shuttingDown{false};
+    std::function<void()> _reconnectHandler;
 
     std::string _pendingReply;
     QEventLoop* _syncLoop{nullptr};

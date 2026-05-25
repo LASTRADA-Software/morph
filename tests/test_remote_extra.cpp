@@ -4,11 +4,14 @@
 #include <morph/executor.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>
+#include <morph/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <stdexcept>
 #include <thread>
+
+#include "test_support.hpp"
 
 
 // Fresh dispatcher + registry per test to avoid global state pollution
@@ -76,9 +79,8 @@ static Env& sharedEnv() {
     return env;
 }
 
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExec = morph::testing::InlineExecutor;
+using morph::testing::WaitReply;
 
 // ── morph::backend::RemoteServer: bad message type ───────────────────────────────────────────
 
@@ -87,18 +89,12 @@ TEST_CASE("morph::backend::RemoteServer: unknown command replies with err", "[re
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    std::atomic<bool> replyReceived{false};
-    std::string replyMsg;
-    server->handle("badcmd|stuff", [&](const std::string& reply) {
-        replyMsg = reply;
-        replyReceived.store(true);
-    });
-
-    for (int i = 0; i < 50 && !replyReceived.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    REQUIRE(replyReceived.load());
-    REQUIRE(replyMsg.starts_with("err|"));
+    morph::wire::Envelope req;
+    req.kind = "badcmd";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "err");
 }
 
 // ── morph::backend::RemoteServer: deregister path ────────────────────────────────────────────
@@ -108,118 +104,81 @@ TEST_CASE("morph::backend::RemoteServer: register then deregister succeeds", "[r
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    // Register
-    std::string regReply;
-    {
-        std::atomic<bool> done{false};
-        server->handle("register|RX_SquareModel", [&](const std::string& reply) {
-            regReply = reply;
-            done.store(true);
-        });
-        for (int i = 0; i < 50 && !done.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        REQUIRE(done.load());
-        REQUIRE(regReply.starts_with("ok|"));
-    }
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
 
-    // Extract id
-    uint64_t mid = std::stoull(regReply.substr(3));
-
-    // Deregister
-    {
-        std::atomic<bool> done{false};
-        server->handle("deregister|" + std::to_string(mid), [&](const std::string& reply) {
-            REQUIRE(reply == "ok");
-            done.store(true);
-        });
-        for (int i = 0; i < 50 && !done.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        REQUIRE(done.load());
-    }
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
+    dereg.await();
+    REQUIRE(dereg.env.kind == "ok");
 }
 
 // ── morph::backend::RemoteServer: execute on unknown model ─────────────────────────────────
 
-TEST_CASE("morph::backend::RemoteServer: execute on unknown model replies with err (5-part format)", "[remote]") {
+TEST_CASE("morph::backend::RemoteServer: execute on unknown model replies with err", "[remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    std::atomic<bool> replyReceived{false};
-    std::string replyMsg;
-    // Use a model id that was never registered
-    server->handle("execute|9999|RX_SquareModel|RX_SquareAction|{\"x\":3}", [&](const std::string& reply) {
-        replyMsg = reply;
-        replyReceived.store(true);
-    });
-
-    for (int i = 0; i < 50 && !replyReceived.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    REQUIRE(replyReceived.load());
-    REQUIRE(replyMsg.starts_with("err|"));
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = 9999;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":3})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == "model not found");
 }
 
-TEST_CASE("morph::backend::RemoteServer: execute on unknown model replies with err (6-part Qt format)", "[remote]") {
+TEST_CASE("morph::backend::RemoteServer: execute on unknown model echoes callId in err", "[remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    std::atomic<bool> replyReceived{false};
-    std::string replyMsg;
-    // 6-part format: execute|callId|mid|modelTy|actionTy|body
-    server->handle("execute|call-abc|9999|RX_SquareModel|RX_SquareAction|{\"x\":3}", [&](const std::string& reply) {
-        replyMsg = reply;
-        replyReceived.store(true);
-    });
-
-    for (int i = 0; i < 50 && !replyReceived.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    REQUIRE(replyReceived.load());
-    // Should include callId in error: "err|call-abc|model not found"
-    REQUIRE(replyMsg.starts_with("err|call-abc|"));
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 7;
+    req.modelId = 9999;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":3})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.callId == 7U);
 }
 
-// ── morph::backend::RemoteServer: 6-part Qt execute with valid model ─────────────────────────
+// ── morph::backend::RemoteServer: valid execute with callId ────────────────────────────────
 
-TEST_CASE("morph::backend::RemoteServer: Qt 6-part execute returns ok|callId|result", "[remote]") {
+TEST_CASE("morph::backend::RemoteServer: execute with callId returns ok envelope", "[remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    // First register a model
-    std::string regReply;
-    {
-        std::atomic<bool> done{false};
-        server->handle("register|RX_SquareModel", [&](const std::string& reply) {
-            regReply = reply;
-            done.store(true);
-        });
-        for (int i = 0; i < 50 && !done.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        REQUIRE(regReply.starts_with("ok|"));
-    }
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
 
-    uint64_t mid = std::stoull(regReply.substr(3));
-
-    // Execute via 6-part Qt format
-    std::atomic<bool> replyReceived{false};
-    std::string replyMsg;
-    server->handle("execute|call-xyz|" + std::to_string(mid) + "|RX_SquareModel|RX_SquareAction|{\"x\":5}",
-                   [&](const std::string& reply) {
-                       replyMsg = reply;
-                       replyReceived.store(true);
-                   });
-
-    for (int i = 0; i < 50 && !replyReceived.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    REQUIRE(replyReceived.load());
-    REQUIRE(replyMsg == "ok|call-xyz|25");
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 42;
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":5})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "ok");
+    REQUIRE(waiter.env.callId == 42U);
+    REQUIRE(waiter.env.body == "25");
 }
 
 // ── morph::backend::RemoteServer: dispatch exception propagates as err reply ──────────────────
@@ -229,48 +188,26 @@ TEST_CASE("morph::backend::RemoteServer: model action exception becomes err repl
     auto& env = sharedEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
-    std::string regReply;
-    {
-        std::atomic<bool> done{false};
-        server->handle("register|RX_SquareModel", [&](const std::string& reply) {
-            regReply = reply;
-            done.store(true);
-        });
-        for (int i = 0; i < 50 && !done.load(); ++i) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        REQUIRE(regReply.starts_with("ok|"));
-    }
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
 
-    uint64_t mid = std::stoull(regReply.substr(3));
-
-    std::atomic<bool> replyReceived{false};
-    std::string replyMsg;
-    server->handle("execute|" + std::to_string(mid) + "|RX_SquareModel|RX_SquareFail|{}",
-                   [&](const std::string& reply) {
-                       replyMsg = reply;
-                       replyReceived.store(true);
-                   });
-
-    for (int i = 0; i < 50 && !replyReceived.load(); ++i) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    REQUIRE(replyReceived.load());
-    REQUIRE(replyMsg.starts_with("err|"));
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareFail";
+    req.body = "{}";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "err");
 }
 
 // ── morph::backend::SimulatedRemoteBackend: malformed reply ───────────────────────────────────
 
 TEST_CASE("morph::backend::SimulatedRemoteBackend: malformed reply triggers onError", "[remote]") {
-    // We inject a fake server that always replies with garbage
-    struct GarbageServer {
-        void handle(std::string_view /*msg*/, const std::function<void(std::string)>& reply) {
-            // Synchronously reply with something that is neither "ok|" nor "err|"
-            reply("garbage");
-        }
-    };
-
-    // Directly test CompletionState error path by simulating what morph::backend::SimulatedRemoteBackend does
     SyncExec cbExec;
     auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
     morph::async::Completion<std::shared_ptr<void>> comp{state, &cbExec};
@@ -284,44 +221,22 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: malformed reply triggers onEr
         }
     });
 
-    // Simulate what the callback in morph::backend::SimulatedRemoteBackend does with "garbage"
+    // Simulate what the callback in morph::backend::SimulatedRemoteBackend does with garbage:
+    // decode() throws on non-JSON, which the backend turns into a CompletionState exception.
     try {
-        const std::string reply = "garbage";
-        if (reply.starts_with("ok|")) {
-            // won't enter
-        } else if (reply.starts_with("err|")) {
-            throw std::runtime_error(reply.substr(4));
-        } else {
-            throw std::runtime_error("malformed reply: " + reply);
-        }
+        (void)morph::wire::decode("garbage");
     } catch (...) {
         state->setException(std::current_exception());
     }
 
-    REQUIRE(errMsg.contains("malformed"));
+    REQUIRE_FALSE(errMsg.empty());
 }
 
 // ── morph::backend::SimulatedRemoteBackend: register failure (server sends non-ok reply) ──────
 
 TEST_CASE("morph::backend::SimulatedRemoteBackend: register failure raises exception", "[remote]") {
-    // Simulate a server that always rejects register
-    struct RejectServer {
-        void handle(std::string_view /*msg*/, const std::function<void(std::string)>& reply) {
-            reply("err|no models allowed");
-        }
-    } fakeServer;
-
-    // Manually replicate what morph::backend::SimulatedRemoteBackend::registerModel does
-    std::promise<morph::exec::detail::ModelId> prom;
-    auto fut = prom.get_future();
-
-    fakeServer.handle("register|anything", [&prom](const std::string& reply) {
-        if (reply.starts_with("ok|")) {
-            prom.set_value(morph::exec::detail::ModelId{std::stoull(reply.substr(3))});
-        } else {
-            prom.set_exception(std::make_exception_ptr(std::runtime_error("register failed: " + reply)));
-        }
-    });
-
-    REQUIRE_THROWS_AS(fut.get(), std::runtime_error);
+    auto reply = morph::wire::encode(morph::wire::makeErr("no models allowed"));
+    auto decoded = morph::wire::decode(reply);
+    REQUIRE(decoded.kind == "err");
+    REQUIRE(decoded.message == "no models allowed");
 }

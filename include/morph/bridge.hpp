@@ -17,6 +17,7 @@
 #include "backend.hpp"
 #include "completion.hpp"
 #include "registry.hpp"
+#include "session.hpp"
 
 namespace morph::bridge {
 
@@ -71,9 +72,32 @@ struct HandlerBinding {
 class Bridge {
 public:
     /// @brief Constructs a bridge that dispatches through @p backend.
+    ///
+    /// Installs a reconnect handler so backends with a recoverable transport
+    /// (e.g. `QtWebSocketBackend`) can ask the bridge to re-register every live
+    /// handler against the freshly reconnected peer.
+    ///
     /// @param backend Initial backend. Ownership is transferred.
     explicit Bridge(std::unique_ptr<::morph::backend::detail::IBackend> backend)
-        : _backend{std::shared_ptr<::morph::backend::detail::IBackend>(std::move(backend))} {}
+        : _backend{std::shared_ptr<::morph::backend::detail::IBackend>(std::move(backend))} {
+        installReconnectHandler(_backend.load());
+    }
+
+    /// @brief Cancels every still-pending completion on the active backend.
+    ///
+    /// Each `.onError(...)` callback receives a `BridgeDestroyedError`. In-flight
+    /// server replies that arrive after destruction are no-ops because each
+    /// `CompletionState::setValue`/`setException` is idempotent.
+    ~Bridge() {
+        if (auto active = _backend.load()) {
+            active->cancelPending(std::make_exception_ptr(::morph::backend::BridgeDestroyedError{}));
+        }
+    }
+
+    Bridge(const Bridge&) = delete;
+    Bridge& operator=(const Bridge&) = delete;
+    Bridge(Bridge&&) = delete;
+    Bridge& operator=(Bridge&&) = delete;
 
     /// @brief Creates and registers a new `HandlerBinding` for `Model`.
     ///
@@ -115,24 +139,56 @@ public:
     ///       also acquire `_mtx` and would deadlock.
     ///
     /// @param newBackend Replacement backend. Ownership is transferred.
+    /// @brief Installs a default session context applied to every call that does
+    ///        not provide one explicitly via `BridgeHandler::executeWith(...)`.
+    ///
+    /// Typical pattern: call this once after login to bind the user's principal
+    /// and locale, then every subsequent `handler.execute(action)` carries the
+    /// session automatically. Thread-safe.
+    ///
+    /// @param session The new default. Pass `{}` to clear.
+    void setDefaultSession(::morph::session::Context session) {
+        std::scoped_lock lock{_sessionMtx};
+        _defaultSession = std::move(session);
+    }
+
+    /// @brief Returns a copy of the currently installed default session. Thread-safe.
+    [[nodiscard]] ::morph::session::Context defaultSession() const {
+        std::scoped_lock lock{_sessionMtx};
+        return _defaultSession;
+    }
+
     void switchBackend(std::unique_ptr<::morph::backend::detail::IBackend> newBackend) {
         auto newShared = std::shared_ptr<::morph::backend::detail::IBackend>(std::move(newBackend));
-        std::scoped_lock lock{_mtx};
+        std::shared_ptr<::morph::backend::detail::IBackend> previous;
+        {
+            std::scoped_lock lock{_mtx};
 
-        std::vector<std::weak_ptr<detail::HandlerBinding>> live;
-        for (auto& weak : _handlers) {
-            auto binding = weak.lock();
-            if (!binding) {
-                continue;
+            std::vector<std::weak_ptr<detail::HandlerBinding>> live;
+            for (auto& weak : _handlers) {
+                auto binding = weak.lock();
+                if (!binding) {
+                    continue;
+                }
+                auto newId = newShared->registerModel(binding->typeId, binding->modelFactory);
+                binding->currentId.store(newId.v);
+                live.push_back(weak);
             }
-            auto newId = newShared->registerModel(binding->typeId, binding->modelFactory);
-            binding->currentId.store(newId.v);
-            live.push_back(weak);
-        }
-        _handlers = std::move(live);
+            _handlers = std::move(live);
 
-        _backend.store(newShared);
-        newShared->notifyBackendChanged();
+            previous = _backend.exchange(newShared);
+            newShared->notifyBackendChanged();
+        }
+        installReconnectHandler(newShared);
+        if (previous && previous != newShared) {
+            previous->setReconnectHandler(nullptr);
+        }
+        // Drain the outgoing backend outside the bridge mutex: cancelPending
+        // delivers callbacks through the caller's gui executor, and we never want
+        // to hold _mtx while user code runs.
+        if (previous && previous != newShared) {
+            previous->cancelPending(std::make_exception_ptr(::morph::backend::BackendChangedError{}));
+        }
     }
 
     /// @brief Deregisters @p binding from the active backend and removes it from tracking.
@@ -195,6 +251,10 @@ public:
             auto& model = holder.template into<Model>();
             return std::make_shared<R>(model.execute(*sharedAction));
         };
+        {
+            std::scoped_lock lock{_sessionMtx};
+            call.session = _defaultSession;
+        }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
             .then([typedState](const std::shared_ptr<void>& vAny) {
@@ -205,9 +265,36 @@ public:
     }
 
 private:
+    void installReconnectHandler(const std::shared_ptr<::morph::backend::detail::IBackend>& backend) {
+        if (!backend) {
+            return;
+        }
+        // The handler is invoked on the backend's transport thread. We keep a
+        // weak_ptr to the same shared backend so a stale callback fired after a
+        // switchBackend is a no-op.
+        std::weak_ptr<::morph::backend::detail::IBackend> weakBackend{backend};
+        backend->setReconnectHandler([this, weakBackend] {
+            auto pinned = weakBackend.lock();
+            std::scoped_lock lock{_mtx};
+            if (!pinned || pinned != _backend.load()) {
+                return;  // We've moved on to a different backend; ignore.
+            }
+            for (auto& weak : _handlers) {
+                auto binding = weak.lock();
+                if (!binding) {
+                    continue;
+                }
+                auto newId = pinned->registerModel(binding->typeId, binding->modelFactory);
+                binding->currentId.store(newId.v);
+            }
+        });
+    }
+
     std::atomic<std::shared_ptr<::morph::backend::detail::IBackend>> _backend;
     std::mutex _mtx;
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
+    mutable std::mutex _sessionMtx;
+    ::morph::session::Context _defaultSession;
 };
 
 /// @brief RAII wrapper that binds a single model type to a `Bridge`.
@@ -267,6 +354,10 @@ public:
     BridgeHandler& operator=(const BridgeHandler&) = delete;
 
     /// @brief Dispatches @p action via the underlying `Bridge` and returns a `Completion`.
+    ///
+    /// The bridge's currently-installed default session (set once at startup or
+    /// after login via `Bridge::setDefaultSession`) is attached automatically —
+    /// callers never thread the session through individual call sites.
     ///
     /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
     /// @param action Action to execute (moved into the dispatch).

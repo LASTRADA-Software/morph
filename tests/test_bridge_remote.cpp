@@ -10,6 +10,9 @@
 #include <stdexcept>
 #include <thread>
 
+#include "test_support.hpp"
+
+using SyncExecutor = morph::testing::InlineExecutor;
 
 struct EchoAction {
     int value = 0;
@@ -24,10 +27,6 @@ struct EchoModel {
 BRIDGE_REGISTER_MODEL(EchoModel, "TestR_EchoModel")
 BRIDGE_REGISTER_ACTION(EchoModel, EchoAction, "TestR_EchoAction")
 BRIDGE_REGISTER_ACTION(EchoModel, EchoFail, "TestR_EchoFail")
-
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> task) override { task(); }
-};
 
 TEST_CASE("morph::backend::SimulatedRemoteBackend: action result delivered via then", "[bridge][remote]") {
     morph::exec::ThreadPoolExecutor serverPool{2};

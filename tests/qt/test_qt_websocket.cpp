@@ -17,6 +17,7 @@
 #include <morph/qt/qt_websocket_server.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>
+#include <morph/wire.hpp>
 #include <atomic>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -403,64 +404,82 @@ TEST_CASE("Server rejects malformed protocol messages", "[qt][ws][protocol]") {
     pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
     REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
 
-    SECTION("bare unknown message type") {
-        auto reply = sendRawAndAwaitReply(sock, "hello");
-        REQUIRE(reply == "err|bad msg type");
+    auto decodeReply = [](const std::string& raw) { return morph::wire::decode(raw); };
+
+    SECTION("bare unknown envelope kind") {
+        morph::wire::Envelope req;
+        req.kind = "hello";
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+        REQUIRE(reply.kind == "err");
+        REQUIRE(reply.message.find("unknown envelope kind") != std::string::npos);
+    }
+
+    SECTION("non-JSON garbage") {
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, "not-json"));
+        REQUIRE(reply.kind == "err");
     }
 
     SECTION("register without typeId") {
-        auto reply = sendRawAndAwaitReply(sock, "register");
-        REQUIRE(reply.starts_with("err|"));
+        morph::wire::Envelope req;
+        req.kind = "register";  // typeId empty
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+        REQUIRE(reply.kind == "err");
     }
 
     SECTION("register with unknown typeId") {
-        auto reply = sendRawAndAwaitReply(sock, "register|NoSuchModel");
-        REQUIRE(reply.starts_with("err|"));
-        REQUIRE(reply.contains("unknown model type"));
+        auto reply = decodeReply(sendRawAndAwaitReply(
+            sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("NoSuchModel")))));
+        REQUIRE(reply.kind == "err");
+        REQUIRE(reply.message.find("unknown model type") != std::string::npos);
     }
 
-    SECTION("deregister without modelId") {
-        auto reply = sendRawAndAwaitReply(sock, "deregister");
-        REQUIRE(reply.starts_with("err|"));
-    }
-
-    SECTION("execute with too few parts") {
-        auto reply = sendRawAndAwaitReply(sock, "execute|1|2");
-        REQUIRE(reply.starts_with("err|"));
-    }
-
-    SECTION("execute with non-numeric callId") {
-        auto reply = sendRawAndAwaitReply(sock, "execute|notnum|1|WsEchoModel|WsEchoAction|{\"value\":1}");
-        REQUIRE(reply.starts_with("err|"));
-    }
-
-    SECTION("execute against unknown modelId") {
-        auto reply = sendRawAndAwaitReply(sock, "execute|7|999|WsEchoModel|WsEchoAction|{\"value\":1}");
-        // Format: err|<callId>|model not found
-        REQUIRE(reply.starts_with("err|7|"));
-        REQUIRE(reply.contains("model not found"));
+    SECTION("execute against unknown modelId echoes callId") {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = 7;
+        req.modelId = 999;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = R"({"value":1})";
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+        REQUIRE(reply.kind == "err");
+        REQUIRE(reply.callId == 7U);
+        REQUIRE(reply.message == "model not found");
     }
 
     SECTION("execute with malformed JSON body") {
-        // Register a model first so dispatch reaches fromJson.
-        auto regReply = sendRawAndAwaitReply(sock, "register|WsEchoModel");
-        REQUIRE(regReply.starts_with("ok|"));
-        auto mid = regReply.substr(3);
+        auto regReply = decodeReply(sendRawAndAwaitReply(
+            sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+        REQUIRE(regReply.kind == "ok");
 
-        auto reply = sendRawAndAwaitReply(sock, QString("execute|9|%1|WsEchoModel|WsEchoAction|{not json")
-                                                    .arg(QString::fromStdString(mid)));
-        REQUIRE(reply.starts_with("err|9|"));
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = 9;
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = "{not json";
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+        REQUIRE(reply.kind == "err");
+        REQUIRE(reply.callId == 9U);
     }
 
     SECTION("execute against unknown actionTypeId") {
-        auto regReply = sendRawAndAwaitReply(sock, "register|WsEchoModel");
-        REQUIRE(regReply.starts_with("ok|"));
-        auto mid = regReply.substr(3);
+        auto regReply = decodeReply(sendRawAndAwaitReply(
+            sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+        REQUIRE(regReply.kind == "ok");
 
-        auto reply =
-            sendRawAndAwaitReply(sock, QString("execute|10|%1|WsEchoModel|NoSuchAction|{}").arg(QString::fromStdString(mid)));
-        REQUIRE(reply.starts_with("err|10|"));
-        REQUIRE(reply.contains("unknown action"));
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = 10;
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "NoSuchAction";
+        req.body = "{}";
+        auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+        REQUIRE(reply.kind == "err");
+        REQUIRE(reply.callId == 10U);
+        REQUIRE(reply.message.find("unknown action") != std::string::npos);
     }
 
     sock.close();
@@ -481,8 +500,8 @@ TEST_CASE("Server keeps serving good clients after a malformed message", "[qt][w
     badSock.open(url);
     pumpUntil([&] { return badSock.state() == QAbstractSocket::ConnectedState; }, 100);
     REQUIRE(badSock.state() == QAbstractSocket::ConnectedState);
-    auto badReply = sendRawAndAwaitReply(badSock, "garbage|garbage|garbage");
-    REQUIRE(badReply.starts_with("err|"));
+    auto badReply = morph::wire::decode(sendRawAndAwaitReply(badSock, "garbage|garbage|garbage"));
+    REQUIRE(badReply.kind == "err");
 
     // Well-behaved backend on the same server should still work end-to-end.
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);

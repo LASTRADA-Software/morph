@@ -3,47 +3,67 @@
 #pragma once
 #include <atomic>
 #include <functional>
-#include <future>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "backend.hpp"
+#include "session.hpp"
+#include "wire.hpp"
 
 namespace morph::backend {
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
 ///
-/// `RemoteServer` receives pipe-delimited text messages (from a WebSocket, a
-/// simulated transport, or any other source) and executes the corresponding
-/// model operations via an `ActionDispatcher`.
+/// `RemoteServer` receives JSON envelopes (`morph::wire::Envelope`) from any
+/// transport (WebSocket, in-process simulation, …) and executes the corresponding
+/// model operations via an `ActionDispatcher`. Authorization is delegated to an
+/// `IAuthorizer` that defaults to allow-all.
 ///
 /// @par Heap allocation requirement
 /// `RemoteServer` **must** be heap-allocated via `std::make_shared`. `handle()`
 /// captures `shared_from_this()` to prevent use-after-free when the worker pool
 /// outlives the server object.
 ///
-/// @par Message protocol
-/// - `register|<typeId>` — creates a model instance; replies `ok|<modelId>`.
-/// - `deregister|<modelId>` — destroys the instance; replies `ok`.
-/// - `execute|<mid>|<modelTy>|<actionTy>|<body>` — dispatches an action; replies `ok|<result>`.
-/// - `execute|<callId>|<mid>|<modelTy>|<actionTy>|<body>` — same with a correlation id.
-/// - Any error replies with `err|<message>` or `err|<callId>|<message>`.
+/// @par Wire format
+/// All requests and replies are encoded as `morph::wire::Envelope` JSON. See
+/// `wire.hpp` for the field semantics. The `kind` field is the discriminator.
 class RemoteServer : public std::enable_shared_from_this<RemoteServer> {
 public:
-    /// @brief Constructs a server backed by @p workerPool.
-    ///
-    /// @param workerPool Pool used to process messages asynchronously.
-    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
-    /// @param registry   Model factory registry; defaults to the process-level singleton.
+    /// @brief Constructs a server backed by @p workerPool with allow-all authorization.
     explicit RemoteServer(
         ::morph::exec::IExecutor& workerPool,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
-        : _pool{workerPool}, _strand{workerPool}, _dispatcher{dispatcher}, _registry{registry} {}
+        : _pool{workerPool},
+          _strand{workerPool},
+          _dispatcher{dispatcher},
+          _registry{registry},
+          _authorizer{::morph::session::allowAllAuthorizer()} {}
+
+    /// @brief Constructs a server with a custom authorizer.
+    ///
+    /// @param workerPool Pool used to process messages asynchronously.
+    /// @param authorizer Authorizer consulted for every `execute` envelope.
+    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
+    /// @param registry   Model factory registry; defaults to the process-level singleton.
+    RemoteServer(
+        ::morph::exec::IExecutor& workerPool, std::shared_ptr<::morph::session::IAuthorizer> authorizer,
+        ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
+        ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
+        : _pool{workerPool},
+          _strand{workerPool},
+          _dispatcher{dispatcher},
+          _registry{registry},
+          _authorizer{std::move(authorizer)} {
+        if (!_authorizer) {
+            _authorizer = ::morph::session::allowAllAuthorizer();
+        }
+    }
 
     /// @brief Asynchronously processes @p msg and calls @p reply with the response.
     ///
@@ -60,55 +80,69 @@ public:
             [self, msg = std::move(msg), reply = std::move(reply)]() mutable { self->dispatchMessage(msg, reply); });
     }
 
+    /// @brief Synchronously processes @p msg on the calling thread and returns the reply.
+    ///
+    /// Equivalent to `handle()` but never posts to the worker pool, so it is safe
+    /// to call from a thread that *is* the worker pool — for example, from a
+    /// `BridgeHandler` constructor invoked from inside an action handler.
+    ///
+    /// Only safe for control messages (`register`, `deregister`) — `execute`
+    /// messages still post to the strand and would return before the result is
+    /// produced. The implementation rejects `execute` to make this explicit.
+    ///
+    /// @param msg Pipe-delimited control message.
+    /// @return Reply string the async path would have produced.
+    std::string handleInline(const std::string& msg) {
+        std::string reply;
+        std::function<void(std::string)> capture = [&reply](std::string out) { reply = std::move(out); };
+        dispatchMessage(msg, capture);
+        return reply;
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply) {
-        // Split into at most 6 parts to support both the 5-part SimulatedRemote
-        // protocol and the 6-part Qt WebSocket protocol (which carries a callId).
-        auto parts = split(msg, '|', 6);
+        ::morph::wire::Envelope env;
         try {
-            if (parts[0] == "register") {
-                if (parts.size() < 2) {
+            env = ::morph::wire::decode(msg);
+        } catch (const std::exception& exc) {
+            reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));
+            return;
+        }
+        try {
+            if (env.kind == "register") {
+                if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
                 }
-                auto holder = _registry.create(parts[1]);
+                auto holder = _registry.create(env.typeId);
                 ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
                 {
                     std::scoped_lock lock{_regMtx};
                     _models[mid] = std::move(holder);
                 }
-                reply("ok|" + std::to_string(mid.v));
-            } else if (parts[0] == "deregister") {
-                if (parts.size() < 2) {
-                    throw std::runtime_error("deregister requires a modelId");
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+            } else if (env.kind == "deregister") {
+                {
+                    std::scoped_lock lock{_regMtx};
+                    _models.erase(::morph::exec::detail::ModelId{env.modelId});
                 }
-                ::morph::exec::detail::ModelId mid{std::stoull(parts[1])};
-                std::scoped_lock lock{_regMtx};
-                _models.erase(mid);
-                reply("ok");
-            } else if (parts[0] == "execute") {
-                if (parts.size() == 6) {
-                    // Qt WebSocket format: execute|callId|mid|modelTy|actionTy|body
-                    std::string callId = parts[1];
-                    ::morph::exec::detail::ModelId mid{std::stoull(parts[2])};
-                    dispatchExecute(std::move(callId), mid, parts[3], parts[4], parts[5], reply);
-                } else if (parts.size() == 5) {
-                    // SimulatedRemote format: execute|mid|modelTy|actionTy|body
-                    ::morph::exec::detail::ModelId mid{std::stoull(parts[1])};
-                    dispatchExecute("", mid, parts[2], parts[3], parts[4], reply);
-                } else {
-                    throw std::runtime_error("execute requires 5 or 6 parts");
-                }
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
+            } else if (env.kind == "execute") {
+                dispatchExecute(std::move(env), reply);
             } else {
-                reply("err|bad msg type");
+                reply(::morph::wire::encode(
+                    ::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
         } catch (const std::exception& exc) {
-            reply(std::string{"err|"} + exc.what());
+            reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
         }
     }
 
-    void dispatchExecute(std::string callId, ::morph::exec::detail::ModelId mid, const std::string& modelTy,
-                         const std::string& actionTy, const std::string& body,
-                         std::function<void(std::string)> reply) {
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+        if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+            return;
+        }
+        ::morph::exec::detail::ModelId mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         {
             std::scoped_lock lock{_regMtx};
@@ -118,51 +152,26 @@ private:
             }
         }
         if (!holder) {
-            if (callId.empty()) {
-                reply("err|model not found");
-            } else {
-                reply("err|" + callId + "|model not found");
-            }
+            reply(::morph::wire::encode(::morph::wire::makeErr("model not found", env.callId)));
             return;
         }
-        _strand.post(mid, [&disp = _dispatcher, callId = std::move(callId), modelTy, actionTy, body,
-                           holder = std::move(holder), reply = std::move(reply)]() mutable {
+        _strand.post(mid, [&disp = _dispatcher, env = std::move(env), holder = std::move(holder),
+                           reply = std::move(reply)]() mutable {
             try {
-                auto result = disp.dispatch(modelTy, actionTy, *holder, body);
-                if (callId.empty()) {
-                    reply("ok|" + result);
-                } else {
-                    reply("ok|" + callId + "|" + result);
-                }
+                ::morph::session::detail::ScopedContext scoped{env.session};
+                auto result = disp.dispatch(env.modelType, env.actionType, *holder, env.body);
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
-                if (callId.empty()) {
-                    reply(std::string{"err|"} + exc.what());
-                } else {
-                    reply("err|" + callId + "|" + exc.what());
-                }
+                reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
-    }
-
-    static std::vector<std::string> split(const std::string& src, char sep, int maxParts) {
-        std::vector<std::string> out;
-        std::size_t pos = 0;
-        while (static_cast<int>(out.size()) < maxParts - 1) {
-            auto found = src.find(sep, pos);
-            if (found == std::string::npos) {
-                break;
-            }
-            out.emplace_back(src.substr(pos, found - pos));
-            pos = found + 1;
-        }
-        out.emplace_back(src.substr(pos));
-        return out;
     }
 
     ::morph::exec::IExecutor& _pool;
     ::morph::exec::detail::StrandExecutor _strand;
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
+    std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
     std::mutex _regMtx;
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
@@ -185,8 +194,10 @@ public:
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
-    /// Blocks until the server replies. The @p factory argument is ignored —
-    /// model construction is delegated to the server's `ModelRegistryFactory`.
+    /// Processed inline on the calling thread (no pool round-trip), so it is safe
+    /// to call from any thread including a worker in the same pool that backs the
+    /// `RemoteServer`. The @p factory argument is ignored — model construction is
+    /// delegated to the server's `ModelRegistryFactory`.
     ///
     /// @param typeId String type-id sent in the `register` message.
     /// @return `ModelId` assigned by the server.
@@ -194,31 +205,26 @@ public:
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()>) override {
-        std::promise<::morph::exec::detail::ModelId> prom;
-        auto fut = prom.get_future();
-        _server.handle("register|" + typeId, [&prom](const std::string& reply) {
-            if (reply.starts_with("ok|")) {
-                prom.set_value(::morph::exec::detail::ModelId{std::stoull(reply.substr(3))});
-            } else {
-                prom.set_exception(std::make_exception_ptr(std::runtime_error("register failed: " + reply)));
-            }
-        });
-        return fut.get();
+        auto reply = ::morph::wire::decode(
+            _server.handleInline(::morph::wire::encode(::morph::wire::makeRegister(typeId))));
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error("register failed: " + reply.message);
     }
 
-    /// @brief Deregisters the model on the server. Blocks until the reply arrives.
+    /// @brief Deregisters the model on the server. Processed inline; safe from any thread.
     /// @param mid Id of the model to deregister.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
-        std::promise<void> prom;
-        auto fut = prom.get_future();
-        _server.handle("deregister|" + std::to_string(mid.v), [&prom](const std::string&) { prom.set_value(); });
-        fut.get();
+        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)));
     }
 
     /// @brief Serialises the action, sends it to the server, and returns a `Completion`.
     ///
     /// The `Completion` resolves when the server's reply is received and
-    /// deserialized. Callbacks are posted via @p cbExec.
+    /// deserialized. Callbacks are posted via @p cbExec. The session attached to
+    /// the call (via `Bridge::setDefaultSession()` or the per-call API) is
+    /// serialised into the envelope.
     ///
     /// @param mid    Target model id on the server.
     /// @param call   Bundled action; `serializeAction` and `deserializeResult` are used.
@@ -229,33 +235,61 @@ public:
                                                               ::morph::exec::IExecutor* cbExec) override {
         auto state = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
+        trackPending(state);
 
-        std::string body = call.serializeAction();
-        std::string msg =
-            "execute|" + std::to_string(mid.v) + "|" + call.modelTypeId + "|" + call.actionTypeId + "|" + body;
+        ::morph::wire::Envelope env;
+        env.kind = "execute";
+        env.modelId = mid.v;
+        env.modelType = call.modelTypeId;
+        env.actionType = call.actionTypeId;
+        env.body = call.serializeAction();
+        env.session = std::move(call.session);
         auto deser = std::move(call.deserializeResult);
 
-        _server.handle(std::move(msg), [state, deser = std::move(deser)](const std::string& reply) mutable {
-            try {
-                if (reply.starts_with("ok|")) {
-                    state->setValue(deser(reply.substr(3)));
-                } else if (reply.starts_with("err|")) {
-                    throw std::runtime_error(reply.substr(4));
-                } else {
-                    throw std::runtime_error("malformed reply: " + reply);
-                }
-            } catch (...) {
-                state->setException(std::current_exception());
-            }
-        });
+        _server.handle(::morph::wire::encode(env),
+                       [state, deser = std::move(deser)](const std::string& replyJson) mutable {
+                           try {
+                               auto reply = ::morph::wire::decode(replyJson);
+                               if (reply.kind == "ok") {
+                                   state->setValue(deser(reply.body));
+                               } else {
+                                   throw std::runtime_error(
+                                       reply.message.empty() ? "malformed reply" : reply.message);
+                               }
+                           } catch (...) {
+                               state->setException(std::current_exception());
+                           }
+                       });
         return comp;
     }
 
     /// @brief No-op — models live in `RemoteServer`, not locally.
     void notifyBackendChanged() override {}
 
+    /// @brief Resolves every still-pending completion this backend produced with @p exc.
+    void cancelPending(const std::exception_ptr& exc) override {
+        std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
+        {
+            std::scoped_lock lock{_pendingMtx};
+            snapshot.swap(_pending);
+        }
+        for (auto& weak : snapshot) {
+            if (auto state = weak.lock()) {
+                state->setException(exc);
+            }
+        }
+    }
+
 private:
+    void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
+        std::scoped_lock lock{_pendingMtx};
+        std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
+        _pending.emplace_back(state);
+    }
+
     RemoteServer& _server;
+    std::mutex _pendingMtx;
+    std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
 };
 
 }  // namespace morph::backend

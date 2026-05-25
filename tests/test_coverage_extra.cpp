@@ -3,7 +3,6 @@
 #include <morph/bridge.hpp>
 #include <morph/executor.hpp>
 #include <morph/registry.hpp>
-#include <morph/task.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -11,91 +10,11 @@
 #include <stdexcept>
 #include <string>
 
+#include "test_support.hpp"
 
 namespace {
-struct CovSyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using CovSyncExecutor = morph::testing::InlineExecutor;
 }  // namespace
-
-// ── task.hpp: per-instantiation coverage for TaskState<T> ────────────────────
-//
-// LocalBackend uses TaskState<std::shared_ptr<void>>; tests use TaskState<int>
-// and TaskState<std::string> in places. Codecov's per-instantiation view marks
-// branches on lines 43, 58, 71 partial unless every arm fires for every
-// instantiation. Walk all paths for each used type.
-
-namespace {
-
-template <typename T>
-void exerciseTaskStateBranches(const T& sampleValue) {
-    using namespace morph::async::detail;
-
-    // attach BEFORE ready  → line 71 True arm; setValue then fires continuation (line 43 True arm).
-    {
-        TaskState<T> state;
-        bool fired = false;
-        state.attach([&](TaskState<T>&) { fired = true; });
-        state.setValue(T{sampleValue});
-        REQUIRE(fired);
-    }
-
-    // attach BEFORE ready, then setException  → line 58 True arm.
-    {
-        TaskState<T> state;
-        bool fired = false;
-        state.attach([&](TaskState<T>&) { fired = true; });
-        state.setException(std::make_exception_ptr(std::runtime_error{"err"}));
-        REQUIRE(fired);
-    }
-
-    // setValue WITHOUT attach  → line 43 False arm.
-    {
-        TaskState<T> state;
-        state.setValue(T{sampleValue});
-        REQUIRE(state.ready);
-    }
-
-    // setException WITHOUT attach  → line 58 False arm.
-    {
-        TaskState<T> state;
-        state.setException(std::make_exception_ptr(std::runtime_error{"err"}));
-        REQUIRE(state.error != nullptr);
-    }
-
-    // attach AFTER ready (value)  → line 71 False arm; immediate fire on line 76.
-    {
-        TaskState<T> state;
-        state.setValue(T{sampleValue});
-        bool fired = false;
-        state.attach([&](TaskState<T>&) { fired = true; });
-        REQUIRE(fired);
-    }
-
-    // attach AFTER ready (error)  → same False arm via the error side.
-    {
-        TaskState<T> state;
-        state.setException(std::make_exception_ptr(std::runtime_error{"err"}));
-        bool fired = false;
-        state.attach([&](TaskState<T>&) { fired = true; });
-        REQUIRE(fired);
-    }
-}
-
-}  // namespace
-
-TEST_CASE("TaskState<int>: every branch", "[task]") {
-    exerciseTaskStateBranches<int>(42);
-}
-
-TEST_CASE("TaskState<string>: every branch", "[task]") {
-    exerciseTaskStateBranches<std::string>("hello");
-}
-
-TEST_CASE("TaskState<shared_ptr<void>>: every branch", "[task]") {
-    exerciseTaskStateBranches<std::shared_ptr<void>>(
-        std::static_pointer_cast<void>(std::make_shared<int>(7)));
-}
 
 // ── executor.hpp: while-loop guard takes its `now() >= deadline` arm ─────────
 //

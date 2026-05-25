@@ -10,6 +10,10 @@
 #include <stdexcept>
 #include <thread>
 
+#include "test_support.hpp"
+
+using SyncExecutor = morph::testing::InlineExecutor;
+
 
 struct CounterAction {
     int delta = 0;
@@ -58,10 +62,6 @@ struct morph::model::ActionTraits<CounterAction> {
         }
         return result;
     }
-};
-
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
 };
 
 // ── morph::backend::LocalBackend: model-not-found path ────────────────────────────────────────

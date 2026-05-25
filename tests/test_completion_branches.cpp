@@ -5,10 +5,9 @@
 #include <stdexcept>
 #include <string>
 
+#include "test_support.hpp"
 
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExecutor = morph::testing::InlineExecutor;
 
 // ── setException branches ─────────────────────────────────────────────────────
 

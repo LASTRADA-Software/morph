@@ -24,13 +24,11 @@
 #include <thread>
 #include <vector>
 
+#include "test_support.hpp"
+
 using namespace std::chrono_literals;
 
-// ── Infrastructure ────────────────────────────────────────────────────────────
-
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExec = morph::testing::InlineExecutor;
 
 // ── Domain types ──────────────────────────────────────────────────────────────
 

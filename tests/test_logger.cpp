@@ -3,30 +3,11 @@
 #include <morph/logger.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <print>
 #include <string>
 #include <thread>
 #include <vector>
 
-
-// RAII guard: restores logger + level after each test so tests are isolated.
-struct LogGuard {
-    morph::log::LogLevel savedLevel = morph::log::getLogLevel();
-    morph::log::detail::Logger savedSink;
-
-    LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        savedLevel = morph::log::detail::logState().minLevel;
-        savedSink = morph::log::detail::logState().sink;
-    }
-    ~LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        morph::log::detail::logState().minLevel = savedLevel;
-        morph::log::detail::logState().sink = std::move(savedSink);
-    }
-    LogGuard(const LogGuard&) = delete;
-    LogGuard& operator=(const LogGuard&) = delete;
-};
+using LogGuard = morph::log::ScopedLoggerOverride;
 
 // ── morph::log::detail::levelName ─────────────────────────────────────────────────────────────────
 

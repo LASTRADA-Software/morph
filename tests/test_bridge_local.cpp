@@ -9,6 +9,9 @@
 #include <stdexcept>
 #include <thread>
 
+#include "test_support.hpp"
+
+using SyncExecutor = morph::testing::InlineExecutor;
 
 // Test-local model — only used in this translation unit
 struct PingAction {
@@ -24,11 +27,6 @@ struct PingModel {
 BRIDGE_REGISTER_MODEL(PingModel, "Test_PingModel")
 BRIDGE_REGISTER_ACTION(PingModel, PingAction, "Test_PingAction")
 BRIDGE_REGISTER_ACTION(PingModel, PingFailAction, "Test_PingFailAction")
-
-// Runs the callback executor inline (simulates a GUI thread pump)
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> task) override { task(); }
-};
 
 TEST_CASE("morph::backend::LocalBackend: action result delivered via then", "[bridge][local]") {
     morph::exec::ThreadPoolExecutor pool{2};

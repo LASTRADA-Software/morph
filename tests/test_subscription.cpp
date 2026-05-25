@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "test_support.hpp"
+
 
 // ── Test fixture: a model with two action types ─────────────────────────────
 //
@@ -95,10 +97,7 @@ BRIDGE_REGISTER_VALIDATOR(MixedAction, [](const MixedAction& action) {
     return !action.name.empty() && action.inner.n != 0 && action.count != 0;
 })
 
-// Runs the callback executor inline (simulates a GUI thread pump)
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> task) override { task(); }
-};
+using SyncExecutor = morph::testing::InlineExecutor;
 
 namespace {
 

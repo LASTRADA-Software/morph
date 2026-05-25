@@ -8,27 +8,12 @@
 #include <stdexcept>
 #include <string>
 
+#include "test_support.hpp"
 
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExecutor = morph::testing::InlineExecutor;
+using LogGuard = morph::log::ScopedLoggerOverride;
 
-// Restores the global logger sink/level around a test that installs a throwing sink.
 namespace {
-struct LogGuard {
-    morph::log::LogLevel savedLevel;
-    morph::log::detail::Logger savedSink;
-    LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        savedLevel = morph::log::detail::logState().minLevel;
-        savedSink = morph::log::detail::logState().sink;
-    }
-    ~LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        morph::log::detail::logState().minLevel = savedLevel;
-        morph::log::detail::logState().sink = std::move(savedSink);
-    }
-};
 struct NotAStdExceptionExtra {};
 }  // namespace
 

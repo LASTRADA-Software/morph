@@ -11,6 +11,7 @@
 #include <morph/network_monitor.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>
+#include <morph/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -22,43 +23,19 @@
 #include <string>
 #include <thread>
 
+#include "test_support.hpp"
+
 using namespace std::chrono_literals;
 
 namespace {
 
-struct SyncExecutor : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExecutor = morph::testing::InlineExecutor;
+using LogGuard = morph::log::ScopedLoggerOverride;
 
 template <typename Pred>
 bool waitFor(Pred pred, std::chrono::milliseconds budget = 2000ms) {
-    const auto deadline = std::chrono::steady_clock::now() + budget;
-    while (!pred()) {
-        if (std::chrono::steady_clock::now() >= deadline) {
-            return false;
-        }
-        std::this_thread::sleep_for(2ms);
-    }
-    return true;
+    return morph::testing::waitUntil(std::move(pred), budget);
 }
-
-// Restores logger + level around a test so a throwing sink doesn't leak.
-struct LogGuard {
-    morph::log::LogLevel savedLevel;
-    morph::log::detail::Logger savedSink;
-    LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        savedLevel = morph::log::detail::logState().minLevel;
-        savedSink = morph::log::detail::logState().sink;
-    }
-    ~LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        morph::log::detail::logState().minLevel = savedLevel;
-        morph::log::detail::logState().sink = std::move(savedSink);
-    }
-    LogGuard(const LogGuard&) = delete;
-    LogGuard& operator=(const LogGuard&) = delete;
-};
 
 }  // namespace
 
@@ -168,34 +145,43 @@ CovRemoteEnv& covRemoteEnv() {
 
 }  // namespace
 
-TEST_CASE("morph::backend::RemoteServer: Qt 6-part execute err reply carries callId", "[coverage][remote]") {
-    // Drives the err-with-callId branch in dispatchExecute (remote.hpp 138-139).
+TEST_CASE("morph::backend::RemoteServer: execute err reply preserves callId", "[coverage][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto& env = covRemoteEnv();
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
 
     // Register a model first
-    std::string regReply;
+    std::string regReplyRaw;
     std::atomic<bool> regDone{false};
-    server->handle("register|Cov_RemoteModel", [&](const std::string& reply) {
-        regReply = reply;
-        regDone.store(true);
-    });
+    server->handle(morph::wire::encode(morph::wire::makeRegister("Cov_RemoteModel")),
+                   [&](const std::string& reply) {
+                       regReplyRaw = reply;
+                       regDone.store(true);
+                   });
     REQUIRE(waitFor([&] { return regDone.load(); }));
-    REQUIRE(regReply.starts_with("ok|"));
-    uint64_t mid = std::stoull(regReply.substr(3));
+    auto regReply = morph::wire::decode(regReplyRaw);
+    REQUIRE(regReply.kind == "ok");
 
-    // 6-part execute that triggers an exception — server must reply err|callId|message
+    // Execute with a callId; failure must echo the same callId in the err envelope.
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 4242;
+    req.modelId = regReply.modelId;
+    req.modelType = "Cov_RemoteModel";
+    req.actionType = "Cov_RemoteFail";
+    req.body = "{}";
+
     std::atomic<bool> replyReceived{false};
     std::string replyMsg;
-    server->handle("execute|tag-42|" + std::to_string(mid) + "|Cov_RemoteModel|Cov_RemoteFail|{}",
-                   [&](const std::string& reply) {
-                       replyMsg = reply;
-                       replyReceived.store(true);
-                   });
+    server->handle(morph::wire::encode(req), [&](const std::string& reply) {
+        replyMsg = reply;
+        replyReceived.store(true);
+    });
 
     REQUIRE(waitFor([&] { return replyReceived.load(); }));
-    REQUIRE(replyMsg.starts_with("err|tag-42|"));
+    auto resp = morph::wire::decode(replyMsg);
+    REQUIRE(resp.kind == "err");
+    REQUIRE(resp.callId == 4242U);
 }
 
 // ── remote.hpp: morph::backend::SimulatedRemoteBackend register failure (lines 196-197)

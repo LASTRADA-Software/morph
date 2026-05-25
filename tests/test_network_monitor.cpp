@@ -7,20 +7,10 @@
 #include <thread>
 #include <vector>
 
-using namespace std::chrono_literals;
+#include "test_support.hpp"
 
-// Poll until condition is true or deadline is reached.
-// More robust than a fixed sleep on loaded CI machines.
-static bool waitUntil(auto cond, std::chrono::milliseconds timeout = 500ms) {
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (!cond()) {
-        if (std::chrono::steady_clock::now() >= deadline) {
-            return false;
-        }
-        std::this_thread::sleep_for(5ms);
-    }
-    return true;
-}
+using namespace std::chrono_literals;
+using morph::testing::waitUntil;
 
 // ── Skeleton tests ────────────────────────────────────────────────────────────
 

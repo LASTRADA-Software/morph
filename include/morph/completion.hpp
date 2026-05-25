@@ -30,6 +30,9 @@ struct CompletionState {
         std::function<void()> callback;
         {
             std::scoped_lock lock{mtx};
+            if (ready) {
+                return;
+            }
             value = std::move(val);
             ready = true;
             if (onOk) {
@@ -48,6 +51,9 @@ struct CompletionState {
         std::function<void()> callback;
         {
             std::scoped_lock lock{mtx};
+            if (ready) {
+                return;
+            }
             error = exc;
             ready = true;
             if (onErr) {

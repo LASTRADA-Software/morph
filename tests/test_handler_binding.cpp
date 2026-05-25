@@ -9,6 +9,10 @@
 #include <chrono>
 #include <thread>
 
+#include "test_support.hpp"
+
+using SyncExec = morph::testing::InlineExecutor;
+
 
 struct HBAction {
     int x = 0;
@@ -29,10 +33,6 @@ struct morph::model::ActionTraits<HBAction> {
     static HBAction fromJson(std::string_view) { return {}; }
     static std::string resultToJson(const int& res) { return std::to_string(res); }
     static int resultFromJson(std::string_view json) { return std::stoi(std::string{json}); }
-};
-
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
 };
 
 // ── RAII: morph::bridge::BridgeHandler destructor deregisters model ─────────────────────────

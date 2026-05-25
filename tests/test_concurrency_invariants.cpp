@@ -30,47 +30,15 @@
 #include <utility>
 #include <vector>
 
+#include "test_support.hpp"
+
 using namespace std::chrono_literals;
 
 namespace {
 
-struct InlineExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
-
-template <typename Pred>
-bool waitUntil(Pred pred, std::chrono::milliseconds timeout = 2s, std::chrono::milliseconds step = 5ms) {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (!pred()) {
-        if (std::chrono::steady_clock::now() >= deadline) {
-            return false;
-        }
-        std::this_thread::sleep_for(step);
-    }
-    return true;
-}
-
-// Mirrors test_logger.cpp's LogGuard: snapshot+restore the global logger so a
-// custom sink installed inside one test does not bleed into the next.
-struct LogGuard {
-    morph::log::LogLevel savedLevel;
-    morph::log::detail::Logger savedSink;
-
-    LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        savedLevel = morph::log::detail::logState().minLevel;
-        savedSink = morph::log::detail::logState().sink;
-    }
-    ~LogGuard() {
-        std::scoped_lock lock{morph::log::detail::logState().mtx};
-        morph::log::detail::logState().minLevel = savedLevel;
-        morph::log::detail::logState().sink = std::move(savedSink);
-    }
-    LogGuard(const LogGuard&) = delete;
-    LogGuard& operator=(const LogGuard&) = delete;
-    LogGuard(LogGuard&&) = delete;
-    LogGuard& operator=(LogGuard&&) = delete;
-};
+using InlineExec = morph::testing::InlineExecutor;
+using morph::testing::waitUntil;
+using LogGuard = morph::log::ScopedLoggerOverride;
 
 }  // namespace
 

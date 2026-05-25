@@ -14,6 +14,7 @@
 #include <morph/remote.hpp>
 #include <morph/strand.hpp>
 #include <morph/sync_worker.hpp>
+#include <morph/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -24,24 +25,12 @@
 #include <utility>
 #include <vector>
 
+#include "test_support.hpp"
+
 using namespace std::chrono_literals;
 
-// ── Shared helpers ────────────────────────────────────────────────────────────
-
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
-
-static bool waitUntil(const std::function<bool()>& pred, std::chrono::milliseconds timeout = 500ms) {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        if (pred()) {
-            return true;
-        }
-        std::this_thread::sleep_for(5ms);
-    }
-    return pred();
-}
+using SyncExec = morph::testing::InlineExecutor;
+using morph::testing::waitUntil;
 
 // ── Issue 1: CompletionState::setValue should move value into callback ────────
 
@@ -296,12 +285,15 @@ TEST_CASE("Issue 15: morph::backend::RemoteServer handles 'register' with no typ
 
     std::atomic<bool> done{false};
     std::string reply;
-    server->handle("register", [&](const std::string& msg) {
+    morph::wire::Envelope env;
+    env.kind = "register";  // empty typeId
+    server->handle(morph::wire::encode(env), [&](const std::string& msg) {
         reply = msg;
         done.store(true);
     });
     REQUIRE(waitUntil([&] { return done.load(); }));
-    REQUIRE(reply.starts_with("err|"));
+    auto decoded = morph::wire::decode(reply);
+    REQUIRE(decoded.kind == "err");
 }
 
 TEST_CASE("Issue 15: morph::backend::RemoteServer handles 'deregister' with no id gracefully", "[remote][issue15]") {
@@ -310,40 +302,48 @@ TEST_CASE("Issue 15: morph::backend::RemoteServer handles 'deregister' with no i
 
     std::atomic<bool> done{false};
     std::string reply;
-    server->handle("deregister", [&](const std::string& msg) {
+    morph::wire::Envelope env;
+    env.kind = "deregister";  // modelId defaults to 0; valid envelope, erase is a no-op
+    server->handle(morph::wire::encode(env), [&](const std::string& msg) {
         reply = msg;
         done.store(true);
     });
     REQUIRE(waitUntil([&] { return done.load(); }));
-    REQUIRE(reply.starts_with("err|"));
+    auto decoded = morph::wire::decode(reply);
+    // Deregister with id 0 is a no-op (id 0 is never assigned), so this is "ok".
+    REQUIRE(decoded.kind == "ok");
 }
 
-TEST_CASE("Issue 15: morph::backend::RemoteServer handles 'execute' with too few parts gracefully", "[remote][issue15]") {
+TEST_CASE("Issue 15: morph::backend::RemoteServer rejects unknown envelope kind gracefully", "[remote][issue15]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
     std::atomic<bool> done{false};
     std::string reply;
-    server->handle("execute|1|SomeModel", [&](const std::string& msg) {
+    morph::wire::Envelope env;
+    env.kind = "frobnicate";
+    server->handle(morph::wire::encode(env), [&](const std::string& msg) {
         reply = msg;
         done.store(true);
     });
     REQUIRE(waitUntil([&] { return done.load(); }));
-    REQUIRE(reply.starts_with("err|"));
+    auto decoded = morph::wire::decode(reply);
+    REQUIRE(decoded.kind == "err");
 }
 
-TEST_CASE("Issue 15: morph::backend::RemoteServer handles completely empty message gracefully", "[remote][issue15]") {
+TEST_CASE("Issue 15: morph::backend::RemoteServer handles malformed JSON gracefully", "[remote][issue15]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
     std::atomic<bool> done{false};
     std::string reply;
-    server->handle("", [&](const std::string& msg) {
+    server->handle("not-json", [&](const std::string& msg) {
         reply = msg;
         done.store(true);
     });
     REQUIRE(waitUntil([&] { return done.load(); }));
-    REQUIRE(reply.starts_with("err|"));
+    auto decoded = morph::wire::decode(reply);
+    REQUIRE(decoded.kind == "err");
 }
 
 // ── Issue 10: In-flight execute after deregisterModel completes safely ─────────

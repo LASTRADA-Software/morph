@@ -29,6 +29,8 @@
 #include <thread>
 #include <vector>
 
+#include "test_support.hpp"
+
 using namespace std::chrono_literals;
 
 // ── Test model ────────────────────────────────────────────────────────────────
@@ -55,9 +57,7 @@ struct morph::model::ActionTraits<OffAction> {
     static int resultFromJson(std::string_view str) { return std::stoi(std::string{str}); }
 };
 
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExec = morph::testing::InlineExecutor;
 
 // ── Integration test ──────────────────────────────────────────────────────────
 

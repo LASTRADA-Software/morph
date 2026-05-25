@@ -1,9 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/model.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <memory>
+#include <morph/backend.hpp>
+#include <morph/bridge.hpp>
+#include <morph/executor.hpp>
+#include <morph/model.hpp>
+#include <morph/registry.hpp>
+#include <thread>
 
+#include "test_support.hpp"
 
 // ── Test models ───────────────────────────────────────────────────────────────
 
@@ -21,19 +28,24 @@ TEST_CASE("morph::model::detail::BackendChangedNotifiable: detects onBackendChan
     STATIC_REQUIRE_FALSE(morph::model::detail::BackendChangedNotifiable<SilentModel>);
 }
 
-TEST_CASE("morph::model::detail::ModelHolder for notifiable model implements morph::model::detail::IBackendChangedSink", "[model][concept]") {
+TEST_CASE(
+    "morph::model::detail::ModelHolder for notifiable model implements morph::model::detail::IBackendChangedSink",
+    "[model][concept]") {
     auto holder = std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>();
     auto* sink = dynamic_cast<morph::model::detail::IBackendChangedSink*>(holder.get());
     REQUIRE(sink != nullptr);
 }
 
-TEST_CASE("morph::model::detail::ModelHolder for silent model does NOT implement morph::model::detail::IBackendChangedSink", "[model][concept]") {
+TEST_CASE(
+    "morph::model::detail::ModelHolder for silent model does NOT implement morph::model::detail::IBackendChangedSink",
+    "[model][concept]") {
     auto holder = std::make_unique<morph::model::detail::ModelHolder<SilentModel>>();
     auto* sink = dynamic_cast<morph::model::detail::IBackendChangedSink*>(holder.get());
     REQUIRE(sink == nullptr);
 }
 
-TEST_CASE("morph::model::detail::IBackendChangedSink::onBackendChanged delegates to model method", "[model][concept]") {
+TEST_CASE("morph::model::detail::IBackendChangedSink::onBackendChanged delegates to model method",
+          "[model][concept]") {
     auto holder = std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>();
     auto* sink = dynamic_cast<morph::model::detail::IBackendChangedSink*>(holder.get());
     REQUIRE(sink != nullptr);
@@ -46,29 +58,22 @@ TEST_CASE("morph::model::detail::IBackendChangedSink::onBackendChanged delegates
 }
 
 // ── notifyBackendChanged ──────────────────────────────────────────────────────
-
-#include <morph/backend.hpp>
-#include <morph/executor.hpp>
-
-TEST_CASE("morph::backend::LocalBackend::notifyBackendChanged calls onBackendChanged on notifiable models only", "[backend][notify]") {
+TEST_CASE("morph::backend::LocalBackend::notifyBackendChanged calls onBackendChanged on notifiable models only",
+          "[backend][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::backend::LocalBackend backend{pool};
 
     // Register one notifiable model and one silent model.
-    backend.registerModel("NotifiableModel", [] { return std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>(); });
-    backend.registerModel("SilentModel", [] { return std::make_unique<morph::model::detail::ModelHolder<SilentModel>>(); });
+    backend.registerModel("NotifiableModel",
+                          [] { return std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>(); });
+    backend.registerModel("SilentModel",
+                          [] { return std::make_unique<morph::model::detail::ModelHolder<SilentModel>>(); });
 
     // Must not throw or crash regardless of model mix.
     REQUIRE_NOTHROW(backend.notifyBackendChanged());
 }
 
 // ── switchBackend test models ─────────────────────────────────────────────────
-
-#include <morph/bridge.hpp>
-#include <morph/registry.hpp>
-#include <chrono>
-#include <thread>
-
 struct CountAction {
     int x = 0;
 };
@@ -108,9 +113,7 @@ struct morph::model::ActionTraits<SwitchCountAction> {
     static int resultFromJson(std::string_view str) { return std::stoi(std::string{str}); }
 };
 
-struct SyncExec : morph::exec::IExecutor {
-    void post(std::function<void()> fn) override { fn(); }
-};
+using SyncExec = morph::testing::InlineExecutor;
 
 // ── switchBackend tests ───────────────────────────────────────────────────────
 
@@ -140,7 +143,8 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  handler works before and aft
     REQUIRE(res2.load() == 7);
 }
 
-TEST_CASE("morph::bridge::Bridge::switchBackend  -  destroyed handler not re-registered, no crash", "[bridge][switch]") {
+TEST_CASE("morph::bridge::Bridge::switchBackend  -  destroyed handler not re-registered, no crash",
+          "[bridge][switch]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -178,8 +182,9 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all r
 
 // ── Deep onBackendChanged count verification ──────────────────────────────────
 
-TEST_CASE("morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once on new model after one switch",
-          "[bridge][switch][notify]") {
+TEST_CASE(
+    "morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once on new model after one switch",
+    "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -199,8 +204,9 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  onBackendChanged called exac
     REQUIRE(count.load() == 1);
 }
 
-TEST_CASE("morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once per switch across two switches",
-          "[bridge][switch][notify]") {
+TEST_CASE(
+    "morph::bridge::Bridge::switchBackend  -  onBackendChanged called exactly once per switch across two switches",
+    "[bridge][switch][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};

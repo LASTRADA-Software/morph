@@ -62,7 +62,6 @@ target_sources(morph
         include/morph/logger.hpp
         include/morph/executor.hpp
         include/morph/strand.hpp
-        include/morph/task.hpp
         include/morph/completion.hpp
         include/morph/model.hpp
         include/morph/registry.hpp
@@ -72,6 +71,8 @@ target_sources(morph
         include/morph/network_monitor.hpp
         include/morph/offline_queue.hpp
         include/morph/sync_worker.hpp
+        include/morph/session.hpp
+        include/morph/wire.hpp
 )
 
 # ── Demo executable ──────────────────────────────────────────────────────────

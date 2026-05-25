@@ -45,7 +45,6 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 │  IExecutor · ThreadPoolExecutor · MainThreadExecutor            │
 │                                       (executor.hpp)            │
 │  StrandExecutor · ModelId             (strand.hpp)              │
-│  Task<T>                              (task.hpp)                │
 │  CompletionState<T>                   (completion.hpp)          │
 ├─────────────────────────────────────────────────────────────────┤
 │  Cross-cutting                                                  │
@@ -59,11 +58,9 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 
 | Header | Responsibility |
 |---|---|
-| `fwd.hpp` | Forward declarations of every `morph::*` sub-namespace so `using namespace morph::xxx;` works after a single include |
 | `logger.hpp` | `LogLevel`, log configuration and level helpers; internals in `morph::log::detail` |
 | `executor.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` (`morph::exec::`) |
 | `strand.hpp` | `ModelId`, `ModelIdHash`, `StrandExecutor` — serialises tasks per model (`morph::exec::detail::`) |
-| `task.hpp` | `Task<T>` — coroutine primitive (`morph::async::detail::`) |
 | `completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
 | `model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage (`morph::model::detail::`) |
 | `registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>` (public) + `ActionDispatcher`, `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`, `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
@@ -126,18 +123,24 @@ The GUI sees the same `morph::async::Completion<T>` in all three modes.
 
 ## Wire protocol
 
-`RemoteServer::handle` accepts pipe-delimited text messages:
+`RemoteServer::handle` accepts JSON envelopes (`morph::wire::Envelope`). The `kind`
+field is the discriminator:
 
-| Format | Direction | Meaning |
-|---|---|---|
-| `register\|<modelTypeId>` | client → server | Register a model instance; server replies `ok\|<id>` |
-| `deregister\|<id>` | client → server | Destroy model instance; server replies `ok` |
-| `execute\|<id>\|<modelTy>\|<actionTy>\|<json>` | client → server | 5-part; SimulatedRemote |
-| `execute\|<callId>\|<id>\|<modelTy>\|<actionTy>\|<json>` | client → server | 6-part; Qt WebSocket |
-| `ok\|<result>` | server → client | Successful execute (SimulatedRemote) |
-| `ok\|<callId>\|<result>` | server → client | Successful execute (Qt WebSocket) |
-| `err\|<message>` | server → client | Error reply (SimulatedRemote) |
-| `err\|<callId>\|<message>` | server → client | Error reply (Qt WebSocket) |
+| `kind` | Direction | Required fields | Meaning |
+|---|---|---|---|
+| `"register"` | client → server | `typeId` | Register a model instance; server replies `ok` with `modelId` |
+| `"deregister"` | client → server | `modelId` | Destroy model instance; server replies `ok` |
+| `"execute"`   | client → server | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` (optional) | Dispatch an action |
+| `"ok"`        | server → client | `callId`, plus `body` (execute result) or `modelId` (register reply) | Success |
+| `"err"`       | server → client | `callId` (echoed), `message` | Failure |
+
+All envelopes round-trip through Glaze JSON, so the protocol is self-describing,
+escaping-safe, and easy to extend (add a field, ignore unknowns).
+
+The `session` field is a `morph::session::Context`. The server runs every
+incoming `execute` envelope through its configured `IAuthorizer`; a `false`
+return causes the server to reply with `err|unauthorized` (callId echoed). The
+default authorizer permits everything.
 
 ## Component detail
 
@@ -264,7 +267,7 @@ Conflict resolution during offline-to-online sync belongs entirely in the model.
 
 ```
 Model::execute(action) throws
-  └─ Task<T> coroutine catches via co_return / exception
+  └─ LocalBackend's strand task catches via try/catch
        └─ CompletionState::setException(current_exception())
             └─ .onError(fn) handler posted to GUI executor
                  └─ fn receives exception_ptr; caller rethrows to inspect
@@ -357,14 +360,6 @@ handler.reset<FormAction>();
 
 `RemoteServer::handle()` captures `shared_from_this()` to prevent a use-after-free if the worker pool outlives the server. This means `RemoteServer` **must** be created via `std::make_shared<morph::backend::RemoteServer>(...)`. Constructing it on the stack and calling `handle()` will throw `std::bad_weak_ptr` at runtime.
 
-### `SimulatedRemoteBackend::registerModel` must not be called from a pool thread
-
-`registerModel` and `deregisterModel` post a message to `RemoteServer` and then block on a `std::future` waiting for the reply. That reply is produced by a task on the same pool. If `registerModel` is itself called from a task on that pool, the blocking `future::get()` will deadlock because the thread is occupied waiting for work it would need to dispatch itself.
-
-**Safe:** call `registerModel` / `deregisterModel` from the GUI thread or any thread that is not a worker in the pool that backs the `RemoteServer`.
-
-**Unsafe:** calling `Bridge::switchBackend` (which internally calls `registerModel` for every live handler) from within a pool-backed task.
-
 ### `NetworkMonitor` callbacks must not block
 
 Callbacks (`onOffline`, `onOnline`) run directly on the probe thread. A blocking call inside a callback will delay or prevent subsequent probes, and a blocking `stop()` call from within a callback will self-deadlock on the thread join. `stop()` detects this case and detaches instead of joining; the monitor thread completes its current iteration and exits, and the destructor spin-waits until it does. The intent is that callbacks should be short — typically just setting an atomic flag or posting to an executor.
@@ -393,7 +388,7 @@ If `runFor(timeout)` returns because the timeout expired rather than because the
 | `HandlerBinding` with atomic `currentId` | Handlers survive backend replacement without re-registering from application code. |
 | `LogLevel : uint8_t` | Minimises storage; 5 levels fit in one byte. |
 | Glaze for JSON | Reflects aggregate types automatically; no hand-written serialisation per action. |
-| `Task<T>` and `CompletionState<T>` internal only | Keeps the public API free of coroutine machinery; implementation can change without breaking callers. |
+| `CompletionState<T>` internal only | Keeps the public API free of state-handling machinery; implementation can change without breaking callers. |
 | 6-part Qt wire protocol | Carries a `callId` so async WebSocket replies can be correlated back to pending `Completion` objects. |
 | Client-side drafts for fielded actions | Avoids new wire messages, server-side draft state, and a server push channel. Patches never leave the client; only the full action is sent when the validator passes. |
 | `ActionValidator<A>` is action-typed, not model-typed | Different actions on the same model have different readiness requirements; pinning the predicate to the action keeps GUI code oblivious to model internals. |
