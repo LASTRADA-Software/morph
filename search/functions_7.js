@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['markdone_0',['markdone',['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5',1,'morph::offline::IOfflineQueue::markDone()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a',1,'morph::offline::InMemoryOfflineQueue::markDone()']]]
+  ['listen_0',['listen',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b',1,'morph::qt::QtWebSocketServer']]],
+  ['localbackend_1',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a1bbaff0063b89c293f427e07da9f1424',1,'morph::backend::LocalBackend']]]
 ];

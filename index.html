@@ -145,7 +145,6 @@ Layer diagram</h1>
 <div class="line">│  IExecutor · ThreadPoolExecutor · MainThreadExecutor            │</div>
 <div class="line">│                                       (executor.hpp)            │</div>
 <div class="line">│  StrandExecutor · ModelId             (strand.hpp)              │</div>
-<div class="line">│  Task&lt;T&gt;                              (task.hpp)                │</div>
 <div class="line">│  CompletionState&lt;T&gt;                   (completion.hpp)          │</div>
 <div class="line">├─────────────────────────────────────────────────────────────────┤</div>
 <div class="line">│  Cross-cutting                                                  │</div>
@@ -159,15 +158,11 @@ Core headers (&lt;tt&gt;include/morph/&lt;/tt&gt;)</h2>
 <tr class="markdownTableHead">
 <th class="markdownTableHeadNone">Header   </th><th class="markdownTableHeadNone">Responsibility    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>fwd.hpp</code>   </td><td class="markdownTableBodyNone">Forward declarations of every <code>morph::*</code> sub-namespace so <code>using namespace morph::xxx;</code> works after a single include    </td></tr>
-<tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><code><a class="el" href="d6/da3/logger_8hpp_source.html">logger.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>LogLevel</code>, log configuration and level helpers; internals in <code>morph::log::detail</code>    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code><a class="el" href="d7/d76/executor_8hpp_source.html">executor.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>IExecutor</code>, <code>ThreadPoolExecutor</code>, <code>MainThreadExecutor</code> (<code>morph::exec::</code>)    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code><a class="el" href="de/dc1/strand_8hpp_source.html">strand.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>ModelId</code>, <code>ModelIdHash</code>, <code>StrandExecutor</code> — serialises tasks per model (<code>morph::exec::detail::</code>)    </td></tr>
+<td class="markdownTableBodyNone"><code><a class="el" href="d7/d76/executor_8hpp_source.html">executor.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>IExecutor</code>, <code>ThreadPoolExecutor</code>, <code>MainThreadExecutor</code> (<code>morph::exec::</code>)    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code><a class="el" href="d8/da1/task_8hpp_source.html">task.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>Task&lt;T&gt;</code> — coroutine primitive (<code>morph::async::detail::</code>)    </td></tr>
+<td class="markdownTableBodyNone"><code><a class="el" href="de/dc1/strand_8hpp_source.html">strand.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>ModelId</code>, <code>ModelIdHash</code>, <code>StrandExecutor</code> — serialises tasks per model (<code>morph::exec::detail::</code>)    </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone"><code><a class="el" href="d1/d76/completion_8hpp_source.html">completion.hpp</a></code>   </td><td class="markdownTableBodyNone"><code>CompletionState&lt;T&gt;</code> (detail) + <code>Completion&lt;T&gt;</code> (public) — result handle    </td></tr>
 <tr class="markdownTableRowOdd">
@@ -230,27 +225,23 @@ Deployment topologies</h1>
 </div><!-- fragment --><p>The GUI sees the same <code><a class="el" href="dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">morph::async::Completion</a>&lt;T&gt;</code> in all three modes.</p>
 <h1><a class="anchor" id="wire-protocol"></a>
 Wire protocol</h1>
-<p><code>RemoteServer::handle</code> accepts pipe-delimited text messages:</p>
+<p><code>RemoteServer::handle</code> accepts JSON envelopes (<code><a class="el" href="d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code>). The <code>kind</code> field is the discriminator:</p>
 <table class="markdownTable">
 <tr class="markdownTableHead">
-<th class="markdownTableHeadNone">Format   </th><th class="markdownTableHeadNone">Direction   </th><th class="markdownTableHeadNone">Meaning    </th></tr>
+<th class="markdownTableHeadNone"><code>kind</code>   </th><th class="markdownTableHeadNone">Direction   </th><th class="markdownTableHeadNone">Required fields   </th><th class="markdownTableHeadNone">Meaning    </th></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>register\|&lt;modelTypeId&gt;</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone">Register a model instance; server replies <code>ok\|&lt;id&gt;</code>    </td></tr>
+<td class="markdownTableBodyNone"><code>"register"</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone"><code>typeId</code>   </td><td class="markdownTableBodyNone">Register a model instance; server replies <code>ok</code> with <code>modelId</code>    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>deregister\|&lt;id&gt;</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone">Destroy model instance; server replies <code>ok</code>    </td></tr>
+<td class="markdownTableBodyNone"><code>"deregister"</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone"><code>modelId</code>   </td><td class="markdownTableBodyNone">Destroy model instance; server replies <code>ok</code>    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>execute\|&lt;id&gt;\|&lt;modelTy&gt;\|&lt;actionTy&gt;\|&lt;json&gt;</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone">5-part; SimulatedRemote    </td></tr>
+<td class="markdownTableBodyNone"><code>"execute"</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone"><code>callId</code>, <code>modelId</code>, <code>modelType</code>, <code>actionType</code>, <code>body</code>, <code>session</code> (optional)   </td><td class="markdownTableBodyNone">Dispatch an action    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>execute\|&lt;callId&gt;\|&lt;id&gt;\|&lt;modelTy&gt;\|&lt;actionTy&gt;\|&lt;json&gt;</code>   </td><td class="markdownTableBodyNone">client → server   </td><td class="markdownTableBodyNone">6-part; Qt WebSocket    </td></tr>
+<td class="markdownTableBodyNone"><code>"ok"</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone"><code>callId</code>, plus <code>body</code> (execute result) or <code>modelId</code> (register reply)   </td><td class="markdownTableBodyNone">Success    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>ok\|&lt;result&gt;</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone">Successful execute (SimulatedRemote)    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>ok\|&lt;callId&gt;\|&lt;result&gt;</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone">Successful execute (Qt WebSocket)    </td></tr>
-<tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>err\|&lt;message&gt;</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone">Error reply (SimulatedRemote)    </td></tr>
-<tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone"><code>err\|&lt;callId&gt;\|&lt;message&gt;</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone">Error reply (Qt WebSocket)   </td></tr>
+<td class="markdownTableBodyNone"><code>"err"</code>   </td><td class="markdownTableBodyNone">server → client   </td><td class="markdownTableBodyNone"><code>callId</code> (echoed), <code>message</code>   </td><td class="markdownTableBodyNone">Failure   </td></tr>
 </table>
+<p>All envelopes round-trip through Glaze JSON, so the protocol is self-describing, escaping-safe, and easy to extend (add a field, ignore unknowns).</p>
+<p>The <code>session</code> field is a <code><a class="el" href="dd/d85/structmorph_1_1session_1_1Context.html" title="Per-call session context carried through the bridge to the model.">morph::session::Context</a></code>. The server runs every incoming <code>execute</code> envelope through its configured <code>IAuthorizer</code>; a <code>false</code> return causes the server to reply with <code>err|unauthorized</code> (callId echoed). The default authorizer permits everything.</p>
 <h1><a class="anchor" id="component-detail"></a>
 Component detail</h1>
 <h2><a class="anchor" id="executors"></a>
@@ -361,7 +352,7 @@ Thread safety</h1>
 <h1><a class="anchor" id="error-propagation"></a>
 Error propagation</h1>
 <div class="fragment"><div class="line">Model::execute(action) throws</div>
-<div class="line">  └─ Task&lt;T&gt; coroutine catches via co_return / exception</div>
+<div class="line">  └─ LocalBackend&#39;s strand task catches via try/catch</div>
 <div class="line">       └─ CompletionState::setException(current_exception())</div>
 <div class="line">            └─ .onError(fn) handler posted to GUI executor</div>
 <div class="line">                 └─ fn receives exception_ptr; caller rethrows to inspect</div>
@@ -392,9 +383,9 @@ Adding a new model and actions</h1>
 <div class="line">handler.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">execute</a>(MyAction{21})</div>
 <div class="line">    .then([](<span class="keywordtype">int</span> result) { <span class="comment">/* runs on GUI thread */</span> })</div>
 <div class="line">    .onError([](std::exception_ptr e) { <span class="comment">/* runs on GUI thread */</span> });</div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a></div><div class="ttdoc">RAII wrapper that binds a single model type to a Bridge.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00230">bridge.hpp:230</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a8c6341aaf8719bd097f2af013204b03b"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">morph::bridge::BridgeHandler::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; typename ::morph::model::ActionTraits&lt; Action &gt;::Result &gt; execute(Action action)</div><div class="ttdoc">Dispatches action via the underlying Bridge and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00275">bridge.hpp:275</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1Bridge_html"><div class="ttname"><a href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a></div><div class="ttdoc">Central dispatcher that routes typed actions to an IBackend.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00071">bridge.hpp:71</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a></div><div class="ttdoc">RAII wrapper that binds a single model type to a Bridge.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00332">bridge.hpp:332</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a8c6341aaf8719bd097f2af013204b03b"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">morph::bridge::BridgeHandler::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; typename ::morph::model::ActionTraits&lt; Action &gt;::Result &gt; execute(Action action)</div><div class="ttdoc">Dispatches action via the underlying Bridge and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00381">bridge.hpp:381</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1Bridge_html"><div class="ttname"><a href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a></div><div class="ttdoc">Central dispatcher that routes typed actions to an IBackend.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00072">bridge.hpp:72</a></div></div>
 </div><!-- fragment --><h1><a class="anchor" id="subscriptions-and-fielded-actions"></a>
 Subscriptions and fielded actions</h1>
 <p>The framework offers two complementary surfaces for invoking actions from the GUI:</p>
@@ -407,15 +398,15 @@ API</h2>
 <div class="fragment"><div class="line"><span class="comment">// Per-action validator — template specialisation, no Model coupling.</span></div>
 <div class="line"><span class="keyword">template</span> &lt;<span class="keyword">typename</span> A&gt;</div>
 <div class="line"><span class="keyword">struct </span><a class="code hl_struct" href="d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a> {</div>
-<div class="line">    <span class="keyword">static</span> <span class="keywordtype">bool</span> <a class="code hl_function" href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a4a8938be285794c7b095e97cf86faef3">ready</a>(<span class="keyword">const</span> A&amp;) <span class="keyword">noexcept</span> { <span class="keywordflow">return</span> <span class="keyword">true</span>; }   <span class="comment">// default: one-shot</span></div>
+<div class="line">    <span class="keyword">static</span> <span class="keywordtype">bool</span> <a class="code hl_function" href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a3741692227c70903fcc7fa93011f636d">ready</a>(<span class="keyword">const</span> A&amp;) <span class="keyword">noexcept</span> { <span class="keywordflow">return</span> <span class="keyword">true</span>; }   <span class="comment">// default: one-shot</span></div>
 <div class="line">};</div>
 <div class="line"> </div>
 <div class="line"><span class="comment">// User specialises (or uses the macro) for actions with fielded readiness.</span></div>
 <div class="line">BRIDGE_REGISTER_VALIDATOR(FormAction, [](<span class="keyword">const</span> FormAction&amp; a) {</div>
 <div class="line">    <span class="keywordflow">return</span> a.a != 0.0 &amp;&amp; a.b != 0.0 &amp;&amp; a.c != 0.0;</div>
 <div class="line">})</div>
-<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a></div><div class="ttdoc">Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00048">registry.hpp:48</a></div></div>
-<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html_a4a8938be285794c7b095e97cf86faef3"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a4a8938be285794c7b095e97cf86faef3">morph::model::ActionValidator::ready</a></div><div class="ttdeci">static bool ready(const Action &amp;) noexcept</div><div class="ttdoc">Returns true if the action is in a state that should be executed.</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00052">registry.hpp:52</a></div></div>
+<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a></div><div class="ttdoc">Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00078">registry.hpp:78</a></div></div>
+<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html_a3741692227c70903fcc7fa93011f636d"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a3741692227c70903fcc7fa93011f636d">morph::model::ActionValidator::ready</a></div><div class="ttdeci">static constexpr bool ready(const Action &amp;action)</div><div class="ttdoc">Returns true if the action is in a state that should be executed.</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00086">registry.hpp:86</a></div></div>
 </div><!-- fragment --><div class="fragment"><div class="line"><a class="code hl_class" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler&lt;FormModel&gt;</a> handler{bridge, &amp;guiExec};</div>
 <div class="line"> </div>
 <div class="line">handler.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">subscribe</a>&lt;FormAction&gt;([](<span class="keywordtype">double</span> sum) { renderTotal(sum); });</div>
@@ -426,7 +417,7 @@ API</h2>
 <div class="line"> </div>
 <div class="line">handler.unsubscribe&lt;FormAction&gt;();</div>
 <div class="line">handler.reset&lt;FormAction&gt;();</div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_aa289505b2d7130d3a250e76745ef8753"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">morph::bridge::BridgeHandler::subscribe</a></div><div class="ttdeci">void subscribe(std::function&lt; void(typename ::morph::model::ActionTraits&lt; Action &gt;::Result)&gt; cb)</div><div class="ttdoc">Subscribes to results of action type Action.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00284">bridge.hpp:284</a></div></div>
+<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_aa289505b2d7130d3a250e76745ef8753"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">morph::bridge::BridgeHandler::subscribe</a></div><div class="ttdeci">void subscribe(std::function&lt; void(typename ::morph::model::ActionTraits&lt; Action &gt;::Result)&gt; cb)</div><div class="ttdoc">Subscribes to results of action type Action.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00390">bridge.hpp:390</a></div></div>
 </div><!-- fragment --><h2><a class="anchor" id="behavior"></a>
 Behavior</h2>
 <table class="markdownTable">
@@ -452,11 +443,6 @@ Known limitations</h1>
 <h2><a class="anchor" id="remoteserver-must-be-heap-allocated"></a>
 &lt;tt&gt;RemoteServer&lt;/tt&gt; must be heap-allocated</h2>
 <p><code>RemoteServer::handle()</code> captures <code>shared_from_this()</code> to prevent a use-after-free if the worker pool outlives the server. This means <code>RemoteServer</code> <b>must</b> be created via <code>std::make_shared&lt;<a class="el" href="d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">morph::backend::RemoteServer</a>&gt;(...)</code>. Constructing it on the stack and calling <code>handle()</code> will throw <code>std::bad_weak_ptr</code> at runtime.</p>
-<h2><a class="anchor" id="simulatedremotebackendregistermodel-must-not-be-called-from-a-pool-thread"></a>
-&lt;tt&gt;SimulatedRemoteBackend::registerModel&lt;/tt&gt; must not be called from a pool thread</h2>
-<p><code>registerModel</code> and <code>deregisterModel</code> post a message to <code>RemoteServer</code> and then block on a <code>std::future</code> waiting for the reply. That reply is produced by a task on the same pool. If <code>registerModel</code> is itself called from a task on that pool, the blocking <code>future::get()</code> will deadlock because the thread is occupied waiting for work it would need to dispatch itself.</p>
-<p><b>Safe:</b> call <code>registerModel</code> / <code>deregisterModel</code> from the GUI thread or any thread that is not a worker in the pool that backs the <code>RemoteServer</code>.</p>
-<p><b>Unsafe:</b> calling <code>Bridge::switchBackend</code> (which internally calls <code>registerModel</code> for every live handler) from within a pool-backed task.</p>
 <h2><a class="anchor" id="networkmonitor-callbacks-must-not-block"></a>
 &lt;tt&gt;NetworkMonitor&lt;/tt&gt; callbacks must not block</h2>
 <p>Callbacks (<code>onOffline</code>, <code>onOnline</code>) run directly on the probe thread. A blocking call inside a callback will delay or prevent subsequent probes, and a blocking <code>stop()</code> call from within a callback will self-deadlock on the thread join. <code>stop()</code> detects this case and detaches instead of joining; the monitor thread completes its current iteration and exits, and the destructor spin-waits until it does. The intent is that callbacks should be short — typically just setting an atomic flag or posting to an executor.</p>
@@ -491,7 +477,7 @@ Key design decisions</h1>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">Glaze for JSON   </td><td class="markdownTableBodyNone">Reflects aggregate types automatically; no hand-written serialisation per action.    </td></tr>
 <tr class="markdownTableRowOdd">
-<td class="markdownTableBodyNone"><code>Task&lt;T&gt;</code> and <code>CompletionState&lt;T&gt;</code> internal only   </td><td class="markdownTableBodyNone">Keeps the public API free of coroutine machinery; implementation can change without breaking callers.    </td></tr>
+<td class="markdownTableBodyNone"><code>CompletionState&lt;T&gt;</code> internal only   </td><td class="markdownTableBodyNone">Keeps the public API free of state-handling machinery; implementation can change without breaking callers.    </td></tr>
 <tr class="markdownTableRowEven">
 <td class="markdownTableBodyNone">6-part Qt wire protocol   </td><td class="markdownTableBodyNone">Carries a <code>callId</code> so async WebSocket replies can be correlated back to pending <code>Completion</code> objects.    </td></tr>
 <tr class="markdownTableRowOdd">

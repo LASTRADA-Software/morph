@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['payload_0',['payload',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918',1,'morph::offline::QueueItem']]],
-  ['probeinterval_1',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]]
+  ['deadlettered_0',['deadLettered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73',1,'morph::offline::SyncResult']]]
 ];

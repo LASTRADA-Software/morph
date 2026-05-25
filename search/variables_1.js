@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['id_0',['id',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84',1,'morph::offline::QueueItem']]]
+  ['backoffmultiplier_0',['backoffMultiplier',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a3eb7d1ba338774ed582fe26de164a4b9',1,'morph::qt::QtWebSocketBackendConfig']]],
+  ['body_1',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope']]]
 ];

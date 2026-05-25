@@ -126,12 +126,15 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ac638da4c0824021c5a63f1bd5f13b6f4" id="r_ac638da4c0824021c5a63f1bd5f13b6f4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4">execute</a> (::morph::exec::detail::ModelId mid, detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
 <tr class="memdesc:ac638da4c0824021c5a63f1bd5f13b6f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <code>call.localOp</code> on the model's strand and returns a <code>Completion</code>.  <br /></td></tr>
 <tr class="separator:ac638da4c0824021c5a63f1bd5f13b6f4"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a8cd0f4114df7c7f9ff9b224bdba3f5e4" id="r_a8cd0f4114df7c7f9ff9b224bdba3f5e4"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a8cd0f4114df7c7f9ff9b224bdba3f5e4">cancelPending</a> (const std::exception_ptr &amp;exc) override</td></tr>
+<tr class="memdesc:a8cd0f4114df7c7f9ff9b224bdba3f5e4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every still-pending completion this backend produced with <code>exc</code>.  <br /></td></tr>
+<tr class="separator:a8cd0f4114df7c7f9ff9b224bdba3f5e4"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>In-process backend that executes model actions on a thread pool strand. </p>
 <p>Each model instance gets its own strand so actions are serialised per-model without a global lock on the pool. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a1bbaff0063b89c293f427e07da9f1424" name="a1bbaff0063b89c293f427e07da9f1424"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1bbaff0063b89c293f427e07da9f1424">&#9670;&#160;</a></span>LocalBackend()</h2>
@@ -165,7 +168,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +216,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Newly assigned <code>ModelId</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -249,7 +252,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +281,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Notifies every live model that implements <code>IBackendChangedSink</code>. Thread-safe. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -334,7 +337,43 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00172">172</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a8cd0f4114df7c7f9ff9b224bdba3f5e4" name="a8cd0f4114df7c7f9ff9b224bdba3f5e4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a8cd0f4114df7c7f9ff9b224bdba3f5e4">&#9670;&#160;</a></span>cancelPending()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::LocalBackend::cancelPending </td>
+          <td>(</td>
+          <td class="paramtype">const std::exception_ptr &amp;&#160;</td>
+          <td class="paramname"><em>exc</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Resolves every still-pending completion this backend produced with <code>exc</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">exc</td><td>Exception delivered to every pending completion's error sink. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

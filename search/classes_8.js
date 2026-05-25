@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['remoteserver_0',['RemoteServer',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html',1,'morph::backend']]]
+  ['networkmonitor_0',['NetworkMonitor',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html',1,'morph::offline']]],
+  ['networkmonitorconfig_1',['NetworkMonitorConfig',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html',1,'morph::offline']]]
 ];

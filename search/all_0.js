@@ -3,14 +3,16 @@ var searchData=
   ['a_20domain_20concern_20not_20a_20framework_20concern_0',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
   ['a_20new_20model_20and_20actions_1',['Adding a new model and actions',['../index.html#adding-a-new-model-and-actions',1,'']]],
   ['a_20non_20null_20executor_20before_20callbacks_20fire_2',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
-  ['a_20pool_20thread_3',['&lt;tt&gt;SimulatedRemoteBackend::registerModel&lt;/tt&gt; must not be called from a pool thread',['../index.html#simulatedremotebackendregistermodel-must-not-be-called-from-a-pool-thread',1,'']]],
-  ['actions_4',['actions',['../index.html#adding-a-new-model-and-actions',1,'Adding a new model and actions'],['../index.html#subscriptions-and-fielded-actions',1,'Subscriptions and fielded actions']]],
-  ['actiontraits_5',['ActionTraits',['../d5/d09/structmorph_1_1model_1_1ActionTraits.html',1,'morph::model']]],
+  ['actions_3',['actions',['../index.html#adding-a-new-model-and-actions',1,'Adding a new model and actions'],['../index.html#subscriptions-and-fielded-actions',1,'Subscriptions and fielded actions']]],
+  ['actiontraits_4',['ActionTraits',['../d5/d09/structmorph_1_1model_1_1ActionTraits.html',1,'morph::model']]],
+  ['actiontype_5',['actionType',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95',1,'morph::wire::Envelope']]],
   ['actionvalidator_6',['ActionValidator',['../d5/d92/structmorph_1_1model_1_1ActionValidator.html',1,'morph::model']]],
   ['adding_20a_20new_20model_20and_20actions_7',['Adding a new model and actions',['../index.html#adding-a-new-model-and-actions',1,'']]],
   ['allocated_8',['&lt;tt&gt;RemoteServer&lt;/tt&gt; must be heap-allocated',['../index.html#remoteserver-must-be-heap-allocated',1,'']]],
-  ['and_20actions_9',['Adding a new model and actions',['../index.html#adding-a-new-model-and-actions',1,'']]],
-  ['and_20fielded_20actions_10',['Subscriptions and fielded actions',['../index.html#subscriptions-and-fielded-actions',1,'']]],
-  ['api_11',['API',['../index.html#api',1,'']]],
-  ['architecture_12',['morph Architecture',['../index.html',1,'']]]
+  ['allowallauthorizer_9',['AllowAllAuthorizer',['../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html',1,'morph::session']]],
+  ['and_20actions_10',['Adding a new model and actions',['../index.html#adding-a-new-model-and-actions',1,'']]],
+  ['and_20fielded_20actions_11',['Subscriptions and fielded actions',['../index.html#subscriptions-and-fielded-actions',1,'']]],
+  ['api_12',['API',['../index.html#api',1,'']]],
+  ['architecture_13',['morph Architecture',['../index.html',1,'']]],
+  ['authorize_14',['authorize',['../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html#a15563dffc836682b80f6d15cba956f42',1,'morph::session::AllowAllAuthorizer::authorize()'],['../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901',1,'morph::session::IAuthorizer::authorize()']]]
 ];

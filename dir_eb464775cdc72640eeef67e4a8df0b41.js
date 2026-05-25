@@ -11,7 +11,8 @@ var dir_eb464775cdc72640eeef67e4a8df0b41 =
     [ "offline_queue.hpp", "d3/d1c/offline__queue_8hpp_source.html", null ],
     [ "registry.hpp", "d1/da2/registry_8hpp_source.html", null ],
     [ "remote.hpp", "d0/dfc/remote_8hpp_source.html", null ],
+    [ "session.hpp", "d4/d5e/session_8hpp_source.html", null ],
     [ "strand.hpp", "de/dc1/strand_8hpp_source.html", null ],
     [ "sync_worker.hpp", "d5/d2b/sync__worker_8hpp_source.html", null ],
-    [ "task.hpp", "d8/da1/task_8hpp_source.html", null ]
+    [ "wire.hpp", "dc/de4/wire_8hpp_source.html", null ]
 ];

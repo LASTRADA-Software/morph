@@ -108,6 +108,21 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a6a0b4e661e796d6b2a12be4866c2d49d" id="r_a6a0b4e661e796d6b2a12be4866c2d49d"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6a0b4e661e796d6b2a12be4866c2d49d">Bridge</a> (std::unique_ptr&lt;::morph::backend::detail::IBackend &gt; backend)</td></tr>
 <tr class="memdesc:a6a0b4e661e796d6b2a12be4866c2d49d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a bridge that dispatches through <code>backend</code>.  <br /></td></tr>
 <tr class="separator:a6a0b4e661e796d6b2a12be4866c2d49d"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7045f7c97ea552add8cfbfc1868daba3" id="r_a7045f7c97ea552add8cfbfc1868daba3"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7045f7c97ea552add8cfbfc1868daba3">~Bridge</a> ()</td></tr>
+<tr class="memdesc:a7045f7c97ea552add8cfbfc1868daba3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Cancels every still-pending completion on the active backend.  <br /></td></tr>
+<tr class="separator:a7045f7c97ea552add8cfbfc1868daba3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac899b0190db384e706a0b0b77d5fcb15" id="r_ac899b0190db384e706a0b0b77d5fcb15"><td class="memItemLeft" align="right" valign="top"><a id="ac899b0190db384e706a0b0b77d5fcb15" name="ac899b0190db384e706a0b0b77d5fcb15"></a>
+&#160;</td><td class="memItemRight" valign="bottom"><b>Bridge</b> (const <a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;)=delete</td></tr>
+<tr class="separator:ac899b0190db384e706a0b0b77d5fcb15"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2522930e95ef04e3b98ee368954db18f" id="r_a2522930e95ef04e3b98ee368954db18f"><td class="memItemLeft" align="right" valign="top"><a id="a2522930e95ef04e3b98ee368954db18f" name="a2522930e95ef04e3b98ee368954db18f"></a>
+<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><b>operator=</b> (const <a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;)=delete</td></tr>
+<tr class="separator:a2522930e95ef04e3b98ee368954db18f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aa9be22cc487548068faa3181bbf27f9a" id="r_aa9be22cc487548068faa3181bbf27f9a"><td class="memItemLeft" align="right" valign="top"><a id="aa9be22cc487548068faa3181bbf27f9a" name="aa9be22cc487548068faa3181bbf27f9a"></a>
+&#160;</td><td class="memItemRight" valign="bottom"><b>Bridge</b> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;&amp;)=delete</td></tr>
+<tr class="separator:aa9be22cc487548068faa3181bbf27f9a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aaea226bd7bab3bc1fe06d9fa9da835ef" id="r_aaea226bd7bab3bc1fe06d9fa9da835ef"><td class="memItemLeft" align="right" valign="top"><a id="aaea226bd7bab3bc1fe06d9fa9da835ef" name="aaea226bd7bab3bc1fe06d9fa9da835ef"></a>
+<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><b>operator=</b> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;&amp;)=delete</td></tr>
+<tr class="separator:aaea226bd7bab3bc1fe06d9fa9da835ef"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a4075023106e7be2251049ca4be569410" id="r_a4075023106e7be2251049ca4be569410"><td class="memTemplParams" colspan="2">template&lt;typename Model &gt; </td></tr>
 <tr class="memitem:a4075023106e7be2251049ca4be569410"><td class="memTemplItemLeft" align="right" valign="top">std::shared_ptr&lt; detail::HandlerBinding &gt;&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4075023106e7be2251049ca4be569410">registerHandler</a> ()</td></tr>
 <tr class="memdesc:a4075023106e7be2251049ca4be569410"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates and registers a new <code>HandlerBinding</code> for <code>Model</code>.  <br /></td></tr>
@@ -115,6 +130,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a7c18a6f7785c958a7d2e3ea2df97c107" id="r_a7c18a6f7785c958a7d2e3ea2df97c107"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7c18a6f7785c958a7d2e3ea2df97c107">registerHandler</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding)</td></tr>
 <tr class="memdesc:a7c18a6f7785c958a7d2e3ea2df97c107"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers a pre-built binding with a custom factory.  <br /></td></tr>
 <tr class="separator:a7c18a6f7785c958a7d2e3ea2df97c107"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9933a611e3467284c356bb0083de6834" id="r_a9933a611e3467284c356bb0083de6834"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a9933a611e3467284c356bb0083de6834">setDefaultSession</a> (<a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session)</td></tr>
+<tr class="memdesc:a9933a611e3467284c356bb0083de6834"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a default session context applied to every call that does not provide one explicitly via <code>BridgeHandler::executeWith(...)</code>.  <br /></td></tr>
+<tr class="separator:a9933a611e3467284c356bb0083de6834"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:adaccbb7a89e5625b3e6085d8db59bd97" id="r_adaccbb7a89e5625b3e6085d8db59bd97"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adaccbb7a89e5625b3e6085d8db59bd97">defaultSession</a> () const</td></tr>
+<tr class="memdesc:adaccbb7a89e5625b3e6085d8db59bd97"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed default session. Thread-safe.  <br /></td></tr>
+<tr class="separator:adaccbb7a89e5625b3e6085d8db59bd97"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af0892c23b3dfbf5917fd65da908b0e95" id="r_af0892c23b3dfbf5917fd65da908b0e95"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95">switchBackend</a> (std::unique_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)</td></tr>
 <tr class="memdesc:af0892c23b3dfbf5917fd65da908b0e95"><td class="mdescLeft">&#160;</td><td class="mdescRight">Atomically replaces the active backend with <code>newBackend</code>.  <br /></td></tr>
 <tr class="separator:af0892c23b3dfbf5917fd65da908b0e95"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -131,7 +152,7 @@ Public Member Functions</h2></td></tr>
 <p><code><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></code> owns exactly one active backend at a time. It tracks all registered <code>HandlerBinding</code> instances and re-registers them automatically when <code><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></code> is called, enabling seamless local ↔ remote transitions.</p>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. <code><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6676a2e068b5739a465d2c29f4570828" title="Dispatches action against the model identified by binding.">executeVia()</a></code> uses a lock-free snapshot of the backend pointer so it does not block <code><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6a0b4e661e796d6b2a12be4866c2d49d" name="a6a0b4e661e796d6b2a12be4866c2d49d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6a0b4e661e796d6b2a12be4866c2d49d">&#9670;&#160;</a></span>Bridge()</h2>
@@ -158,6 +179,7 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Constructs a bridge that dispatches through <code>backend</code>. </p>
+<p>Installs a reconnect handler so backends with a recoverable transport (e.g. <code>QtWebSocketBackend</code>) can ask the bridge to re-register every live handler against the freshly reconnected peer.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">backend</td><td>Initial backend. Ownership is transferred. </td></tr>
@@ -165,7 +187,37 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7045f7c97ea552add8cfbfc1868daba3" name="a7045f7c97ea552add8cfbfc1868daba3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7045f7c97ea552add8cfbfc1868daba3">&#9670;&#160;</a></span>~Bridge()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::bridge::Bridge::~Bridge </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Cancels every still-pending completion on the active backend. </p>
+<p>Each <code>.onError(...)</code> callback receives a <code>BridgeDestroyedError</code>. In-flight server replies that arrive after destruction are no-ops because each <code>CompletionState::setValue</code>/<code>setException</code> is idempotent. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -204,7 +256,7 @@ template&lt;typename Model &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +292,74 @@ template&lt;typename Model &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9933a611e3467284c356bb0083de6834" name="a9933a611e3467284c356bb0083de6834"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9933a611e3467284c356bb0083de6834">&#9670;&#160;</a></span>setDefaultSession()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::bridge::Bridge::setDefaultSession </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>&#160;</td>
+          <td class="paramname"><em>session</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs a default session context applied to every call that does not provide one explicitly via <code>BridgeHandler::executeWith(...)</code>. </p>
+<p>Typical pattern: call this once after login to bind the user's principal and locale, then every subsequent <code>handler.execute(action)</code> carries the session automatically. Thread-safe.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">session</td><td>The new default. Pass <code>{}</code> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="adaccbb7a89e5625b3e6085d8db59bd97" name="adaccbb7a89e5625b3e6085d8db59bd97"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adaccbb7a89e5625b3e6085d8db59bd97">&#9670;&#160;</a></span>defaultSession()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> morph::bridge::Bridge::defaultSession </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy of the currently installed default session. Thread-safe. </p>
+<dl class="section return"><dt>Returns</dt><dd>Snapshot of the default <code>Context</code>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -278,7 +397,7 @@ template&lt;typename Model &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,7 +433,7 @@ template&lt;typename Model &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -379,7 +498,7 @@ template&lt;typename Model , typename Action &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

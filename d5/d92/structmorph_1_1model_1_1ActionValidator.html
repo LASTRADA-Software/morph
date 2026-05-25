@@ -105,15 +105,27 @@ $(document).ready(function(){initNavTree('d5/d92/structmorph_1_1model_1_1ActionV
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
-<tr class="memitem:a4a8938be285794c7b095e97cf86faef3" id="r_a4a8938be285794c7b095e97cf86faef3"><td class="memItemLeft" align="right" valign="top">static bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html#a4a8938be285794c7b095e97cf86faef3">ready</a> (const Action &amp;) noexcept</td></tr>
-<tr class="memdesc:a4a8938be285794c7b095e97cf86faef3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns <code>true</code> if the action is in a state that should be executed.  <br /></td></tr>
-<tr class="separator:a4a8938be285794c7b095e97cf86faef3"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a3741692227c70903fcc7fa93011f636d" id="r_a3741692227c70903fcc7fa93011f636d"><td class="memItemLeft" align="right" valign="top">static constexpr bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html#a3741692227c70903fcc7fa93011f636d">ready</a> (const Action &amp;action)</td></tr>
+<tr class="memdesc:a3741692227c70903fcc7fa93011f636d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns <code>true</code> if the action is in a state that should be executed.  <br /></td></tr>
+<tr class="separator:a3741692227c70903fcc7fa93011f636d"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Action&gt;<br />
 struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action validator used by <code>BridgeHandler::set&lt;...&gt;</code> to decide whether the in-progress draft is ready to execute. </p>
-<p>The primary template returns <code>true</code> unconditionally, which matches the existing one-shot semantics: the first <code>set&lt;&gt;</code> lands and the action fires. Specialise (or use <code>BRIDGE_REGISTER_VALIDATOR</code>) when an action requires multiple fields populated before it makes sense to execute.</p>
+<p>Resolution order (highest-priority first):</p><ol type="1">
+<li><b>Explicit specialisation</b> of <code><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html" title="Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...">ActionValidator</a>&lt;Action&gt;</code> — typically via <code>BRIDGE_REGISTER_VALIDATOR(Action, fn)</code>. Wins over everything.</li>
+<li>**<code>bool validate() const</code>** member on <code>Action</code> — picked up automatically. Co-locates the predicate with the data it inspects; preferred when you own the action type.</li>
+<li><b>Default</b> — returns <code>true</code>, matching one-shot semantics (the first <code>set&lt;&gt;</code> lands and the action fires).</li>
+</ol>
 <p>Validation is intentionally a property of the <b>action</b>, not the model: different actions on the same model have different readiness requirements, and keeping the predicate next to the action keeps the GUI side oblivious to model internals.</p>
+<dl class="section user"><dt>Example — member function</dt><dd><div class="fragment"><div class="line"><span class="keyword">struct </span>FormAction {</div>
+<div class="line">    <span class="keywordtype">double</span> a;</div>
+<div class="line">    <span class="keywordtype">double</span> b;</div>
+<div class="line">    <span class="keywordtype">double</span> c;</div>
+<div class="line">    <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> a != 0.0 &amp;&amp; b != 0.0 &amp;&amp; c != 0.0; }</div>
+<div class="line">};</div>
+<div class="line"><span class="comment">// No macro needed; ActionValidator&lt;FormAction&gt;::ready calls .validate() automatically.</span></div>
+</div><!-- fragment --></dd></dl>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Action</td><td>Concrete action type. </td></tr>
@@ -121,10 +133,10 @@ struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action validato
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
-<a id="a4a8938be285794c7b095e97cf86faef3" name="a4a8938be285794c7b095e97cf86faef3"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a4a8938be285794c7b095e97cf86faef3">&#9670;&#160;</a></span>ready()</h2>
+<a id="a3741692227c70903fcc7fa93011f636d" name="a3741692227c70903fcc7fa93011f636d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a3741692227c70903fcc7fa93011f636d">&#9670;&#160;</a></span>ready()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -135,24 +147,31 @@ template&lt;typename Action &gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">static bool <a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a>&lt; Action &gt;::ready </td>
+          <td class="memname">static constexpr bool <a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a>&lt; Action &gt;::ready </td>
           <td>(</td>
           <td class="paramtype">const Action &amp;&#160;</td>
-          <td class="paramname"></td><td>)</td>
+          <td class="paramname"><em>action</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span><span class="mlabel">constexpr</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
 <p>Returns <code>true</code> if the action is in a state that should be executed. </p>
-<dl class="section return"><dt>Returns</dt><dd><code>true</code> if ready (default); specialise to gate firing. </dd></dl>
+<p>Auto-detects a <code>bool validate() const</code> member on <code>action</code> via the <code>morph::model::detail::HasValidate</code> concept. Falls back to <code>true</code>.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">action</td><td>Draft action whose readiness is being checked. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><code>true</code> if the action should fire, <code>false</code> to keep collecting fields. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 
 </div>
 </div>

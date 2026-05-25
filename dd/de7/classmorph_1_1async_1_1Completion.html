@@ -148,7 +148,7 @@ class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing 
 <dl class="section user"><dt>Thread safety</dt><dd><code><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></code> and <code><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></code> may be called from any thread. The registered callbacks are invoked via the executor, never directly from the producing thread.</dd></dl>
 <dl class="section user"><dt>Orphan detection</dt><dd>If a <code><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a></code> is destroyed before an <code><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></code> handler is attached and the operation has already failed, the exception is logged as an orphan error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00132">132</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00138">138</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -195,7 +195,7 @@ template&lt;typename T &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00140">140</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -267,7 +267,7 @@ template&lt;typename T &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>*this</code> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00163">163</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -307,7 +307,7 @@ template&lt;typename T &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>*this</code> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00178">178</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +339,7 @@ template&lt;typename T &gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <code>nullptr</code> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

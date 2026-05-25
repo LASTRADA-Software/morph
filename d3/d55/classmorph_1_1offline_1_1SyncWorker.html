@@ -124,16 +124,24 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Replays queued actions from an <code><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></code> on reconnect. </p>
-<p><code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></code> drains the queue and calls a caller-supplied replay function for each item. The framework has no knowledge of what "replay" means — that is entirely the caller's domain.</p>
+<p><code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></code> drains the queue and calls a caller-supplied replay function for each item. The framework has no knowledge of what "replay" means — that is entirely the caller's domain. Retry semantics are baked in with hard-coded sensible defaults; there are intentionally no setters.</p>
+<dl class="section user"><dt>Retry &amp; dead-letter (built-in defaults)</dt><dd><ul>
+<li>Each item is retried up to <b>5 attempts</b> across successive <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> calls.</li>
+<li>Items that fail their 5th attempt are dropped from the queue and logged at <code>morph::log::LogLevel::error</code> (so the host application sees them through whatever sink it installed). The payload appears in the log line.</li>
+<li>Items that succeed reset their attempt counter implicitly (they're removed).</li>
+<li>There is no public knob — if your application needs different retry math, wrap or replace <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></code>. The framework's promise is "obvious, safe
+  defaults that the GUI never has to think about."</li>
+</ul>
+</dd></dl>
 <dl class="section user"><dt>ReplayFunction contract</dt><dd><ul>
 <li>Return <code>true</code> → item successfully processed; it is removed from the queue.</li>
-<li>Return <code>false</code> → item failed; it is left in the queue for the next <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code>.</li>
-<li>Throw → treated as failure; exception is swallowed, item stays.</li>
+<li>Return <code>false</code> → item failed; attempt counter incremented; left in queue if under the cap, otherwise dropped + logged.</li>
+<li>Throw → treated as failure (same path as returning <code>false</code>).</li>
 </ul>
 </dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd><code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> is safe to call from any thread. Concurrent calls are serialised by an internal mutex — the second caller blocks until the first <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> completes. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00036">36</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><h2 class="groupheader">Member Typedef Documentation</h2>
 <a id="a31349dc8d4338512a2ffc2a8fda90996" name="a31349dc8d4338512a2ffc2a8fda90996"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a31349dc8d4338512a2ffc2a8fda90996">&#9670;&#160;</a></span>ReplayFunction</h2>
@@ -149,7 +157,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Callable that attempts to replay a single queued item. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -197,7 +205,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -228,9 +236,9 @@ Public Member Functions</h2></td></tr>
 <p>Drains the queue, replaying each item via the replay function. </p>
 <p>Concurrent calls are serialised. The call blocks until all pending items have been processed or <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></code> is signalled.</p>
 <p>If <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68" title="Signals an in-progress run() to stop after the current item.">stop()</a></code> was called before <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> acquired the lock, <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> returns immediately with an empty result and resets the stop flag.</p>
-<dl class="section return"><dt>Returns</dt><dd>Counts of successful and failed replays. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Counts of successful / failed / dead-lettered replays. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -260,7 +268,7 @@ Public Member Functions</h2></td></tr>
 <p>Signals an in-progress <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> to stop after the current item. </p>
 <p>Thread-safe. The flag is automatically reset at the start of the next <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">run()</a></code> call, so stopping is one-shot. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

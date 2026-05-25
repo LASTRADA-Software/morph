@@ -92,6 +92,7 @@ $(document).ready(function(){initNavTree('d4/d0b/classmorph_1_1qt_1_1QtWebSocket
 
 <div class="header">
   <div class="summary">
+<a href="#pub-types">Public Types</a> &#124;
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="../../d1/d59/classmorph_1_1qt_1_1QtWebSocketBackend-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">morph::qt::QtWebSocketBackend Class Reference</div></div>
@@ -109,11 +110,17 @@ Inheritance diagram for morph::qt::QtWebSocketBackend:</div>
   <img src="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.png" alt=""/>
  </div></div>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:abb613465047676a5ca37e4c1962efc7c" id="r_abb613465047676a5ca37e4c1962efc7c"><td class="memItemLeft" align="right" valign="top">using&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a> = <a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html">QtWebSocketBackendConfig</a></td></tr>
+<tr class="memdesc:abb613465047676a5ca37e4c1962efc7c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Alias for the reconnect configuration struct.  <br /></td></tr>
+<tr class="separator:abb613465047676a5ca37e4c1962efc7c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:aefa8d9491837a5aed9d3c9698f0e5d3a" id="r_aefa8d9491837a5aed9d3c9698f0e5d3a"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aefa8d9491837a5aed9d3c9698f0e5d3a">QtWebSocketBackend</a> (QUrl serverUrl, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), std::optional&lt; QSslConfiguration &gt; tls=std::nullopt)</td></tr>
-<tr class="memdesc:aefa8d9491837a5aed9d3c9698f0e5d3a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend and opens a WebSocket connection to <code>serverUrl</code>.  <br /></td></tr>
-<tr class="separator:aefa8d9491837a5aed9d3c9698f0e5d3a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0d712428fa45193506db2c03b41793aa" id="r_a0d712428fa45193506db2c03b41793aa"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa">QtWebSocketBackend</a> (QUrl serverUrl, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), std::optional&lt; QSslConfiguration &gt; tls=std::nullopt, <a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a> cfg=<a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a>{})</td></tr>
+<tr class="memdesc:a0d712428fa45193506db2c03b41793aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend and opens a WebSocket connection to <code>serverUrl</code>.  <br /></td></tr>
+<tr class="separator:a0d712428fa45193506db2c03b41793aa"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ad3e402f437433e89a65dbe1ef056da84" id="r_ad3e402f437433e89a65dbe1ef056da84"><td class="memItemLeft" align="right" valign="top"><a id="ad3e402f437433e89a65dbe1ef056da84" name="ad3e402f437433e89a65dbe1ef056da84"></a>
 &#160;</td><td class="memItemRight" valign="bottom"><b>~QtWebSocketBackend</b> () override</td></tr>
 <tr class="memdesc:ad3e402f437433e89a65dbe1ef056da84"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the socket and cleans up pending operations. <br /></td></tr>
@@ -133,6 +140,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a74433cc659e1bf91a8dcba58b6dec2b0" id="r_a74433cc659e1bf91a8dcba58b6dec2b0"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0">notifyBackendChanged</a> () override</td></tr>
 <tr class="memdesc:a74433cc659e1bf91a8dcba58b6dec2b0"><td class="mdescLeft">&#160;</td><td class="mdescRight">No-op — this backend holds no local model objects.  <br /></td></tr>
 <tr class="separator:a74433cc659e1bf91a8dcba58b6dec2b0"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:aaeeb1552d6d0d5601f9457d5bd3494cf" id="r_aaeeb1552d6d0d5601f9457d5bd3494cf"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aaeeb1552d6d0d5601f9457d5bd3494cf">cancelPending</a> (const std::exception_ptr &amp;exc) override</td></tr>
+<tr class="memdesc:aaeeb1552d6d0d5601f9457d5bd3494cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every pending execute call's <code>Completion</code> with <code>exc</code>.  <br /></td></tr>
+<tr class="separator:aaeeb1552d6d0d5601f9457d5bd3494cf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0c07bd236f3db024a131b3ce2841eb6f" id="r_a0c07bd236f3db024a131b3ce2841eb6f"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0c07bd236f3db024a131b3ce2841eb6f">setReconnectHandler</a> (std::function&lt; void()&gt; handler) override</td></tr>
+<tr class="memdesc:a0c07bd236f3db024a131b3ce2841eb6f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler <code>Bridge</code> uses to re-register handlers after a reconnect.  <br /></td></tr>
+<tr class="separator:a0c07bd236f3db024a131b3ce2841eb6f"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><code>IBackend</code> implementation that communicates with a <code>RemoteServer</code> over WebSocket. </p>
@@ -140,10 +153,29 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>TLS</dt><dd>Pass a <code>QSslConfiguration</code> to enable <code>wss://</code>. For self-signed certificates set <code>QSslSocket::VerifyNone</code> on the configuration before passing it in.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></code> and the internal message handler are both called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
-</div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="aefa8d9491837a5aed9d3c9698f0e5d3a" name="aefa8d9491837a5aed9d3c9698f0e5d3a"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aefa8d9491837a5aed9d3c9698f0e5d3a">&#9670;&#160;</a></span>QtWebSocketBackend()</h2>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+</div><h2 class="groupheader">Member Typedef Documentation</h2>
+<a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">morph::qt::QtWebSocketBackend::Config</a> =  <a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html">QtWebSocketBackendConfig</a></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Alias for the reconnect configuration struct. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<a id="a0d712428fa45193506db2c03b41793aa" name="a0d712428fa45193506db2c03b41793aa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d712428fa45193506db2c03b41793aa">&#9670;&#160;</a></span>QtWebSocketBackend()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -173,7 +205,13 @@ Public Member Functions</h2></td></tr>
           <td class="paramkey"></td>
           <td></td>
           <td class="paramtype">std::optional&lt; QSslConfiguration &gt;&#160;</td>
-          <td class="paramname"><em>tls</em> = <code>std::nullopt</code>&#160;</td>
+          <td class="paramname"><em>tls</em> = <code>std::nullopt</code>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a>&#160;</td>
+          <td class="paramname"><em>cfg</em> = <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a>{}</code>&#160;</td>
         </tr>
         <tr>
           <td></td>
@@ -195,6 +233,7 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">dispatcher</td><td>Action dispatcher (defaults to the process-level singleton). </td></tr>
     <tr><td class="paramname">registry</td><td>Model registry (defaults to the process-level singleton). </td></tr>
     <tr><td class="paramname">tls</td><td>If non-null, enables TLS and applies this configuration. </td></tr>
+    <tr><td class="paramname">cfg</td><td>Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff. </td></tr>
   </table>
   </dd>
 </dl>
@@ -395,7 +434,76 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aaeeb1552d6d0d5601f9457d5bd3494cf" name="aaeeb1552d6d0d5601f9457d5bd3494cf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaeeb1552d6d0d5601f9457d5bd3494cf">&#9670;&#160;</a></span>cancelPending()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::cancelPending </td>
+          <td>(</td>
+          <td class="paramtype">const std::exception_ptr &amp;&#160;</td>
+          <td class="paramname"><em>exc</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Resolves every pending execute call's <code>Completion</code> with <code>exc</code>. </p>
+<p>Called by <code>Bridge::switchBackend()</code> on the outgoing backend, by <code>~Bridge</code>, and internally when the socket disconnects. Late replies arriving for already-cancelled call ids are dropped silently.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">exc</td><td>Exception delivered to every pending completion's error sink. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a0c07bd236f3db024a131b3ce2841eb6f" name="a0c07bd236f3db024a131b3ce2841eb6f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0c07bd236f3db024a131b3ce2841eb6f">&#9670;&#160;</a></span>setReconnectHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::setReconnectHandler </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; void()&gt;&#160;</td>
+          <td class="paramname"><em>handler</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the handler <code>Bridge</code> uses to re-register handlers after a reconnect. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable invoked on the Qt thread after every successful reconnect. Pass <code>nullptr</code> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
 
 </div>
 </div>

@@ -5,6 +5,5 @@ var searchData=
   ['fielded_20actions_2',['Subscriptions and fielded actions',['../index.html#subscriptions-and-fielded-actions',1,'']]],
   ['fire_3',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
   ['framework_20concern_4',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
-  ['from_20a_20pool_20thread_5',['&lt;tt&gt;SimulatedRemoteBackend::registerModel&lt;/tt&gt; must not be called from a pool thread',['../index.html#simulatedremotebackendregistermodel-must-not-be-called-from-a-pool-thread',1,'']]],
-  ['from_20tt_20onbackendchanged_20tt_6',['&lt;tt&gt;Bridge::switchBackend&lt;/tt&gt; must not be called from &lt;tt&gt;onBackendChanged&lt;/tt&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]]
+  ['from_20tt_20onbackendchanged_20tt_5',['&lt;tt&gt;Bridge::switchBackend&lt;/tt&gt; must not be called from &lt;tt&gt;onBackendChanged&lt;/tt&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]]
 ];

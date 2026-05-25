@@ -109,13 +109,16 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:abad0b8cf702ce8d6266cebfb3ab16cfc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of items successfully replayed and removed from the queue.  <br /></td></tr>
 <tr class="separator:abad0b8cf702ce8d6266cebfb3ab16cfc"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac961898bd488a98d989a3eb6bdce4d33" id="r_ac961898bd488a98d989a3eb6bdce4d33"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33">failed</a> = 0</td></tr>
-<tr class="memdesc:ac961898bd488a98d989a3eb6bdce4d33"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of items that failed and were left in the queue.  <br /></td></tr>
+<tr class="memdesc:ac961898bd488a98d989a3eb6bdce4d33"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of items that failed and were left in the queue for retry.  <br /></td></tr>
 <tr class="separator:ac961898bd488a98d989a3eb6bdce4d33"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a923a0e48ad45897bfe83ec7cb3419a73" id="r_a923a0e48ad45897bfe83ec7cb3419a73"><td class="memItemLeft" align="right" valign="top">int&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73">deadLettered</a> = 0</td></tr>
+<tr class="memdesc:a923a0e48ad45897bfe83ec7cb3419a73"><td class="mdescLeft">&#160;</td><td class="mdescRight">Number of items that exhausted their retry budget and were dropped from the queue (logged via <code>morph::log::logError</code>).  <br /></td></tr>
+<tr class="separator:a923a0e48ad45897bfe83ec7cb3419a73"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Aggregated result returned by <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">SyncWorker::run()</a></code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00014">14</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00017">17</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="abad0b8cf702ce8d6266cebfb3ab16cfc" name="abad0b8cf702ce8d6266cebfb3ab16cfc"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abad0b8cf702ce8d6266cebfb3ab16cfc">&#9670;&#160;</a></span>successful</h2>
@@ -131,7 +134,7 @@ Public Attributes</h2></td></tr>
 
 <p>Number of items successfully replayed and removed from the queue. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00016">16</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00019">19</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>
@@ -147,9 +150,27 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Number of items that failed and were left in the queue. </p>
+<p>Number of items that failed and were left in the queue for retry. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00019">19</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00022">22</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a923a0e48ad45897bfe83ec7cb3419a73" name="a923a0e48ad45897bfe83ec7cb3419a73"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a923a0e48ad45897bfe83ec7cb3419a73">&#9670;&#160;</a></span>deadLettered</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">int morph::offline::SyncResult::deadLettered = 0</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Number of items that exhausted their retry budget and were dropped from the queue (logged via <code>morph::log::logError</code>). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html#l00026">26</a> of file <a class="el" href="../../d5/d2b/sync__worker_8hpp_source.html">sync_worker.hpp</a>.</p>
 
 </div>
 </div>

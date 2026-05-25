@@ -30,7 +30,6 @@ var index =
     ] ],
     [ "Known limitations", "index.html#known-limitations", [
       [ "<tt>RemoteServer</tt> must be heap-allocated", "index.html#remoteserver-must-be-heap-allocated", null ],
-      [ "<tt>SimulatedRemoteBackend::registerModel</tt> must not be called from a pool thread", "index.html#simulatedremotebackendregistermodel-must-not-be-called-from-a-pool-thread", null ],
       [ "<tt>NetworkMonitor</tt> callbacks must not block", "index.html#networkmonitor-callbacks-must-not-block", null ],
       [ "<tt>Bridge::switchBackend</tt> must not be called from <tt>onBackendChanged</tt>", "index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged", null ],
       [ "<tt>CompletionState</tt> requires a non-null executor before callbacks fire", "index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire", null ],

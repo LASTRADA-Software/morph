@@ -104,39 +104,39 @@ $(document).ready(function(){initNavTree('d0/dfc/remote_8hpp_source.html','../..
 <div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="preprocessor">#pragma once</span></div>
 <div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="preprocessor">#include &lt;atomic&gt;</span></div>
 <div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="preprocessor">#include &lt;functional&gt;</span></div>
-<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="preprocessor">#include &lt;future&gt;</span></div>
-<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="preprocessor">#include &lt;memory&gt;</span></div>
-<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &lt;mutex&gt;</span></div>
-<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &lt;stdexcept&gt;</span></div>
-<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &lt;string&gt;</span></div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &lt;unordered_map&gt;</span></div>
+<div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="preprocessor">#include &lt;memory&gt;</span></div>
+<div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="preprocessor">#include &lt;mutex&gt;</span></div>
+<div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="preprocessor">#include &lt;stdexcept&gt;</span></div>
+<div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="preprocessor">#include &lt;string&gt;</span></div>
+<div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="preprocessor">#include &lt;unordered_map&gt;</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="preprocessor">#include &lt;utility&gt;</span></div>
 <div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &lt;vector&gt;</span></div>
 <div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span> </div>
 <div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="preprocessor">#include &quot;backend.hpp&quot;</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span> </div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="keyword">namespace </span>morph::backend {</div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment"></span> </div>
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">/// @brief Server-side message handler that owns model instances and dispatches actions.</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="comment">///</span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">/// `RemoteServer` receives pipe-delimited text messages (from a WebSocket, a</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">/// simulated transport, or any other source) and executes the corresponding</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">/// model operations via an `ActionDispatcher`.</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">///</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// @par Heap allocation requirement</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// `RemoteServer` **must** be heap-allocated via `std::make_shared`. `handle()`</span></div>
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// captures `shared_from_this()` to prevent use-after-free when the worker pool</span></div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// outlives the server object.</span></div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">///</span></div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// @par Message protocol</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// - `register|&lt;typeId&gt;` — creates a model instance; replies `ok|&lt;modelId&gt;`.</span></div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// - `deregister|&lt;modelId&gt;` — destroys the instance; replies `ok`.</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// - `execute|&lt;mid&gt;|&lt;modelTy&gt;|&lt;actionTy&gt;|&lt;body&gt;` — dispatches an action; replies `ok|&lt;result&gt;`.</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// - `execute|&lt;callId&gt;|&lt;mid&gt;|&lt;modelTy&gt;|&lt;actionTy&gt;|&lt;body&gt;` — same with a correlation id.</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// - Any error replies with `err|&lt;message&gt;` or `err|&lt;callId&gt;|&lt;message&gt;`.</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#include &quot;session.hpp&quot;</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &quot;wire.hpp&quot;</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span> </div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="keyword">namespace </span>morph::backend {</div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="comment"></span> </div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">/// @brief Server-side message handler that owns model instances and dispatches actions.</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">///</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">/// `RemoteServer` receives JSON envelopes (`morph::wire::Envelope`) from any</span></div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">/// transport (WebSocket, in-process simulation, …) and executes the corresponding</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">/// model operations via an `ActionDispatcher`. Authorization is delegated to an</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">/// `IAuthorizer` that defaults to allow-all.</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">///</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">/// @par Heap allocation requirement</span></div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// `RemoteServer` **must** be heap-allocated via `std::make_shared`. `handle()`</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// captures `shared_from_this()` to prevent use-after-free when the worker pool</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// outlives the server object.</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">///</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// @par Wire format</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// All requests and replies are encoded as `morph::wire::Envelope` JSON. See</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// `wire.hpp` for the field semantics. The `kind` field is the discriminator.</span></div>
 <div class="foldopen" id="foldopen00035" data-start="{" data-end="};">
 <div class="line"><a id="l00035" name="l00035"></a><span class="lineno"><a class="line" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">   35</a></span><span class="comment"></span><span class="keyword">class </span><a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> : <span class="keyword">public</span> std::enable_shared_from_this&lt;RemoteServer&gt; {</div>
 <div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    /// @brief Constructs a server backed by @p workerPool.</span></div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    /// @brief Constructs a server backed by @p workerPool with allow-all authorization.</span></div>
 <div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    ///</span></div>
 <div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span><span class="comment">    /// @param workerPool Pool used to process messages asynchronously.</span></div>
 <div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span><span class="comment">    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.</span></div>
@@ -146,246 +146,304 @@ $(document).ready(function(){initNavTree('d0/dfc/remote_8hpp_source.html','../..
 <div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>        <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; workerPool,</div>
 <div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>        ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher(),</div>
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>        ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry())</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>        : _pool{workerPool}, _strand{workerPool}, _dispatcher{dispatcher}, _registry{registry} {}</div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>        : _pool{workerPool},</div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>          _strand{workerPool},</div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>          _dispatcher{dispatcher},</div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>          _registry{registry},</div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>          _authorizer{::morph::session::allowAllAuthorizer()} {}</div>
 </div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment"></span> </div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span><span class="comment">    /// @brief Asynchronously processes @p msg and calls @p reply with the response.</span></div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment">    /// The message is dispatched to the worker pool. @p reply is called exactly</span></div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">    /// once from the pool thread when processing completes.</span></div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">    /// Thread-safe. Safe to call before the previous call&#39;s reply has been delivered.</span></div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// @param msg   Pipe-delimited protocol message.</span></div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// @param reply Callback invoked with the response string.</span></div>
-<div class="foldopen" id="foldopen00057" data-start="{" data-end="}">
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno"><a class="line" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">   57</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">handle</a>(std::string msg, std::function&lt;<span class="keywordtype">void</span>(std::string)&gt; reply) {</div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>        <span class="keyword">auto</span> self = shared_from_this();</div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>        _pool.<a class="code hl_function" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">post</a>(</div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>            [self, msg = std::move(msg), reply = std::move(reply)]() <span class="keyword">mutable</span> { self-&gt;dispatchMessage(msg, reply); });</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    }</div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment"></span> </div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">    /// @brief Constructs a server with a custom authorizer.</span></div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">    /// @param workerPool Pool used to process messages asynchronously.</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">    /// @param authorizer Authorizer consulted for every `execute` envelope.</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">    /// @param dispatcher Action dispatcher; defaults to the process-level singleton.</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// @param registry   Model factory registry; defaults to the process-level singleton.</span></div>
+<div class="foldopen" id="foldopen00058" data-start="{" data-end="}">
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno"><a class="line" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a3125da15823891abf6a3bf4fc6355bb3">   58</a></span><span class="comment"></span>    <a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a3125da15823891abf6a3bf4fc6355bb3">RemoteServer</a>(</div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>        <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; workerPool, std::shared_ptr&lt;::morph::session::IAuthorizer&gt; authorizer,</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>        ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher(),</div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>        ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry())</div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>        : _pool{workerPool},</div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>          _strand{workerPool},</div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>          _dispatcher{dispatcher},</div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>          _registry{registry},</div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>          _authorizer{std::move(authorizer)} {</div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>        <span class="keywordflow">if</span> (!_authorizer) {</div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>            _authorizer = ::morph::session::allowAllAuthorizer();</div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>        }</div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>    }</div>
 </div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span> </div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    <span class="keywordtype">void</span> dispatchMessage(<span class="keyword">const</span> std::string&amp; msg, std::function&lt;<span class="keywordtype">void</span>(std::string)&gt;&amp; reply) {</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>        <span class="comment">// Split into at most 6 parts to support both the 5-part SimulatedRemote</span></div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>        <span class="comment">// protocol and the 6-part Qt WebSocket protocol (which carries a callId).</span></div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>        <span class="keyword">auto</span> parts = split(msg, <span class="charliteral">&#39;|&#39;</span>, 6);</div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>        <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>            <span class="keywordflow">if</span> (parts[0] == <span class="stringliteral">&quot;register&quot;</span>) {</div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>                <span class="keywordflow">if</span> (parts.size() &lt; 2) {</div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;register requires a typeId&quot;</span>);</div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>                }</div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>                <span class="keyword">auto</span> holder = _registry.create(parts[1]);</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>                ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>                {</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>                    std::scoped_lock lock{_regMtx};</div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>                    _models[mid] = std::move(holder);</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>                }</div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>                reply(<span class="stringliteral">&quot;ok|&quot;</span> + std::to_string(mid.v));</div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>            } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (parts[0] == <span class="stringliteral">&quot;deregister&quot;</span>) {</div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>                <span class="keywordflow">if</span> (parts.size() &lt; 2) {</div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;deregister requires a modelId&quot;</span>);</div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>                }</div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>                ::morph::exec::detail::ModelId mid{std::stoull(parts[1])};</div>
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>                std::scoped_lock lock{_regMtx};</div>
-<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>                _models.erase(mid);</div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>                reply(<span class="stringliteral">&quot;ok&quot;</span>);</div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>            } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (parts[0] == <span class="stringliteral">&quot;execute&quot;</span>) {</div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>                <span class="keywordflow">if</span> (parts.size() == 6) {</div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span>                    <span class="comment">// Qt WebSocket format: execute|callId|mid|modelTy|actionTy|body</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span>                    std::string callId = parts[1];</div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span>                    ::morph::exec::detail::ModelId mid{std::stoull(parts[2])};</div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span>                    dispatchExecute(std::move(callId), mid, parts[3], parts[4], parts[5], reply);</div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span>                } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (parts.size() == 5) {</div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span>                    <span class="comment">// SimulatedRemote format: execute|mid|modelTy|actionTy|body</span></div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span>                    ::morph::exec::detail::ModelId mid{std::stoull(parts[1])};</div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span>                    dispatchExecute(<span class="stringliteral">&quot;&quot;</span>, mid, parts[2], parts[3], parts[4], reply);</div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;execute requires 5 or 6 parts&quot;</span>);</div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>                }</div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>                reply(<span class="stringliteral">&quot;err|bad msg type&quot;</span>);</div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>            }</div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>        } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>            reply(std::string{<span class="stringliteral">&quot;err|&quot;</span>} + exc.what());</div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>        }</div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>    }</div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span> </div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>    <span class="keywordtype">void</span> dispatchExecute(std::string callId, ::morph::exec::detail::ModelId mid, <span class="keyword">const</span> std::string&amp; modelTy,</div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>                         <span class="keyword">const</span> std::string&amp; actionTy, <span class="keyword">const</span> std::string&amp; body,</div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>                         std::function&lt;<span class="keywordtype">void</span>(std::string)&gt; reply) {</div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>        std::shared_ptr&lt;::morph::model::detail::IModelHolder&gt; holder;</div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>        {</div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>            std::scoped_lock lock{_regMtx};</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>            <span class="keyword">auto</span> iter = _models.find(mid);</div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>            <span class="keywordflow">if</span> (iter != _models.end()) {</div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>                holder = iter-&gt;second;</div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>            }</div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>        }</div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>        <span class="keywordflow">if</span> (!holder) {</div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>            <span class="keywordflow">if</span> (callId.empty()) {</div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>                reply(<span class="stringliteral">&quot;err|model not found&quot;</span>);</div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>                reply(<span class="stringliteral">&quot;err|&quot;</span> + callId + <span class="stringliteral">&quot;|model not found&quot;</span>);</div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>            }</div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>            <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>        }</div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>        _strand.post(mid, [&amp;disp = _dispatcher, callId = std::move(callId), modelTy, actionTy, body,</div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>                           holder = std::move(holder), reply = std::move(reply)]() <span class="keyword">mutable</span> {</div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>            <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>                <span class="keyword">auto</span> result = disp.dispatch(modelTy, actionTy, *holder, body);</div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>                <span class="keywordflow">if</span> (callId.empty()) {</div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>                    reply(<span class="stringliteral">&quot;ok|&quot;</span> + result);</div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>                    reply(<span class="stringliteral">&quot;ok|&quot;</span> + callId + <span class="stringliteral">&quot;|&quot;</span> + result);</div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>                }</div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>            } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>                <span class="keywordflow">if</span> (callId.empty()) {</div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>                    reply(std::string{<span class="stringliteral">&quot;err|&quot;</span>} + exc.what());</div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>                    reply(<span class="stringliteral">&quot;err|&quot;</span> + callId + <span class="stringliteral">&quot;|&quot;</span> + exc.what());</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>                }</div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>            }</div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>        });</div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>    }</div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span> </div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>    <span class="keyword">static</span> std::vector&lt;std::string&gt; split(<span class="keyword">const</span> std::string&amp; src, <span class="keywordtype">char</span> sep, <span class="keywordtype">int</span> maxParts) {</div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>        std::vector&lt;std::string&gt; out;</div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>        std::size_t pos = 0;</div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>        <span class="keywordflow">while</span> (<span class="keyword">static_cast&lt;</span><span class="keywordtype">int</span><span class="keyword">&gt;</span>(out.size()) &lt; maxParts - 1) {</div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>            <span class="keyword">auto</span> found = src.find(sep, pos);</div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>            <span class="keywordflow">if</span> (found == std::string::npos) {</div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>                <span class="keywordflow">break</span>;</div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>            }</div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>            out.emplace_back(src.substr(pos, found - pos));</div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>            pos = found + 1;</div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment"></span> </div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">    /// @brief Asynchronously processes @p msg and calls @p reply with the response.</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">    /// The message is dispatched to the worker pool. @p reply is called exactly</span></div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">    /// once from the pool thread when processing completes.</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">    /// Thread-safe. Safe to call before the previous call&#39;s reply has been delivered.</span></div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">    /// @param msg   Pipe-delimited protocol message.</span></div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">    /// @param reply Callback invoked with the response string.</span></div>
+<div class="foldopen" id="foldopen00081" data-start="{" data-end="}">
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno"><a class="line" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">   81</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">handle</a>(std::string msg, std::function&lt;<span class="keywordtype">void</span>(std::string)&gt; reply) {</div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>        <span class="keyword">auto</span> self = shared_from_this();</div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>        _pool.<a class="code hl_function" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">post</a>(</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>            [self, msg = std::move(msg), reply = std::move(reply)]() <span class="keyword">mutable</span> { self-&gt;dispatchMessage(msg, reply); });</div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>    }</div>
+</div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="comment"></span> </div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">    /// @brief Synchronously processes @p msg on the calling thread and returns the reply.</span></div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">    /// Equivalent to `handle()` but never posts to the worker pool, so it is safe</span></div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">    /// to call from a thread that *is* the worker pool — for example, from a</span></div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">    /// `BridgeHandler` constructor invoked from inside an action handler.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">    /// Only safe for control messages (`register`, `deregister`) — `execute`</span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// messages still post to the strand and would return before the result is</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">    /// produced. The implementation rejects `execute` to make this explicit.</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">    /// @param msg Pipe-delimited control message.</span></div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">    /// @return Reply string the async path would have produced.</span></div>
+<div class="foldopen" id="foldopen00099" data-start="{" data-end="}">
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno"><a class="line" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">   99</a></span><span class="comment"></span>    std::string <a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">handleInline</a>(<span class="keyword">const</span> std::string&amp; msg) {</div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>        std::string reply;</div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>        std::function&lt;void(std::string)&gt; capture = [&amp;reply](std::string out) { reply = std::move(out); };</div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>        dispatchMessage(msg, capture);</div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>        <span class="keywordflow">return</span> reply;</div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>    }</div>
+</div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span> </div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>    <span class="keywordtype">void</span> dispatchMessage(<span class="keyword">const</span> std::string&amp; msg, std::function&lt;<span class="keywordtype">void</span>(std::string)&gt;&amp; reply) {</div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>        <a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> env;</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>        <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>            env = ::morph::wire::decode(msg);</div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>        } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>            reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));</div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>        }</div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>        <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>            <span class="keywordflow">if</span> (env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">kind</a> == <span class="stringliteral">&quot;register&quot;</span>) {</div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>                <span class="keywordflow">if</span> (env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192">typeId</a>.empty()) {</div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>                    <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;register requires a typeId&quot;</span>);</div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>                }</div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>                <span class="keyword">auto</span> holder = _registry.create(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192">typeId</a>);</div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>                ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};</div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>                {</div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>                    std::scoped_lock lock{_regMtx};</div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>                    _models[mid] = std::move(holder);</div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>                }</div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>                reply(::morph::wire::encode(::morph::wire::makeOk(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>, {}, mid.v)));</div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>            } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">kind</a> == <span class="stringliteral">&quot;deregister&quot;</span>) {</div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>                {</div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>                    std::scoped_lock lock{_regMtx};</div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>                    _models.erase(::morph::exec::detail::ModelId{env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a658710447abce83c9392698bdd1ca5a1">modelId</a>});</div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>                }</div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>                reply(::morph::wire::encode(::morph::wire::makeOk(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>            } <span class="keywordflow">else</span> <span class="keywordflow">if</span> (env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">kind</a> == <span class="stringliteral">&quot;execute&quot;</span>) {</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>                dispatchExecute(std::move(env), reply);</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>            } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>                reply(::morph::wire::encode(</div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>                    ::morph::wire::makeErr(<span class="stringliteral">&quot;unknown envelope kind: &quot;</span> + env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">kind</a>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>            }</div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>        } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>            reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>        }</div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    }</div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span> </div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>    <span class="keywordtype">void</span> dispatchExecute(<a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> env, std::function&lt;<span class="keywordtype">void</span>(std::string)&gt; reply) {</div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>        <span class="keywordflow">if</span> (!_authorizer-&gt;authorize(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18">session</a>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a2ff3cb841aa7a258ad6f9b65dd6a70ab">modelType</a>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95">actionType</a>)) {</div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>            reply(::morph::wire::encode(::morph::wire::makeErr(<span class="stringliteral">&quot;unauthorized&quot;</span>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>        }</div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>        ::morph::exec::detail::ModelId mid{env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a658710447abce83c9392698bdd1ca5a1">modelId</a>};</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>        std::shared_ptr&lt;::morph::model::detail::IModelHolder&gt; holder;</div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>        {</div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>            std::scoped_lock lock{_regMtx};</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>            <span class="keyword">auto</span> iter = _models.find(mid);</div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>            <span class="keywordflow">if</span> (iter != _models.end()) {</div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>                holder = iter-&gt;second;</div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>            }</div>
 <div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>        }</div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>        out.emplace_back(src.substr(pos));</div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>    }</div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span> </div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>    <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; _pool;</div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    ::morph::exec::detail::StrandExecutor _strand;</div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    ::morph::model::detail::ActionDispatcher&amp; _dispatcher;</div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>    ::morph::model::detail::ModelRegistryFactory&amp; _registry;</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>    std::mutex _regMtx;</div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>    std::unordered_map&lt;::morph::exec::detail::ModelId, std::shared_ptr&lt;::morph::model::detail::IModelHolder&gt;,</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                       ::morph::exec::detail::ModelIdHash&gt;</div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>        _models;</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>    std::atomic&lt;uint64_t&gt; _nextId{0};</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>};</div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>        <span class="keywordflow">if</span> (!holder) {</div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>            reply(::morph::wire::encode(::morph::wire::makeErr(<span class="stringliteral">&quot;model not found&quot;</span>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>            <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>        }</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>        _strand.post(mid, [&amp;disp = _dispatcher, env = std::move(env), holder = std::move(holder),</div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>                           reply = std::move(reply)]() <span class="keyword">mutable</span> {</div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>            <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>                <a class="code hl_class" href="../../dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html">::morph::session::detail::ScopedContext</a> scoped{env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18">session</a>};</div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>                <span class="keyword">auto</span> result = disp.dispatch(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a2ff3cb841aa7a258ad6f9b65dd6a70ab">modelType</a>, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95">actionType</a>, *holder, env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326">body</a>);</div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>                reply(::morph::wire::encode(::morph::wire::makeOk(env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>, std::move(result))));</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>            } <span class="keywordflow">catch</span> (<span class="keyword">const</span> std::exception&amp; exc) {</div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">callId</a>)));</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>            }</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        });</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>    }</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span> </div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>    <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>&amp; _pool;</div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>    ::morph::exec::detail::StrandExecutor _strand;</div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>    ::morph::model::detail::ActionDispatcher&amp; _dispatcher;</div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    ::morph::model::detail::ModelRegistryFactory&amp; _registry;</div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>    std::shared_ptr&lt;::morph::session::IAuthorizer&gt; _authorizer;</div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>    std::mutex _regMtx;</div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>    std::unordered_map&lt;::morph::exec::detail::ModelId, std::shared_ptr&lt;::morph::model::detail::IModelHolder&gt;,</div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>                       ::morph::exec::detail::ModelIdHash&gt;</div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>        _models;</div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>    std::atomic&lt;uint64_t&gt; _nextId{0};</div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>};</div>
 </div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment"></span> </div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">/// @brief `IBackend` adapter that routes all calls through a `RemoteServer` using a</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">///        synchronous request-reply protocol.</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">///</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">/// Intended for testing and in-process simulation of remote execution. All</span></div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">/// `registerModel()`, `deregisterModel()`, and `execute()` calls are forwarded</span></div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">/// as protocol messages to the server; the calling thread blocks until the reply</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">/// arrives via `std::promise`.</span></div>
-<div class="foldopen" id="foldopen00180" data-start="{" data-end="};">
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">  180</a></span><span class="comment"></span><span class="keyword">class </span><a class="code hl_class" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">SimulatedRemoteBackend</a> : <span class="keyword">public</span> detail::IBackend {</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">    /// @brief Constructs the backend targeting @p server.</span></div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span><span class="comment">    /// @param server The `RemoteServer` instance to forward calls to.</span></div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">  184</a></span><span class="comment"></span>    <span class="keyword">explicit</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">SimulatedRemoteBackend</a>(<a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a>&amp; server) : _server{server} {}</div>
 <div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment"></span> </div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">    /// @brief Registers the model type on the server and returns its assigned id.</span></div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">    /// Blocks until the server replies. The @p factory argument is ignored —</span></div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">    /// model construction is delegated to the server&#39;s `ModelRegistryFactory`.</span></div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">    /// @param typeId String type-id sent in the `register` message.</span></div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">    /// @return `ModelId` assigned by the server.</span></div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">    /// @throws std::runtime_error if the server replies with an error.</span></div>
-<div class="foldopen" id="foldopen00194" data-start="{" data-end="}">
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">  194</a></span><span class="comment"></span>    ::morph::exec::detail::ModelId <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">registerModel</a>(</div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>        <span class="keyword">const</span> std::string&amp; typeId,</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>        std::function&lt;std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt;()&gt;)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        std::promise&lt;::morph::exec::detail::ModelId&gt; prom;</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>        <span class="keyword">auto</span> fut = prom.get_future();</div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>        _server.handle(<span class="stringliteral">&quot;register|&quot;</span> + typeId, [&amp;prom](<span class="keyword">const</span> std::string&amp; reply) {</div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span>            <span class="keywordflow">if</span> (reply.starts_with(<span class="stringliteral">&quot;ok|&quot;</span>)) {</div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>                prom.set_value(::morph::exec::detail::ModelId{std::stoull(reply.substr(3))});</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>                prom.set_exception(std::make_exception_ptr(std::runtime_error(<span class="stringliteral">&quot;register failed: &quot;</span> + reply)));</div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>            }</div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        });</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        <span class="keywordflow">return</span> fut.get();</div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>    }</div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">/// @brief `IBackend` adapter that routes all calls through a `RemoteServer` using a</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">///        synchronous request-reply protocol.</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">///</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">/// Intended for testing and in-process simulation of remote execution. All</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">/// `registerModel()`, `deregisterModel()`, and `execute()` calls are forwarded</span></div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">/// as protocol messages to the server; the calling thread blocks until the reply</span></div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">/// arrives via `std::promise`.</span></div>
+<div class="foldopen" id="foldopen00193" data-start="{" data-end="};">
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">  193</a></span><span class="comment"></span><span class="keyword">class </span><a class="code hl_class" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">SimulatedRemoteBackend</a> : <span class="keyword">public</span> detail::IBackend {</div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="comment">    /// @brief Constructs the backend targeting @p server.</span></div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="comment">    /// @param server The `RemoteServer` instance to forward calls to.</span></div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">  197</a></span><span class="comment"></span>    <span class="keyword">explicit</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">SimulatedRemoteBackend</a>(<a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a>&amp; server) : _server{server} {}</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment"></span> </div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">    /// @brief Registers the model type on the server and returns its assigned id.</span></div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment">    /// Processed inline on the calling thread (no pool round-trip), so it is safe</span></div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">    /// to call from any thread including a worker in the same pool that backs the</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">    /// `RemoteServer`. The @p factory argument is ignored — model construction is</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">    /// delegated to the server&#39;s `ModelRegistryFactory`.</span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="comment">    /// @param typeId String type-id sent in the `register` message.</span></div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="comment">    /// @return `ModelId` assigned by the server.</span></div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment">    /// @throws std::runtime_error if the server replies with an error.</span></div>
+<div class="foldopen" id="foldopen00209" data-start="{" data-end="}">
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">  209</a></span><span class="comment"></span>    ::morph::exec::detail::ModelId <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">registerModel</a>(</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>        <span class="keyword">const</span> std::string&amp; typeId,</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>        std::function&lt;std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt;()&gt;)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>        <span class="keyword">auto</span> reply = ::morph::wire::decode(</div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>            _server.<a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">handleInline</a>(::morph::wire::encode(::morph::wire::makeRegister(typeId))));</div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>        <span class="keywordflow">if</span> (reply.kind == <span class="stringliteral">&quot;ok&quot;</span>) {</div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>            return ::morph::exec::detail::ModelId{reply.modelId};</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>        }</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;register failed: &quot;</span> + reply.message);</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>    }</div>
 </div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span><span class="comment"></span> </div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">    /// @brief Deregisters the model on the server. Blocks until the reply arrives.</span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @param mid Id of the model to deregister.</span></div>
-<div class="foldopen" id="foldopen00211" data-start="{" data-end="}">
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">  211</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">deregisterModel</a>(::morph::exec::detail::ModelId mid)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>        std::promise&lt;void&gt; prom;</div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>        <span class="keyword">auto</span> fut = prom.get_future();</div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>        _server.handle(<span class="stringliteral">&quot;deregister|&quot;</span> + std::to_string(mid.v), [&amp;prom](<span class="keyword">const</span> std::string&amp;) { prom.set_value(); });</div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        fut.get();</div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>    }</div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment"></span> </div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// @brief Deregisters the model on the server. Processed inline; safe from any thread.</span></div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    /// @param mid Id of the model to deregister.</span></div>
+<div class="foldopen" id="foldopen00222" data-start="{" data-end="}">
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">  222</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">deregisterModel</a>(::morph::exec::detail::ModelId mid)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>        (void)_server.<a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">handleInline</a>(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)));</div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>    }</div>
 </div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment"></span> </div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">    /// @brief Serialises the action, sends it to the server, and returns a `Completion`.</span></div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">    /// The `Completion` resolves when the server&#39;s reply is received and</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">    /// deserialized. Callbacks are posted via @p cbExec.</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    /// @param mid    Target model id on the server.</span></div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    /// @param call   Bundled action; `serializeAction` and `deserializeResult` are used.</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">    /// @param cbExec Executor for delivering the completion callbacks.</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">    /// @return Completion that resolves with the deserialized result or an error.</span></div>
-<div class="foldopen" id="foldopen00227" data-start="{" data-end="}">
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">  227</a></span><span class="comment"></span>    <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;std::shared_ptr&lt;void&gt;</a>&gt; <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">execute</a>(::morph::exec::detail::ModelId mid,</div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>                                                              detail::ActionCall call,</div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>                                                              <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>* cbExec)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>        <span class="keyword">auto</span> state = std::make_shared&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt;();</div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>        <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;std::shared_ptr&lt;void&gt;</a>&gt; comp{state, cbExec};</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span> </div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>        std::string body = call.serializeAction();</div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>        std::string msg =</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>            <span class="stringliteral">&quot;execute|&quot;</span> + std::to_string(mid.v) + <span class="stringliteral">&quot;|&quot;</span> + call.modelTypeId + <span class="stringliteral">&quot;|&quot;</span> + call.actionTypeId + <span class="stringliteral">&quot;|&quot;</span> + body;</div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>        <span class="keyword">auto</span> deser = std::move(call.deserializeResult);</div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span> </div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>        _server.handle(std::move(msg), [state, deser = std::move(deser)](<span class="keyword">const</span> std::string&amp; reply) <span class="keyword">mutable</span> {</div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>            <span class="keywordflow">try</span> {</div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>                <span class="keywordflow">if</span> (reply.starts_with(<span class="stringliteral">&quot;ok|&quot;</span>)) {</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>                    state-&gt;setValue(deser(reply.substr(3)));</div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>                } <span class="keywordflow">else</span> if (reply.starts_with(<span class="stringliteral">&quot;err|&quot;</span>)) {</div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>                    throw std::runtime_error(reply.substr(4));</div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>                } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>                    throw std::runtime_error(<span class="stringliteral">&quot;malformed reply: &quot;</span> + reply);</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                }</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>            } <span class="keywordflow">catch</span> (...) {</div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>                state-&gt;setException(std::current_exception());</div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>            }</div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>        });</div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>        <span class="keywordflow">return</span> comp;</div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>    }</div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment"></span> </div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">    /// @brief Serialises the action, sends it to the server, and returns a `Completion`.</span></div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">    /// The `Completion` resolves when the server&#39;s reply is received and</span></div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">    /// deserialized. Callbacks are posted via @p cbExec. The session attached to</span></div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">    /// the call (via `Bridge::setDefaultSession()` or the per-call API) is</span></div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">    /// serialised into the envelope.</span></div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">    /// @param mid    Target model id on the server.</span></div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="comment">    /// @param call   Bundled action; `serializeAction` and `deserializeResult` are used.</span></div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="comment">    /// @param cbExec Executor for delivering the completion callbacks.</span></div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// @return Completion that resolves with the deserialized result or an error.</span></div>
+<div class="foldopen" id="foldopen00237" data-start="{" data-end="}">
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">  237</a></span><span class="comment"></span>    <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;std::shared_ptr&lt;void&gt;</a>&gt; <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">execute</a>(::morph::exec::detail::ModelId mid,</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>                                                              detail::ActionCall call,</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>                                                              <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a>* cbExec)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>        <span class="keyword">auto</span> state = std::make_shared&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt;();</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <a class="code hl_class" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion&lt;std::shared_ptr&lt;void&gt;</a>&gt; comp{state, cbExec};</div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        trackPending(state);</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span> </div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        <a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">::morph::wire::Envelope</a> env;</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">kind</a> = <span class="stringliteral">&quot;execute&quot;</span>;</div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a658710447abce83c9392698bdd1ca5a1">modelId</a> = mid.v;</div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a2ff3cb841aa7a258ad6f9b65dd6a70ab">modelType</a> = call.modelTypeId;</div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95">actionType</a> = call.actionTypeId;</div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326">body</a> = call.serializeAction();</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>        env.<a class="code hl_variable" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18">session</a> = std::move(call.session);</div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>        <span class="keyword">auto</span> deser = std::move(call.deserializeResult);</div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span> </div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>        _server.<a class="code hl_function" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">handle</a>(::morph::wire::encode(env),</div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span>                       [state, deser = std::move(deser)](<span class="keyword">const</span> std::string&amp; replyJson) <span class="keyword">mutable</span> {</div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>                           <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>                               <span class="keyword">auto</span> reply = ::morph::wire::decode(replyJson);</div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>                               <span class="keywordflow">if</span> (reply.kind == <span class="stringliteral">&quot;ok&quot;</span>) {</div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>                                   state-&gt;setValue(deser(reply.body));</div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>                               } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>                                   <span class="keywordflow">throw</span> std::runtime_error(</div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>                                       reply.message.empty() ? <span class="stringliteral">&quot;malformed reply&quot;</span> : reply.message);</div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>                               }</div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>                           } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>                               state-&gt;setException(std::current_exception());</div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>                           }</div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span>                       });</div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span>        <span class="keywordflow">return</span> comp;</div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span>    }</div>
 </div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment"></span> </div>
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment">    /// @brief No-op — models live in `RemoteServer`, not locally.</span></div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">  255</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">notifyBackendChanged</a>()<span class="keyword"> override </span>{}</div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span> </div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>    <a class="code hl_class" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a>&amp; _server;</div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>};</div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment"></span> </div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">    /// @brief No-op — models live in `RemoteServer`, not locally.</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">  271</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">notifyBackendChanged</a>()<span class="keyword"> override </span>{}</div>
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span><span class="comment"></span> </div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="comment">    /// @brief Resolves every still-pending completion this backend produced with @p exc.</span></div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">    /// @param exc Exception delivered to every pending completion&#39;s error sink.</span></div>
+<div class="foldopen" id="foldopen00275" data-start="{" data-end="}">
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno"><a class="line" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237">  275</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237">cancelPending</a>(<span class="keyword">const</span> std::exception_ptr&amp; exc)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>        std::vector&lt;std::weak_ptr&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt;&gt; snapshot;</div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>        {</div>
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span>            std::scoped_lock lock{_pendingMtx};</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>            snapshot.swap(_pending);</div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>        }</div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span>&amp; weak : snapshot) {</div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>            <span class="keywordflow">if</span> (<span class="keyword">auto</span> state = weak.lock()) {</div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>                state-&gt;setException(exc);</div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>            }</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        }</div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>    }</div>
 </div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span> </div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>}  <span class="comment">// namespace morph::backend</span></div>
-<div class="ttc" id="aclassmorph_1_1async_1_1Completion_html"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a></div><div class="ttdoc">Move-only handle representing the eventual result of an asynchronous operation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00132">completion.hpp:132</a></div></div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span> </div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span>    <span class="keywordtype">void</span> trackPending(<span class="keyword">const</span> std::shared_ptr&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt;&amp; state) {</div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span>        std::scoped_lock lock{_pendingMtx};</div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span>        std::erase_if(_pending, [](<span class="keyword">const</span> <span class="keyword">auto</span>&amp; weak) { <span class="keywordflow">return</span> weak.expired(); });</div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span>        _pending.emplace_back(state);</div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>    }</div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span> </div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>    RemoteServer&amp; _server;</div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>    std::mutex _pendingMtx;</div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>    std::vector&lt;std::weak_ptr&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt;&gt; _pending;</div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>};</div>
+</div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span> </div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>}  <span class="comment">// namespace morph::backend</span></div>
+<div class="ttc" id="aclassmorph_1_1async_1_1Completion_html"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a></div><div class="ttdoc">Move-only handle representing the eventual result of an asynchronous operation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00138">completion.hpp:138</a></div></div>
 <div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">morph::backend::RemoteServer</a></div><div class="ttdoc">Server-side message handler that owns model instances and dispatches actions.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00035">remote.hpp:35</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_ae0a8a4b505069b41f9005705e93d4701"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">morph::backend::RemoteServer::handle</a></div><div class="ttdeci">void handle(std::string msg, std::function&lt; void(std::string)&gt; reply)</div><div class="ttdoc">Asynchronously processes msg and calls reply with the response.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00057">remote.hpp:57</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_af8a6235cbbe77ead17ea779d99d6011a"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#af8a6235cbbe77ead17ea779d99d6011a">morph::backend::RemoteServer::RemoteServer</a></div><div class="ttdeci">RemoteServer(::morph::exec::IExecutor &amp;workerPool, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</div><div class="ttdoc">Constructs a server backed by workerPool.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00042">remote.hpp:42</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">morph::backend::SimulatedRemoteBackend</a></div><div class="ttdoc">IBackend adapter that routes all calls through a RemoteServer using a synchronous request-reply proto...</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00180">remote.hpp:180</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_a06e3f39db0975c6baf3a7b433f01a0ec"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">morph::backend::SimulatedRemoteBackend::notifyBackendChanged</a></div><div class="ttdeci">void notifyBackendChanged() override</div><div class="ttdoc">No-op — models live in RemoteServer, not locally.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00255">remote.hpp:255</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_a978cad0db6efd8ccd3f33c1bf15be188"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">morph::backend::SimulatedRemoteBackend::SimulatedRemoteBackend</a></div><div class="ttdeci">SimulatedRemoteBackend(RemoteServer &amp;server)</div><div class="ttdoc">Constructs the backend targeting server.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00184">remote.hpp:184</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_ae05332b7c26d6617e468f1c750431404"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">morph::backend::SimulatedRemoteBackend::deregisterModel</a></div><div class="ttdeci">void deregisterModel(::morph::exec::detail::ModelId mid) override</div><div class="ttdoc">Deregisters the model on the server. Blocks until the reply arrives.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00211">remote.hpp:211</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_ae2e0de3d0e1107efca7f5c86a8c4e295"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">morph::backend::SimulatedRemoteBackend::registerModel</a></div><div class="ttdeci">::morph::exec::detail::ModelId registerModel(const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;) override</div><div class="ttdoc">Registers the model type on the server and returns its assigned id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00194">remote.hpp:194</a></div></div>
-<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_af575c96f8350bdf7745cf45662314bc4"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">morph::backend::SimulatedRemoteBackend::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; std::shared_ptr&lt; void &gt; &gt; execute(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor *cbExec) override</div><div class="ttdoc">Serialises the action, sends it to the server, and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00227">remote.hpp:227</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_a3125da15823891abf6a3bf4fc6355bb3"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a3125da15823891abf6a3bf4fc6355bb3">morph::backend::RemoteServer::RemoteServer</a></div><div class="ttdeci">RemoteServer(::morph::exec::IExecutor &amp;workerPool, std::shared_ptr&lt;::morph::session::IAuthorizer &gt; authorizer, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</div><div class="ttdoc">Constructs a server with a custom authorizer.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00058">remote.hpp:58</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_abcdee5e1504ebcbef2415b029eec8818"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">morph::backend::RemoteServer::handleInline</a></div><div class="ttdeci">std::string handleInline(const std::string &amp;msg)</div><div class="ttdoc">Synchronously processes msg on the calling thread and returns the reply.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00099">remote.hpp:99</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_ae0a8a4b505069b41f9005705e93d4701"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">morph::backend::RemoteServer::handle</a></div><div class="ttdeci">void handle(std::string msg, std::function&lt; void(std::string)&gt; reply)</div><div class="ttdoc">Asynchronously processes msg and calls reply with the response.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00081">remote.hpp:81</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1RemoteServer_html_af8a6235cbbe77ead17ea779d99d6011a"><div class="ttname"><a href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#af8a6235cbbe77ead17ea779d99d6011a">morph::backend::RemoteServer::RemoteServer</a></div><div class="ttdeci">RemoteServer(::morph::exec::IExecutor &amp;workerPool, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</div><div class="ttdoc">Constructs a server backed by workerPool with allow-all authorization.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00042">remote.hpp:42</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html">morph::backend::SimulatedRemoteBackend</a></div><div class="ttdoc">IBackend adapter that routes all calls through a RemoteServer using a synchronous request-reply proto...</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00193">remote.hpp:193</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_a06e3f39db0975c6baf3a7b433f01a0ec"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec">morph::backend::SimulatedRemoteBackend::notifyBackendChanged</a></div><div class="ttdeci">void notifyBackendChanged() override</div><div class="ttdoc">No-op — models live in RemoteServer, not locally.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00271">remote.hpp:271</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_a978cad0db6efd8ccd3f33c1bf15be188"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188">morph::backend::SimulatedRemoteBackend::SimulatedRemoteBackend</a></div><div class="ttdeci">SimulatedRemoteBackend(RemoteServer &amp;server)</div><div class="ttdoc">Constructs the backend targeting server.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00197">remote.hpp:197</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_a99914bc40b056f11484ec271746ec237"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237">morph::backend::SimulatedRemoteBackend::cancelPending</a></div><div class="ttdeci">void cancelPending(const std::exception_ptr &amp;exc) override</div><div class="ttdoc">Resolves every still-pending completion this backend produced with exc.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00275">remote.hpp:275</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_ae05332b7c26d6617e468f1c750431404"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">morph::backend::SimulatedRemoteBackend::deregisterModel</a></div><div class="ttdeci">void deregisterModel(::morph::exec::detail::ModelId mid) override</div><div class="ttdoc">Deregisters the model on the server. Processed inline; safe from any thread.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00222">remote.hpp:222</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_ae2e0de3d0e1107efca7f5c86a8c4e295"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">morph::backend::SimulatedRemoteBackend::registerModel</a></div><div class="ttdeci">::morph::exec::detail::ModelId registerModel(const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;) override</div><div class="ttdoc">Registers the model type on the server and returns its assigned id.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00209">remote.hpp:209</a></div></div>
+<div class="ttc" id="aclassmorph_1_1backend_1_1SimulatedRemoteBackend_html_af575c96f8350bdf7745cf45662314bc4"><div class="ttname"><a href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4">morph::backend::SimulatedRemoteBackend::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; std::shared_ptr&lt; void &gt; &gt; execute(::morph::exec::detail::ModelId mid, detail::ActionCall call, ::morph::exec::IExecutor *cbExec) override</div><div class="ttdoc">Serialises the action, sends it to the server, and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="../../d0/dfc/remote_8hpp_source.html#l00237">remote.hpp:237</a></div></div>
+<div class="ttc" id="aclassmorph_1_1session_1_1detail_1_1ScopedContext_html"><div class="ttname"><a href="../../dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html">morph::session::detail::ScopedContext</a></div><div class="ttdoc">RAII helper that sets the thread-local Context for its scope.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00093">session.hpp:93</a></div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00022">executor.hpp:22</a></div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html_aba07ebeefeb8222821085e766887f4a5"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor::post</a></div><div class="ttdeci">virtual void post(std::function&lt; void()&gt; task)=0</div><div class="ttdoc">Schedules task for asynchronous execution.</div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">morph::wire::Envelope</a></div><div class="ttdoc">JSON wire envelope used between any client and RemoteServer.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00028">wire.hpp:28</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a2ff3cb841aa7a258ad6f9b65dd6a70ab"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a2ff3cb841aa7a258ad6f9b65dd6a70ab">morph::wire::Envelope::modelType</a></div><div class="ttdeci">std::string modelType</div><div class="ttdoc">Model type id for execute (routing key in ActionDispatcher).</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00042">wire.hpp:42</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a3d0760f89cb023bdae4bbadb7a97ee95"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a3d0760f89cb023bdae4bbadb7a97ee95">morph::wire::Envelope::actionType</a></div><div class="ttdeci">std::string actionType</div><div class="ttdoc">Action type id for execute (the second routing key).</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00045">wire.hpp:45</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a658710447abce83c9392698bdd1ca5a1"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a658710447abce83c9392698bdd1ca5a1">morph::wire::Envelope::modelId</a></div><div class="ttdeci">uint64_t modelId</div><div class="ttdoc">Existing model instance id for deregister, execute, ok(register).</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00039">wire.hpp:39</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a81787fa40e7b4af0cb09babaf404278b"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b">morph::wire::Envelope::kind</a></div><div class="ttdeci">std::string kind</div><div class="ttdoc">Discriminator — see class docstring for valid values.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00030">wire.hpp:30</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a81aeb13f8b173ffce931e8f117e9ef59"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59">morph::wire::Envelope::callId</a></div><div class="ttdeci">uint64_t callId</div><div class="ttdoc">Correlation id for matching async replies to their requests.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00033">wire.hpp:33</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_a873839ca79760b994eee91b5fb516c18"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#a873839ca79760b994eee91b5fb516c18">morph::wire::Envelope::session</a></div><div class="ttdeci">::morph::session::Context session</div><div class="ttdoc">Session context for authorization and routing. Populated on execute; ignored on every other kind.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00056">wire.hpp:56</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_aa4880619c9deb3551acbbfdd78299326"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326">morph::wire::Envelope::body</a></div><div class="ttdeci">std::string body</div><div class="ttdoc">Serialized JSON of the action payload (execute) or of the deserializable result (ok).</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00049">wire.hpp:49</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html_af154f3156a5d37877f06c9ebd33b7192"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192">morph::wire::Envelope::typeId</a></div><div class="ttdeci">std::string typeId</div><div class="ttdoc">Model type id for register.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00036">wire.hpp:36</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- start footer part -->
