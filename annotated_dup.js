@@ -35,6 +35,8 @@ var annotated_dup =
         [ "NetworkMonitor", "db/dee/classmorph_1_1offline_1_1NetworkMonitor.html", "db/dee/classmorph_1_1offline_1_1NetworkMonitor" ],
         [ "NetworkMonitorConfig", "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html", "d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig" ],
         [ "QueueItem", "d0/df8/structmorph_1_1offline_1_1QueueItem.html", "d0/df8/structmorph_1_1offline_1_1QueueItem" ],
+        [ "ReconnectCoordinator", "d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html", "d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator" ],
+        [ "ReconnectCoordinatorConfig", "d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html", "d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig" ],
         [ "SyncResult", "de/d6e/structmorph_1_1offline_1_1SyncResult.html", "de/d6e/structmorph_1_1offline_1_1SyncResult" ],
         [ "SyncWorker", "d3/d55/classmorph_1_1offline_1_1SyncWorker.html", "d3/d55/classmorph_1_1offline_1_1SyncWorker" ]
       ] ],
