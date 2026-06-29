@@ -109,7 +109,13 @@ int main(int argc, char* argv[]) {
             window->grabWindow().save(out + "/qml_login.png");
         }
 
-        appController.registerUser("gui-demo", "demo1234", "Demo User");
+        const QByteArray seedUser = qgetenv("BANK_SEED_USER");
+        const QByteArray seedPass = qgetenv("BANK_SEED_PASS");
+        appController.registerUser(seedUser.isEmpty() ? QStringLiteral("gui-demo")
+                                                      : QString::fromUtf8(seedUser),
+                                   seedPass.isEmpty() ? QStringLiteral("demo1234")
+                                                      : QString::fromUtf8(seedPass),
+                                   QStringLiteral("Demo User"));
         pump(600);
         accountController.openAccount(0, 0, "500");
         pump(300);
