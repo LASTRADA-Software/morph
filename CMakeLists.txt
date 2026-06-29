@@ -12,6 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
+option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
+option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 
@@ -86,6 +88,10 @@ if(MORPH_BUILD_EXAMPLES)
     endif()
     if(AF_COVERAGE)
         apply_coverage(morph_example)
+    endif()
+
+    if(MORPH_BUILD_BANK_EXAMPLE)
+        add_subdirectory(examples/bank)
     endif()
 endif()
 
