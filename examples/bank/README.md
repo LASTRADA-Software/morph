@@ -87,10 +87,10 @@ registered with unixODBC (the connection string is `DRIVER=SQLite3;Database=…`
 ./build/examples/bank/bank_cli
 ```
 
-### Qt 6 GUI
+### Qt 6 QML GUI
 
-A desktop GUI (`gui/`) is built when `-DMORPH_BUILD_BANK_GUI=ON` is also passed
-(requires Qt 6 Widgets):
+A **QML (Qt Quick)** desktop GUI (`gui/`) is built when `-DMORPH_BUILD_BANK_GUI=ON`
+is also passed (requires Qt 6 Quick + Quick Controls 2):
 
 ```sh
 cmake -G Ninja -B build -S . -DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON
@@ -98,14 +98,27 @@ cmake --build build --target bank_gui
 ./build/examples/bank/gui/bank_gui
 ```
 
-It binds to the models through `morph::qt::QtExecutor` over a local backend, so
-completion callbacks land on the Qt GUI thread — the views never touch threads.
-The design is a warm, "Claude-inspired" theme (paper background, clay accent,
-soft cards, dark sidebar) defined entirely in `gui/Theme.hpp`. Screens: Login,
-Accounts (dashboard), Move Money (+ history), Cards, Payees & Bills, and Loans
-(with amortization schedule). Each `Page` reloads its data from the models when
-shown. A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set
-(uses `QT_QPA_PLATFORM=offscreen`).
+Structure:
+
+- **`gui/BankClient`** — owns the worker pool, a `morph::qt::QtExecutor`, the
+  `Bridge` (local backend), DB setup, and the session. UI-toolkit-agnostic.
+- **`gui/controllers/`** — one QObject controller per domain (`AppController`,
+  `AccountController`, …), exposed to QML as context properties (`app`,
+  `accounts`, `txns`, `cards`, `payees`, `loans`). Each calls
+  `BridgeHandler<Model>.execute(...).then(...)` — callbacks land on the Qt GUI
+  thread via `QtExecutor` — and publishes display-ready data as `Q_PROPERTY`
+  `QVariantList`s (money pre-formatted), plus an `error(QString)` signal. The
+  heavy morph/Lightweight includes are hidden from `moc` behind `#ifndef
+  Q_MOC_RUN` (moc follows includes and its parser trips on them).
+- **`gui/qml/`** — the front-end: `Main` (login ⇄ shell + error toast),
+  `AppShell` (sidebar + stacked pages), the five pages, and reusable components
+  (`Panel`, `AppButton`, `Field`, `Pill`, `Picker`). Bundled via
+  `qt_add_qml_module` (URI `BankGui`). The warm, "Claude-inspired" palette is
+  passed in from `main.cpp` as the `theme` object.
+
+A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set (with
+`QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`): it seeds data, signs in,
+and grabs a PNG of each page.
 
 ## Tests
 
