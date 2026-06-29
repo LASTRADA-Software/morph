@@ -11,6 +11,7 @@
 #include <string>
 
 #include "bank/core/errors.hpp"
+#include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/ledger_ops.hpp"
 
@@ -39,8 +40,12 @@ dto::TxnInfo TransactionModel::execute(const dto::Deposit& action) {
     if (!action.validate()) {
         throw ValidationError{"deposit amount must be positive"};
     }
-    auto account = db::loadOpenAccount(mapper(), action.accountId);
-    auto txn = db::applyCredit(mapper(), account, action.amountMinor, TxnKind::Deposit, 0, action.description);
+    auto& dm = mapper();
+    auto account = db::loadOwnedOpenAccount(dm, action.accountId, sessionPrincipal());
+    // Balance update and its ledger entry must commit (or roll back) as a unit.
+    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto txn = db::applyCredit(dm, account, action.amountMinor, TxnKind::Deposit, 0, action.description);
+    tx.Commit();
     return toTxnInfo(txn);
 }
 
@@ -48,9 +53,11 @@ dto::TxnInfo TransactionModel::execute(const dto::Withdraw& action) {
     if (!action.validate()) {
         throw ValidationError{"withdrawal amount must be positive"};
     }
-    auto account = db::loadOpenAccount(mapper(), action.accountId);
-    auto txn =
-        db::applyDebit(mapper(), account, action.amountMinor, TxnKind::Withdrawal, 0, action.description);
+    auto& dm = mapper();
+    auto account = db::loadOwnedOpenAccount(dm, action.accountId, sessionPrincipal());
+    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto txn = db::applyDebit(dm, account, action.amountMinor, TxnKind::Withdrawal, 0, action.description);
+    tx.Commit();
     return toTxnInfo(txn);
 }
 
@@ -59,8 +66,9 @@ dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
         throw ValidationError{"invalid transfer (accounts must differ and amount be positive)"};
     }
     auto& dm = mapper();
-    auto source = db::loadOpenAccount(dm, action.fromAccountId);
-    auto dest = db::loadOpenAccount(dm, action.toAccountId);
+    const std::string owner = sessionPrincipal();
+    auto source = db::loadOwnedOpenAccount(dm, action.fromAccountId, owner);
+    auto dest = db::loadOwnedOpenAccount(dm, action.toAccountId, owner);
     if (source.currency.Value() != dest.currency.Value()) {
         throw ValidationError{"cross-currency transfers are not supported"};
     }
@@ -77,21 +85,26 @@ dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
 }
 
 dto::HistoryPage TransactionModel::execute(const dto::History& action) {
-    auto rows = mapper()
-                    .Query<db::TxnRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, "=", action.accountId)
-                    .All();
-    // Newest first by id.
-    std::ranges::sort(rows, [](const db::TxnRecord& lhs, const db::TxnRecord& rhs) {
-        return lhs.id.Value() > rhs.id.Value();
-    });
-
     dto::HistoryPage page;
     page.accountId = action.accountId;
     const auto offset = static_cast<std::size_t>(std::max(0, action.offset));
     const auto limit = static_cast<std::size_t>(std::max(0, action.limit));
-    for (std::size_t idx = offset; idx < rows.size() && page.entries.size() < limit; ++idx) {
-        page.entries.push_back(toTxnInfo(rows[idx]));
+    if (limit == 0) {
+        return page;
+    }
+
+    // Newest first, paginated in the database: only the requested window is
+    // fetched instead of loading and sorting the whole ledger in memory.
+    auto rows = mapper()
+                    .Query<db::TxnRecord>()
+                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, "=", action.accountId)
+                    .OrderBy(Lightweight::FieldNameOf<&db::TxnRecord::id>,
+                             Lightweight::SqlResultOrdering::DESCENDING)
+                    .Range(offset, limit);
+
+    page.entries.reserve(rows.size());
+    for (const auto& rec : rows) {
+        page.entries.push_back(toTxnInfo(rec));
     }
     return page;
 }

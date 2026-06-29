@@ -5,10 +5,28 @@
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlMigration.hpp>
 
+#include <algorithm>
+#include <cctype>
+#include <string>
+
 namespace bank::db {
 
 void configure(const std::string& connectionString) {
-    Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{connectionString});
+    // Each model opens its own SQLite connection to the same file. Give every
+    // connection a busy timeout so that when they contend on SQLite's single
+    // writer lock they wait-and-retry instead of failing immediately with
+    // SQLITE_BUSY. (The SQLite ODBC driver reads `Timeout` in milliseconds.)
+    std::string lower = connectionString;
+    std::ranges::transform(lower, lower.begin(),
+                           [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    std::string augmented = connectionString;
+    if (lower.find("timeout=") == std::string::npos) {
+        if (!augmented.empty() && augmented.back() != ';') {
+            augmented.push_back(';');
+        }
+        augmented += "Timeout=5000";
+    }
+    Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{augmented});
 }
 
 void applyMigrations() {

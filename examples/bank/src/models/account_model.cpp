@@ -12,6 +12,7 @@
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/account_entity.hpp"
+#include "bank/db/ledger_ops.hpp"
 
 namespace bank {
 
@@ -94,23 +95,23 @@ dto::AccountList AccountModel::execute(const dto::ListAccounts& action) {
 }
 
 dto::AccountInfo AccountModel::execute(const dto::GetAccount& action) {
-    auto rec = mapper().QuerySingle<db::AccountRecord>(static_cast<std::uint64_t>(action.id));
-    if (!rec.has_value()) {
-        throw NotFound{"account not found"};
-    }
-    return toInfo(*rec);
+    auto rec = db::loadOwned<db::AccountRecord>(mapper(), action.id, sessionPrincipal(), "account");
+    return toInfo(rec);
 }
 
 dto::CommandResult AccountModel::execute(const dto::CloseAccount& action) {
-    auto rec = mapper().QuerySingle<db::AccountRecord>(static_cast<std::uint64_t>(action.id));
-    if (!rec.has_value()) {
-        throw NotFound{"account not found"};
-    }
-    if (rec->balanceMinor.Value() != 0) {
+    auto rec = db::loadOwned<db::AccountRecord>(mapper(), action.id, sessionPrincipal(), "account");
+    // Best-effort zero-balance guard. The balance is read on this model's own
+    // connection, so a deposit committing on another model's connection between
+    // this read and the Update could leave a Closed account holding funds — the
+    // same cross-connection window documented in ledger_ops.hpp. A production
+    // ledger would close the account inside the same transaction that settles
+    // its balance, or gate on an atomic conditional update.
+    if (rec.balanceMinor.Value() != 0) {
         return dto::CommandResult{.ok = false, .message = "account balance must be zero before closing"};
     }
-    rec->status = static_cast<int>(AccountStatus::Closed);
-    mapper().Update(*rec);
+    rec.status = static_cast<int>(AccountStatus::Closed);
+    mapper().Update(rec);
     return dto::CommandResult{.ok = true, .message = "account closed"};
 }
 

@@ -12,6 +12,7 @@
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/budget_entity.hpp"
+#include "bank/db/ledger_ops.hpp"
 #include "bank/db/txn_entity.hpp"
 
 namespace bank {
@@ -63,14 +64,8 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
 }
 
 dto::CommandResult BudgetModel::execute(const dto::DeleteBudget& action) {
-    auto rec = mapper().QuerySingle<db::BudgetRecord>(static_cast<std::uint64_t>(action.id));
-    if (!rec.has_value()) {
-        throw NotFound{"budget not found"};
-    }
-    if (std::string{rec->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"budget belongs to a different owner"};
-    }
-    mapper().Delete(*rec);
+    auto rec = db::loadOwned<db::BudgetRecord>(mapper(), action.id, sessionPrincipal(), "budget");
+    mapper().Delete(rec);
     return dto::CommandResult{.ok = true, .message = "budget deleted"};
 }
 
@@ -92,22 +87,19 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
 }
 
 dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
+    // Push the account/direction/time filters into the query so only the rows we
+    // aggregate cross the wire; the by-kind rollup stays in code (no GROUP BY SQL).
     auto rows = mapper()
                     .Query<db::TxnRecord>()
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, "=", action.accountId)
+                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=",
+                           static_cast<int>(TxnDirection::Debit))
+                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.sinceMs)
                     .All();
 
-    // Aggregate debits by kind in code (kept on the typed DataMapper path rather
-    // than hand-written GROUP BY SQL).
     std::map<int, dto::KindSpend> byKind;
     std::int64_t totalDebits = 0;
     for (const auto& rec : rows) {
-        if (rec.direction.Value() != static_cast<int>(TxnDirection::Debit)) {
-            continue;
-        }
-        if (rec.createdAtMs.Value() < action.sinceMs) {
-            continue;
-        }
         const int kind = rec.kind.Value();
         auto& entry = byKind[kind];
         entry.kind = kind;

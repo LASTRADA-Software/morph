@@ -36,14 +36,7 @@ dto::LoanInfo toInfo(const db::LoanRecord& rec) {
 }
 
 db::LoanRecord requireOwnedLoan(Lightweight::DataMapper& mapper, std::int64_t loanId) {
-    auto loan = mapper.QuerySingle<db::LoanRecord>(static_cast<std::uint64_t>(loanId));
-    if (!loan.has_value()) {
-        throw NotFound{"loan not found"};
-    }
-    if (std::string{loan->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"loan belongs to a different owner"};
-    }
-    return *loan;
+    return db::loadOwned<db::LoanRecord>(mapper, loanId, sessionPrincipal(), "loan");
 }
 
 /// Fixed monthly payment (minor units) for an amortizing loan.
@@ -68,10 +61,7 @@ dto::LoanInfo LoanModel::execute(const dto::ApplyLoan& action) {
         throw Unauthorized{"no session principal"};
     }
     auto& dm = mapper();
-    auto account = db::loadOpenAccount(dm, action.accountId);
-    if (std::string{account.owner.Value().str()} != owner) {
-        throw Unauthorized{"account belongs to a different owner"};
-    }
+    auto account = db::loadOwnedOpenAccount(dm, action.accountId, owner);
 
     db::LoanRecord loan;
     loan.owner = Light::SqlAnsiString<64>{owner};
@@ -101,10 +91,7 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
     if (loan.status.Value() != static_cast<int>(LoanStatus::Active)) {
         throw ConflictError{"loan is not active"};
     }
-    auto account = db::loadOpenAccount(dm, action.fromAccountId);
-    if (std::string{account.owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"account belongs to a different owner"};
-    }
+    auto account = db::loadOwnedOpenAccount(dm, action.fromAccountId, sessionPrincipal());
     const std::int64_t payment = std::min(action.amountMinor, loan.outstandingMinor.Value());
 
     Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
@@ -121,11 +108,7 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
 }
 
 dto::LoanInfo LoanModel::execute(const dto::GetLoan& action) {
-    auto loan = mapper().QuerySingle<db::LoanRecord>(static_cast<std::uint64_t>(action.id));
-    if (!loan.has_value()) {
-        throw NotFound{"loan not found"};
-    }
-    return toInfo(*loan);
+    return toInfo(requireOwnedLoan(mapper(), action.id));
 }
 
 dto::LoanList LoanModel::execute(const dto::ListLoans& action) {

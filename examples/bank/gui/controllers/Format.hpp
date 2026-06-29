@@ -58,10 +58,8 @@ inline std::optional<std::int64_t> parseMinor(const QString& text, int decimals 
     if (!ok || major < 0.0) {
         return std::nullopt;
     }
-    double scale = 1.0;
-    for (int idx = 0; idx < decimals; ++idx) {
-        scale *= 10.0;
-    }
+    // Reuse the core scale primitive so parse and format share one source.
+    const auto scale = static_cast<double>(bank::pow10i(decimals));
     return static_cast<std::int64_t>(major * scale + 0.5);
 }
 

@@ -28,6 +28,22 @@ enum class Currency : std::uint8_t {
     return c == Currency::JPY ? 0 : 2;
 }
 
+/// @brief Integer 10^exponent. Single source of truth for the parse/format
+/// scale, so the hand-rolled `10^decimals` loops don't drift apart across the
+/// core and the GUI.
+[[nodiscard]] constexpr std::int64_t pow10i(int exponent) noexcept {
+    std::int64_t value = 1;
+    for (int idx = 0; idx < exponent; ++idx) {
+        value *= 10;
+    }
+    return value;
+}
+
+/// @brief Number of minor units in one major unit of @p c, i.e. 10^decimals.
+[[nodiscard]] constexpr std::int64_t currencyScale(Currency c) noexcept {
+    return pow10i(currencyDecimals(c));
+}
+
 /// @brief Three-letter code for a currency (for display / statements).
 [[nodiscard]] constexpr std::string_view currencyCode(Currency c) noexcept {
     switch (c) {

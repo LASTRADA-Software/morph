@@ -118,4 +118,16 @@ TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transa
         REQUIRE(srcInfo.balanceMinor == 10000);
         REQUIRE(dstInfo.balanceMinor == 0);
     }
+
+    SECTION("a different principal cannot move money from accounts they do not own") {
+        app.login("mallory-intruder");
+        REQUIRE_THROWS_AS(
+            await(txns.execute(bank::dto::Withdraw{.accountId = src, .amountMinor = 100}), app.guiLoop()),
+            bank::Unauthorized);
+        REQUIRE_THROWS_AS(await(txns.execute(bank::dto::Transfer{.fromAccountId = src,
+                                                                 .toAccountId = dst,
+                                                                 .amountMinor = 100}),
+                                app.guiLoop()),
+                          bank::Unauthorized);
+    }
 }

@@ -70,15 +70,9 @@ dto::NotificationList NotificationModel::execute(const dto::ListNotifications& a
 }
 
 dto::CommandResult NotificationModel::execute(const dto::MarkRead& action) {
-    auto rec = mapper().QuerySingle<db::NotificationRecord>(static_cast<std::uint64_t>(action.id));
-    if (!rec.has_value()) {
-        throw NotFound{"notification not found"};
-    }
-    if (std::string{rec->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"notification belongs to a different owner"};
-    }
-    rec->read = true;
-    mapper().Update(*rec);
+    auto rec = db::loadOwned<db::NotificationRecord>(mapper(), action.id, sessionPrincipal(), "notification");
+    rec.read = true;
+    mapper().Update(rec);
     return dto::CommandResult{.ok = true, .message = "marked read"};
 }
 
@@ -87,17 +81,18 @@ dto::CommandResult NotificationModel::execute(const dto::MarkAllRead& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    // Only the unread rows need touching, so filter in the query rather than
+    // scanning every notification and branching per row.
     auto rows = mapper()
                     .Query<db::NotificationRecord>()
                     .Where(Lightweight::FieldNameOf<&db::NotificationRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::NotificationRecord::read>, "=", false)
                     .All();
     int updated = 0;
     for (auto& rec : rows) {
-        if (!rec.read.Value()) {
-            rec.read = true;
-            mapper().Update(rec);
-            ++updated;
-        }
+        rec.read = true;
+        mapper().Update(rec);
+        ++updated;
     }
     return dto::CommandResult{.ok = true, .message = std::to_string(updated) + " marked read"};
 }

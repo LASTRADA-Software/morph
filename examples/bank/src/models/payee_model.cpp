@@ -9,6 +9,7 @@
 
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
+#include "bank/db/ledger_ops.hpp"
 #include "bank/db/payee_entity.hpp"
 
 namespace bank {
@@ -46,14 +47,8 @@ dto::PayeeInfo PayeeModel::execute(const dto::AddPayee& action) {
 }
 
 dto::CommandResult PayeeModel::execute(const dto::RemovePayee& action) {
-    auto rec = mapper().QuerySingle<db::PayeeRecord>(static_cast<std::uint64_t>(action.id));
-    if (!rec.has_value()) {
-        throw NotFound{"payee not found"};
-    }
-    if (std::string{rec->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"payee belongs to a different owner"};
-    }
-    mapper().Delete(*rec);
+    auto rec = db::loadOwned<db::PayeeRecord>(mapper(), action.id, sessionPrincipal(), "payee");
+    mapper().Delete(rec);
     return dto::CommandResult{.ok = true, .message = "payee removed"};
 }
 

@@ -70,8 +70,10 @@ void LoanController::reloadLoans() {
 
 void LoanController::apply(qlonglong accountId, const QString& principal, int rateBps, int termMonths) {
     const auto minor = fmt::parseMinor(principal);
-    if (!minor || accountId == 0 || termMonths <= 0) {
-        emit error(QStringLiteral("Enter account, principal, and term."));
+    // rateBps < 0 means the field was left blank (see LoansPage.qml); a rate of 0
+    // is a valid interest-free loan, which the model accepts.
+    if (!minor || accountId == 0 || rateBps < 0 || termMonths <= 0) {
+        emit error(QStringLiteral("Enter account, principal, rate (bps), and term."));
         return;
     }
     _loanModel

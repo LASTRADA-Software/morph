@@ -38,24 +38,13 @@ dto::PaymentInfo toInfo(const db::PaymentRecord& rec) {
 /// Loads a payee, requiring it to exist and belong to @p owner.
 db::PayeeRecord requireOwnedPayee(Lightweight::DataMapper& mapper, std::int64_t payeeId,
                                   const std::string& owner) {
-    auto payee = mapper.QuerySingle<db::PayeeRecord>(static_cast<std::uint64_t>(payeeId));
-    if (!payee.has_value()) {
-        throw NotFound{"payee not found"};
-    }
-    if (std::string{payee->owner.Value().str()} != owner) {
-        throw Unauthorized{"payee belongs to a different owner"};
-    }
-    return *payee;
+    return db::loadOwned<db::PayeeRecord>(mapper, payeeId, owner, "payee");
 }
 
 /// Loads an open account, requiring it to belong to @p owner.
 db::AccountRecord requireOwnedAccount(Lightweight::DataMapper& mapper, std::int64_t accountId,
                                       const std::string& owner) {
-    auto account = db::loadOpenAccount(mapper, accountId);
-    if (std::string{account.owner.Value().str()} != owner) {
-        throw Unauthorized{"account belongs to a different owner"};
-    }
-    return account;
+    return db::loadOwnedOpenAccount(mapper, accountId, owner);
 }
 
 }  // namespace
@@ -141,18 +130,12 @@ dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
 }
 
 dto::CommandResult PaymentModel::execute(const dto::CancelPayment& action) {
-    auto payment = mapper().QuerySingle<db::PaymentRecord>(static_cast<std::uint64_t>(action.id));
-    if (!payment.has_value()) {
-        throw NotFound{"payment not found"};
-    }
-    if (std::string{payment->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"payment belongs to a different owner"};
-    }
-    if (payment->status.Value() != static_cast<int>(PaymentStatus::Pending)) {
+    auto payment = db::loadOwned<db::PaymentRecord>(mapper(), action.id, sessionPrincipal(), "payment");
+    if (payment.status.Value() != static_cast<int>(PaymentStatus::Pending)) {
         throw ConflictError{"only pending payments can be cancelled"};
     }
-    payment->status = static_cast<int>(PaymentStatus::Cancelled);
-    mapper().Update(*payment);
+    payment.status = static_cast<int>(PaymentStatus::Cancelled);
+    mapper().Update(payment);
     return dto::CommandResult{.ok = true, .message = "payment cancelled"};
 }
 

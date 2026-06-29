@@ -6,16 +6,17 @@
 
 #include <cstdint>
 #include <format>
-#include <functional>
 #include <random>
 #include <string>
 #include <string_view>
 
+#include "bank/core/demo_hash.hpp"
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/account_entity.hpp"
 #include "bank/db/card_entity.hpp"
+#include "bank/db/ledger_ops.hpp"
 
 namespace bank {
 
@@ -28,7 +29,7 @@ std::string randomLast4() {
 }
 
 std::string hashPin(std::string_view pin) {
-    return std::format("{:016x}", std::hash<std::string>{}(std::string{pin} + ":pin"));
+    return demoHash(std::string{pin} + ":pin");
 }
 
 dto::CardInfo toInfo(const db::CardRecord& rec) {
@@ -53,13 +54,8 @@ dto::CardInfo CardModel::execute(const dto::IssueCard& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    auto account = mapper().QuerySingle<db::AccountRecord>(static_cast<std::uint64_t>(action.accountId));
-    if (!account.has_value()) {
-        throw NotFound{"account not found"};
-    }
-    if (std::string{account->owner.Value().str()} != owner) {
-        throw Unauthorized{"account belongs to a different owner"};
-    }
+    // Cards may only be issued against an open account the caller owns.
+    auto account = db::loadOwnedOpenAccount(mapper(), action.accountId, owner);
 
     db::CardRecord card;
     card.owner = Light::SqlAnsiString<64>{owner};
@@ -77,14 +73,7 @@ namespace {
 
 /// Loads a card the session owner owns, or throws.
 db::CardRecord requireOwnedCard(Lightweight::DataMapper& mapper, std::int64_t cardId) {
-    auto card = mapper.QuerySingle<db::CardRecord>(static_cast<std::uint64_t>(cardId));
-    if (!card.has_value()) {
-        throw NotFound{"card not found"};
-    }
-    if (std::string{card->owner.Value().str()} != sessionPrincipal()) {
-        throw Unauthorized{"card belongs to a different owner"};
-    }
-    return *card;
+    return db::loadOwned<db::CardRecord>(mapper, cardId, sessionPrincipal(), "card");
 }
 
 }  // namespace

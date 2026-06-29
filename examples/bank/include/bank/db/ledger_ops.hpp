@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "bank/core/errors.hpp"
 #include "bank/core/types.hpp"
@@ -19,6 +20,16 @@
 ///
 /// The caller passes its own `DataMapper`; when several writes must be atomic,
 /// it wraps the calls in a `SqlTransaction` over `mapper.Connection()`.
+///
+/// Concurrency note: `applyCredit`/`applyDebit` read the balance, adjust it in
+/// memory, and write it back. Because each model owns a *separate* SQLite
+/// connection, two models mutating the same account concurrently could
+/// interleave and lose an update. The example mitigates this by (a) giving every
+/// connection a busy timeout (see `db::configure`) so writers serialize rather
+/// than fail, and (b) wrapping each balance change in a `SqlTransaction` so the
+/// balance write and its ledger entry commit as a unit. A production ledger
+/// would additionally use an atomic `balance = balance - ?` update or an
+/// optimistic version column to fully close the read-modify-write window.
 
 namespace bank::db {
 
@@ -29,12 +40,39 @@ namespace bank::db {
         .count();
 }
 
-/// @brief Loads an account by id, requiring it to exist and be open.
-/// @throws NotFound if the account does not exist; ConflictError if not open.
-[[nodiscard]] inline AccountRecord loadOpenAccount(Lightweight::DataMapper& mapper, std::int64_t accountId) {
+/// @brief Loads a record by id, requiring it to exist and be owned by @p owner.
+///
+/// Every per-resource access check (accounts, loans, cards, payees, payments,
+/// budgets, notifications) shares this one guard so the authorization rule lives
+/// in a single place. @p noun is woven into the thrown messages, e.g. "loan".
+/// @throws NotFound if no row has that id; Unauthorized if it belongs elsewhere.
+template <typename Record>
+[[nodiscard]] Record loadOwned(Lightweight::DataMapper& mapper, std::int64_t id,
+                               const std::string& owner, std::string_view noun) {
+    auto rec = mapper.QuerySingle<Record>(static_cast<std::uint64_t>(id));
+    if (!rec.has_value()) {
+        throw NotFound{std::string{noun} + " not found"};
+    }
+    if (std::string{rec->owner.Value().str()} != owner) {
+        throw Unauthorized{std::string{noun} + " belongs to a different owner"};
+    }
+    return *rec;
+}
+
+/// @brief Loads an account, requiring it to exist, be owned by @p owner, and be
+///        open — checked in that order so a non-owner never learns the account's
+///        status. The single home for the "owned and open" rule that every
+///        money-movement path (deposit, withdraw, transfer, payment, loan, card)
+///        shares.
+/// @throws NotFound if missing; Unauthorized if owned elsewhere; ConflictError if not open.
+[[nodiscard]] inline AccountRecord loadOwnedOpenAccount(Lightweight::DataMapper& mapper,
+                                                        std::int64_t accountId, const std::string& owner) {
     auto acct = mapper.QuerySingle<AccountRecord>(static_cast<std::uint64_t>(accountId));
     if (!acct.has_value()) {
         throw NotFound{"account not found"};
+    }
+    if (std::string{acct->owner.Value().str()} != owner) {
+        throw Unauthorized{"account belongs to a different owner"};
     }
     if (acct->status.Value() != static_cast<int>(AccountStatus::Open)) {
         throw ConflictError{"account is not open"};

@@ -4,12 +4,11 @@
 
 #include <Lightweight/Lightweight.hpp>
 
-#include <cstddef>
-#include <format>
 #include <optional>
 #include <string>
 #include <string_view>
 
+#include "bank/core/demo_hash.hpp"
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/db/user_entity.hpp"
@@ -22,9 +21,7 @@ namespace {
 /// salted KDF (Argon2/bcrypt). Salting with the username keeps identical
 /// passwords from colliding across users.
 std::string hashPassword(std::string_view username, std::string_view password) {
-    const std::string material = std::string{username} + ":" + std::string{password} + ":morph-bank";
-    const std::size_t digest = std::hash<std::string>{}(material);
-    return std::format("{:016x}", digest);
+    return demoHash(std::string{username} + ":" + std::string{password} + ":morph-bank");
 }
 
 /// Finds a user by username, or std::nullopt.

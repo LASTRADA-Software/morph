@@ -25,7 +25,11 @@ ColumnLayout {
                 text: "Apply"
                 variant: "primary"
                 onClicked: {
-                    loans.apply(account.currentValue, principal.text, parseInt(rate.text || "0"), parseInt(term.text || "0"));
+                    // Pass -1 for a blank rate so the controller can tell "left blank"
+                    // apart from an intentional 0% loan (which the model allows).
+                    var rateBps = rate.text.length > 0 ? parseInt(rate.text) : -1;
+                    loans.apply(account.currentValue, principal.text,
+                                isNaN(rateBps) ? -1 : rateBps, parseInt(term.text || "0"));
                     principal.text = ""; rate.text = ""; term.text = "";
                 }
             }
