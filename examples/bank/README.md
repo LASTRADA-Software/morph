@@ -155,6 +155,36 @@ A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set (with
 `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`): it seeds data, signs in,
 and grabs a PNG of each page.
 
+### WebAssembly demo (self-contained, GitHub Pages)
+
+`gui_wasm/` is a **single-threaded WebAssembly** build of the same GUI that runs
+**entirely in the browser** — the morph model layer is the "server in the background,"
+with no external process. Since Lightweight (ODBC/SQLite) can't run in a browser, the
+WASM build swaps persistence for an **in-memory store** (`gui_wasm/include/bank/wasm/`)
+behind **shadow model headers** that shine ahead of the native ones on the include path,
+so the QML, controllers and DTOs are reused unchanged. `BankClient` is dual-moded
+(`#ifdef __EMSCRIPTEN__`): models run on the Qt event loop via `QtExecutor` (no thread
+pool, no database). Single-threaded ⇒ no SharedArrayBuffer ⇒ **no COOP/COEP headers**, so
+plain GitHub Pages hosts it. A demo user (`demo` / `demo1234`) and two accounts are
+seeded and auto-signed-in.
+
+Build locally (needs Qt-for-WASM + a matching emsdk):
+
+```
+source /path/to/qt6-wasm/emsdk/emsdk_env.sh
+export EM_CACHE="$PWD/.emcache"
+/path/to/qt6-wasm/bin/qt-cmake -S . -B build-wasm -G Ninja \
+  -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
+  -DMORPH_BUILD_BANK_GUI=ON -DMORPH_BUILD_TESTS=OFF
+cmake --build build-wasm --target bank_gui_wasm
+python3 -m http.server -d build-wasm/examples/bank/gui_wasm 8000   # open bank_gui_wasm.html
+```
+
+CI (`.github/workflows/wasm-demo.yml`) builds the bundle with a matched host+wasm Qt pair
+and publishes it to `…github.io/<repo>/demo/`, coexisting with the Doxygen docs at the
+site root. The native (non-Emscripten) build is unaffected — the whole native stack is
+gated `if(NOT EMSCRIPTEN)` in `CMakeLists.txt`.
+
 ## Tests
 
 Each model has a `tests/test_*.cpp` (Catch2). `tests/bank_test_support.hpp` provides
@@ -168,6 +198,9 @@ shared on-disk test database. Notable cross-cutting tests:
 
 ## Status
 
-Models, tests, CLI, and the Qt 6 GUI are complete. Possible extensions: wiring
-the GUI over the Qt WebSocket backend (`morph::qt::QtWebSocketBackend`) for a
-true client/server split, and surfacing the offline queue in the UI.
+Models, tests, CLI, the Qt 6 GUI, and a self-contained WebAssembly build (hosted
+on GitHub Pages) are complete. Possible extensions: durable in-browser
+persistence (IDBFS/OPFS) for the WASM build, switching its in-browser backend to
+`RemoteServer` + `SimulatedRemoteBackend` to surface the JSON wire protocol, and
+wiring the desktop GUI over `morph::qt::QtWebSocketBackend` for a true networked
+client/server split.

@@ -1,5 +1,6 @@
 /build/
 /build-bank/
+/build-wasm/
 /out/
 *.db
 /.cache/

@@ -37,7 +37,12 @@ public:
     [[nodiscard]] const QString& displayName() const noexcept { return _displayName; }
 
 private:
+#ifndef __EMSCRIPTEN__
+    // Native: models run on a worker thread pool. WebAssembly is single-threaded,
+    // so the WASM build (see gui_wasm/) runs models on the Qt event loop via
+    // `_gui` instead — no thread pool, no ODBC database.
     morph::exec::ThreadPoolExecutor _pool;
+#endif
     morph::qt::QtExecutor _gui;
     morph::bridge::Bridge _bridge;
     QString _principal;

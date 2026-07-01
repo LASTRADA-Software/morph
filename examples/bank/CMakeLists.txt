@@ -16,6 +16,18 @@ if(NOT TARGET morph::morph)
         "with -DMORPH_BUILD_BANK_EXAMPLE=ON instead of configuring examples/bank directly.")
 endif()
 
+# ── WebAssembly build ────────────────────────────────────────────────────────
+# In an Emscripten configure, the native persistence layer (Lightweight ORM over
+# ODBC) cannot exist in the browser, so the whole native stack — Lightweight,
+# bank_lib, the CLI and the tests — is skipped. Only the self-contained WASM GUI
+# (its own in-memory backend) is built. See gui_wasm/.
+if(EMSCRIPTEN)
+    if(MORPH_BUILD_BANK_GUI)
+        add_subdirectory(gui_wasm)
+    endif()
+    return()
+endif()
+
 include(FetchContent)
 
 # ── Lightweight ORM (SQLite via ODBC) ────────────────────────────────────────
