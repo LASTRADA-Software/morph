@@ -11,7 +11,12 @@ A feature-rich demo banking application built on two libraries:
   schema is owned by Lightweight migrations.
 
 It ships the models, a full test suite, a scripted CLI driver, and a **Qt 6
-desktop GUI**.
+desktop GUI** — which also builds to **WebAssembly** and runs entirely in the browser.
+
+> **▶ Try the live demo:** **https://lastrada-software.github.io/morph/demo/**
+> It opens signed in as a seeded demo user (`demo` / `demo1234`) with two accounts.
+> Everything runs client-side — no server. First load fetches a ~31 MB `.wasm`, so
+> give it a few seconds. (See [WebAssembly demo](#webassembly-demo-self-contained-github-pages).)
 
 ## Architecture: two type layers
 
@@ -156,6 +161,14 @@ A headless screenshot smoke test runs when `BANK_GUI_SMOKE=<dir>` is set (with
 and grabs a PNG of each page.
 
 ### WebAssembly demo (self-contained, GitHub Pages)
+
+**Open it in a browser — nothing to install:** **https://lastrada-software.github.io/morph/demo/**
+
+You land signed in as the seeded demo user (`demo` / `demo1234`) with two accounts;
+open accounts, deposit/withdraw/transfer, issue cards, add payees & pay bills, and take
+a loan. It's a static page — the first load fetches a ~31 MB `.wasm` (streaming-compiled
+by the browser), then it's instant. Published from `master` by
+[`.github/workflows/wasm-demo.yml`](../../.github/workflows/wasm-demo.yml).
 
 `gui_wasm/` is a **single-threaded WebAssembly** build of the same GUI that runs
 **entirely in the browser** — the morph model layer is the "server in the background,"
