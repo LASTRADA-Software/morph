@@ -28,6 +28,7 @@ add_executable(morph_tests
     test_subscription.cpp
     test_coverage_gaps.cpp
     test_coverage_extra.cpp
+    test_coverage_push95.cpp
     test_server_limits.cpp
 )
 

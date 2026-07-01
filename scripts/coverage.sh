@@ -39,4 +39,18 @@ llvm-cov-20 export "$TEST_EXE" \
     -instr-profile="$MERGED" \
     -format=lcov \
     "$SOURCES" \
-    > "$OUT/coverage.lcov"
+    > "$OUT/coverage.lcov.raw"
+
+# llvm-cov emits branch (BRDA) records once per template instantiation, so a
+# branch that is covered in aggregate is still scored "partial" by Codecov for
+# every instantiation that did not take one arm — dozens of spurious partials on
+# header-only templated code. Collapse them to one record per source branch,
+# matching the aggregate that `llvm-cov report` already prints above. Branch
+# coverage is preserved (not skipped); only the per-instantiation noise is removed.
+llvm-cov-20 export "$TEST_EXE" \
+    -instr-profile="$MERGED" \
+    "$SOURCES" \
+    > "$OUT/coverage.json"
+
+python3 scripts/aggregate_lcov_branches.py \
+    "$OUT/coverage.lcov.raw" "$OUT/coverage.json" "$OUT/coverage.lcov"
