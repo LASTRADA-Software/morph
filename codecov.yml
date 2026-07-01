@@ -1,0 +1,32 @@
+# Codecov configuration.
+#
+# Coverage is produced by the `clang-coverage` CI job via scripts/coverage.sh,
+# restricted to the library headers under include/morph (tests, demo src/ and
+# fetched dependencies are excluded by the positional source filter to llvm-cov).
+
+coverage:
+  # Statuses are informational so a coverage delta never blocks a PR; they still
+  # render the project/patch numbers on the checks list.
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+# Always post the coverage-comparison comment on a PR, even on the first upload
+# after activation and even when the base report is still processing.
+comment:
+  layout: "reference, diff, flags, files"
+  behavior: default
+  require_base: false
+  require_head: true
+  require_changes: false
+
+# Only library headers carry coverage; make the exclusion explicit for Codecov's
+# own file walking so tests/ and the demo never dilute the reported number.
+ignore:
+  - "tests/**"
+  - "src/**"
+  - "examples/**"
