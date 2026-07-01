@@ -12,6 +12,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
+option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
+option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 
@@ -33,7 +35,10 @@ if(NOT glaze_FOUND)
     FetchContent_MakeAvailable(glaze)
 endif()
 
-if(NOT WIN32)
+# Emscripten's single-threaded build has no pthreads; requiring Threads there
+# would force -pthread (SharedArrayBuffer), which we deliberately avoid so the
+# WASM bundle can be served from plain GitHub Pages with no COOP/COEP headers.
+if(NOT WIN32 AND NOT EMSCRIPTEN)
     find_package(Threads REQUIRED)
 endif()
 
@@ -46,7 +51,7 @@ target_include_directories(morph INTERFACE
     $<INSTALL_INTERFACE:include>
 )
 target_link_libraries(morph INTERFACE glaze::glaze)
-if(NOT WIN32)
+if(NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(morph INTERFACE Threads::Threads)
 endif()
 
@@ -77,15 +82,23 @@ target_sources(morph
 
 # ── Demo executable ──────────────────────────────────────────────────────────
 if(MORPH_BUILD_EXAMPLES)
-    add_executable(morph_example src/main.cpp)
-    target_link_libraries(morph_example PRIVATE morph)
-    apply_warnings(morph_example)
+    # The console demo uses the thread-pool executor; skip it for the
+    # single-threaded WASM build (which only wants the bank GUI target).
+    if(NOT EMSCRIPTEN)
+        add_executable(morph_example src/main.cpp)
+        target_link_libraries(morph_example PRIVATE morph)
+        apply_warnings(morph_example)
 
-    if(DEFINED AF_SANITIZER)
-        apply_sanitizers(morph_example ${AF_SANITIZER})
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(morph_example ${AF_SANITIZER})
+        endif()
+        if(AF_COVERAGE)
+            apply_coverage(morph_example)
+        endif()
     endif()
-    if(AF_COVERAGE)
-        apply_coverage(morph_example)
+
+    if(MORPH_BUILD_BANK_EXAMPLE)
+        add_subdirectory(examples/bank)
     endif()
 endif()
 

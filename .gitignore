@@ -1,5 +1,8 @@
 /build/
+/build-bank/
+/build-wasm/
 /out/
+*.db
 /.cache/
 /compile_commands.json
 *.user

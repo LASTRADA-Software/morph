@@ -1,0 +1,108 @@
+name: WASM Demo
+
+# Builds the self-contained WebAssembly bank GUI (examples/bank/gui_wasm) and
+# publishes it to GitHub Pages under /demo/, alongside the Doxygen docs at the
+# site root. Single-threaded Qt-for-WASM ⇒ no SharedArrayBuffer ⇒ no COOP/COEP
+# headers ⇒ plain Pages hosting works.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'examples/bank/**'
+      - 'include/morph/**'
+      - '.github/workflows/wasm-demo.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'examples/bank/**'
+      - 'include/morph/**'
+      - '.github/workflows/wasm-demo.yml'
+
+concurrency:
+  group: wasm-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  QT_VERSION: 6.8.3
+  EMSDK_VERSION: 3.1.56   # the emscripten Qt 6.8 was built against
+
+jobs:
+  build-wasm:
+    name: Build & deploy WASM demo
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build
+
+      # aqtinstall gives a matched host + wasm Qt pair (same cmake glue), so no
+      # host/target version skew.
+      - name: Install Qt (host desktop)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          dir: ${{ runner.temp }}/qt
+
+      # Qt 6.7+ ships WebAssembly under host=all_os / target=wasm (not
+      # linux/desktop). The matching host desktop Qt above provides the tools.
+      - name: Install Qt (wasm, single-threaded)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: all_os
+          target: wasm
+          arch: wasm_singlethread
+          dir: ${{ runner.temp }}/qt
+
+      - name: Set up emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Configure
+        run: |
+          export EM_CACHE="$PWD/.emcache"
+          mkdir -p "$EM_CACHE"
+          HOST=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/gcc_64
+          WASM=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/wasm_singlethread
+          # The all_os/wasm package extracts its scripts without the exec bit.
+          chmod +x "$WASM"/bin/* || true
+          "$WASM/bin/qt-cmake" -S . -B build-wasm -G Ninja \
+            -DQT_HOST_PATH="$HOST" \
+            -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
+            -DMORPH_BUILD_BANK_GUI=ON -DMORPH_BUILD_TESTS=OFF
+
+      - name: Build
+        run: |
+          export EM_CACHE="$PWD/.emcache"
+          cmake --build build-wasm --target bank_gui_wasm
+
+      - name: Stage bundle
+        run: |
+          mkdir -p site
+          BIN=build-wasm/examples/bank/gui_wasm
+          cp "$BIN"/bank_gui_wasm.js "$BIN"/bank_gui_wasm.wasm "$BIN"/qtloader.js site/
+          # Serve the Qt loader page as the directory index.
+          cp "$BIN"/bank_gui_wasm.html site/index.html
+
+      - name: Deploy to GitHub Pages (/demo)
+        if: github.ref == 'refs/heads/master'
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: site
+          target-folder: demo
+          clean: false   # leave the Doxygen docs at the site root untouched

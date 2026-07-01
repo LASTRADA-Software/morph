@@ -53,3 +53,4 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: build/html/html
+          clean-exclude: demo/   # preserve the WASM demo published by wasm-demo.yml
