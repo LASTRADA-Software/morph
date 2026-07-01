@@ -79,6 +79,8 @@ jobs:
           mkdir -p "$EM_CACHE"
           HOST=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/gcc_64
           WASM=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/wasm_singlethread
+          # The all_os/wasm package extracts its scripts without the exec bit.
+          chmod +x "$WASM"/bin/* || true
           "$WASM/bin/qt-cmake" -S . -B build-wasm -G Ninja \
             -DQT_HOST_PATH="$HOST" \
             -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
