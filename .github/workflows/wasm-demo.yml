@@ -55,17 +55,17 @@ jobs:
           target: desktop
           arch: linux_gcc_64
           dir: ${{ runner.temp }}/qt
-          base: https://download.qt.io/   # official mirror (avoids missing XML on fallbacks)
 
+      # Qt 6.7+ ships WebAssembly under host=all_os / target=wasm (not
+      # linux/desktop). The matching host desktop Qt above provides the tools.
       - name: Install Qt (wasm, single-threaded)
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
-          host: linux
-          target: desktop
+          host: all_os
+          target: wasm
           arch: wasm_singlethread
           dir: ${{ runner.temp }}/qt
-          base: https://download.qt.io/
 
       - name: Set up emsdk
         uses: mymindstorm/setup-emsdk@v14
