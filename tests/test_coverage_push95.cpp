@@ -31,13 +31,17 @@
 
 using namespace std::chrono_literals;
 
-// Minimal model used only so a HandlerBinding has a valid factory + typeId.
-// File scope (not the anonymous namespace) so BRIDGE_REGISTER_MODEL's
-// ModelTraits specialisation is visible before makeBinding() below uses it.
+// Minimal model + action used for HandlerBinding factories and executeVia().
+// File scope (not the anonymous namespace) so the BRIDGE_REGISTER_* trait
+// specialisations are visible before makeBinding() below uses them.
+struct P95Action {
+    int x = 0;
+};
 struct P95Model {
-    int execute(int value) { return value; }
+    int execute(const P95Action& act) { return act.x; }
 };
 BRIDGE_REGISTER_MODEL(P95Model, "Cov_P95Model")
+BRIDGE_REGISTER_ACTION(P95Model, P95Action, "Cov_P95Action")
 
 namespace {
 
@@ -153,6 +157,56 @@ TEST_CASE("morph::bridge::Bridge: setDefaultSession / defaultSession round-trip"
 
     bridge.setDefaultSession({});  // clear
     REQUIRE(bridge.defaultSession().principal.empty());
+}
+
+// ── bridge.hpp:91-95,283-285 — a null initial backend is tolerated ───────────
+
+TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed", "[coverage][bridge]") {
+    // installReconnectHandler sees a null backend and returns early (283-285);
+    // the destructor's `if (auto active = loadBackend())` takes its null/false
+    // arm (92) because the backend is still null at destruction.
+    REQUIRE_NOTHROW([] {
+        ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}};
+    }());
+}
+
+// ── bridge.hpp:184,190 — switchBackend from a null backend ───────────────────
+
+TEST_CASE("morph::bridge::Bridge: switchBackend from a null backend skips the previous-backend teardown",
+          "[coverage][bridge]") {
+    // With a null initial backend, `previous` is empty after the swap, so both
+    // `if (previous && previous != newShared)` guards (184, 190) take their false
+    // arm and the old-backend teardown is skipped.
+    ::morph::exec::ThreadPoolExecutor pool{1};
+    ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}};
+    REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<::morph::backend::LocalBackend>(pool)));
+}
+
+// ── bridge.hpp:239-242 — executeVia on an unbound handler reports "handler not bound"
+
+TEST_CASE("morph::bridge::Bridge: executeVia on an unregistered binding fails with \"handler not bound\"",
+          "[coverage][bridge]") {
+    // A HandlerBinding that was never registered has currentId == 0, so executeVia
+    // hits the `if (raw == 0U)` branch (239 true arm) and resolves with an error.
+    ::morph::exec::ThreadPoolExecutor pool{1};
+    SyncExecutor cbExec;
+    ::morph::bridge::Bridge bridge{std::make_unique<::morph::backend::LocalBackend>(pool)};
+
+    auto unbound = std::make_shared<::morph::bridge::detail::HandlerBinding>();
+    auto comp = bridge.executeVia<P95Model, P95Action>(unbound, P95Action{5}, &cbExec);
+
+    std::atomic<bool> errored{false};
+    std::string message;
+    comp.onError([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const std::exception& ex) {
+            message = ex.what();
+        }
+        errored.store(true);
+    });
+    REQUIRE(waitFor([&] { return errored.load(); }));
+    REQUIRE(message.contains("handler not bound"));
 }
 
 // ── completion.hpp:54 — setException is a no-op once the state is ready ───────
