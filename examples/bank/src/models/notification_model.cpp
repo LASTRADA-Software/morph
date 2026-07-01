@@ -10,16 +10,16 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/db/ledger_ops.hpp"  // for nowMillis()
-#include "bank/db/notification_entity.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
 namespace {
 
-dto::NotificationInfo toInfo(const db::NotificationRecord& rec) {
+dto::NotificationInfo toInfo(const db::NotificationRecord& rec, const std::string& owner) {
     return dto::NotificationInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
+        .owner = owner,
         .severity = rec.severity.Value(),
         .message = std::string{rec.message.Value().str()},
         .read = rec.read.Value(),
@@ -38,13 +38,13 @@ dto::NotificationInfo NotificationModel::execute(const dto::Notify& action) {
         throw Unauthorized{"no session principal"};
     }
     db::NotificationRecord rec;
-    rec.owner = Light::SqlAnsiString<64>{owner};
+    db::setReference(rec.user, db::requireUserId(mapper(), owner));
     rec.severity = action.severity;
     rec.message = Light::SqlAnsiString<256>{action.message};
     rec.read = false;
     rec.createdAtMs = db::nowMillis();
     mapper().Create(rec);
-    return toInfo(rec);
+    return toInfo(rec, owner);
 }
 
 dto::NotificationList NotificationModel::execute(const dto::ListNotifications& action) {
@@ -52,9 +52,10 @@ dto::NotificationList NotificationModel::execute(const dto::ListNotifications& a
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::NotificationRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::NotificationRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::NotificationRecord::user>, "=", userId)
                     .All();
     dto::NotificationList out;
     for (const auto& rec : rows) {
@@ -64,7 +65,7 @@ dto::NotificationList NotificationModel::execute(const dto::ListNotifications& a
         if (action.unreadOnly && rec.read.Value()) {
             continue;
         }
-        out.notifications.push_back(toInfo(rec));
+        out.notifications.push_back(toInfo(rec, owner));
     }
     return out;
 }
@@ -83,9 +84,10 @@ dto::CommandResult NotificationModel::execute(const dto::MarkAllRead& action) {
     }
     // Only the unread rows need touching, so filter in the query rather than
     // scanning every notification and branching per row.
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::NotificationRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::NotificationRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::NotificationRecord::user>, "=", userId)
                     .Where(Lightweight::FieldNameOf<&db::NotificationRecord::read>, "=", false)
                     .All();
     int updated = 0;

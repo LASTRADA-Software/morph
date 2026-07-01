@@ -10,8 +10,8 @@
 
 #include "bank/core/errors.hpp"
 #include "bank/core/types.hpp"
-#include "bank/db/account_entity.hpp"
-#include "bank/db/txn_entity.hpp"
+#include "bank/db/entities.hpp"
+#include "bank/db/user_ops.hpp"
 
 /// @file
 /// Reusable ledger operations shared by every model that moves money
@@ -40,11 +40,25 @@ namespace bank::db {
         .count();
 }
 
+/// @brief Points a `BelongsTo<>` field at the referenced row's primary key and
+///        marks it modified so a subsequent `Update` writes the foreign key.
+///
+/// Models usually have the parent record's id (from the wire DTO) but not the
+/// loaded parent object; this sets the foreign key directly. Works for both
+/// mandatory (`uint64`) and nullable (`std::optional<uint64>`) relations.
+template <typename BelongsToField>
+inline void setReference(BelongsToField& field, std::uint64_t id) {
+    field.MutableValue() = id;
+    field.SetModified(true);
+}
+
 /// @brief Loads a record by id, requiring it to exist and be owned by @p owner.
 ///
-/// Every per-resource access check (accounts, loans, cards, payees, payments,
-/// budgets, notifications) shares this one guard so the authorization rule lives
-/// in a single place. @p noun is woven into the thrown messages, e.g. "loan".
+/// Authorization is expressed through the relation itself: the record's
+/// `BelongsTo<&UserRecord::id> user` is navigated (`rec.user->username`,
+/// lazily loaded by `QuerySingle`) and compared to the caller's principal. One
+/// guard serves every owned resource (accounts, loans, cards, payees, payments,
+/// budgets, notifications); @p noun is woven into the thrown messages.
 /// @throws NotFound if no row has that id; Unauthorized if it belongs elsewhere.
 template <typename Record>
 [[nodiscard]] Record loadOwned(Lightweight::DataMapper& mapper, std::int64_t id,
@@ -53,7 +67,7 @@ template <typename Record>
     if (!rec.has_value()) {
         throw NotFound{std::string{noun} + " not found"};
     }
-    if (std::string{rec->owner.Value().str()} != owner) {
+    if (std::string{rec->user->username.Value().str()} != owner) {
         throw Unauthorized{std::string{noun} + " belongs to a different owner"};
     }
     return *rec;
@@ -71,7 +85,7 @@ template <typename Record>
     if (!acct.has_value()) {
         throw NotFound{"account not found"};
     }
-    if (std::string{acct->owner.Value().str()} != owner) {
+    if (std::string{acct->user->username.Value().str()} != owner) {
         throw Unauthorized{"account belongs to a different owner"};
     }
     if (acct->status.Value() != static_cast<int>(AccountStatus::Open)) {
@@ -81,12 +95,15 @@ template <typename Record>
 }
 
 /// @brief Inserts a ledger row reflecting @p account's *current* balance.
+///        @p counterpartyId is the other account in a transfer, or 0 for none.
 inline TxnRecord postEntry(Lightweight::DataMapper& mapper, const AccountRecord& account,
                            TxnDirection direction, TxnKind kind, std::int64_t amountMinor,
                            std::int64_t counterpartyId, const std::string& description) {
     TxnRecord txn;
-    txn.accountId = static_cast<std::int64_t>(account.id.Value());
-    txn.counterpartyId = counterpartyId;
+    setReference(txn.account, account.id.Value());
+    if (counterpartyId > 0) {
+        setReference(txn.counterparty, static_cast<std::uint64_t>(counterpartyId));
+    }
     txn.direction = static_cast<int>(direction);
     txn.kind = static_cast<int>(kind);
     txn.amountMinor = amountMinor;

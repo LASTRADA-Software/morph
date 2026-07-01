@@ -11,7 +11,9 @@
 #include "bank/core/demo_hash.hpp"
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
-#include "bank/db/user_entity.hpp"
+// Querying UserRecord configures its `HasMany<AccountRecord>` auto-loader, which
+// needs the related entity types complete — pull in the whole graph.
+#include "bank/db/entities.hpp"
 
 namespace bank {
 
@@ -24,15 +26,12 @@ std::string hashPassword(std::string_view username, std::string_view password) {
     return demoHash(std::string{username} + ":" + std::string{password} + ":morph-bank");
 }
 
-/// Finds a user by username, or std::nullopt.
-std::optional<db::UserRecord> findUser(Lightweight::DataMapper& mapper, const std::string& username) {
-    auto rows = mapper.Query<db::UserRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::UserRecord::username>, "=", username)
-                    .All();
-    if (rows.empty()) {
-        return std::nullopt;
-    }
-    return std::move(rows.front());
+/// Finds a user by username, or std::nullopt. Uses the relation-free `UserRow`
+/// projection so the fluent query/update work (see `UserRecord`'s warning).
+std::optional<db::UserRow> findUser(Lightweight::DataMapper& mapper, const std::string& username) {
+    return mapper.Query<db::UserRow>()
+        .Where(Lightweight::FieldNameOf<&db::UserRow::username>, "=", username)
+        .First();
 }
 
 }  // namespace
@@ -45,7 +44,7 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
         return dto::AuthResult{.ok = false, .message = "username already taken"};
     }
 
-    db::UserRecord rec;
+    db::UserRow rec;
     rec.username = Light::SqlAnsiString<64>{action.username};
     rec.passwordHash = Light::SqlAnsiString<32>{hashPassword(action.username, action.password)};
     rec.displayName =
@@ -89,7 +88,7 @@ dto::CommandResult AuthModel::execute(const dto::ChangePassword& action) {
         throw ValidationError{"new password must be at least 4 characters"};
     }
     user->passwordHash = Light::SqlAnsiString<32>{hashPassword(action.username, action.newPassword)};
-    mapper().Update(*user);
+    mapper().Update(*user);  // UserRow is relation-free, so typed Update works
     return dto::CommandResult{.ok = true, .message = "password changed"};
 }
 

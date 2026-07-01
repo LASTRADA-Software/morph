@@ -12,19 +12,18 @@
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/ledger_ops.hpp"
-#include "bank/db/payee_entity.hpp"
-#include "bank/db/payment_entity.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
 namespace {
 
-dto::PaymentInfo toInfo(const db::PaymentRecord& rec) {
+dto::PaymentInfo toInfo(const db::PaymentRecord& rec, const std::string& owner) {
     return dto::PaymentInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
-        .fromAccountId = rec.fromAccountId.Value(),
-        .payeeId = rec.payeeId.Value(),
+        .owner = owner,
+        .fromAccountId = static_cast<std::int64_t>(rec.fromAccount.Value()),
+        .payeeId = static_cast<std::int64_t>(rec.payee.Value()),
         .amountMinor = rec.amountMinor.Value(),
         .currency = rec.currency.Value(),
         .schedule = rec.schedule.Value(),
@@ -62,9 +61,9 @@ dto::PaymentInfo PaymentModel::execute(const dto::PayBill& action) {
     requireOwnedPayee(dm, action.payeeId, owner);
 
     db::PaymentRecord payment;
-    payment.owner = Light::SqlAnsiString<64>{owner};
-    payment.fromAccountId = action.fromAccountId;
-    payment.payeeId = action.payeeId;
+    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
+    db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
     payment.currency = account.currency.Value();
     payment.schedule = static_cast<int>(PaymentSchedule::OneOff);
@@ -78,7 +77,7 @@ dto::PaymentInfo PaymentModel::execute(const dto::PayBill& action) {
     dm.Create(payment);
     tx.Commit();
 
-    return toInfo(payment);
+    return toInfo(payment, owner);
 }
 
 dto::PaymentInfo PaymentModel::execute(const dto::SchedulePayment& action) {
@@ -91,9 +90,9 @@ dto::PaymentInfo PaymentModel::execute(const dto::SchedulePayment& action) {
     requireOwnedPayee(dm, action.payeeId, owner);
 
     db::PaymentRecord payment;
-    payment.owner = Light::SqlAnsiString<64>{owner};
-    payment.fromAccountId = action.fromAccountId;
-    payment.payeeId = action.payeeId;
+    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
+    db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
     payment.currency = account.currency.Value();
     payment.schedule = static_cast<int>(PaymentSchedule::Scheduled);
@@ -102,7 +101,7 @@ dto::PaymentInfo PaymentModel::execute(const dto::SchedulePayment& action) {
     payment.intervalDays = 0;
     payment.description = Light::SqlAnsiString<128>{action.description};
     dm.Create(payment);
-    return toInfo(payment);
+    return toInfo(payment, owner);
 }
 
 dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
@@ -115,9 +114,9 @@ dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
     requireOwnedPayee(dm, action.payeeId, owner);
 
     db::PaymentRecord payment;
-    payment.owner = Light::SqlAnsiString<64>{owner};
-    payment.fromAccountId = action.fromAccountId;
-    payment.payeeId = action.payeeId;
+    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
+    db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
     payment.currency = account.currency.Value();
     payment.schedule = static_cast<int>(PaymentSchedule::Standing);
@@ -126,7 +125,7 @@ dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
     payment.intervalDays = action.intervalDays;
     payment.description = Light::SqlAnsiString<128>{action.description};
     dm.Create(payment);
-    return toInfo(payment);
+    return toInfo(payment, owner);
 }
 
 dto::CommandResult PaymentModel::execute(const dto::CancelPayment& action) {
@@ -144,14 +143,15 @@ dto::PaymentList PaymentModel::execute(const dto::ListPayments& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::PaymentRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::PaymentRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::PaymentRecord::user>, "=", userId)
                     .All();
     dto::PaymentList out;
     out.payments.reserve(rows.size());
     for (const auto& rec : rows) {
-        out.payments.push_back(toInfo(rec));
+        out.payments.push_back(toInfo(rec, owner));
     }
     return out;
 }

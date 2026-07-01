@@ -28,9 +28,10 @@ GUI / CLI ──actions/results (plain DTOs)──▶ morph Bridge ──▶ Mod
 
 - **`include/bank/dto/`** — wire DTOs (the morph action/result types). Amounts are
   integer **minor units** (cents); enums travel as their integer values.
-- **`include/bank/db/`** — Lightweight entity records (`*_entity.hpp`), the shared
-  `WithMapper` mixin (one lazily-opened `DataMapper` per model), and reusable
-  `ledger_ops.hpp` (debit/credit/post-entry helpers used by every money-moving model).
+- **`include/bank/db/`** — Lightweight entity records (`*_entity.hpp`, aggregated by
+  `entities.hpp`), the shared `WithMapper` mixin (one lazily-opened `DataMapper` per
+  model), `user_ops.hpp` (principal→`user_id` resolution), and reusable `ledger_ops.hpp`
+  (relation-aware debit/credit/post-entry + the `loadOwned` ownership guard).
 - **`include/bank/models/` + `src/models/`** — one model per banking domain. The
   `BRIDGE_REGISTER_*` macros live in the **model header** so every `.execute()` call
   site sees the `ActionTraits` specialisation.
@@ -45,6 +46,40 @@ connection with no locking. The database is an **on-disk SQLite file** (not `:me
 which is private per connection) so every model's connection sees the same data.
 Cross-row atomic operations (transfer, bill payment, loan disbursement/repayment) run
 inside a `SqlTransaction`.
+
+### Relations: `BelongsTo` / `HasMany`
+
+The schema is modelled with Lightweight's relation types rather than bare foreign-key
+columns:
+
+- **`BelongsTo<&UserRecord::id>`** — every owned record (`accounts`, `payees`, `cards`,
+  `loans`, `payments`, `budgets`, `notifications`) references its owner by `user_id`.
+  Authorization is expressed *through the relation*: `db::loadOwned` navigates
+  `rec->user->username` (lazily loaded) and compares it to the session principal.
+- **`BelongsTo` for the id FKs** — `transactions.account_id`, the nullable
+  `transactions.counterparty_id` (NULL for deposits/withdrawals, set for transfers),
+  `payments.from_account_id` / `payee_id`, `cards.account_id`, `loans.account_id`.
+- **`HasMany`** — `UserRecord::accounts` (used by `ListAccounts` and `StatementModel`)
+  and `PayeeRecord::payments`. The migrations also declare the matching SQL
+  `RequiredForeignKey`/`ForeignKey` constraints.
+
+Two quirks of the current Lightweight version (non-reflection build) shaped the entity
+layout, and are documented inline in the `*_entity.hpp` headers:
+
+1. **`HasMany<Child>` resolves the child's foreign key by *ordinal member index***, not
+   by type — so each `HasMany` field is placed at the same member index as the
+   back-pointing `BelongsTo` on the child (e.g. `UserRecord::accounts` and
+   `AccountRecord::user` are both at index 5). The relations test locks this in.
+2. **A record that has a `HasMany` member can't be used with `DataMapper::Update` or the
+   fluent `Query<T>()`** (both enumerate every member without a storage guard). So
+   `UserRecord`/`PayeeRecord` are read-only *aggregates* (used via `Create`/`Delete`/
+   `QuerySingle` + navigation), and a relation-free *projection* over the same table
+   (`UserRow`/`PayeeRow`) backs the fluent list queries and credential updates.
+   `AccountRecord` carries no `HasMany` at all because it is updated on every balance
+   change.
+
+The wire DTOs are unchanged by this (they still expose `owner` as a username and ids as
+integers), so the GUI and CLI are unaffected; models map the relation values to the DTO.
 
 ## Models & features
 

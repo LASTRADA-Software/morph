@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <Lightweight/Lightweight.hpp>
 #include <morph/completion.hpp>
 #include <morph/executor.hpp>
 
@@ -13,6 +14,8 @@
 #include <utility>
 
 #include "bank/db/database.hpp"
+#include "bank/db/entities.hpp"
+#include "bank/db/user_ops.hpp"
 
 /// @file
 /// Shared helpers for the bank example tests.
@@ -34,6 +37,18 @@ inline void ensureDatabase() {
         return true;
     }();
     (void)once;
+}
+
+/// @brief Ensures the database exists and a `users` row for @p principal does
+///        too, so models can resolve it to a `user_id`.
+///
+/// `App::login` provisions the principal automatically; tests that drive a model
+/// without `App` (e.g. the remote-backend test, which sets the session principal
+/// directly) call this to get the same effect.
+inline void ensurePrincipal(const std::string& principal) {
+    ensureDatabase();
+    Lightweight::DataMapper mapper;
+    bank::db::ensureUser(mapper, principal);
 }
 
 /// @brief Runs a morph action to completion synchronously by pumping @p gui.

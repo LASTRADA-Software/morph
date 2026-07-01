@@ -14,17 +14,17 @@
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/ledger_ops.hpp"
-#include "bank/db/loan_entity.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
 namespace {
 
-dto::LoanInfo toInfo(const db::LoanRecord& rec) {
+dto::LoanInfo toInfo(const db::LoanRecord& rec, const std::string& owner) {
     return dto::LoanInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
-        .accountId = rec.accountId.Value(),
+        .owner = owner,
+        .accountId = static_cast<std::int64_t>(rec.account.Value()),
         .principalMinor = rec.principalMinor.Value(),
         .outstandingMinor = rec.outstandingMinor.Value(),
         .currency = rec.currency.Value(),
@@ -64,8 +64,8 @@ dto::LoanInfo LoanModel::execute(const dto::ApplyLoan& action) {
     auto account = db::loadOwnedOpenAccount(dm, action.accountId, owner);
 
     db::LoanRecord loan;
-    loan.owner = Light::SqlAnsiString<64>{owner};
-    loan.accountId = action.accountId;
+    db::setReference(loan.user, db::requireUserId(dm, owner));
+    db::setReference(loan.account, account.id.Value());
     loan.principalMinor = action.principalMinor;
     loan.outstandingMinor = action.principalMinor;
     loan.currency = account.currency.Value();
@@ -79,7 +79,7 @@ dto::LoanInfo LoanModel::execute(const dto::ApplyLoan& action) {
     db::applyCredit(dm, account, action.principalMinor, TxnKind::LoanDisbursement, 0, "loan disbursement");
     tx.Commit();
 
-    return toInfo(loan);
+    return toInfo(loan, owner);
 }
 
 dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
@@ -87,6 +87,7 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
         throw ValidationError{"invalid repayment"};
     }
     auto& dm = mapper();
+    const std::string owner = sessionPrincipal();
     auto loan = requireOwnedLoan(dm, action.loanId);
     if (loan.status.Value() != static_cast<int>(LoanStatus::Active)) {
         throw ConflictError{"loan is not active"};
@@ -104,11 +105,12 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
     dm.Update(loan);
     tx.Commit();
 
-    return toInfo(loan);
+    return toInfo(loan, owner);
 }
 
 dto::LoanInfo LoanModel::execute(const dto::GetLoan& action) {
-    return toInfo(requireOwnedLoan(mapper(), action.id));
+    const std::string owner = sessionPrincipal();
+    return toInfo(requireOwnedLoan(mapper(), action.id), owner);
 }
 
 dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
@@ -116,14 +118,15 @@ dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::LoanRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::LoanRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::LoanRecord::user>, "=", userId)
                     .All();
     dto::LoanList out;
     out.loans.reserve(rows.size());
     for (const auto& rec : rows) {
-        out.loans.push_back(toInfo(rec));
+        out.loans.push_back(toInfo(rec, owner));
     }
     return out;
 }

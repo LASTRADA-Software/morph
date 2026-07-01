@@ -84,6 +84,7 @@ if(MORPH_BUILD_TESTS)
             tests/test_statement.cpp
             tests/test_remote.cpp
             tests/test_offline.cpp
+            tests/test_relations.cpp
         )
         target_include_directories(bank_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         target_link_libraries(bank_tests PRIVATE bank_lib Catch2::Catch2WithMain)

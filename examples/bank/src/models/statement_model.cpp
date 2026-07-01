@@ -13,8 +13,8 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
-#include "bank/db/account_entity.hpp"
-#include "bank/db/txn_entity.hpp"
+#include "bank/db/entities.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
@@ -24,10 +24,10 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
         throw Unauthorized{"no session principal"};
     }
 
-    auto accounts = mapper()
-                        .Query<db::AccountRecord>()
-                        .Where(Lightweight::FieldNameOf<&db::AccountRecord::owner>, "=", owner)
-                        .All();
+    // Reach the owner's accounts through the `UserRecord::accounts` relation.
+    const auto userId = db::requireUserId(mapper(), owner);
+    auto user = mapper().QuerySingle<db::UserRecord>(userId).value();
+    const auto& accounts = user.accounts.All();
 
     dto::Statement statement;
     statement.owner = owner;
@@ -41,12 +41,12 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
     statement.lines.reserve(accounts.size());
     accountIds.reserve(accounts.size());
     for (const auto& account : accounts) {
-        const auto accountId = static_cast<std::int64_t>(account.id.Value());
+        const auto accountId = static_cast<std::int64_t>(account->id.Value());
         dto::StatementLine line;
         line.accountId = accountId;
-        line.number = std::string{account.number.Value().str()};
-        line.currency = account.currency.Value();
-        line.closingBalanceMinor = account.balanceMinor.Value();
+        line.number = std::string{account->number.Value().str()};
+        line.currency = account->currency.Value();
+        line.closingBalanceMinor = account->balanceMinor.Value();
         lineIndex.emplace(accountId, statement.lines.size());
         statement.lines.push_back(std::move(line));
         accountIds.push_back(accountId);
@@ -60,7 +60,7 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
     // (toMs == 0 means "open ended") stays as a cheap in-loop check.
     auto entries = mapper()
                        .Query<db::TxnRecord>()
-                       .WhereIn(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, accountIds)
+                       .WhereIn(Lightweight::FieldNameOf<&db::TxnRecord::account>, accountIds)
                        .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.fromMs)
                        .All();
 
@@ -69,7 +69,7 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
         if (action.toMs != 0 && when > action.toMs) {
             continue;
         }
-        const auto it = lineIndex.find(entry.accountId.Value());
+        const auto it = lineIndex.find(static_cast<std::int64_t>(entry.account.Value()));
         if (it == lineIndex.end()) {
             continue;
         }

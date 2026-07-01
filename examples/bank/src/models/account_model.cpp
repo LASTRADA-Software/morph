@@ -11,8 +11,8 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
-#include "bank/db/account_entity.hpp"
 #include "bank/db/ledger_ops.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
@@ -31,10 +31,12 @@ std::string generateAccountNumber() {
 }
 
 /// Translates a persisted `AccountRecord` into the wire `AccountInfo` DTO.
-dto::AccountInfo toInfo(const db::AccountRecord& rec) {
+/// @p owner is the resolved owner username (the wire DTO carries the username
+/// rather than the internal `user_id` the record stores).
+dto::AccountInfo toInfo(const db::AccountRecord& rec, const std::string& owner) {
     return dto::AccountInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
+        .owner = owner,
         .number = std::string{rec.number.Value().str()},
         .kind = rec.kind.Value(),
         .currency = rec.currency.Value(),
@@ -62,7 +64,7 @@ dto::AccountInfo AccountModel::execute(const dto::OpenAccount& action) {
     }
 
     db::AccountRecord rec;
-    rec.owner = Light::SqlAnsiString<64>{owner};
+    db::setReference(rec.user, db::requireUserId(mapper(), owner));
     rec.number = Light::SqlAnsiString<34>{generateAccountNumber()};
     rec.kind = action.kind;
     rec.currency = action.currency;
@@ -72,7 +74,7 @@ dto::AccountInfo AccountModel::execute(const dto::OpenAccount& action) {
     rec.interestBps = defaultInterestBps(action.kind);
 
     mapper().Create(rec);
-    return toInfo(rec);
+    return toInfo(rec, owner);
 }
 
 dto::AccountList AccountModel::execute(const dto::ListAccounts& action) {
@@ -81,22 +83,24 @@ dto::AccountList AccountModel::execute(const dto::ListAccounts& action) {
         throw Unauthorized{"no session principal to list accounts for"};
     }
 
-    auto rows = mapper()
-                    .Query<db::AccountRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::AccountRecord::owner>, "=", owner)
-                    .All();
+    // Load the owner and walk the `UserRecord::accounts` HasMany relation rather
+    // than issuing a manual `WHERE user_id = ?` — the relation resolves the join
+    // for us and returns the user's accounts directly.
+    const auto userId = db::requireUserId(mapper(), owner);
+    auto user = mapper().QuerySingle<db::UserRecord>(userId).value();
 
     dto::AccountList out;
-    out.accounts.reserve(rows.size());
-    for (const auto& rec : rows) {
-        out.accounts.push_back(toInfo(rec));
+    out.accounts.reserve(user.accounts.Count());
+    for (const auto& account : user.accounts.All()) {
+        out.accounts.push_back(toInfo(*account, owner));
     }
     return out;
 }
 
 dto::AccountInfo AccountModel::execute(const dto::GetAccount& action) {
-    auto rec = db::loadOwned<db::AccountRecord>(mapper(), action.id, sessionPrincipal(), "account");
-    return toInfo(rec);
+    const std::string owner = sessionPrincipal();
+    auto rec = db::loadOwned<db::AccountRecord>(mapper(), action.id, owner, "account");
+    return toInfo(rec, owner);
 }
 
 dto::CommandResult AccountModel::execute(const dto::CloseAccount& action) {

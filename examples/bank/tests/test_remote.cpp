@@ -58,6 +58,8 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     morph::session::Context ctx;
     ctx.principal = "olivia-remote";
     bridge.setDefaultSession(ctx);
+    // No App here to provision the principal, so ensure its users row exists.
+    bank::testing::ensurePrincipal("olivia-remote");
 
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{bridge, &gui};
 

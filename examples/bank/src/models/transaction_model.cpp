@@ -22,8 +22,9 @@ namespace {
 dto::TxnInfo toTxnInfo(const db::TxnRecord& rec) {
     return dto::TxnInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .accountId = rec.accountId.Value(),
-        .counterpartyId = rec.counterpartyId.Value(),
+        .accountId = static_cast<std::int64_t>(rec.account.Value()),
+        // Nullable relation: NULL (deposits/withdrawals) surfaces as 0 on the wire.
+        .counterpartyId = static_cast<std::int64_t>(rec.counterparty.Value().value_or(0)),
         .direction = rec.direction.Value(),
         .kind = rec.kind.Value(),
         .amountMinor = rec.amountMinor.Value(),
@@ -97,7 +98,7 @@ dto::HistoryPage TransactionModel::execute(const dto::History& action) {
     // fetched instead of loading and sorting the whole ledger in memory.
     auto rows = mapper()
                     .Query<db::TxnRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, "=", action.accountId)
+                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
                     .OrderBy(Lightweight::FieldNameOf<&db::TxnRecord::id>,
                              Lightweight::SqlResultOrdering::DESCENDING)
                     .Range(offset, limit);

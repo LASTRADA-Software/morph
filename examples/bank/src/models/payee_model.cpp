@@ -10,16 +10,19 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/db/ledger_ops.hpp"
-#include "bank/db/payee_entity.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
 namespace {
 
-dto::PayeeInfo toInfo(const db::PayeeRecord& rec) {
+/// Works for either the `PayeeRecord` aggregate or the `PayeeRow` projection —
+/// both expose the same scalar fields.
+template <typename Record>
+dto::PayeeInfo toInfo(const Record& rec, const std::string& owner) {
     return dto::PayeeInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
+        .owner = owner,
         .name = std::string{rec.name.Value().str()},
         .iban = std::string{rec.iban.Value().str()},
         .bankName = std::string{rec.bankName.Value().str()},
@@ -38,12 +41,12 @@ dto::PayeeInfo PayeeModel::execute(const dto::AddPayee& action) {
     }
 
     db::PayeeRecord rec;
-    rec.owner = Light::SqlAnsiString<64>{owner};
+    db::setReference(rec.user, db::requireUserId(mapper(), owner));
     rec.name = Light::SqlAnsiString<128>{action.name};
     rec.iban = Light::SqlAnsiString<34>{action.iban};
     rec.bankName = Light::SqlAnsiString<128>{action.bankName};
     mapper().Create(rec);
-    return toInfo(rec);
+    return toInfo(rec, owner);
 }
 
 dto::CommandResult PayeeModel::execute(const dto::RemovePayee& action) {
@@ -57,14 +60,17 @@ dto::PayeeList PayeeModel::execute(const dto::ListPayees& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    // Fluent list query uses the relation-free `PayeeRow` projection (the
+    // `PayeeRecord` aggregate carries a `HasMany` the fluent builder can't select).
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
-                    .Query<db::PayeeRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::PayeeRecord::owner>, "=", owner)
+                    .Query<db::PayeeRow>()
+                    .Where(Lightweight::FieldNameOf<&db::PayeeRow::user>, "=", userId)
                     .All();
     dto::PayeeList out;
     out.payees.reserve(rows.size());
     for (const auto& rec : rows) {
-        out.payees.push_back(toInfo(rec));
+        out.payees.push_back(toInfo(rec, owner));
     }
     return out;
 }

@@ -14,9 +14,8 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
-#include "bank/db/account_entity.hpp"
-#include "bank/db/card_entity.hpp"
 #include "bank/db/ledger_ops.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
@@ -32,11 +31,11 @@ std::string hashPin(std::string_view pin) {
     return demoHash(std::string{pin} + ":pin");
 }
 
-dto::CardInfo toInfo(const db::CardRecord& rec) {
+dto::CardInfo toInfo(const db::CardRecord& rec, const std::string& owner) {
     return dto::CardInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
-        .accountId = rec.accountId.Value(),
+        .owner = owner,
+        .accountId = static_cast<std::int64_t>(rec.account.Value()),
         .kind = rec.kind.Value(),
         .panLast4 = std::string{rec.panLast4.Value().str()},
         .status = rec.status.Value(),
@@ -58,15 +57,15 @@ dto::CardInfo CardModel::execute(const dto::IssueCard& action) {
     auto account = db::loadOwnedOpenAccount(mapper(), action.accountId, owner);
 
     db::CardRecord card;
-    card.owner = Light::SqlAnsiString<64>{owner};
-    card.accountId = action.accountId;
+    db::setReference(card.account, account.id.Value());
+    db::setReference(card.user, db::requireUserId(mapper(), owner));
     card.kind = action.kind;
     card.panLast4 = Light::SqlAnsiString<4>{randomLast4()};
     card.status = static_cast<int>(CardStatus::Active);
     card.dailyLimitMinor = action.dailyLimitMinor;
     card.pinHash = Light::SqlAnsiString<16>{hashPin("0000")};
     mapper().Create(card);
-    return toInfo(card);
+    return toInfo(card, owner);
 }
 
 namespace {
@@ -127,14 +126,15 @@ dto::CardList CardModel::execute(const dto::ListCards& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::CardRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::CardRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::CardRecord::user>, "=", userId)
                     .All();
     dto::CardList out;
     out.cards.reserve(rows.size());
     for (const auto& rec : rows) {
-        out.cards.push_back(toInfo(rec));
+        out.cards.push_back(toInfo(rec, owner));
     }
     return out;
 }

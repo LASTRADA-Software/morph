@@ -11,18 +11,17 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/principal.hpp"
 #include "bank/core/types.hpp"
-#include "bank/db/budget_entity.hpp"
 #include "bank/db/ledger_ops.hpp"
-#include "bank/db/txn_entity.hpp"
+#include "bank/db/user_ops.hpp"
 
 namespace bank {
 
 namespace {
 
-dto::BudgetInfo toInfo(const db::BudgetRecord& rec) {
+dto::BudgetInfo toInfo(const db::BudgetRecord& rec, const std::string& owner) {
     return dto::BudgetInfo{
         .id = static_cast<std::int64_t>(rec.id.Value()),
-        .owner = std::string{rec.owner.Value().str()},
+        .owner = owner,
         .category = std::string{rec.category.Value().str()},
         .monthlyLimitMinor = rec.monthlyLimitMinor.Value(),
         .currency = rec.currency.Value(),
@@ -40,10 +39,11 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
         throw Unauthorized{"no session principal"};
     }
 
-    // Upsert: update the existing row for (owner, category) or create a new one.
+    // Upsert: update the existing row for (user, category) or create a new one.
+    const auto userId = db::requireUserId(mapper(), owner);
     auto existing = mapper()
                         .Query<db::BudgetRecord>()
-                        .Where(Lightweight::FieldNameOf<&db::BudgetRecord::owner>, "=", owner)
+                        .Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId)
                         .Where(Lightweight::FieldNameOf<&db::BudgetRecord::category>, "=", action.category)
                         .All();
     if (!existing.empty()) {
@@ -51,16 +51,16 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
         rec.monthlyLimitMinor = action.monthlyLimitMinor;
         rec.currency = action.currency;
         mapper().Update(rec);
-        return toInfo(rec);
+        return toInfo(rec, owner);
     }
 
     db::BudgetRecord rec;
-    rec.owner = Light::SqlAnsiString<64>{owner};
+    db::setReference(rec.user, userId);
     rec.category = Light::SqlAnsiString<64>{action.category};
     rec.monthlyLimitMinor = action.monthlyLimitMinor;
     rec.currency = action.currency;
     mapper().Create(rec);
-    return toInfo(rec);
+    return toInfo(rec, owner);
 }
 
 dto::CommandResult BudgetModel::execute(const dto::DeleteBudget& action) {
@@ -74,14 +74,15 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    const auto userId = db::requireUserId(mapper(), owner);
     auto rows = mapper()
                     .Query<db::BudgetRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::BudgetRecord::owner>, "=", owner)
+                    .Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId)
                     .All();
     dto::BudgetList out;
     out.budgets.reserve(rows.size());
     for (const auto& rec : rows) {
-        out.budgets.push_back(toInfo(rec));
+        out.budgets.push_back(toInfo(rec, owner));
     }
     return out;
 }
@@ -91,7 +92,7 @@ dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
     // aggregate cross the wire; the by-kind rollup stays in code (no GROUP BY SQL).
     auto rows = mapper()
                     .Query<db::TxnRecord>()
-                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::accountId>, "=", action.accountId)
+                    .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=",
                            static_cast<int>(TxnDirection::Debit))
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.sinceMs)
