@@ -35,8 +35,16 @@ llvm-cov-20 report "$TEST_EXE" \
     -instr-profile="$MERGED" \
     "$SOURCES"
 
+# --skip-branches: llvm-cov's lcov branch export is emitted per template
+# instantiation, so a branch that is fully covered in aggregate is still marked
+# "partial" on Codecov whenever any single instantiation leaves one arm untaken
+# (pervasive for header-only templated code like completion.hpp / bridge.hpp).
+# That noise buries the meaningful signal, so we upload line coverage only.
+# Aggregate branch coverage remains visible in the `llvm-cov report` output above
+# and in the HTML report.
 llvm-cov-20 export "$TEST_EXE" \
     -instr-profile="$MERGED" \
     -format=lcov \
+    --skip-branches \
     "$SOURCES" \
     > "$OUT/coverage.lcov"
