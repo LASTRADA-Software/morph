@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+#include <glaze/glaze.hpp>
+#include <cstdint>
+#include <mutex>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace morph::journal {
+
+/// @brief One recorded execution of an action against a model instance.
+///
+/// Produced automatically by `morph::model::detail::IModelHolder::recordIfAttached`
+/// — application and model code never construct or append these directly.
+struct LogEntry {
+    /// @brief Monotonic order assigned by the sink on `append()`. Callers pass `0`.
+    uint64_t seq = 0;
+
+    /// @brief String type-id of the model the action ran against (`ModelTraits<M>::typeId()`).
+    std::string modelType;
+
+    /// @brief Stable identity of the model instance (e.g. an account id), stamped
+    ///        from the value passed to `attachActionLog()`. Empty if none was set.
+    std::string entityKey;
+
+    /// @brief String type-id of the executed action (`ActionTraits<A>::typeId()`).
+    std::string actionType;
+
+    /// @brief JSON-encoded request (`ActionTraits<A>::toJson`).
+    std::string payload;
+
+    /// @brief JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after
+    ///        successful execution.
+    std::string result;
+
+    /// @brief Auth principal from `morph::session::current()`, if any. Empty if unset.
+    std::string principal;
+
+    /// @brief Wall-clock time of execution, milliseconds since the Unix epoch.
+    int64_t timestampMs = 0;
+};
+
+/// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.
+struct SerializationError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+/// @brief Encodes @p entry as JSON.
+///
+/// `LogEntry` is a plain aggregate, so Glaze reflects it without a `glz::meta`
+/// specialisation — the same automatic reflection `BRIDGE_REGISTER_ACTION`
+/// relies on for user action structs. Used by sinks that need an opaque
+/// string representation (`FileActionLog`, `kafka::KafkaActionLog`).
+/// @throws SerializationError on encode failure (should not happen for a valid `LogEntry`).
+inline std::string toJson(const LogEntry& entry) {
+    std::string out;
+    if (auto errCode = glz::write_json(entry, out)) {
+        throw SerializationError{glz::format_error(errCode, out)};
+    }
+    return out;
+}
+
+/// @brief Decodes @p json into a `LogEntry`.
+/// @throws SerializationError if @p json is not a valid `LogEntry`.
+inline LogEntry fromJson(std::string_view json) {
+    LogEntry entry{};
+    if (auto errCode = glz::read_json(entry, json)) {
+        throw SerializationError{glz::format_error(errCode, json)};
+    }
+    return entry;
+}
+
+/// @brief Interface for durable storage of executed-action entries.
+///
+/// Entries are never removed by the framework — this is a permanent, append-only
+/// record, unlike `morph::offline::IOfflineQueue` (whose `markDone()` deletes
+/// items once retried successfully). Implementations range from in-memory
+/// (`InMemoryActionLog`) to file, SQL, or network-backed stores supplied by the
+/// host application.
+struct IActionLog {
+    virtual ~IActionLog() = default;
+
+    /// @brief Appends @p entry. Implementations assign `entry.seq`.
+    virtual void append(LogEntry entry) = 0;
+
+    /// @brief Pushes any buffered entries to the durable backend. No-op for sinks
+    ///        with nothing to buffer (e.g. `InMemoryActionLog`).
+    virtual void flush() = 0;
+
+    /// @brief Returns recorded entries in append order.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    [[nodiscard]] virtual std::vector<LogEntry> entries(std::string_view entityKey = {}) const = 0;
+};
+
+/// @brief Thread-safe in-memory implementation of `IActionLog`.
+///
+/// Suitable for testing and for applications that do not need cross-process
+/// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape.
+class InMemoryActionLog : public IActionLog {
+public:
+    /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
+    void append(LogEntry entry) override {
+        std::scoped_lock lock{_mtx};
+        entry.seq = ++_nextSeq;
+        _entries.push_back(std::move(entry));
+    }
+
+    /// @brief No-op — there is no external backend to flush to.
+    void flush() override {}
+
+    /// @brief Returns a snapshot of matching entries in append order. Thread-safe.
+    [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
+        std::scoped_lock lock{_mtx};
+        if (entityKey.empty()) {
+            return _entries;
+        }
+        std::vector<LogEntry> out;
+        for (const auto& entry : _entries) {
+            if (entry.entityKey == entityKey) {
+                out.push_back(entry);
+            }
+        }
+        return out;
+    }
+
+private:
+    mutable std::mutex _mtx;
+    std::vector<LogEntry> _entries;
+    uint64_t _nextSeq{0};
+};
+
+}  // namespace morph::journal

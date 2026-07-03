@@ -8,6 +8,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -60,6 +61,28 @@ struct IBackend {
     virtual ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
+
+    /// @brief Registers a new model instance, additionally passing @p contextKey —
+    ///        the instance's stable identity (e.g. an account id) — through to
+    ///        backends that can make use of it.
+    ///
+    /// Default implementation forwards to `registerModel()` and drops @p contextKey,
+    /// which is exactly correct for `LocalBackend`: the caller's own @p factory
+    /// closure already captures whatever identity it needs directly (see
+    /// `IModelHolder::attachActionLog`), so there is nothing for the backend to
+    /// forward. Backends whose model instances live behind a wire protocol
+    /// (`SimulatedRemoteBackend`) override this to carry @p contextKey across —
+    /// see `wire::Envelope::contextKey` and `RemoteServer::setLogProvider`.
+    /// @param typeId     String type-id of the model to instantiate.
+    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
+    /// @param contextKey Stable identity of the new instance; empty if none.
+    /// @return Newly assigned `ModelId`.
+    virtual ::morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey) {
+        (void)contextKey;
+        return registerModel(typeId, std::move(factory));
+    }
 
     /// @brief Removes the model identified by @p mid from the backend.
     virtual void deregisterModel(::morph::exec::detail::ModelId mid) = 0;

@@ -7,10 +7,12 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "action_log.hpp"
 #include "backend.hpp"
 #include "session.hpp"
 #include "wire.hpp"
@@ -103,6 +105,28 @@ public:
         return reply;
     }
 
+    /// @brief Callable that supplies the action log to attach to a newly
+    ///        registered instance, given its model type and `contextKey`.
+    ///
+    /// Return `nullptr` to register the instance with no log attached (e.g. for
+    /// model types or context keys the host app doesn't want journaled).
+    using LogProvider =
+        std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType, std::string_view contextKey)>;
+
+    /// @brief Installs @p provider, consulted on every `register` envelope whose
+    ///        `contextKey` is non-empty.
+    ///
+    /// This is what closes the gap `IModelHolder::attachActionLog` leaves open
+    /// for remote topologies: `RemoteServer` owns the actual model instances for
+    /// every remote/simulated-remote client, so it is the only place that can
+    /// attach a log to them. Pass `nullptr` to remove a previously installed
+    /// provider (new registrations get no log). Thread-safe.
+    /// @param provider Callable invoked synchronously while handling `register`.
+    void setLogProvider(LogProvider provider) {
+        std::scoped_lock lock{_logProviderMtx};
+        _logProvider = std::move(provider);
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply) {
         ::morph::wire::Envelope env;
@@ -118,6 +142,18 @@ private:
                     throw std::runtime_error("register requires a typeId");
                 }
                 auto holder = _registry.create(env.typeId);
+                if (!env.contextKey.empty()) {
+                    LogProvider provider;
+                    {
+                        std::scoped_lock lock{_logProviderMtx};
+                        provider = _logProvider;
+                    }
+                    if (provider) {
+                        if (auto log = provider(env.typeId, env.contextKey)) {
+                            holder->attachActionLog(std::move(log), env.contextKey);
+                        }
+                    }
+                }
                 ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
                 {
                     std::scoped_lock lock{_regMtx};
@@ -181,6 +217,8 @@ private:
                        ::morph::exec::detail::ModelIdHash>
         _models;
     std::atomic<uint64_t> _nextId{0};
+    std::mutex _logProviderMtx;
+    LogProvider _logProvider;
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` using a
@@ -209,8 +247,24 @@ public:
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()>) override {
-        auto reply = ::morph::wire::decode(
-            _server.handleInline(::morph::wire::encode(::morph::wire::makeRegister(typeId))));
+        return registerModelWithContext(typeId, nullptr, {});
+    }
+
+    /// @brief Registers the model type on the server, carrying @p contextKey across
+    ///        the wire so the server's `RemoteServer::LogProvider` (if configured)
+    ///        can attach an action log to the instance it creates.
+    ///
+    /// @p factory is still ignored — model construction is delegated to the
+    /// server's `ModelRegistryFactory`, same as `registerModel()`.
+    /// @param typeId     String type-id sent in the `register` message.
+    /// @param contextKey Stable identity of the new instance; empty if none.
+    /// @return `ModelId` assigned by the server.
+    /// @throws std::runtime_error if the server replies with an error.
+    ::morph::exec::detail::ModelId registerModelWithContext(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()>,
+        std::string_view contextKey) override {
+        auto reply = ::morph::wire::decode(_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey}))));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }

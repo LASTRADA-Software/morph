@@ -93,7 +93,56 @@ struct ActionValidator {
     }
 };
 
+/// @brief Whether an action's executions are recorded to an attached action log.
+///
+/// A strong type instead of a bare `bool` so registration call sites read as
+/// intent (`Loggable::No`) rather than an unexplained `false`.
+enum class Loggable { No, Yes };
+
+/// @brief Per-action policy deciding how repeated executions are checkpointed
+///        into a durable action log.
+///
+/// Deliberately minimal for now — only `coalesce` exists, and it has no
+/// registration macro yet. Specialise directly for the rare action where only
+/// the latest occurrence should survive a checkpoint (e.g. a form-field edit
+/// fired repeatedly via `BridgeHandler::set<...>`); every other action defaults
+/// to `false`, meaning every execution is treated as a distinct, permanent fact
+/// (the right default for anything resembling a business event).
+/// @tparam Action Concrete action type.
+template <typename Action>
+struct ActionLogPolicy {
+    /// @brief If `true`, a checkpoint keeps only the most recent entry per
+    ///        `(modelType, entityKey, actionType)`. If `false` (default), every
+    ///        entry survives.
+    static constexpr bool coalesce = false;
+};
+
 namespace detail {
+
+/// @brief Concept satisfied by `ActionTraits<A>` specialisations that expose a
+///        `Loggable loggable` static member.
+///
+/// Lets `actionLoggable()` default to `Loggable::Yes` for hand-written
+/// `ActionTraits` specialisations (as used in tests) that predate this member,
+/// instead of requiring every existing specialisation to be updated.
+template <typename A>
+concept HasLoggableFlag = requires {
+    { ActionTraits<A>::loggable } -> std::convertible_to<Loggable>;
+};
+
+/// @brief Returns `ActionTraits<A>::loggable` if present, otherwise `Loggable::Yes`.
+///
+/// Logging every action by default (opt out via the macro's 4th argument) means
+/// new actions are captured automatically; only actions that are known to be
+/// pure queries need to opt out explicitly.
+template <typename A>
+constexpr Loggable actionLoggable() {
+    if constexpr (HasLoggableFlag<A>) {
+        return ActionTraits<A>::loggable;
+    } else {
+        return Loggable::Yes;
+    }
+}
 
 /// @brief Exception thrown when JSON serialisation or deserialisation fails.
 struct ParseError : std::runtime_error {
@@ -114,6 +163,12 @@ public:
     using Runner = std::function<std::string(IModelHolder&, std::string_view)>;
 
     /// @brief Registers a runner for `(Model, Action)` under the given string ids.
+    ///
+    /// This is the single execution site used by `RemoteServer` (every remote and
+    /// Qt WebSocket topology) — `Model::execute()` runs here, on whichever process
+    /// actually owns @p holder. If a `journal::IActionLog` is attached to @p holder
+    /// (via `IModelHolder::attachActionLog`) and `Action` is loggable (the default),
+    /// the executed action is recorded automatically after it succeeds.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
         Key key{std::string{modelId}, std::string{actionId}};
@@ -121,8 +176,25 @@ public:
             auto action = ActionTraits<Action>::fromJson(payloadJson);
             auto& model = holder.template into<Model>();
             auto result = model.execute(action);
-            return ActionTraits<Action>::resultToJson(result);
+            auto resultJson = ActionTraits<Action>::resultToJson(result);
+            if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                if (holder.hasActionLog()) {
+                    // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                    holder.recordIfAttached(::morph::journal::LogEntry{
+                        .seq = 0,
+                        .modelType = std::string{ModelTraits<Model>::typeId()},
+                        .entityKey = {},
+                        .actionType = std::string{ActionTraits<Action>::typeId()},
+                        .payload = std::string{payloadJson},
+                        .result = resultJson,
+                        .principal = {},
+                        .timestampMs = 0,
+                    });
+                }
+            }
+            return resultJson;
         };
+        _coalesce[key] = ActionLogPolicy<Action>::coalesce;
     }
 
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
@@ -134,6 +206,17 @@ public:
             throw std::runtime_error("unknown action: " + key.first + "/" + key.second);
         }
         return iter->second(holder, payload);
+    }
+
+    /// @brief Returns whether `(modelId, actionId)` was registered with
+    ///        `ActionLogPolicy<Action>::coalesce == true`.
+    ///
+    /// Used by `journal::SessionLog::checkpoint()` to decide, from the type-erased
+    /// `LogEntry` stream, which entries collapse to their latest occurrence.
+    /// Unknown pairs (never registered) default to `false` — every entry kept.
+    [[nodiscard]] bool coalesce(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _coalesce.find(Key{std::string{modelId}, std::string{actionId}});
+        return iter != _coalesce.end() && iter->second;
     }
 
     /// @brief Returns the process-level singleton dispatcher.
@@ -149,6 +232,7 @@ private:
         }
     };
     std::unordered_map<Key, Runner, KeyHash> _runners;
+    std::unordered_map<Key, bool, KeyHash> _coalesce;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.
@@ -234,14 +318,34 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
 /// registers the action with the process-level `ActionDispatcher` at static-init time.
 /// `BRIDGE_REGISTER_MODEL(M, ...)` must be called before this macro.
 ///
+/// An optional 4th argument overrides whether executions of @p A are recorded to
+/// an attached action log (see `IModelHolder::attachActionLog`); omitted, it
+/// defaults to `morph::model::Loggable::Yes`, so every action is captured unless
+/// explicitly opted out — typically for pure queries:
+/// @code
+/// BRIDGE_REGISTER_ACTION(AccountModel, Deposit,    "Deposit")                            // logged
+/// BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount", morph::model::Loggable::No)  // opt out
+/// @endcode
+///
 /// @param M    Concrete model type that handles the action.
 /// @param A    Concrete action type.
 /// @param NAME String literal used as the action type-id.
-#define BRIDGE_REGISTER_ACTION(M, A, NAME)                                                               \
+/// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
+#define BRIDGE_REGISTER_ACTION(...)                                                                     \
+    BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3)         \
+    (__VA_ARGS__)
+
+/// @cond detail
+#define BRIDGE_REGISTER_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
+
+#define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
+
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                   \
     template <>                                                                                          \
     struct morph::model::ActionTraits<A> {                                                               \
         using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                          \
         static constexpr std::string_view typeId() { return NAME; }                                      \
+        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                 \
         static std::string toJson(const A& action) {                                                     \
             std::string out;                                                                             \
             if (auto errCode = glz::write_json(action, out)) {                                           \
@@ -275,6 +379,7 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                            \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
     }
+/// @endcond
 
 /// @brief Registers a readiness predicate for action @p A.
 ///
