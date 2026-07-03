@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for phase 2/3 of the ordered action log (issue #3): LogEntry JSON
-// round-trip, FileActionLog, the wire::Envelope::contextKey + RemoteServer::
-// LogProvider mechanism that closes phase 1's "remote identity" gap, and the
-// fake-broker-backed KafkaActionLog (phase 3, per the chosen "interface + fake
-// broker" approach — no librdkafka or live cluster involved).
+// Coverage for phase 2 of the ordered action log (issue #3): LogEntry JSON
+// round-trip, FileActionLog, and the wire::Envelope::contextKey +
+// RemoteServer::LogProvider mechanism that closes phase 1's "remote identity"
+// gap. (Phase 3, a Kafka-shaped sink, was dropped for now.)
 
 #include <morph/action_log.hpp>
 #include <morph/backend.hpp>
@@ -12,7 +11,6 @@
 #include <morph/executor.hpp>
 #include <morph/file_action_log.hpp>
 #include <morph/journal.hpp>
-#include <morph/kafka_action_log.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>
 #include <morph/wire.hpp>
@@ -32,7 +30,6 @@ using morph::journal::FileActionLog;
 using morph::journal::IActionLog;
 using morph::journal::InMemoryActionLog;
 using morph::journal::LogEntry;
-namespace kafka = morph::journal::kafka;
 
 namespace {
 LogEntry makeEntry(std::string modelType, std::string entityKey, std::string actionType, std::string payload = {},
@@ -73,17 +70,6 @@ struct P2Deposit {
 struct P2GetBalance {};
 struct P2Save {};  // signals "commit now" — the app decides what that means, not the framework
 
-// Registered only against local (non-global) ActionDispatcher instances in the
-// Kafka tests below, purely to populate the coalesce map — dispatch() is never
-// actually called on them. Declared here (rather than down by those tests) so
-// P2Model can have real execute() overloads for them.
-struct KafkaCoalesceAction {
-    std::string name;
-};
-struct KafkaEventAction {
-    int amount = 0;
-};
-
 struct P2Model {
     int balance = 0;
     int execute(const P2Deposit& a) {
@@ -92,8 +78,6 @@ struct P2Model {
     }
     int execute(const P2GetBalance& /*a*/) { return balance; }
     int execute(const P2Save& /*a*/) { return balance; }
-    std::string execute(const KafkaCoalesceAction& a) { return a.name; }
-    int execute(const KafkaEventAction& a) { return a.amount; }
 };
 
 BRIDGE_REGISTER_MODEL(P2Model, "P2_Model")
@@ -404,102 +388,4 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     REQUIRE(entries.size() == 1);
     REQUIRE(entries[0].entityKey == "acct-remote-1");
     REQUIRE(entries[0].actionType == "P2_Deposit");
-}
-
-// ── Kafka: fake broker + KafkaActionLog ─────────────────────────────────────
-//
-// KafkaCoalesceAction/KafkaEventAction are declared earlier, alongside P2Model.
-
-// Manual ActionTraits (matching test_dispatch_di.cpp's style) — these actions
-// are only ever registered on a local ActionDispatcher to populate its
-// coalesce map; dispatcher.dispatch() is never actually called on them, but
-// registerAction<>() still compiles the full runner lambda, which references
-// ActionTraits<Action>, so a real specialisation is required regardless.
-template <>
-struct morph::model::ActionTraits<KafkaCoalesceAction> {
-    using Result = std::string;
-    static constexpr std::string_view typeId() { return "KafkaCoalesceAction"; }
-    static std::string toJson(const KafkaCoalesceAction& a) { return R"({"name":")" + a.name + "\"}"; }
-    static KafkaCoalesceAction fromJson(std::string_view) { return {}; }
-    static std::string resultToJson(const std::string& r) { return r; }
-    static std::string resultFromJson(std::string_view s) { return std::string{s}; }
-};
-template <>
-struct morph::model::ActionTraits<KafkaEventAction> {
-    using Result = int;
-    static constexpr std::string_view typeId() { return "KafkaEventAction"; }
-    static std::string toJson(const KafkaEventAction& a) { return R"({"amount":)" + std::to_string(a.amount) + "}"; }
-    static KafkaEventAction fromJson(std::string_view) { return {}; }
-    static std::string resultToJson(const int& r) { return std::to_string(r); }
-    static int resultFromJson(std::string_view s) { return std::stoi(std::string{s}); }
-};
-
-template <>
-struct morph::model::ActionLogPolicy<KafkaCoalesceAction> {
-    static constexpr bool coalesce = true;
-};
-
-TEST_CASE("KafkaActionLog: coalesce==true actions share one key, compactedView keeps only the latest",
-         "[action_log][phase3][kafka]") {
-    morph::model::detail::ActionDispatcher dispatcher;
-    dispatcher.registerAction<P2Model, KafkaCoalesceAction>("P2_Model", "KafkaCoalesceAction");
-
-    kafka::FakeProducer producer;
-    kafka::KafkaActionLog kafkaLog{producer, "action-log-topic", dispatcher};
-
-    kafkaLog.append(makeEntry("P2_Model", "acct-1", "KafkaCoalesceAction", "", "bob"));
-    kafkaLog.append(makeEntry("P2_Model", "acct-1", "KafkaCoalesceAction", "", "bobby"));
-    kafkaLog.flush();
-
-    auto raw = producer.raw("action-log-topic");
-    REQUIRE(raw.size() == 2);
-    REQUIRE(raw[0].key == raw[1].key);  // same coalescing key both times
-
-    auto compacted = producer.compactedView("action-log-topic");
-    REQUIRE(compacted.size() == 1);
-    REQUIRE(morph::journal::fromJson(compacted[0].value).result == "bobby");  // latest wins
-    REQUIRE(producer.flushCount() == 1);
-}
-
-TEST_CASE("KafkaActionLog: coalesce==false actions each get a unique key, compactedView keeps all",
-         "[action_log][phase3][kafka]") {
-    morph::model::detail::ActionDispatcher dispatcher;
-    dispatcher.registerAction<P2Model, KafkaEventAction>("P2_Model", "KafkaEventAction");
-
-    kafka::FakeProducer producer;
-    kafka::KafkaActionLog kafkaLog{producer, "action-log-topic", dispatcher};
-
-    kafkaLog.append(makeEntry("P2_Model", "acct-1", "KafkaEventAction", "", "10"));
-    kafkaLog.append(makeEntry("P2_Model", "acct-1", "KafkaEventAction", "", "20"));
-
-    auto raw = producer.raw("action-log-topic");
-    REQUIRE(raw.size() == 2);
-    REQUIRE(raw[0].key != raw[1].key);  // distinct keys — real events, never merged
-
-    auto compacted = producer.compactedView("action-log-topic");
-    REQUIRE(compacted.size() == 2);  // compaction is a no-op for this policy
-}
-
-TEST_CASE("KafkaActionLog: unregistered (modelType, actionType) defaults to coalesce==false",
-         "[action_log][phase3][kafka]") {
-    morph::model::detail::ActionDispatcher dispatcher;  // nothing registered
-    kafka::FakeProducer producer;
-    kafka::KafkaActionLog kafkaLog{producer, "t", dispatcher};
-
-    kafkaLog.append(makeEntry("Unknown", "e", "Unknown"));
-    kafkaLog.append(makeEntry("Unknown", "e", "Unknown"));
-    REQUIRE(producer.compactedView("t").size() == 2);
-}
-
-TEST_CASE("KafkaActionLog::entries: not supported, throws", "[action_log][phase3][kafka]") {
-    morph::model::detail::ActionDispatcher dispatcher;
-    kafka::FakeProducer producer;
-    kafka::KafkaActionLog kafkaLog{producer, "t", dispatcher};
-    REQUIRE_THROWS_AS(kafkaLog.entries(), std::logic_error);
-}
-
-TEST_CASE("kafka::FakeProducer: raw() on an unknown topic returns empty", "[action_log][phase3][kafka]") {
-    kafka::FakeProducer producer;
-    REQUIRE(producer.raw("nope").empty());
-    REQUIRE(producer.compactedView("nope").empty());
 }

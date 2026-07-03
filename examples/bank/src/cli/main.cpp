@@ -70,35 +70,17 @@ bank::Money usd(std::int64_t minor) { return bank::Money{.minor = minor, .curren
 
 /// Runs the full scenario against an already-wired bridge + gui executor.
 ///
-/// `auditLog` is attached to the `TransactionModel` handler so every
-/// Deposit/Withdraw/Transfer is recorded — see the `HandlerBinding` built
-/// below and the matching `RemoteServer::setLogProvider` wiring in `main()`,
-/// which together make this work identically whether `bridge`'s backend is
-/// local or (simulated) remote.
+/// No per-handler wiring is needed for auditing: `morph::journal::setActionLog`
+/// was called once in `main()`, so every handler constructed below — local or
+/// (simulated) remote — automatically records to it. `session::current()`'s
+/// principal is captured on each entry automatically too, from the login below.
 void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor& gui, const char* label,
-                 const std::string& principal, const std::shared_ptr<morph::journal::IActionLog>& auditLog) {
+                 const std::string& principal) {
     std::println("\n========== {} ==========", label);
 
     morph::bridge::BridgeHandler<bank::AuthModel> auth{bridge, &gui};
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{bridge, &gui};
-
-    // Audited handler: `contextKey` is the demo principal, so every entry this
-    // handler produces is attributable to whoever was logged in when it ran.
-    // For LocalBackend, `modelFactory` runs directly and attaches `auditLog`
-    // right here. For SimulatedRemoteBackend, `modelFactory` is never invoked
-    // (model construction happens inside RemoteServer) but `contextKey` still
-    // reaches it over the wire, where the log provider installed in `main()`
-    // attaches the very same `auditLog`.
-    auto txnBinding = std::make_shared<morph::bridge::detail::HandlerBinding>();
-    txnBinding->typeId = std::string{morph::model::ModelTraits<bank::TransactionModel>::typeId()};
-    txnBinding->contextKey = principal;
-    txnBinding->modelFactory = [auditLog, principal] {
-        auto holder = morph::model::detail::ModelFactory::create<bank::TransactionModel>();
-        holder->attachActionLog(auditLog, principal);
-        return holder;
-    };
-    morph::bridge::BridgeHandler<bank::TransactionModel> txns{bridge, &gui, txnBinding};
-
+    morph::bridge::BridgeHandler<bank::TransactionModel> txns{bridge, &gui};
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{bridge, &gui};
     morph::bridge::BridgeHandler<bank::PaymentModel> payments{bridge, &gui};
     morph::bridge::BridgeHandler<bank::CardModel> cards{bridge, &gui};
@@ -205,12 +187,13 @@ int main() {
     std::filesystem::remove(dbPath, ec);
     bank::db::setup("DRIVER=SQLite3;Database=" + dbPath.string());
 
-    // Audit trail: every Deposit/Withdraw/Transfer, from both scenario runs
-    // below, lands here as one append-only NDJSON file — the "local file"
-    // sink for the action log (issue #3).
+    // Audit trail: set once, here, and every model created from this point on
+    // — in either scenario below, local or (simulated) remote — automatically
+    // records to it. No per-handler wiring needed; see morph::journal::setActionLog.
     const auto auditPath = std::filesystem::temp_directory_path() / "morph_bank_cli_audit.ndjson";
     std::filesystem::remove(auditPath, ec);
     auto auditLog = std::make_shared<morph::journal::FileActionLog>(auditPath);
+    morph::journal::setActionLog(auditLog);
 
     morph::exec::ThreadPoolExecutor workerPool{4};
     morph::exec::MainThreadExecutor gui;
@@ -218,30 +201,24 @@ int main() {
     // 1) Local backend: models run in this process on the worker pool.
     {
         morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
-        runScenario(bridge, gui, "LocalBackend", "demo-local", auditLog);
+        runScenario(bridge, gui, "LocalBackend", "demo-local");
     }
 
-    // 2) Remote backend (simulated): identical scenario, identical code.
+    // 2) Remote backend (simulated): identical scenario, identical code. The
+    // audited instances RemoteServer creates for this backend go through the
+    // very same ModelFactory::create<Model>() as the local ones above, so the
+    // audit log reaches them too with no extra wiring.
     {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-        // Closes the "remote identity" gap: the register envelope carries the
-        // contextKey runScenario set on the TransactionModel binding, and this
-        // provider attaches the same audit log to the instance RemoteServer
-        // creates for it.
-        server->setLogProvider(
-            [auditLog](std::string_view /*modelType*/,
-                      std::string_view contextKey) -> std::shared_ptr<morph::journal::IActionLog> {
-                return contextKey.empty() ? nullptr : auditLog;
-            });
         morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
-        runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote", auditLog);
+        runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote");
     }
 
     auditLog->flush();
     std::println("\n========== Audit trail ({}) ==========", auditPath.string());
     for (const auto& entry : auditLog->entries()) {
-        std::println("[{}] {}::{} payload={} result={}", entry.entityKey, entry.modelType, entry.actionType,
+        std::println("[{}] {}::{} payload={} result={}", entry.principal, entry.modelType, entry.actionType,
                      entry.payload, entry.result);
     }
 

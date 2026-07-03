@@ -3,10 +3,12 @@
 #pragma once
 #include <glaze/glaze.hpp>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace morph::journal {
@@ -53,7 +55,7 @@ struct SerializationError : std::runtime_error {
 /// `LogEntry` is a plain aggregate, so Glaze reflects it without a `glz::meta`
 /// specialisation — the same automatic reflection `BRIDGE_REGISTER_ACTION`
 /// relies on for user action structs. Used by sinks that need an opaque
-/// string representation (`FileActionLog`, `kafka::KafkaActionLog`).
+/// string representation (`FileActionLog`).
 /// @throws SerializationError on encode failure (should not happen for a valid `LogEntry`).
 inline std::string toJson(const LogEntry& entry) {
     std::string out;
@@ -135,6 +137,81 @@ private:
     mutable std::mutex _mtx;
     std::vector<LogEntry> _entries;
     uint64_t _nextSeq{0};
+};
+
+namespace detail {
+
+/// @brief Process-wide slot holding the default action log, plus the mutex
+///        guarding it. A function-local static, not a namespace-scope global,
+///        so it's safe regardless of translation-unit init order.
+inline std::pair<std::mutex, std::shared_ptr<IActionLog>>& defaultActionLogState() {
+    static std::pair<std::mutex, std::shared_ptr<IActionLog>> state;
+    return state;
+}
+
+}  // namespace detail
+
+/// @brief Installs @p log as the process-wide default action log.
+///
+/// Every model instance created via `morph::model::detail::ModelFactory::create<Model>()`
+/// — which is every model registered the ordinary way, whether the active
+/// backend ends up being local or remote — automatically gets @p log attached
+/// (with an empty `entityKey`) from that point on. Call this once at startup;
+/// no per-model or per-handler wiring is needed for the common case.
+///
+/// Application code that needs a specific instance identity (e.g. per-account
+/// auditing) can still call `IModelHolder::attachActionLog` explicitly on that
+/// instance afterward — an explicit call always overrides whatever the
+/// default attached. Thread-safe.
+///
+/// @param log Sink to attach automatically, or `nullptr` to stop auto-attaching
+///            (existing instances keep whatever they already have).
+inline void setActionLog(std::shared_ptr<IActionLog> log) {
+    auto& [mtx, slot] = detail::defaultActionLogState();
+    std::scoped_lock lock{mtx};
+    slot = std::move(log);
+}
+
+/// @brief Returns the currently installed default action log, or `nullptr`
+///        if none has been set. Thread-safe.
+[[nodiscard]] inline std::shared_ptr<IActionLog> defaultActionLog() {
+    auto& [mtx, slot] = detail::defaultActionLogState();
+    std::scoped_lock lock{mtx};
+    return slot;
+}
+
+/// @brief RAII helper that installs a default action log for its lifetime and
+///        restores the previous one on destruction.
+///
+/// Mirrors `morph::log::ScopedLoggerOverride`. Intended for tests (so one test
+/// case's sink never leaks into the next) and for applications that need to
+/// temporarily redirect auto-attached logging within a scope.
+///
+/// @par Example
+/// @code
+/// {
+///     morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>()};
+///     // ... models created in this scope auto-attach guard's log ...
+/// }  // previous default restored here
+/// @endcode
+class ScopedActionLog {
+public:
+    /// @brief Installs @p log as the default, saving whatever was there before.
+    /// @param log New default for the lifetime of this object.
+    explicit ScopedActionLog(std::shared_ptr<IActionLog> log) : _previous{defaultActionLog()} {
+        setActionLog(std::move(log));
+    }
+
+    /// @brief Restores the saved default.
+    ~ScopedActionLog() { setActionLog(std::move(_previous)); }
+
+    ScopedActionLog(const ScopedActionLog&) = delete;
+    ScopedActionLog& operator=(const ScopedActionLog&) = delete;
+    ScopedActionLog(ScopedActionLog&&) = delete;
+    ScopedActionLog& operator=(ScopedActionLog&&) = delete;
+
+private:
+    std::shared_ptr<IActionLog> _previous;
 };
 
 }  // namespace morph::journal

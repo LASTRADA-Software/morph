@@ -510,3 +510,99 @@ TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing pas
     session->checkpoint(durable, dispatcher);
     REQUIRE(durable.entries().size() == 2);
 }
+
+// ── setActionLog / defaultActionLog / ScopedActionLog ───────────────────────
+//
+// morph_tests runs every TEST_CASE in one process, and the default action log
+// is process-wide global state — every test here uses ScopedActionLog so its
+// override never leaks into a test that runs after it, regardless of order.
+
+TEST_CASE("ScopedActionLog: installs and restores the default action log", "[action_log][default]") {
+    REQUIRE(morph::journal::defaultActionLog() == nullptr);
+    auto log = std::make_shared<InMemoryActionLog>();
+    {
+        morph::journal::ScopedActionLog guard{log};
+        REQUIRE(morph::journal::defaultActionLog() == log);
+    }
+    REQUIRE(morph::journal::defaultActionLog() == nullptr);
+}
+
+TEST_CASE("ScopedActionLog: nested scopes restore in the correct order", "[action_log][default]") {
+    auto outer = std::make_shared<InMemoryActionLog>();
+    auto inner = std::make_shared<InMemoryActionLog>();
+    morph::journal::ScopedActionLog outerGuard{outer};
+    REQUIRE(morph::journal::defaultActionLog() == outer);
+    {
+        morph::journal::ScopedActionLog innerGuard{inner};
+        REQUIRE(morph::journal::defaultActionLog() == inner);
+    }
+    REQUIRE(morph::journal::defaultActionLog() == outer);
+}
+
+TEST_CASE("ModelFactory::create: auto-attaches the default action log when one is installed",
+         "[action_log][default]") {
+    auto log = std::make_shared<InMemoryActionLog>();
+    morph::journal::ScopedActionLog guard{log};
+
+    auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+    REQUIRE(holder->hasActionLog());
+
+    morph::model::detail::ActionDispatcher dispatcher;
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+    auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 12});
+    REQUIRE(dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson) == "12");
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].entityKey.empty());  // auto-attach uses an empty entityKey
+    REQUIRE(entries[0].actionType == "AL_Deposit");
+}
+
+TEST_CASE("ModelFactory::create: does not attach a log when no default is installed", "[action_log][default]") {
+    REQUIRE(morph::journal::defaultActionLog() == nullptr);
+    auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+    REQUIRE_FALSE(holder->hasActionLog());
+}
+
+TEST_CASE("IModelHolder::attachActionLog: an explicit call overrides the auto-attached default",
+         "[action_log][default]") {
+    auto defaultLog = std::make_shared<InMemoryActionLog>();
+    morph::journal::ScopedActionLog guard{defaultLog};
+
+    auto holder = morph::model::detail::ModelFactory::create<ALModel>();  // auto-attaches defaultLog
+    auto specificLog = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(specificLog, "acct-override");  // explicit call wins
+
+    morph::model::detail::ActionDispatcher dispatcher;
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+    auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3});
+    dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson);
+
+    REQUIRE(defaultLog->entries().empty());
+    auto entries = specificLog->entries();
+    REQUIRE(entries.size() == 1);
+    REQUIRE(entries[0].entityKey == "acct-override");
+}
+
+TEST_CASE("ModelFactory::create: auto-attach also reaches server-created holders (ModelRegistryFactory)",
+         "[action_log][default]") {
+    auto log = std::make_shared<InMemoryActionLog>();
+    morph::journal::ScopedActionLog guard{log};
+
+    // ModelRegistryFactory::registerModel<Model> is exactly what RemoteServer
+    // uses to construct instances for every remote/simulated-remote client —
+    // it routes through the same ModelFactory::create<Model>(), so the global
+    // default reaches server-side instances with no contextKey/LogProvider
+    // wiring needed.
+    morph::model::detail::ModelRegistryFactory registry;
+    morph::model::detail::ActionDispatcher dispatcher;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+
+    auto holder = registry.create("AL_Model");
+    REQUIRE(holder->hasActionLog());
+    auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 7});
+    dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson);
+
+    REQUIRE(log->entries().size() == 1);
+}

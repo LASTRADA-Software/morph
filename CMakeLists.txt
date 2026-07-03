@@ -72,7 +72,6 @@ target_sources(morph
         include/morph/action_log.hpp
         include/morph/journal.hpp
         include/morph/file_action_log.hpp
-        include/morph/kafka_action_log.hpp
         include/morph/registry.hpp
         include/morph/backend.hpp
         include/morph/remote.hpp

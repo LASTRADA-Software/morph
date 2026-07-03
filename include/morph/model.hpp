@@ -140,11 +140,23 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
 class ModelFactory {
 public:
     /// @brief Creates a new `ModelHolder<Model>` on the heap.
+    ///
+    /// If a process-wide default action log is installed (see
+    /// `morph::journal::setActionLog`), it is attached to the new holder
+    /// automatically (with an empty `entityKey`) — this is the single
+    /// construction path behind every ordinary model registration, local or
+    /// remote, which is what makes "set the log once in `main()`" work
+    /// uniformly across topologies. Callers that need a specific instance
+    /// identity call `attachActionLog` again afterward to override it.
     /// @tparam Model The model type to instantiate.
     /// @return Owning pointer to the new holder.
     template <typename Model>
     static std::unique_ptr<IModelHolder> create() {
-        return std::make_unique<ModelHolder<Model>>();
+        auto holder = std::make_unique<ModelHolder<Model>>();
+        if (auto log = ::morph::journal::defaultActionLog()) {
+            holder->attachActionLog(std::move(log), {});
+        }
+        return holder;
     }
 };
 

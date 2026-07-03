@@ -24,4 +24,4 @@ using bank::StatementModel;
 using bank::dto::GenerateStatement;
 
 BRIDGE_REGISTER_MODEL(StatementModel, "StatementModel")
-BRIDGE_REGISTER_ACTION(StatementModel, GenerateStatement, "GenerateStatement")
+BRIDGE_REGISTER_ACTION(StatementModel, GenerateStatement, "GenerateStatement", ::morph::model::Loggable::No)
