@@ -42,6 +42,7 @@ namespace morph::journal {
 class FileActionLog : public IActionLog {
 public:
     /// @brief Opens (creating if necessary) @p path for appending.
+    /// @param path File to append entries to.
     /// @throws std::runtime_error if the file cannot be opened.
     explicit FileActionLog(std::filesystem::path path) : _path{std::move(path)} {
         _file = std::fopen(_path.string().c_str(), "a");
@@ -63,6 +64,7 @@ public:
     FileActionLog& operator=(FileActionLog&&) = delete;
 
     /// @brief Appends @p entry as one JSON line. Buffered until `flush()`. Thread-safe.
+    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock lock{_mtx};
         entry.seq = ++_nextSeq;
@@ -89,6 +91,7 @@ public:
     /// to the OS — callers that need a guaranteed-durable view should `flush()`
     /// first.
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return Matching entries, in on-disk (append) order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock lock{_mtx};
         std::ifstream in{_path};

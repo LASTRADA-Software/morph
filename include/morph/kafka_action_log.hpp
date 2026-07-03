@@ -32,6 +32,9 @@ struct IProducer {
     /// keyed on @p key would provide by routing them to the same partition).
     /// Messages with different keys have no ordering guarantee relative to
     /// each other.
+    /// @param topic Topic to publish to.
+    /// @param key   Partition/compaction key.
+    /// @param value Opaque message payload.
     virtual void produce(std::string_view topic, std::string_view key, std::string value) = 0;
 
     /// @brief Blocks until all previously produced messages are durably sent.
@@ -49,11 +52,16 @@ class FakeProducer : public IProducer {
 public:
     /// @brief One recorded `produce()` call.
     struct Message {
+        /// @brief Partition/compaction key the message was produced with.
         std::string key;
+        /// @brief Opaque message payload.
         std::string value;
     };
 
     /// @brief Appends the message to @p topic's in-memory log. Thread-safe.
+    /// @param topic Topic to publish to.
+    /// @param key   Partition/compaction key.
+    /// @param value Opaque message payload.
     void produce(std::string_view topic, std::string_view key, std::string value) override {
         std::scoped_lock lock{_mtx};
         _topics[std::string{topic}].push_back(Message{.key = std::string{key}, .value = std::move(value)});
@@ -66,6 +74,8 @@ public:
     }
 
     /// @brief Every message produced to @p topic, in produce order. Thread-safe.
+    /// @param topic Topic to read.
+    /// @return Messages in produce order; empty if the topic has never been produced to.
     [[nodiscard]] std::vector<Message> raw(std::string_view topic) const {
         std::scoped_lock lock{_mtx};
         auto iter = _topics.find(std::string{topic});
@@ -74,6 +84,8 @@ public:
 
     /// @brief The latest message per key in @p topic, first-seen key order —
     ///        what a compacted Kafka topic would retain. Thread-safe.
+    /// @param topic Topic to read.
+    /// @return One message per distinct key, in first-seen order.
     [[nodiscard]] std::vector<Message> compactedView(std::string_view topic) const {
         std::vector<Message> out;
         std::unordered_map<std::string, std::size_t> indexOfKey;
@@ -90,6 +102,7 @@ public:
     }
 
     /// @brief Number of `flush()` calls so far. Thread-safe.
+    /// @return Total `flush()` call count.
     [[nodiscard]] int flushCount() const {
         std::scoped_lock lock{_mtx};
         return _flushCount;
@@ -137,6 +150,7 @@ public:
         : _producer{producer}, _topic{std::move(topic)}, _dispatcher{dispatcher} {}
 
     /// @brief Publishes @p entry under a key derived from its coalesce policy.
+    /// @param entry Entry to publish; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         entry.seq = _nextSeq.fetch_add(1) + 1;
         auto key = keyFor(entry);
@@ -147,6 +161,7 @@ public:
     void flush() override { _producer.flush(); }
 
     /// @brief Not supported for a write-oriented Kafka sink.
+    /// @return Never returns.
     /// @throws std::logic_error always.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view /*entityKey*/ = {}) const override {
         throw std::logic_error(

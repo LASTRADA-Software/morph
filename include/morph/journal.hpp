@@ -61,6 +61,7 @@ public:
     ///
     /// Always full fidelity: this is what `undoLast()` walks back through, so
     /// nothing is coalesced or dropped here.
+    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock lock{_mtx};
         entry.seq = ++_nextSeq;
@@ -71,6 +72,8 @@ public:
     void flush() override {}
 
     /// @brief Returns the full history (or one entity's slice of it) in append order.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock lock{_mtx};
         if (entityKey.empty()) {
@@ -96,6 +99,7 @@ public:
     /// @param modelTypeId String type-id of the model to reconstruct.
     /// @param registry    Model factory registry; defaults to the process-level singleton.
     /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.
+    /// @return A freshly created holder with the pre-undo state replayed onto it.
     std::unique_ptr<::morph::model::detail::IModelHolder> undoLast(
         std::string_view modelTypeId,
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),

@@ -84,6 +84,7 @@ struct IActionLog {
     virtual ~IActionLog() = default;
 
     /// @brief Appends @p entry. Implementations assign `entry.seq`.
+    /// @param entry Entry to append.
     virtual void append(LogEntry entry) = 0;
 
     /// @brief Pushes any buffered entries to the durable backend. No-op for sinks
@@ -92,6 +93,7 @@ struct IActionLog {
 
     /// @brief Returns recorded entries in append order.
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return Matching entries, in append order.
     [[nodiscard]] virtual std::vector<LogEntry> entries(std::string_view entityKey = {}) const = 0;
 };
 
@@ -102,6 +104,7 @@ struct IActionLog {
 class InMemoryActionLog : public IActionLog {
 public:
     /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
+    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock lock{_mtx};
         entry.seq = ++_nextSeq;
@@ -112,6 +115,8 @@ public:
     void flush() override {}
 
     /// @brief Returns a snapshot of matching entries in append order. Thread-safe.
+    /// @param entityKey If non-empty, restricts the result to that entity's entries.
+    /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock lock{_mtx};
         if (entityKey.empty()) {
