@@ -54,6 +54,16 @@ struct HandlerBinding {
     /// @brief Factory used to re-register the model on a backend switch.
     std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> modelFactory;
 
+    /// @brief Stable identity of this model instance (e.g. an account id).
+    ///
+    /// Empty by default — the common local-mode case needs nothing here, since
+    /// `modelFactory` can already call `IModelHolder::attachActionLog` directly
+    /// with whatever identity it captures. Set this when the active backend may
+    /// be remote (`SimulatedRemoteBackend`, `QtWebSocketBackend`): it travels in
+    /// the `register` wire envelope so a server-side `RemoteServer::LogProvider`
+    /// can attach a log to the instance it creates. See `IBackend::registerModelWithContext`.
+    std::string contextKey;
+
     /// @brief Current `ModelId` value in the active backend (0 = unbound).
     std::atomic<uint64_t> currentId{0};
 };
@@ -110,7 +120,8 @@ public:
         binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
         std::scoped_lock lock{_mtx};
-        binding->currentId.store(loadBackend()->registerModel(binding->typeId, binding->modelFactory).v);
+        binding->currentId.store(
+            loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
         _handlers.push_back(binding);
         return binding;
     }
@@ -118,11 +129,13 @@ public:
     /// @brief Registers a pre-built binding with a custom factory.
     ///
     /// Use this overload when the model factory needs to capture external
-    /// dependencies that the type-erasing default factory cannot carry.
+    /// dependencies that the type-erasing default factory cannot carry, or when
+    /// `binding->contextKey` needs to be set before registration (see `HandlerBinding::contextKey`).
     /// @param binding Pre-constructed binding. Its `typeId` and `modelFactory` must be set.
     void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
         std::scoped_lock lock{_mtx};
-        binding->currentId.store(loadBackend()->registerModel(binding->typeId, binding->modelFactory).v);
+        binding->currentId.store(
+            loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
         _handlers.push_back(binding);
     }
 
@@ -171,7 +184,7 @@ public:
                 if (!binding) {
                     continue;
                 }
-                auto newId = newShared->registerModel(binding->typeId, binding->modelFactory);
+                auto newId = newShared->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
                 binding->currentId.store(newId.v);
                 live.push_back(weak);
             }
@@ -250,7 +263,26 @@ public:
         };
         call.localOp = [sharedAction](::morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
             auto& model = holder.template into<Model>();
-            return std::make_shared<R>(model.execute(*sharedAction));
+            auto result = std::make_shared<R>(model.execute(*sharedAction));
+            // Local mode has no client/server split, so this is the same execution
+            // site `ActionDispatcher::registerAction`'s runner is for remote modes
+            // (registry.hpp) — see that overload's doc comment for the full story.
+            if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                if (holder.hasActionLog()) {
+                    // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                    holder.recordIfAttached(::morph::journal::LogEntry{
+                        .seq = 0,
+                        .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                        .entityKey = {},
+                        .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                        .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                        .result = ::morph::model::ActionTraits<Action>::resultToJson(*result),
+                        .principal = {},
+                        .timestampMs = 0,
+                    });
+                }
+            }
+            return result;
         };
         {
             std::scoped_lock lock{_sessionMtx};
@@ -298,7 +330,7 @@ private:
                 if (!binding) {
                     continue;
                 }
-                auto newId = pinned->registerModel(binding->typeId, binding->modelFactory);
+                auto newId = pinned->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
                 binding->currentId.store(newId.v);
             }
         });

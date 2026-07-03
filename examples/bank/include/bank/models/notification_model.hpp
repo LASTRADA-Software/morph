@@ -31,6 +31,6 @@ using bank::dto::Notify;
 
 BRIDGE_REGISTER_MODEL(NotificationModel, "NotificationModel")
 BRIDGE_REGISTER_ACTION(NotificationModel, Notify, "Notify")
-BRIDGE_REGISTER_ACTION(NotificationModel, ListNotifications, "ListNotifications")
+BRIDGE_REGISTER_ACTION(NotificationModel, ListNotifications, "ListNotifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(NotificationModel, MarkRead, "MarkRead")
 BRIDGE_REGISTER_ACTION(NotificationModel, MarkAllRead, "MarkAllRead")

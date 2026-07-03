@@ -30,6 +30,8 @@ add_executable(morph_tests
     test_coverage_extra.cpp
     test_coverage_push95.cpp
     test_server_limits.cpp
+    test_action_log.cpp
+    test_action_log_phase2.cpp
 )
 
 target_link_libraries(morph_tests

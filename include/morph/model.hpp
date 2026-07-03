@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <chrono>
 #include <memory>
 #include <stdexcept>
 #include <typeindex>
 #include <typeinfo>
 
+#include "action_log.hpp"
+#include "session.hpp"
 #include "strand.hpp"
 
 namespace morph::model::detail {
@@ -71,6 +74,49 @@ struct IModelHolder {
         }
         return static_cast<ModelHolder<Model>*>(this)->model;
     }
+
+    /// @brief Attaches a durable action log and this instance's stable identity.
+    ///
+    /// Set once, typically from the same custom `HandlerBinding::modelFactory`
+    /// closure already used to inject other dependencies. @p contextKey is stamped
+    /// onto every `LogEntry` this instance produces (e.g. an account id) so log
+    /// entries are identifiable without parsing `payload`/`result` JSON.
+    /// @param log        Sink entries are forwarded to. Pass a `SessionLog` to also
+    ///                   get undo/checkpoint support.
+    /// @param contextKey Stable identity of this model instance.
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string contextKey) {
+        _actionLog = std::move(log);
+        _contextKey = std::move(contextKey);
+    }
+
+    /// @brief Returns `true` if an action log is attached to this instance.
+    [[nodiscard]] bool hasActionLog() const noexcept { return static_cast<bool>(_actionLog); }
+
+    /// @brief Records @p entry if a log is attached; no-op otherwise.
+    ///
+    /// Called automatically by the two places `Model::execute()` is actually
+    /// invoked (`ActionDispatcher`'s runner and `Bridge::executeVia`'s local
+    /// op) — model code and application code never call this directly.
+    /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;
+    /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.
+    /// @param entry Entry to record; `seq` is assigned by the attached sink.
+    void recordIfAttached(::morph::journal::LogEntry entry) {
+        if (!_actionLog) {
+            return;
+        }
+        entry.entityKey = _contextKey;
+        if (const auto* ctx = ::morph::session::current()) {
+            entry.principal = ctx->principal;
+        }
+        entry.timestampMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                 std::chrono::system_clock::now().time_since_epoch())
+                                 .count();
+        _actionLog->append(std::move(entry));
+    }
+
+private:
+    std::shared_ptr<::morph::journal::IActionLog> _actionLog;
+    std::string _contextKey;
 };
 
 /// @brief Concrete holder that stores a `Model` by value.
@@ -94,11 +140,23 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
 class ModelFactory {
 public:
     /// @brief Creates a new `ModelHolder<Model>` on the heap.
+    ///
+    /// If a process-wide default action log is installed (see
+    /// `morph::journal::setActionLog`), it is attached to the new holder
+    /// automatically (with an empty `entityKey`) — this is the single
+    /// construction path behind every ordinary model registration, local or
+    /// remote, which is what makes "set the log once in `main()`" work
+    /// uniformly across topologies. Callers that need a specific instance
+    /// identity call `attachActionLog` again afterward to override it.
     /// @tparam Model The model type to instantiate.
     /// @return Owning pointer to the new holder.
     template <typename Model>
     static std::unique_ptr<IModelHolder> create() {
-        return std::make_unique<ModelHolder<Model>>();
+        auto holder = std::make_unique<ModelHolder<Model>>();
+        if (auto log = ::morph::journal::defaultActionLog()) {
+            holder->attachActionLog(std::move(log), {});
+        }
+        return holder;
     }
 };
 

@@ -10,6 +10,11 @@
 /// The Transaction model: deposits, withdrawals, atomic transfers, and history.
 /// Transfers update two accounts and write two ledger rows inside a single
 /// `SqlTransaction`, so a failure leaves no partial state.
+///
+/// Deposit/Withdraw/Transfer default to `morph::model::Loggable::Yes` — when
+/// the app attaches an action log via `IModelHolder::attachActionLog` (see
+/// `bank_cli`'s `main.cpp`), every money movement is recorded automatically.
+/// `History` is a pure read and opts out explicitly.
 
 namespace bank {
 
@@ -41,4 +46,4 @@ BRIDGE_REGISTER_MODEL(TransactionModel, "TransactionModel")
 BRIDGE_REGISTER_ACTION(TransactionModel, Deposit, "Deposit")
 BRIDGE_REGISTER_ACTION(TransactionModel, Withdraw, "Withdraw")
 BRIDGE_REGISTER_ACTION(TransactionModel, Transfer, "Transfer")
-BRIDGE_REGISTER_ACTION(TransactionModel, History, "History")
+BRIDGE_REGISTER_ACTION(TransactionModel, History, "History", ::morph::model::Loggable::No)

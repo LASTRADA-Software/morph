@@ -37,4 +37,4 @@ using bank::dto::RemovePayee;
 BRIDGE_REGISTER_MODEL(PayeeModel, "PayeeModel")
 BRIDGE_REGISTER_ACTION(PayeeModel, AddPayee, "AddPayee")
 BRIDGE_REGISTER_ACTION(PayeeModel, RemovePayee, "RemovePayee")
-BRIDGE_REGISTER_ACTION(PayeeModel, ListPayees, "ListPayees")
+BRIDGE_REGISTER_ACTION(PayeeModel, ListPayees, "ListPayees", ::morph::model::Loggable::No)

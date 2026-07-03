@@ -8,6 +8,8 @@
 #include <morph/backend.hpp>
 #include <morph/bridge.hpp>
 #include <morph/executor.hpp>
+#include <morph/file_action_log.hpp>
+#include <morph/journal.hpp>
 #include <morph/remote.hpp>
 #include <morph/session.hpp>
 
@@ -67,6 +69,11 @@ T await(morph::async::Completion<T> completion, morph::exec::MainThreadExecutor&
 bank::Money usd(std::int64_t minor) { return bank::Money{.minor = minor, .currency = bank::Currency::USD}; }
 
 /// Runs the full scenario against an already-wired bridge + gui executor.
+///
+/// No per-handler wiring is needed for auditing: `morph::journal::setActionLog`
+/// was called once in `main()`, so every handler constructed below — local or
+/// (simulated) remote — automatically records to it. `session::current()`'s
+/// principal is captured on each entry automatically too, from the login below.
 void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor& gui, const char* label,
                  const std::string& principal) {
     std::println("\n========== {} ==========", label);
@@ -180,6 +187,14 @@ int main() {
     std::filesystem::remove(dbPath, ec);
     bank::db::setup("DRIVER=SQLite3;Database=" + dbPath.string());
 
+    // Audit trail: set once, here, and every model created from this point on
+    // — in either scenario below, local or (simulated) remote — automatically
+    // records to it. No per-handler wiring needed; see morph::journal::setActionLog.
+    const auto auditPath = std::filesystem::temp_directory_path() / "morph_bank_cli_audit.ndjson";
+    std::filesystem::remove(auditPath, ec);
+    auto auditLog = std::make_shared<morph::journal::FileActionLog>(auditPath);
+    morph::journal::setActionLog(auditLog);
+
     morph::exec::ThreadPoolExecutor workerPool{4};
     morph::exec::MainThreadExecutor gui;
 
@@ -189,12 +204,22 @@ int main() {
         runScenario(bridge, gui, "LocalBackend", "demo-local");
     }
 
-    // 2) Remote backend (simulated): identical scenario, identical code.
+    // 2) Remote backend (simulated): identical scenario, identical code. The
+    // audited instances RemoteServer creates for this backend go through the
+    // very same ModelFactory::create<Model>() as the local ones above, so the
+    // audit log reaches them too with no extra wiring.
     {
         morph::exec::ThreadPoolExecutor serverPool{4};
         auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
         morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
         runScenario(bridge, gui, "SimulatedRemoteBackend", "demo-remote");
+    }
+
+    auditLog->flush();
+    std::println("\n========== Audit trail ({}) ==========", auditPath.string());
+    for (const auto& entry : auditLog->entries()) {
+        std::println("[{}] {}::{} payload={} result={}", entry.principal, entry.modelType, entry.actionType,
+                     entry.payload, entry.result);
     }
 
     std::println("\nDone.");

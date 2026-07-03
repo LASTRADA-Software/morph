@@ -48,6 +48,6 @@ using bank::dto::OpenAccount;
 
 BRIDGE_REGISTER_MODEL(AccountModel, "AccountModel")
 BRIDGE_REGISTER_ACTION(AccountModel, OpenAccount, "OpenAccount")
-BRIDGE_REGISTER_ACTION(AccountModel, ListAccounts, "ListAccounts")
-BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount")
+BRIDGE_REGISTER_ACTION(AccountModel, ListAccounts, "ListAccounts", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")

@@ -16,10 +16,11 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::log` | Configurable logging | `LogLevel`, `setLogger`, `setLogLevel`, `getLogLevel`, `logDebug`, `logInfo`, `logWarn`, `logError` |
 | `morph::exec` | Executor primitives | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` |
 | `morph::async` | Async result handle | `Completion<T>` |
-| `morph::model` | Model & action traits | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>` |
+| `morph::model` | Model & action traits | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` |
 | `morph::backend` | Pluggable backends | `LocalBackend`, `RemoteServer`, `SimulatedRemoteBackend` |
 | `morph::bridge` | Bridge between handler and backend | `Bridge`, `BridgeHandler<M>` |
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`, `SyncWorker`, `SyncResult` |
+| `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -62,11 +63,14 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 | `executor.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` (`morph::exec::`) |
 | `strand.hpp` | `ModelId`, `ModelIdHash`, `StrandExecutor` — serialises tasks per model (`morph::exec::detail::`) |
 | `completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
-| `model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage (`morph::model::detail::`) |
-| `registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>` (public) + `ActionDispatcher`, `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`, `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
-| `backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail) |
-| `remote.hpp` | `RemoteServer`, `SimulatedRemoteBackend` (`morph::backend::`) |
-| `bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding`, `MemberPointerTraits` (detail) |
+| `model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
+| `registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (now also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
+| `action_log.hpp` | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `toJson`/`fromJson`, `SerializationError`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` (`morph::journal::`) — the durable-sink interface and the process-wide default sink, with zero dependency on `model.hpp`/`registry.hpp` |
+| `journal.hpp` | `SessionLog`, `replay()` (`morph::journal::`) — full-fidelity session log with `checkpoint()` coalescing and `undoLast()`, built on `action_log.hpp` + the existing `ActionDispatcher`/`ModelRegistryFactory` |
+| `file_action_log.hpp` | `FileActionLog` (`morph::journal::`) — append-only NDJSON `IActionLog`, `flush()` fsyncs |
+| `backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
+| `remote.hpp` | `RemoteServer` (now with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
+| `bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (now carrying `contextKey`), `MemberPointerTraits` (detail) |
 | `network_monitor.hpp` | `NetworkMonitorConfig`, `NetworkMonitor` — background probe thread, online/offline state machine |
 | `offline_queue.hpp` | `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue` — durable write queue abstraction |
 | `sync_worker.hpp` | `SyncWorker`, `SyncResult` — drains offline queue on reconnect via caller-supplied replay |
@@ -128,7 +132,7 @@ field is the discriminator:
 
 | `kind` | Direction | Required fields | Meaning |
 |---|---|---|---|
-| `"register"` | client → server | `typeId` | Register a model instance; server replies `ok` with `modelId` |
+| `"register"` | client → server | `typeId`, `contextKey` (optional) | Register a model instance; server replies `ok` with `modelId` |
 | `"deregister"` | client → server | `modelId` | Destroy model instance; server replies `ok` |
 | `"execute"`   | client → server | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` (optional) | Dispatch an action |
 | `"ok"`        | server → client | `callId`, plus `body` (execute result) or `modelId` (register reply) | Success |
@@ -141,6 +145,12 @@ The `session` field is a `morph::session::Context`. The server runs every
 incoming `execute` envelope through its configured `IAuthorizer`; a `false`
 return causes the server to reply with `err|unauthorized` (callId echoed). The
 default authorizer permits everything.
+
+`contextKey` carries a `register`ing instance's stable identity (e.g. an
+account id) from `HandlerBinding::contextKey` across the wire, so a
+server-side `RemoteServer::LogProvider` can attach an action log to the
+instance it creates — see "Action log" below. Empty (the default) means no
+identity; the field is ignored on every other envelope kind.
 
 ## Component detail
 
@@ -232,6 +242,34 @@ morph::offline::NetworkMonitor monitor{
 `drain()` returning items without removing them is deliberate — items survive a crash between `drain()` and `markDone()`. A SQL-backed implementation (not in this repository) can persist items across process restarts by storing them in a table with a UNIQUE constraint on the payload.
 
 `InMemoryOfflineQueue` implements the interface with a `std::deque` protected by a mutex. It does not deduplicate.
+
+### Action log (issue #3) — ordered, coalescing, identity-aware execution history
+
+`morph::journal` records executed actions as an ordered, replayable log, distinct in purpose from `IOfflineQueue` above: `IOfflineQueue` holds pending writes awaiting retry and deletes them once delivered; the action log is a permanent audit/replay trail — entries are never removed by the framework.
+
+**`IActionLog`** is the durable-sink interface (`append`, `flush`, `entries`), implemented by `InMemoryActionLog` and `FileActionLog` (append-only NDJSON, `flush()` fsyncs). Each `LogEntry` carries `modelType`, `entityKey`, `actionType`, `payload`/`result` JSON, `principal`, and a sink-assigned `seq`.
+
+**Set the sink once, in `main()` — every model uses it automatically.** `morph::journal::setActionLog(log)` installs a process-wide default. `ModelFactory::create<Model>()` — the factory behind every ordinary model registration, local *or* remote — attaches that default to each new instance automatically (empty `entityKey`). No per-model, per-handler, or per-backend wiring is required; `RemoteServer`-owned instances get it exactly the same way, since they're constructed through the same factory. `defaultActionLog()` reads the current sink back; `ScopedActionLog` (RAII, mirrors `morph::log::ScopedLoggerOverride`) installs one temporarily and restores the previous one on scope exit — the tool tests use it to avoid leaking a sink across test cases.
+
+
+Application code that needs a specific instance identity (e.g. per-account auditing) can still call `IModelHolder::attachActionLog(log, contextKey)` explicitly on that instance — an explicit call always overrides the default, and is the seam `HandlerBinding::contextKey`/`RemoteServer::setLogProvider` (below) build on for the remote case. Recording itself happens at the two call sites that are the *only* two places `Model::execute()` is ever invoked in the whole codebase:
+
+| Site | Topology | 
+|---|---|
+| `ActionDispatcher::registerAction`'s runner (`registry.hpp`) | Every remote/Qt topology — `RemoteServer` owns the persistent `IModelHolder`s and dispatches through here |
+| `Bridge::executeVia`'s `localOp` (`bridge.hpp`) | Local mode only — `LocalBackend` calls this directly; remote backends never invoke `localOp` at all |
+
+Because these are mutually exclusive per topology, recording is automatically server-side wherever a client/server split exists, with no extra plumbing.
+
+**`Loggable`** (`morph::model::Loggable::{Yes,No}`) is a strong-typed opt-out on the existing `BRIDGE_REGISTER_ACTION` macro (an optional 4th argument; no separate registration macro). Default is `Yes` — every action is recorded unless explicitly marked `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`). Hand-written `ActionTraits` specialisations that predate this member (as used in several tests) are unaffected: `morph::model::detail::actionLoggable<A>()` defaults to `Yes` when the member is absent, via a `HasLoggableFlag` concept exactly like `ActionValidator`'s `HasValidate`.
+
+**`ActionLogPolicy<A>::coalesce`** (default `false`) decides whether repeated executions of the same action against the same entity should collapse to the latest occurrence at a checkpoint, or whether every occurrence is a distinct, permanent fact. This matters because the fielded/reactive `set<...>` mechanism (see "Subscriptions and fielded actions" below) can already fire the same action many times in a row — without coalescing, every keystroke-driven re-fire would become a permanent log entry. `false` is correct for anything resembling a business event (a deposit); `true` is for drafts/settings where only the final value matters.
+
+**`SessionLog`** (`journal.hpp`) is where coalescing actually happens. It keeps full, uncoalesced history in memory (the raw material for `undoLast()`), and `checkpoint(durableSink)` reduces everything appended since the last checkpoint by `(modelType, entityKey, actionType)` — keeping only the latest entry where `coalesce == true`, every entry otherwise — before forwarding the reduced set to the real sink. `undoLast()` needs no inverse operations: it drops the most recent entry and calls `journal::replay()` over what remains, reusing the same `ActionDispatcher`/`ModelRegistryFactory` `RemoteServer` already relies on for dispatch. This is not a workaround — a model's entire state genuinely is "initial state plus its ordered actions replayed," so reconstructing it by replay is the direct statement of that fact, not a special case.
+
+**Remote-mode per-instance identity** (`RemoteServer::setLogProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
+
+**Not yet built** (see the design note linked from issue #3): the outbox pattern an integration against a model that also owns its own durable store would need (to avoid the log and the store's committed state silently diverging) — see `examples/bank`, which demonstrates `setActionLog` end to end against SQLite-backed models but writes to its own DB and the audit log as two independent steps, not one atomic outbox write. A Kafka-backed sink (dropped for now; the `IActionLog` interface is designed so one can be added later without touching call sites) and any read-model built on top of it are noted as future work.
 
 ### SyncWorker
 

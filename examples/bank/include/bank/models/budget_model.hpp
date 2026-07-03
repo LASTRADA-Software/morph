@@ -33,5 +33,5 @@ using bank::dto::SpendingByKind;
 BRIDGE_REGISTER_MODEL(BudgetModel, "BudgetModel")
 BRIDGE_REGISTER_ACTION(BudgetModel, SetBudget, "SetBudget")
 BRIDGE_REGISTER_ACTION(BudgetModel, DeleteBudget, "DeleteBudget")
-BRIDGE_REGISTER_ACTION(BudgetModel, ListBudgets, "ListBudgets")
-BRIDGE_REGISTER_ACTION(BudgetModel, SpendingByKind, "SpendingByKind")
+BRIDGE_REGISTER_ACTION(BudgetModel, ListBudgets, "ListBudgets", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(BudgetModel, SpendingByKind, "SpendingByKind", ::morph::model::Loggable::No)

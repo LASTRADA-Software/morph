@@ -18,7 +18,9 @@ namespace morph::wire {
 /// Empty/zero fields are tolerated — callers populate only what their kind needs.
 ///
 /// @par Discriminator values
-/// - `"register"`  — client requests model creation. Uses `typeId`.
+/// - `"register"`  — client requests model creation. Uses `typeId`, and
+///                   optionally `contextKey` (the new instance's stable
+///                   identity, e.g. an account id — see `RemoteServer::setLogProvider`).
 /// - `"deregister"` — client destroys an instance. Uses `modelId`.
 /// - `"execute"`   — client dispatches an action. Uses `callId`, `modelId`,
 ///                   `modelType`, `actionType`, `body`, and optionally `session`.
@@ -34,6 +36,12 @@ struct Envelope {
 
     /// @brief Model type id for `register`.
     std::string typeId;
+
+    /// @brief Stable identity of the model instance being registered (e.g. an
+    ///        account id). Empty means "no identity" — the server-side holder
+    ///        gets no action log attached even if a `LogProvider` is configured.
+    ///        Ignored on every kind other than `register`.
+    std::string contextKey;
 
     /// @brief Existing model instance id for `deregister`, `execute`, `ok(register)`.
     uint64_t modelId = 0;
@@ -57,10 +65,13 @@ struct Envelope {
 };
 
 /// @brief Builds a `register` envelope.
-inline Envelope makeRegister(std::string typeId) {
+/// @param typeId     Model type id to register.
+/// @param contextKey Optional stable identity for the new instance (default: none).
+inline Envelope makeRegister(std::string typeId, std::string contextKey = {}) {
     Envelope env;
     env.kind = "register";
     env.typeId = std::move(typeId);
+    env.contextKey = std::move(contextKey);
     return env;
 }
 

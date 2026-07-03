@@ -69,6 +69,9 @@ target_sources(morph
         include/morph/strand.hpp
         include/morph/completion.hpp
         include/morph/model.hpp
+        include/morph/action_log.hpp
+        include/morph/journal.hpp
+        include/morph/file_action_log.hpp
         include/morph/registry.hpp
         include/morph/backend.hpp
         include/morph/remote.hpp
