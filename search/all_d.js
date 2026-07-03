@@ -1,11 +1,15 @@
 var searchData=
 [
-  ['payload_0',['payload',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918',1,'morph::offline::QueueItem']]],
-  ['port_1',['port',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5',1,'morph::qt::QtWebSocketServer']]],
-  ['post_2',['post',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5',1,'morph::exec::IExecutor::post()'],['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6',1,'morph::exec::ThreadPoolExecutor::post()'],['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85',1,'morph::exec::MainThreadExecutor::post()'],['../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f',1,'morph::qt::QtExecutor::post()']]],
-  ['principal_3',['principal',['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context']]],
-  ['probefunction_4',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
-  ['probeinterval_5',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
-  ['propagation_6',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_7',['Wire protocol',['../index.html#wire-protocol',1,'']]]
+  ['on_20timeout_0',['&lt;tt&gt;MainThreadExecutor::runFor&lt;/tt&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['onbackendchanged_20tt_1',['&lt;tt&gt;Bridge::switchBackend&lt;/tt&gt; must not be called from &lt;tt&gt;onBackendChanged&lt;/tt&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]],
+  ['ondisconnected_2',['onDisconnected',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3',1,'morph::qt::QtWebSocketServer']]],
+  ['onerror_3',['onError',['../dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8',1,'morph::async::Completion']]],
+  ['onlinethreshold_4',['onlineThreshold',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a0a4a890c46b1171aeb7089517c98d042',1,'morph::offline::NetworkMonitorConfig']]],
+  ['onnewconnection_5',['onNewConnection',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd',1,'morph::qt::QtWebSocketServer']]],
+  ['onoffline_6',['onOffline',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#a1e68df1af6563ea1295f8c48023ae6f5',1,'morph::offline::ReconnectCoordinator']]],
+  ['ononline_7',['onOnline',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538',1,'morph::offline::ReconnectCoordinator']]],
+  ['ontextmessage_8',['onTextMessage',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230',1,'morph::qt::QtWebSocketServer']]],
+  ['operator_3d_9',['operator=',['../dd/de7/classmorph_1_1async_1_1Completion.html#aafed4f34a7a3dd00849171db05731700',1,'morph::async::Completion']]],
+  ['ordered_20coalescing_20identity_20aware_20execution_20history_10',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['overview_11',['Overview',['../index.html#overview',1,'']]]
 ];

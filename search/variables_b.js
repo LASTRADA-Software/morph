@@ -1,7 +1,6 @@
 var searchData=
 [
-  ['reconnectenabled_0',['reconnectEnabled',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#ac3c821f0b4d2405c5b1b5f70640a212a',1,'morph::qt::QtWebSocketBackendConfig']]],
-  ['replay_1',['replay',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['requestid_2',['requestId',['../dd/d85/structmorph_1_1session_1_1Context.html#a985070c36f98f59186888105e2d57e46',1,'morph::session::Context']]],
-  ['retrydelay_3',['retryDelay',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html#a05af269a1ab61cf5205eadf00a14102c',1,'morph::offline::ReconnectCoordinatorConfig']]]
+  ['payload_0',['payload',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3391f30563d9f938b266527937c8c4ed',1,'morph::journal::LogEntry::payload'],['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918',1,'morph::offline::QueueItem::payload']]],
+  ['principal_1',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal']]],
+  ['probeinterval_2',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]]
 ];

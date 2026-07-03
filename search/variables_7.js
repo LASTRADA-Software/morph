@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['locale_0',['locale',['../dd/d85/structmorph_1_1session_1_1Context.html#ac2a24784bc441ed64dbb3753fd9d5633',1,'morph::session::Context']]]
+  ['kind_0',['kind',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81787fa40e7b4af0cb09babaf404278b',1,'morph::wire::Envelope']]]
 ];

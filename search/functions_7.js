@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['listen_0',['listen',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a60f2df58f77a6986c07463cd4bbbf13b',1,'morph::qt::QtWebSocketServer']]],
-  ['localbackend_1',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a1bbaff0063b89c293f427e07da9f1424',1,'morph::backend::LocalBackend']]]
+  ['isonline_0',['isOnline',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a4c93dfd54f19a863d724a196b4bfb319',1,'morph::offline::NetworkMonitor']]]
 ];

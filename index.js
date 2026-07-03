@@ -18,6 +18,7 @@ var index =
       [ "Logger", "index.html#logger", null ],
       [ "NetworkMonitor", "index.html#networkmonitor", null ],
       [ "IOfflineQueue + InMemoryOfflineQueue", "index.html#iofflinequeue--inmemoryofflinequeue", null ],
+      [ "Action log (issue #3) — ordered, coalescing, identity-aware execution history", "index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history", null ],
       [ "SyncWorker", "index.html#syncworker", null ],
       [ "Conflict Resolution — a domain concern, not a framework concern", "index.html#conflict-resolution--a-domain-concern-not-a-framework-concern", null ]
     ] ],

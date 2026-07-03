@@ -1,8 +1,6 @@
 var searchData=
 [
-  ['scopedcontext_0',['ScopedContext',['../dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html',1,'morph::session::detail']]],
-  ['scopedloggeroverride_1',['ScopedLoggerOverride',['../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html',1,'morph::log']]],
-  ['simulatedremotebackend_2',['SimulatedRemoteBackend',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html',1,'morph::backend']]],
-  ['syncresult_3',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
-  ['syncworker_4',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline']]]
+  ['reconnectcoordinator_0',['ReconnectCoordinator',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html',1,'morph::offline']]],
+  ['reconnectcoordinatorconfig_1',['ReconnectCoordinatorConfig',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html',1,'morph::offline']]],
+  ['remoteserver_2',['RemoteServer',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html',1,'morph::backend']]]
 ];

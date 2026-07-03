@@ -117,6 +117,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:ae2e0de3d0e1107efca7f5c86a8c4e295" id="r_ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="memItemLeft" align="right" valign="top">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295">registerModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;) override</td></tr>
 <tr class="memdesc:ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server and returns its assigned id.  <br /></td></tr>
 <tr class="separator:ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ae1668b44851b9b9455891a2ad39a1b79" id="r_ae1668b44851b9b9455891a2ad39a1b79"><td class="memItemLeft" align="right" valign="top">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae1668b44851b9b9455891a2ad39a1b79">registerModelWithContext</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;, std::string_view contextKey) override</td></tr>
+<tr class="memdesc:ae1668b44851b9b9455891a2ad39a1b79"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server, carrying <code>contextKey</code> across the wire so the server's <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127" title="Callable that supplies the action log to attach to a newly registered instance, given its model type ...">RemoteServer::LogProvider</a></code> (if configured) can attach an action log to the instance it creates.  <br /></td></tr>
+<tr class="separator:ae1668b44851b9b9455891a2ad39a1b79"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ae05332b7c26d6617e468f1c750431404" id="r_ae05332b7c26d6617e468f1c750431404"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
 <tr class="memdesc:ae05332b7c26d6617e468f1c750431404"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the model on the server. Processed inline; safe from any thread.  <br /></td></tr>
 <tr class="separator:ae05332b7c26d6617e468f1c750431404"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -134,7 +137,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><code>IBackend</code> adapter that routes all calls through a <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> using a synchronous request-reply protocol. </p>
 <p>Intended for testing and in-process simulation of remote execution. All <code><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></code>, <code><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel()</a></code>, and <code><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></code> calls are forwarded as protocol messages to the server; the calling thread blocks until the reply arrives via <code>std::promise</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00193">193</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a978cad0db6efd8ccd3f33c1bf15be188" name="a978cad0db6efd8ccd3f33c1bf15be188"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend()</h2>
@@ -168,7 +171,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00235">235</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,7 +226,67 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ae1668b44851b9b9455891a2ad39a1b79" name="ae1668b44851b9b9455891a2ad39a1b79"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ae1668b44851b9b9455891a2ad39a1b79">&#9670;&#160;</a></span>registerModelWithContext()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::morph::exec::detail::ModelId morph::backend::SimulatedRemoteBackend::registerModelWithContext </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;&#160;</td>
+          <td class="paramname"><em>typeId</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;&#160;</td>
+          <td class="paramname">, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view&#160;</td>
+          <td class="paramname"><em>contextKey</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Registers the model type on the server, carrying <code>contextKey</code> across the wire so the server's <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127" title="Callable that supplies the action log to attach to a newly registered instance, given its model type ...">RemoteServer::LogProvider</a></code> (if configured) can attach an action log to the instance it creates. </p>
+<p><code>factory</code> is still ignored — model construction is delegated to the server's <code>ModelRegistryFactory</code>, same as <code><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></code>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id sent in the <code>register</code> message. </td></tr>
+    <tr><td class="paramname">contextKey</td><td>Stable identity of the new instance; empty if none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><code>ModelId</code> assigned by the server. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the server replies with an error. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -259,7 +322,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00222">222</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00276">276</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -315,7 +378,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the deserialized result or an error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,7 +407,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — models live in <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code>, not locally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00271">271</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -380,7 +443,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00275">275</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00329">329</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

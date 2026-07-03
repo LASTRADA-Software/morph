@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['networkmonitor_0',['NetworkMonitor',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a1d73c4a868e0b208eb72cd6fe888a1bd',1,'morph::offline::NetworkMonitor']]],
-  ['notifybackendchanged_1',['notifybackendchanged',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#adaa4fa967c7321689e55514788800a91',1,'morph::backend::LocalBackend::notifyBackendChanged()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0',1,'morph::qt::QtWebSocketBackend::notifyBackendChanged()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec',1,'morph::backend::SimulatedRemoteBackend::notifyBackendChanged()']]]
+  ['markdone_0',['markdone',['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5',1,'morph::offline::IOfflineQueue::markDone()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a',1,'morph::offline::InMemoryOfflineQueue::markDone()']]]
 ];

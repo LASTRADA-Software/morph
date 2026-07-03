@@ -21,10 +21,20 @@ var annotated_dup =
         [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ],
         [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ]
       ] ],
+      [ "journal", null, [
+        [ "FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", "d0/d2e/classmorph_1_1journal_1_1FileActionLog" ],
+        [ "IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", "df/d4e/structmorph_1_1journal_1_1IActionLog" ],
+        [ "InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog" ],
+        [ "LogEntry", "de/d2a/structmorph_1_1journal_1_1LogEntry.html", "de/d2a/structmorph_1_1journal_1_1LogEntry" ],
+        [ "ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", "de/d66/classmorph_1_1journal_1_1ScopedActionLog" ],
+        [ "SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
+        [ "SessionLog", "da/d23/classmorph_1_1journal_1_1SessionLog.html", "da/d23/classmorph_1_1journal_1_1SessionLog" ]
+      ] ],
       [ "log", null, [
         [ "ScopedLoggerOverride", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride" ]
       ] ],
       [ "model", null, [
+        [ "ActionLogPolicy", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
         [ "ModelTraits", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ]

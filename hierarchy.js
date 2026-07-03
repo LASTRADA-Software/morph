@@ -14,7 +14,15 @@ var hierarchy =
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
       [ "morph::qt::QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", null ]
     ] ],
+    [ "morph::journal::IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", [
+      [ "morph::journal::FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", null ],
+      [ "morph::journal::InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", null ],
+      [ "morph::journal::SessionLog", "da/d23/classmorph_1_1journal_1_1SessionLog.html", null ]
+    ] ],
+    [ "morph::journal::LogEntry", "de/d2a/structmorph_1_1journal_1_1LogEntry.html", null ],
+    [ "morph::journal::ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", null ],
     [ "morph::log::ScopedLoggerOverride", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html", null ],
+    [ "morph::model::ActionLogPolicy< Action >", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
     [ "morph::model::ActionTraits< Action >", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
     [ "morph::model::ActionValidator< Action >", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
     [ "morph::model::ModelTraits< Model >", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
@@ -41,7 +49,8 @@ var hierarchy =
       [ "std::runtime_error", null, [
         [ "morph::backend::BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", null ],
         [ "morph::backend::BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", null ],
-        [ "morph::backend::DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", null ]
+        [ "morph::backend::DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", null ],
+        [ "morph::journal::SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ]
       ] ]
     ] ]
 ];

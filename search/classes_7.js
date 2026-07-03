@@ -1,5 +1,5 @@
 var searchData=
 [
-  ['mainthreadexecutor_0',['MainThreadExecutor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html',1,'morph::exec']]],
-  ['modeltraits_1',['ModelTraits',['../d2/d14/structmorph_1_1model_1_1ModelTraits.html',1,'morph::model']]]
+  ['localbackend_0',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
+  ['logentry_1',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]]
 ];

@@ -92,6 +92,7 @@ $(document).ready(function(){initNavTree('d4/dc1/classmorph_1_1backend_1_1Remote
 
 <div class="header">
   <div class="summary">
+<a href="#pub-types">Public Types</a> &#124;
 <a href="#pub-methods">Public Member Functions</a> &#124;
 <a href="../../d7/d4c/classmorph_1_1backend_1_1RemoteServer-members.html">List of all members</a>  </div>
   <div class="headertitle"><div class="title">morph::backend::RemoteServer Class Reference</div></div>
@@ -105,6 +106,12 @@ $(document).ready(function(){initNavTree('d4/dc1/classmorph_1_1backend_1_1Remote
 
 <p>Inherits std::enable_shared_from_this&lt; RemoteServer &gt;.</p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-types" name="pub-types"></a>
+Public Types</h2></td></tr>
+<tr class="memitem:a361e6944f65fe4d6dc1b349397528127" id="r_a361e6944f65fe4d6dc1b349397528127"><td class="memItemLeft" align="right" valign="top">using&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127">LogProvider</a> = std::function&lt; std::shared_ptr&lt;<a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">::morph::journal::IActionLog</a> &gt;(std::string_view modelType, std::string_view contextKey)&gt;</td></tr>
+<tr class="memdesc:a361e6944f65fe4d6dc1b349397528127"><td class="mdescLeft">&#160;</td><td class="mdescRight">Callable that supplies the action log to attach to a newly registered instance, given its model type and <code>contextKey</code>.  <br /></td></tr>
+<tr class="separator:a361e6944f65fe4d6dc1b349397528127"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:af8a6235cbbe77ead17ea779d99d6011a" id="r_af8a6235cbbe77ead17ea779d99d6011a"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#af8a6235cbbe77ead17ea779d99d6011a">RemoteServer</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> &amp;workerPool, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry())</td></tr>
@@ -119,6 +126,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:abcdee5e1504ebcbef2415b029eec8818" id="r_abcdee5e1504ebcbef2415b029eec8818"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">handleInline</a> (const std::string &amp;msg)</td></tr>
 <tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Synchronously processes <code>msg</code> on the calling thread and returns the reply.  <br /></td></tr>
 <tr class="separator:abcdee5e1504ebcbef2415b029eec8818"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a99f2c685f538d7cbdbdc8f762c9cca47" id="r_a99f2c685f538d7cbdbdc8f762c9cca47"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a99f2c685f538d7cbdbdc8f762c9cca47">setLogProvider</a> (<a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127">LogProvider</a> provider)</td></tr>
+<tr class="memdesc:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code>provider</code>, consulted on every <code>register</code> envelope whose <code>contextKey</code> is non-empty.  <br /></td></tr>
+<tr class="separator:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Server-side message handler that owns model instances and dispatches actions. </p>
@@ -126,8 +136,28 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Heap allocation requirement</dt><dd><code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> <b>must</b> be heap-allocated via <code>std::make_shared</code>. <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes msg and calls reply with the response.">handle()</a></code> captures <code>shared_from_this()</code> to prevent use-after-free when the worker pool outlives the server object.</dd></dl>
 <dl class="section user"><dt>Wire format</dt><dd>All requests and replies are encoded as <code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code> JSON. See <code><a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a></code> for the field semantics. The <code>kind</code> field is the discriminator. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
-</div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+</div><h2 class="groupheader">Member Typedef Documentation</h2>
+<a id="a361e6944f65fe4d6dc1b349397528127" name="a361e6944f65fe4d6dc1b349397528127"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a361e6944f65fe4d6dc1b349397528127">&#9670;&#160;</a></span>LogProvider</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127">morph::backend::RemoteServer::LogProvider</a> =  std::function&lt;std::shared_ptr&lt;<a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">::morph::journal::IActionLog</a>&gt;(std::string_view modelType, std::string_view contextKey)&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Callable that supplies the action log to attach to a newly registered instance, given its model type and <code>contextKey</code>. </p>
+<p>Return <code>nullptr</code> to register the instance with no log attached (e.g. for model types or context keys the host app doesn't want journaled). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="af8a6235cbbe77ead17ea779d99d6011a" name="af8a6235cbbe77ead17ea779d99d6011a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af8a6235cbbe77ead17ea779d99d6011a">&#9670;&#160;</a></span>RemoteServer() <span class="overload">[1/2]</span></h2>
 
@@ -178,7 +208,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -239,7 +269,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -289,7 +319,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -328,7 +358,43 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Reply string the async path would have produced. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a99f2c685f538d7cbdbdc8f762c9cca47" name="a99f2c685f538d7cbdbdc8f762c9cca47"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a99f2c685f538d7cbdbdc8f762c9cca47">&#9670;&#160;</a></span>setLogProvider()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::RemoteServer::setLogProvider </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127">LogProvider</a>&#160;</td>
+          <td class="paramname"><em>provider</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs <code>provider</code>, consulted on every <code>register</code> envelope whose <code>contextKey</code> is non-empty. </p>
+<p>This is what closes the gap <code>IModelHolder::attachActionLog</code> leaves open for remote topologies: <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> owns the actual model instances for every remote/simulated-remote client, so it is the only place that can attach a log to them. Pass <code>nullptr</code> to remove a previously installed provider (new registrations get no log). Thread-safe. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">provider</td><td>Callable invoked synchronously while handling <code>register</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

@@ -1,12 +1,18 @@
 var searchData=
 [
-  ['enqueue_0',['enqueue',['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490',1,'morph::offline::IOfflineQueue::enqueue()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#add838e99c2cec5205ae9a6e754f862b7',1,'morph::offline::InMemoryOfflineQueue::enqueue()']]],
-  ['envelope_1',['Envelope',['../d5/d77/structmorph_1_1wire_1_1Envelope.html',1,'morph::wire']]],
-  ['erasure_2',['Registry &amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
-  ['error_20propagation_3',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['execute_4',['execute',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4',1,'morph::backend::LocalBackend::execute()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b',1,'morph::bridge::BridgeHandler::execute()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74',1,'morph::qt::QtWebSocketBackend::execute()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4',1,'morph::backend::SimulatedRemoteBackend::execute()']]],
-  ['executevia_5',['executeVia',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6676a2e068b5739a465d2c29f4570828',1,'morph::bridge::Bridge']]],
-  ['executor_20before_20callbacks_20fire_6',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
-  ['executors_7',['Executors',['../index.html#executors',1,'']]],
-  ['exists_8',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['deadlettered_0',['deadLettered',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#a923a0e48ad45897bfe83ec7cb3419a73',1,'morph::offline::SyncResult']]],
+  ['decisions_1',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
+  ['defaultsession_2',['defaultSession',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adaccbb7a89e5625b3e6085d8db59bd97',1,'morph::bridge::Bridge']]],
+  ['deployment_20topologies_3',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
+  ['deps_4',['Deps',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html',1,'morph::offline::ReconnectCoordinator']]],
+  ['deregisterhandler_5',['deregisterHandler',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a73ac9d12273ad9a5fbf34f999f796b8c',1,'morph::bridge::Bridge']]],
+  ['deregistermodel_6',['deregistermodel',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a9a539d67d97dbb987f5a644d2c6073d5',1,'morph::backend::LocalBackend::deregisterModel()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a',1,'morph::qt::QtWebSocketBackend::deregisterModel()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404',1,'morph::backend::SimulatedRemoteBackend::deregisterModel()']]],
+  ['design_20decisions_7',['Key design decisions',['../index.html#key-design-decisions',1,'']]],
+  ['detail_8',['Component detail',['../index.html#component-detail',1,'']]],
+  ['diagram_9',['Layer diagram',['../index.html#layer-diagram',1,'']]],
+  ['disconnectederror_10',['disconnectederror',['../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html#ae7fce013508e94a669a415cb669193e2',1,'morph::backend::DisconnectedError::DisconnectedError()'],['../d3/d73/structmorph_1_1backend_1_1DisconnectedError.html',1,'morph::backend::DisconnectedError']]],
+  ['does_20not_20drain_20on_20timeout_11',['&lt;tt&gt;MainThreadExecutor::runFor&lt;/tt&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['domain_20concern_20not_20a_20framework_20concern_12',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
+  ['drain_13',['drain',['../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a7f244a0141c703a6f15972b39d8624b9',1,'morph::offline::IOfflineQueue::drain()'],['../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af007406b08a1a2159ccef0683376c971',1,'morph::offline::InMemoryOfflineQueue::drain()']]],
+  ['drain_20on_20timeout_14',['&lt;tt&gt;MainThreadExecutor::runFor&lt;/tt&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]]
 ];

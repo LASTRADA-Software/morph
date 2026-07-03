@@ -1,6 +1,8 @@
 var searchData=
 [
-  ['reconnectcoordinator_0',['ReconnectCoordinator',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html',1,'morph::offline']]],
-  ['reconnectcoordinatorconfig_1',['ReconnectCoordinatorConfig',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html',1,'morph::offline']]],
-  ['remoteserver_2',['RemoteServer',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html',1,'morph::backend']]]
+  ['qtexecutor_0',['QtExecutor',['../d4/d30/classmorph_1_1qt_1_1QtExecutor.html',1,'morph::qt']]],
+  ['qtwebsocketbackend_1',['QtWebSocketBackend',['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html',1,'morph::qt']]],
+  ['qtwebsocketbackendconfig_2',['QtWebSocketBackendConfig',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html',1,'morph::qt']]],
+  ['qtwebsocketserver_3',['QtWebSocketServer',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html',1,'morph::qt']]],
+  ['queueitem_4',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];
