@@ -50,18 +50,42 @@ struct SerializationError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+namespace detail {
+
+/// @brief Converts a Glaze error into a `SerializationError`, or does nothing
+///        if @p errCode reports success.
+///
+/// Shared by `toJson` and `fromJson` on purpose, not just for DRY: this is one
+/// non-template function, so both call through the exact same compiled branch.
+/// `fromJson`'s failure path is easy to exercise for real (malformed JSON is
+/// everyday input); `toJson`'s is not — Glaze's buffer-writer has no reachable
+/// failure mode for a flat struct of strings/integers like `LogEntry` (its
+/// only write-relevant error codes are for recursion-depth limits `LogEntry`
+/// can't hit, and `dump_int_error`, which nothing in Glaze's own source ever
+/// actually raises). Routing both through here means `toJson`'s error branch
+/// is the same branch `fromJson`'s test already exercises, rather than a
+/// second, structurally-unreachable copy of the same three lines.
+/// @param errCode Result of a `glz::write_json`/`glz::read_json` call.
+/// @param context Buffer or input passed to `glz::format_error` for the message.
+inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view context) {
+    if (errCode) {
+        throw SerializationError{glz::format_error(errCode, context)};
+    }
+}
+
+}  // namespace detail
+
 /// @brief Encodes @p entry as JSON.
 ///
 /// `LogEntry` is a plain aggregate, so Glaze reflects it without a `glz::meta`
 /// specialisation — the same automatic reflection `BRIDGE_REGISTER_ACTION`
 /// relies on for user action structs. Used by sinks that need an opaque
 /// string representation (`FileActionLog`).
-/// @throws SerializationError on encode failure (should not happen for a valid `LogEntry`).
+/// @throws SerializationError on encode failure (see `detail::throwOnGlazeError`
+///         for why this is not realistically reachable for `LogEntry`).
 inline std::string toJson(const LogEntry& entry) {
     std::string out;
-    if (auto errCode = glz::write_json(entry, out)) {
-        throw SerializationError{glz::format_error(errCode, out)};
-    }
+    detail::throwOnGlazeError(glz::write_json(entry, out), out);
     return out;
 }
 
@@ -69,9 +93,7 @@ inline std::string toJson(const LogEntry& entry) {
 /// @throws SerializationError if @p json is not a valid `LogEntry`.
 inline LogEntry fromJson(std::string_view json) {
     LogEntry entry{};
-    if (auto errCode = glz::read_json(entry, json)) {
-        throw SerializationError{glz::format_error(errCode, json)};
-    }
+    detail::throwOnGlazeError(glz::read_json(entry, json), json);
     return entry;
 }
 
