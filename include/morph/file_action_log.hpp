@@ -52,11 +52,12 @@ public:
     }
 
     /// @brief Closes the underlying file.
-    ~FileActionLog() override {
-        if (_file != nullptr) {
-            std::fclose(_file);
-        }
-    }
+    ///
+    /// `_file` is always non-null here: the constructor either finishes with a
+    /// valid handle or throws before completing (in which case this destructor
+    /// never runs), and copy/move are deleted, so there is no path that could
+    /// null it out afterwards.
+    ~FileActionLog() override { std::fclose(_file); }
 
     FileActionLog(const FileActionLog&) = delete;
     FileActionLog& operator=(const FileActionLog&) = delete;

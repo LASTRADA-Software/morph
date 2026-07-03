@@ -21,6 +21,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
 
@@ -155,6 +156,32 @@ TEST_CASE("FileActionLog: append+flush persists entries, entries() reads them ba
 TEST_CASE("FileActionLog: throws if the path cannot be opened", "[action_log][phase2][file]") {
     REQUIRE_THROWS_AS(FileActionLog(std::filesystem::path{"/no/such/directory/at/all/log.ndjson"}),
                       std::runtime_error);
+}
+
+TEST_CASE("FileActionLog: entries() skips blank lines", "[action_log][phase2][file]") {
+    TempFile tmp{"file_blank_line"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
+        log.flush();
+    }
+    // A blank line can't be produced by FileActionLog itself (every write ends
+    // in exactly one '\n'), but a hand-edited or externally-appended file could
+    // have one — entries() must skip it rather than fail decoding it as JSON.
+    {
+        std::ofstream raw{tmp.path, std::ios::app};
+        raw << "\n";
+    }
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "2"));
+        log.flush();
+
+        auto all = log.entries();
+        REQUIRE(all.size() == 2);
+        REQUIRE(all[0].entityKey == "acct-1");
+        REQUIRE(all[1].entityKey == "acct-2");
+    }
 }
 
 // ── Save action end-to-end: SessionLog + FileActionLog, the pattern the design
