@@ -329,7 +329,9 @@ struct to_json_schema<morph::time::DateTime> {
 template <>
 struct std::formatter<morph::time::DateTime> {
     constexpr auto parse(std::format_parse_context& ctx) {
-        if (ctx.begin() != ctx.end() && *ctx.begin() != '}') {
+        // The parse context always contains the terminating '}' (the format
+        // machinery's contract), so the range is never empty here.
+        if (*ctx.begin() != '}') {
             throw std::format_error{"morph::time::DateTime accepts only the empty format spec '{}'"};
         }
         return ctx.begin();

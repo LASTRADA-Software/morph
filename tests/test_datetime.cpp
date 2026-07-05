@@ -53,21 +53,36 @@ TEST_CASE("DateTime::Iso8601::RoundTrip", "[datetime]") {
 }
 
 TEST_CASE("DateTime::Iso8601::RejectsMalformedInput", "[datetime]") {
-    // Too short / wrong separators.
+    // Too short.
     CHECK_FALSE(DateTime::fromIso8601("").has_value());
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05").has_value());
+    // Every separator position, individually wrong.
+    CHECK_FALSE(DateTime::fromIso8601("2026x07-05T14:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07x05T14:30:15").has_value());
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05 14:30:15").has_value());  // space, not T
-    // Non-digit components.
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14x30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30x15").has_value());
+    // Non-digit components: trailing junk within a field ("20x6") and a
+    // from_chars hard failure at the field start, for every field.
     CHECK_FALSE(DateTime::fromIso8601("20x6-07-05T14:30:15").has_value());
-    // A dot must be followed by at least one digit.
+    CHECK_FALSE(DateTime::fromIso8601("2026-xa-05T14:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-xaT14:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05Txa:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:xa:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:xa").has_value());
+    // A dot must be followed by at least one digit; non-digits end the
+    // fraction and then count as trailing junk.
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15.Z").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15.5x").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15.5-").has_value());  // below '0' ends the fraction
     // Trailing junk (including unsupported zone offsets).
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15+02:00").has_value());
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15.2504Z").has_value());
-    // Impossible calendar dates and clock values.
+    // Impossible calendar dates and clock values, each limb of the check.
     CHECK_FALSE(DateTime::fromIso8601("2026-02-30T10:00:00Z").has_value());
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T24:00:00Z").has_value());
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:60:00Z").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:61Z").has_value());
 }
 
 TEST_CASE("DateTime::ComparisonAndArithmetic", "[datetime]") {
@@ -88,6 +103,8 @@ TEST_CASE("DateTime::ComparisonAndArithmetic", "[datetime]") {
 TEST_CASE("DateTime::Formatter", "[datetime]") {
     CHECK(std::format("{}", sample()) == "2026-07-05T14:30:15.250Z");
     auto const value = sample();
+    // "{:}" reaches parse() with an empty spec range (begin == end).
+    CHECK(std::vformat("{:}", std::make_format_args(value)) == "2026-07-05T14:30:15.250Z");
     CHECK_THROWS_AS(std::vformat("{:x}", std::make_format_args(value)), std::format_error);
 }
 
