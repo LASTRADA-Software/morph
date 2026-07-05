@@ -32,6 +32,8 @@ add_executable(morph_tests
     test_server_limits.cpp
     test_action_log.cpp
     test_action_log_phase2.cpp
+    test_rational.cpp
+    test_quantity_forms.cpp
 )
 
 target_link_libraries(morph_tests

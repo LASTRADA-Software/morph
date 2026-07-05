@@ -21,6 +21,9 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::bridge` | Bridge between handler and backend | `Bridge`, `BridgeHandler<M>` |
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`, `SyncWorker`, `SyncResult` |
 | `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
+| `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
+| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitEnum`, `is_quantity_v` |
+| `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -68,6 +71,9 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 | `action_log.hpp` | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `toJson`/`fromJson`, `SerializationError`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` (`morph::journal::`) — the durable-sink interface and the process-wide default sink, with zero dependency on `model.hpp`/`registry.hpp` |
 | `journal.hpp` | `SessionLog`, `replay()` (`morph::journal::`) — full-fidelity session log with `checkpoint()` coalescing and `undoLast()`, built on `action_log.hpp` + the existing `ActionDispatcher`/`ModelRegistryFactory` |
 | `file_action_log.hpp` | `FileActionLog` (`morph::journal::`) — append-only NDJSON `IActionLog`, `flush()` fsyncs |
+| `rational.hpp` | `Rational`, `DecimalPlaces`, `RationalError` (`morph::math::`) — exact int64 rational arithmetic with a decimal-precision tag; Glaze wire codec (`{"num","den","dp"}`, canonicalised on read) and `std::formatter` |
+| `quantity.hpp` | `Quantity<U>`, `UnitMeta`, `UnitTraits` (`morph::units::`) — unit-tagged optional value over `Rational`; units are application enum NTTPs, schemas get `ExtUnits` automatically |
+| `forms.hpp` | `schemaJson<A>()`, `allRequiredEngaged()` (`morph::forms::`) — JSON Schema per action with derived `required`, `x-decimalPlaces`, `x-order` |
 | `backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
 | `remote.hpp` | `RemoteServer` (now with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
 | `bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (now carrying `contextKey`), `MemberPointerTraits` (detail) |
@@ -392,7 +398,97 @@ handler.reset<FormAction>();
 | **No-subscriber fire** | If `set<>` triggers an execute but no subscriber is installed, the action still runs and the result is silently dropped. |
 | **Subscription thread** | Callbacks always run on the executor passed at handler construction (`guiExec`). |
 
+## Exact values, units, and schema-driven forms
+
+Three headers extend actions from "any aggregate" to *self-describing*
+aggregates a client can build its GUI from at runtime: `rational.hpp` (exact
+numbers), `quantity.hpp` (unit-tagged, optionally-empty values) and
+`forms.hpp` (JSON Schema generation). Nothing else in the framework includes
+them — they are an opt-in layer that composes with registration, validators,
+and the wire. `examples/forms` demonstrates the whole loop with two
+renderers: a self-contained HTML page and a Qt Quick client
+(`MORPH_BUILD_FORMS_QML=ON`), both driven purely by the generated schemas.
+
+### `morph::math::Rational` — exact numbers on the wire
+
+A trivially-copyable `numerator/denominator` pair (`int64_t`) plus a
+`DecimalPlaces` strong type. Arithmetic is exact and reduces to canonical
+form; binary operations propagate the wider precision; comparison ignores
+precision entirely. Fallible operations (`operator/`, `FromFloat`) return
+`std::expected<Rational, RationalError>`, and mixed expressions containing an
+`expected` or a floating-point operand evaluate to `expected` with
+left-to-right error short-circuiting.
+
+On the wire a Rational is `{"num":617,"den":50,"dp":2}`. The Glaze codec
+routes every read through the canonicalising constructor: a non-canonical
+payload (`1234/100`) lands reduced, a hostile one (`den == 0`, out-of-range
+`dp`) is clamped rather than asserted — wire input is untrusted by design.
+
+### `morph::units::Quantity<U>` — one kind of empty, units as types
+
+```cpp
+enum class Unit : std::uint16_t { scalar, kg, m3, kg_per_m3 };
+
+template <> struct morph::units::UnitTraits<Unit> {
+    static constexpr morph::units::UnitMeta meta(Unit) noexcept { /* id, display, decimals */ }
+};
+consteval Unit operator/(Unit lhs, Unit rhs) { /* kg / m3 -> kg_per_m3, else throw */ }
+
+using Mass    = morph::units::Quantity<Unit::kg>;
+using Volume  = morph::units::Quantity<Unit::m3>;
+// Mass{...} / Volume{...} deduces Quantity<Unit::kg_per_m3> at compile time.
+```
+
+Design decisions, in order:
+
+- **One kind of empty.** The blank state ("not entered", "not measured")
+  lives *inside* the quantity as `std::optional<Rational>`; action structs
+  never wrap a `Quantity` in another `std::optional`. Whether a field may
+  still be empty at submit time is field *metadata* (below), not a second
+  wrapper type. Empty propagates through arithmetic (spreadsheet/SQL-NULL
+  semantics); division by zero also yields empty.
+- **Units are types, defined by the application.** morph ships no unit enum.
+  The app supplies its own enum, a `UnitTraits` specialisation (schema id,
+  display text, default decimals) and a `consteval` algebra; `Quantity`'s
+  `operator*` / `operator/` deduce result units from that algebra, and
+  unsupported combinations fail to compile at the call site. Unit ids are
+  protocol vocabulary: append enumerators, never renumber or rename.
+- **Units never travel.** The wire payload is just the nullable Rational
+  (`glz::meta` unwraps the member), so a client cannot send a mismatched
+  unit. Units appear in generated schemas (`ExtUnits`) and in C++ types only.
+
+### `morph::forms` — schemas for auto-built GUIs
+
+`schemaJson<A>()` wraps Glaze's `write_json_schema` (which contributes types,
+`$defs`, and any per-field metadata declared via `glz::json_schema<A>`) and
+closes the gaps a form renderer needs:
+
+- **`required`** — derived, not declared twice: a member is required unless
+  it is a `std::optional<...>` or named in the action's
+  `static constexpr std::array optionalFields{...}` opt-out list.
+- **`x-decimalPlaces`** — on every `Quantity` property, from `UnitTraits`, so
+  the client knows the input step.
+- **`x-order`** — the member's declaration index on every property, so field
+  layout survives schema round-trips through order-losing DOMs.
+
+`allRequiredEngaged(action)` is the matching readiness predicate ("every
+required `Quantity` is engaged") intended as the body of the action's
+`validate()` — which the existing `ActionValidator` resolution picks up
+automatically. One declaration then drives the schema's `required` array, the
+client-side submit gate, and the fielded-action readiness check.
+
 ## Known limitations
+
+### Validators do not run server-side
+
+`ActionValidator`/`validate()` gate only the client side: the fielded
+`set<...>` flow checks readiness before dispatching, and schema-driven form
+renderers disable submit until required fields are filled. The dispatcher
+itself executes whatever payload arrives — a remote client can bypass
+validation entirely. A model that dereferences required quantities must
+therefore enforce its own precondition (the `examples/forms` model throws
+`std::invalid_argument` via the same `validate()` predicate the GUI uses).
+Running validators inside the dispatcher runner is a planned extension.
 
 ### `RemoteServer` must be heap-allocated
 
@@ -431,3 +527,7 @@ If `runFor(timeout)` returns because the timeout expired rather than because the
 | Client-side drafts for fielded actions | Avoids new wire messages, server-side draft state, and a server push channel. Patches never leave the client; only the full action is sent when the validator passes. |
 | `ActionValidator<A>` is action-typed, not model-typed | Different actions on the same model have different readiness requirements; pinning the predicate to the action keeps GUI code oblivious to model internals. |
 | `set<auto FieldPtr>(value)` over `set<Action>(&Action::f, value)` | Member-pointer NTTP encodes both the action type and the field type; the call site stays terse without losing type safety. |
+| `Rational` wire codec canonicalises on read | Wire input is untrusted; every deserialised value passes the reducing constructor, so invariants hold no matter what a client sends. |
+| One optionality: empty state inside `Quantity` | Drafts and lab data genuinely have "no value yet" with the unit still known; a second `std::optional` wrapper would split one concept across two types. |
+| Units are enum NTTPs with app-defined algebra | Mixing units is a compile error and result units are deduced, while morph stays domain-agnostic — the application owns the enum, metadata, and algebra. |
+| `required` derived from types + one opt-out list | The same declaration drives the schema, the client submit gate, and `validate()` — required-ness cannot drift between server and GUI. |

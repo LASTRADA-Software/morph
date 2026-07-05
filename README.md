@@ -15,6 +15,9 @@ deal with a background worker directly.
 - Header-only, C++23, namespace `morph`
 - JSON reflection via [Glaze](https://github.com/stephenberry/glaze) — no hand-written
   serialisation per action
+- Exact, unit-tagged action values (`morph::math::Rational`,
+  `morph::units::Quantity<Unit>`) and JSON-Schema generation per action
+  (`morph::forms`) so clients can build their forms at runtime
 - Optional Qt 6 WebSocket transport (built when `MORPH_BUILD_QT=ON`)
 
 ## The main idea
@@ -191,6 +194,58 @@ disconnected:
 - **`ReconnectCoordinator`** — sequences *reconnect → activate → bind → replay* in a
   strict, unit-tested order when connectivity returns. Pure policy: all side effects
   are injected, so it owns no thread and touches no socket.
+
+## Exact values, units, and auto-generated forms
+
+Actions can carry exact, unit-tagged values instead of raw doubles, and every
+action type can describe itself as a JSON Schema — enough for a client to
+render its form at runtime:
+
+```cpp
+#include <morph/forms.hpp>   // pulls in quantity.hpp + rational.hpp
+
+// The application defines its unit system: an enum, its metadata, and a
+// consteval algebra (see examples/forms/lab_units.hpp for the full pattern).
+enum class Unit : std::uint16_t { scalar, kg, m3, kg_per_m3 };
+
+using Mass    = morph::units::Quantity<Unit::kg>;
+using Volume  = morph::units::Quantity<Unit::m3>;
+using Density = morph::units::Quantity<Unit::kg_per_m3>;
+
+struct ComputeDryDensity {
+    Mass massDry{};      // starts empty ("not entered"), unit known from the type
+    Volume volume{};
+    bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+
+struct LabModel {
+    // kg / m³ -> kg/m³, deduced and checked at compile time; kg + m³ won't compile.
+    Density execute(const ComputeDryDensity& a) { return a.massDry / a.volume; }
+};
+```
+
+- Values are exact `int64` fractions with a decimal-precision tag — no
+  floating-point rounding, canonical `{"num":617,"den":50,"dp":2}` on the wire.
+  Units never travel; they live in the C++ types and the schemas.
+- A `Quantity` can be *empty* ("not measured yet"). A field is required unless
+  it is `std::optional` or listed in the action's `optionalFields` opt-out —
+  the same declaration drives the schema's `required` array, the form's
+  submit gate, and `validate()`.
+- `morph::forms::schemaJson<ComputeDryDensity>()` returns a JSON Schema with
+  units (`ExtUnits`), decimal steps (`x-decimalPlaces`), field order
+  (`x-order`), bounds, and descriptions (via `glz::json_schema<A>`).
+
+[`examples/forms`](examples/forms) shows the whole loop with two renderers
+driven purely by the generated schemas — a self-contained HTML page and a
+runtime-built Qt Quick GUI:
+
+```sh
+cmake -B build -G Ninja -DMORPH_BUILD_FORMS_QML=ON    # QML renderer optional
+ninja -C build
+./build/examples/forms/morph_forms_demo --emit-html   # write forms_demo.html, open it
+./build/examples/forms/morph_forms_demo               # REPL: paste lines from the page
+./build/examples/forms/gui_qml/morph_forms_qml        # same forms, rendered in QML
+```
 
 ## Learn more
 
