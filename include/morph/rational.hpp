@@ -745,12 +745,14 @@ template <std::floating_point Float>
     auto const scale = powerOfTen(rawPrecision);
 
     auto const scaled = static_cast<long double>(value) * static_cast<long double>(scale);
-    // Bound against 2^63 exactly (representable in every long double format).
-    // Casting INT64_MAX instead would round *up* to 2^63 on platforms where
-    // long double == double, letting scaled == 2^63 slip through to overflow
-    // in llround. INT64_MIN == -2^63 is itself valid, hence `<` not `<=`.
+    // Bound against 2^63 (representable in every long double format), minus
+    // the half-ulp llround adds: values in [2^63 - 0.5, 2^63) round *up* to
+    // 2^63 and would overflow int64. Casting INT64_MAX instead would itself
+    // round up to 2^63 where long double == double. The negative bound is
+    // asymmetric because INT64_MIN == -2^63 is a valid result and llround
+    // maps (-2^63 - 0.5, -2^63] onto it, hence `<` against -2^63 exactly.
     constexpr auto twoPow63 = 0x1p63L;
-    if (scaled >= twoPow63 || scaled < -twoPow63) {
+    if (scaled >= twoPow63 - 0.5L || scaled < -twoPow63) {
         return std::unexpected(RationalError::Overflow);
     }
 

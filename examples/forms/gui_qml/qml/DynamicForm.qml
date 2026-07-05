@@ -110,7 +110,8 @@ Frame {
                 const value = parseInt(text)
                 if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
                 if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                parts.push(JSON.stringify(f.name) + ":" + text)
+                // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
+                parts.push(JSON.stringify(f.name) + ":" + text.replace(/^(-?)0+(?=\d)/, "$1"))
             } else {
                 parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(text))
             }

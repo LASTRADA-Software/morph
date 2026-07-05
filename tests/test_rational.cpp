@@ -367,6 +367,15 @@ TEST_CASE("Rational::FromFloat::ErrorPaths", "[rational]")
     auto const justOver = Rational::FromFloat(1.0e18, dp1);  // scaled 1e19 > 2^63
     REQUIRE_FALSE(justOver.has_value());
     CHECK(justOver.error() == RationalError::Overflow);
+
+    // The llround half-ulp window: on x86's 80-bit long double this scales to
+    // exactly 2^63 - 0.5, which llround would round UP to 2^63 (wrapping to a
+    // poisoned INT64_MIN numerator). Must be rejected, not returned. Where
+    // long double == double the literal rounds past the bound and is rejected
+    // by the plain 2^63 check, so the assertion holds on every platform.
+    auto const halfUlp = Rational::FromFloat(922337203685477580.75L, dp1);
+    REQUIRE_FALSE(halfUlp.has_value());
+    CHECK(halfUlp.error() == RationalError::Overflow);
 }
 
 // ---------------------------------------------------------------------------

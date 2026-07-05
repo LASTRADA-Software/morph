@@ -186,7 +186,8 @@ function build() {
           parts.push(JSON.stringify(f.name) + ':' + rationalJson(t, +f.input.dataset.dp));
         } else if (f.kind === 'integer') {
           if (!/^-?\d+$/.test(t) || !f.input.checkValidity()) { ok = false; continue; }
-          parts.push(JSON.stringify(f.name) + ':' + t);  // validated digits: already a JSON number
+          // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
+          parts.push(JSON.stringify(f.name) + ':' + t.replace(/^(-?)0+(?=\d)/, '$1'));
         } else {
           parts.push(JSON.stringify(f.name) + ':' + JSON.stringify(t));
         }
@@ -232,17 +233,24 @@ void runRepl() {
     auto holder = morph::model::detail::ModelRegistryFactory::instance().create("LabModel");
     std::string line;
     while (std::getline(std::cin, line)) {
-        auto const begin = line.find_first_not_of(" \t");
+        // Trim both ends (including the \r of CRLF-pasted lines).
+        auto const begin = line.find_first_not_of(" \t\r");
         if (begin == std::string::npos) {
             continue;
         }
-        line = line.substr(begin);
+        line = line.substr(begin, line.find_last_not_of(" \t\r") - begin + 1);
         if (line == "exit" || line == "quit") {
             break;
         }
-        auto const separator = line.find(' ');
+        auto const separator = line.find_first_of(" \t");
         auto const action = line.substr(0, separator);
-        auto const payload = separator == std::string::npos ? std::string{"{}"} : line.substr(separator + 1);
+        auto payload = std::string{"{}"};
+        if (separator != std::string::npos) {
+            auto const payloadBegin = line.find_first_not_of(" \t", separator);
+            if (payloadBegin != std::string::npos) {
+                payload = line.substr(payloadBegin);
+            }
+        }
         try {
             auto const result =
                 morph::model::detail::ActionDispatcher::instance().dispatch("LabModel", action, *holder, payload);
