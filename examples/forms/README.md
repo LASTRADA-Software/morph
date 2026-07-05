@@ -104,7 +104,13 @@ pointing it at a networked server later means swapping the transport inside
   from the schema (`x-optionsAction`), never baked into the form definition.
 - `RecordMeasurement.measuredAt` is a `morph::time::Timestamp`: ISO-8601 UTC
   on the wire, `format: "date-time"` in the schema, and a malformed string is
-  rejected as a wire error (try it in the REPL).
+  rejected as a wire error (try it in the REPL). Both clients provide a
+  picker: the browser's native datetime-local control (with a *now* button)
+  and a QML calendar/time popup.
+- Mass and volume fields carry `x-unitAlternatives` (g/t for kg, L for m³
+  with exact ratios): pick a different unit and the entered value
+  recalculates exactly; the submitted payload is always in the canonical
+  unit — try entering 2650500 g and watch the model reply in kg/m³.
 - Quantity JSON is the nullable exact rational `{"num","den","dp"}`;
   non-canonical or hostile payloads are canonicalised/clamped on read.
 - Both clients assemble the rational JSON from the typed digit string itself

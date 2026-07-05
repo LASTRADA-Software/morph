@@ -17,6 +17,7 @@ qt_add_qml_module(morph_forms_qml
     QML_FILES
         qml/Main.qml
         qml/DynamicForm.qml
+        qml/DateTimePicker.qml
     SOURCES
         FormsController.hpp
         FormsController.cpp

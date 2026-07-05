@@ -5,7 +5,8 @@
 //   ExtUnits         -> unit suffix          minimum/maximum -> input hints
 //   x-decimalPlaces  -> quantity fields (decimal input -> exact {num,den,dp})
 //   x-optionsAction  -> combo box (options fetched by executing that action)
-//   format date-time -> ISO-8601 UTC text input
+//   x-unitAlternatives -> unit selector with exact recalculation on switch
+//   format date-time -> date-time input with a calendar/time picker
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -25,6 +26,7 @@ Frame {
 
     property var fieldValues: ({})
     property var fieldOptions: ({})
+    property var fieldUnits: ({})
     property int optionsRevision: 0
     property bool ready: false
     property string previewLine: ""
@@ -60,10 +62,21 @@ Frame {
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
                 const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
                 const extUnits = opt(p.ExtUnits, {})
+                const unitText = opt(extUnits.unitUnicode, opt(extUnits.unitAscii, ""))
+                // Canonical unit first, then declared convertible alternatives.
+                const unitOptions = [{ display: unitText, decimals: opt(dp, 0), num: 1, den: 1 }]
+                const alternatives = opt(raw["x-unitAlternatives"], opt(p["x-unitAlternatives"], []))
+                for (let a = 0; a < alternatives.length; ++a) {
+                    const alt = alternatives[a]
+                    unitOptions.push({ display: opt(alt.display, alt.id), decimals: alt.decimals,
+                                       num: alt.num, den: alt.den })
+                }
                 return {
                     name: name,
                     description: opt(p.description, ""),
-                    unit: opt(extUnits.unitUnicode, opt(extUnits.unitAscii, "")),
+                    unit: unitText,
+                    unitOptions: unitOptions,
+                    canonDp: opt(dp, 0),
                     isChoice: optionsAction !== undefined,
                     optionsAction: opt(optionsAction, ""),
                     valueField: opt(opt(raw["x-optionValue"], p["x-optionValue"]), "id"),
@@ -81,15 +94,87 @@ Frame {
 
     // --- draft state --------------------------------------------------------
 
-    // "2650.5" + dp -> exact '{"num":..,"den":..,"dp":..}' JSON built from the
-    // digit string itself — no float round-trip, exact at any magnitude.
-    function rationalJson(text, dp) {
+    // --- exact digit-string arithmetic (QML JS has no reliable BigInt) -----
+
+    // digits * factor, both non-negative; factor stays well under 2^26 so the
+    // per-digit products fit in doubles exactly.
+    function mulDigits(digits, factor) {
+        let carry = 0
+        let out = ""
+        for (let i = digits.length - 1; i >= 0; --i) {
+            const prod = (digits.charCodeAt(i) - 48) * factor + carry
+            out = String(prod % 10) + out
+            carry = Math.floor(prod / 10)
+        }
+        while (carry > 0) {
+            out = String(carry % 10) + out
+            carry = Math.floor(carry / 10)
+        }
+        return out.replace(/^0+(?=\d)/, "")
+    }
+
+    function incDigits(digits) {
+        const out = digits.split("")
+        for (let i = out.length - 1; i >= 0; --i) {
+            if (out[i] === "9") {
+                out[i] = "0"
+            } else {
+                out[i] = String(+out[i] + 1)
+                return out.join("")
+            }
+        }
+        return "1" + out.join("")
+    }
+
+    // digits / divisor with half-up rounding; both non-negative.
+    function divRoundDigits(digits, divisor) {
+        let out = ""
+        let rem = 0
+        for (let i = 0; i < digits.length; ++i) {
+            const cur = (rem * 10) + (digits.charCodeAt(i) - 48)
+            out += String(Math.floor(cur / divisor))
+            rem = cur % divisor
+        }
+        if (rem * 2 >= divisor)
+            out = incDigits(out)
+        return out.replace(/^0+(?=\d)/, "")
+    }
+
+    // The typed decimal as scaled digits (value * 10^dp), sign separate.
+    function scaledDigits(text, dp) {
         const neg = text.startsWith("-")
         const pieces = (neg ? text.slice(1) : text).split(".")
         const frac = ((pieces[1] || "") + "0".repeat(dp)).slice(0, dp)
-        let digits = ((pieces[0] || "0") + frac).replace(/^0+(?=\d)/, "")
-        const sign = (neg && digits !== "0") ? "-" : ""
-        return '{"num":' + sign + digits + ',"den":1' + "0".repeat(dp) + ',"dp":' + dp + "}"
+        const digits = ((pieces[0] || "0") + frac).replace(/^0+(?=\d)/, "")
+        return { neg: neg && digits !== "0", digits: digits }
+    }
+
+    // Exact rational JSON for a value typed in `unit` (the exact
+    // unit-to-canonical ratio rides along; payloads stay canonical).
+    function rationalJson(text, unit, canonDp) {
+        const scaled = scaledDigits(text, unit.decimals)
+        const num = mulDigits(scaled.digits, unit.num)
+        const den = mulDigits("1" + "0".repeat(unit.decimals), unit.den)
+        return '{"num":' + (scaled.neg ? "-" : "") + num + ',"den":' + den + ',"dp":' + canonDp + "}"
+    }
+
+    // Recalculate a decimal string from one unit into another, exactly,
+    // rounded half-up to the target unit's decimals.
+    function convertText(text, from, to) {
+        if (!/^-?\d+(\.\d+)?$/.test(text))
+            return ""
+        const divisor = from.den * to.num * Math.pow(10, from.decimals)
+        if (divisor > 1e12)
+            return ""  // out of the demo's exact long-division range
+        const scaled = scaledDigits(text, from.decimals)
+        let digits = mulDigits(scaled.digits, from.num)
+        digits = mulDigits(digits, to.den)
+        digits = digits + "0".repeat(to.decimals)
+        digits = divRoundDigits(digits, divisor)
+        if (to.decimals === 0)
+            return (scaled.neg ? "-" : "") + digits
+        const padded = digits.padStart(to.decimals + 1, "0")
+        return (scaled.neg ? "-" : "") + padded.slice(0, -to.decimals) + "." + padded.slice(-to.decimals)
     }
 
     function revalidate() {
@@ -114,14 +199,18 @@ Frame {
                            + JSON.stringify((text.length === 16 ? text + ":00" : text) + "Z"))
             } else if (f.isQuantity) {
                 if (!/^-?\d+(\.\d+)?$/.test(text)) { ok = false; continue }
-                // Reject more decimals than the field's declared precision
+                const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
+                // Reject more decimals than the current unit's precision
                 // instead of silently rounding them away.
                 const fracLen = (text.split(".")[1] || "").length
-                if (fracLen > f.decimals) { ok = false; continue }
+                if (fracLen > unit.decimals) { ok = false; continue }
                 const value = parseFloat(text)
-                if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
-                if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                parts.push(JSON.stringify(f.name) + ":" + rationalJson(text, f.decimals))
+                // Bounds are declared against the canonical unit.
+                if (opt(fieldUnits[f.name], 0) === 0) {
+                    if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
+                    if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
+                }
+                parts.push(JSON.stringify(f.name) + ":" + rationalJson(text, unit, f.canonDp))
             } else if (f.isInteger) {
                 if (!/^-?\d+$/.test(text)) { ok = false; continue }
                 const value = parseInt(text)
@@ -243,21 +332,48 @@ Frame {
                         onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
                     }
 
-                    TextField {
-                        visible: !fieldColumn.modelData.isChoice
+                    DateTimePicker {
+                        visible: fieldColumn.modelData.isDateTime
                         Layout.fillWidth: true
-                        placeholderText: fieldColumn.modelData.isDateTime
-                                         ? "YYYY-MM-DDTHH:MM:SS"
-                                         : (fieldColumn.modelData.isQuantity
-                                            ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
-                                            : (fieldColumn.modelData.isInteger ? "0" : ""))
+                        onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
+                    }
+
+                    TextField {
+                        id: entry
+                        visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
+                        Layout.fillWidth: true
+                        placeholderText: fieldColumn.modelData.isQuantity
+                                         ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
+                                         : (fieldColumn.modelData.isInteger ? "0" : "")
                         inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                           ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                         onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
                     }
 
+                    // Unit selector when the unit system declares convertible
+                    // alternatives: switching recalculates the entry exactly.
+                    ComboBox {
+                        visible: fieldColumn.modelData.isQuantity
+                                 && fieldColumn.modelData.unitOptions.length > 1
+                        implicitWidth: 92
+                        textRole: "display"
+                        model: fieldColumn.modelData.unitOptions
+                        onActivated: {
+                            const name = fieldColumn.modelData.name
+                            const fromUnit = fieldColumn.modelData.unitOptions[form.opt(form.fieldUnits[name], 0)]
+                            const toUnit = fieldColumn.modelData.unitOptions[currentIndex]
+                            form.fieldUnits[name] = currentIndex
+                            if (entry.text.trim() !== "")
+                                entry.text = form.convertText(entry.text.trim(), fromUnit, toUnit)
+                            else
+                                form.revalidate()
+                        }
+                    }
+
                     Label {
                         visible: fieldColumn.modelData.unit !== ""
+                                 && !(fieldColumn.modelData.isQuantity
+                                      && fieldColumn.modelData.unitOptions.length > 1)
                         text: fieldColumn.modelData.unit
                         opacity: 0.6
                     }

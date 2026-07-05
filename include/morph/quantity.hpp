@@ -75,6 +75,7 @@
 #include <compare>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -97,11 +98,42 @@ struct UnitMeta {
     std::uint32_t defaultDecimals{3};
 };
 
+/// @brief One convertible display/entry unit for a canonical unit.
+///
+/// The ratio is exact: `value_in_canonical = value_in_alternative * num/den`
+/// (e.g. grams -> kilograms is `{Unit::g, 1, 1000}`). Both components must
+/// be positive.
+/// @tparam E The application's unit enum type.
+template <typename E>
+struct UnitAlternative {
+    /// @brief The alternative unit (must have `UnitTraits` metadata).
+    E unit{};
+
+    /// @brief Numerator of the exact alternative-to-canonical ratio.
+    std::int64_t num{1};
+
+    /// @brief Denominator of the exact alternative-to-canonical ratio.
+    std::int64_t den{1};
+};
+
 /// @brief Customisation point: the application specialises this for its unit
 ///        enum and returns a `UnitMeta` per enumerator.
+///
+/// Optionally, a specialisation may also provide
+/// `static constexpr std::span<const UnitAlternative<E>> alternatives(E)` —
+/// the convertible display/entry units per canonical unit. Renderers then
+/// offer a unit selector on such fields and recalculate entered values
+/// exactly on switch; the wire and the model always stay in the canonical
+/// unit.
 /// @tparam E The application's unit enum type.
 template <typename E>
 struct UnitTraits;
+
+/// @brief Concept: `UnitTraits<E>` also declares convertible alternatives.
+template <typename E>
+concept HasUnitAlternatives = requires(E unit) {
+    { UnitTraits<E>::alternatives(unit) } -> std::convertible_to<std::span<const UnitAlternative<E>>>;
+};
 
 /// @brief Concept: an enum with a `UnitTraits` specialisation.
 template <typename E>
@@ -174,6 +206,17 @@ struct Quantity {
     /// @return `DecimalPlaces{declaredDecimals}`.
     [[nodiscard]] static constexpr math::DecimalPlaces declaredPrecision() noexcept {
         return math::DecimalPlaces{DeclaredDecimals};
+    }
+
+    /// @brief The convertible display/entry units declared for this field's
+    ///        unit (empty when the unit system declares none).
+    /// @return Exact-ratio alternatives from `UnitTraits<E>::alternatives`.
+    [[nodiscard]] static constexpr std::span<const UnitAlternative<decltype(U)>> unitAlternatives() noexcept {
+        if constexpr (HasUnitAlternatives<decltype(U)>) {
+            return UnitTraits<decltype(U)>::alternatives(U);
+        } else {
+            return {};
+        }
     }
 
     /// @brief Converts a floating-point reading at the declared precision.

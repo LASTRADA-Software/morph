@@ -13,7 +13,9 @@
 
 #include <morph/quantity.hpp>
 
+#include <array>
 #include <cstdint>
+#include <span>
 
 namespace lab {
 
@@ -24,6 +26,9 @@ enum class Unit : std::uint16_t {
     kg,          ///< mass
     m3,          ///< volume
     kg_per_m3,   ///< density
+    g,           ///< mass entry alternative (1 g = 1/1000 kg)
+    t,           ///< mass entry alternative (1 t = 1000 kg)
+    l,           ///< volume entry alternative (1 L = 1/1000 m³)
 };
 
 }  // namespace lab
@@ -38,8 +43,29 @@ struct morph::units::UnitTraits<lab::Unit> {
             case lab::Unit::kg:        return {"kg", "kg", 3};
             case lab::Unit::m3:        return {"m3", "m³", 3};
             case lab::Unit::kg_per_m3: return {"kg_per_m3", "kg/m³", 1};
+            case lab::Unit::g:         return {"g", "g", 1};
+            case lab::Unit::t:         return {"t", "t", 4};
+            case lab::Unit::l:         return {"l", "L", 1};
         }
         return {"?", "?", 3};
+    }
+
+    /// @brief Convertible entry units: mass may be typed in g/t, volume in L.
+    ///        The exact ratio maps the alternative to the canonical unit.
+    static constexpr std::array<morph::units::UnitAlternative<lab::Unit>, 2> kMassAlternatives{
+        {{.unit = lab::Unit::g, .num = 1, .den = 1000}, {.unit = lab::Unit::t, .num = 1000, .den = 1}}};
+    static constexpr std::array<morph::units::UnitAlternative<lab::Unit>, 1> kVolumeAlternatives{
+        {{.unit = lab::Unit::l, .num = 1, .den = 1000}}};
+
+    /// @brief The alternatives per canonical unit (empty for the rest).
+    /// @param unit The canonical unit.
+    /// @return Exact-ratio alternatives for @p unit.
+    static constexpr std::span<const morph::units::UnitAlternative<lab::Unit>> alternatives(lab::Unit unit) noexcept {
+        switch (unit) {
+            case lab::Unit::kg: return kMassAlternatives;
+            case lab::Unit::m3: return kVolumeAlternatives;
+            default:            return {};
+        }
     }
 };
 

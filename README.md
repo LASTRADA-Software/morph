@@ -234,6 +234,9 @@ struct LabModel {
 - `morph::time::Timestamp` fields travel as strict ISO-8601 UTC strings and
   render as date-time inputs (`"format": "date-time"`); malformed timestamps
   are wire *errors*, not clamped values.
+- Unit systems may declare convertible entry units with exact ratios
+  (`UnitTraits<E>::alternatives`): fields grow a unit selector, values
+  recalculate exactly on switch, and payloads always stay canonical.
 - `morph::forms::Choice<std::int64_t, "ListSamples">` declares a combo box:
   the options are the rows returned by executing the named action, referenced
   from the schema via `x-optionsAction` — the option list stays living data

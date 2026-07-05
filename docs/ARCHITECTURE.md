@@ -501,6 +501,12 @@ Two further field types follow the same one-kind-of-empty pattern:
   and — unlike the clamping `Rational` codec — a malformed timestamp is a
   JSON **read error**: there is no meaningful clamp for a mistyped instant.
   Schemas carry the standard `"format": "date-time"` annotation.
+- **Unit switching** (`UnitTraits<E>::alternatives`): a unit system may
+  declare convertible entry units per canonical unit with exact rational
+  ratios (grams -> kilograms as `{g, 1, 1000}`). They surface as
+  `x-unitAlternatives` in the schema; renderers offer a unit selector and
+  recalculate the entered value exactly on switch, and payloads always carry
+  the canonical unit — the model never sees display units.
 - **`Choice<T, "ListSamples", "id", "name">`**: declares in the type that the
   field is *not free input* — its options are the rows returned by executing
   the named action (itself just a registered action, typically

@@ -23,6 +23,12 @@
 /// - **`x-order`** — the member's declaration index on every property, so a
 ///   renderer can lay fields out in declaration order (JSON object key order
 ///   is not reliable once schemas pass through DOMs/maps).
+/// - **`x-unitAlternatives`** — for `Quantity` members whose unit system
+///   declares convertible units (`UnitTraits<E>::alternatives`): an array of
+///   `{id, display, decimals, num, den}` entries, where `num/den` is the
+///   exact alternative-to-canonical ratio. Renderers offer a unit selector
+///   and recalculate entered values exactly on switch; payloads always carry
+///   the canonical unit.
 /// - **`x-optionsAction` / `x-optionValue` / `x-optionLabel`** — for
 ///   `morph::forms::Choice` members: which registered action serves the
 ///   options, and which result-row fields carry the submitted value and the
@@ -155,6 +161,23 @@ template <typename A>
             // The field's *declared* precision: the unit default unless the
             // field's type overrides it (Quantity<Unit::m3, 4>).
             property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
+
+            // Convertible display/entry units with their exact ratios.
+            auto const alternatives = Member::unitAlternatives();
+            if (!alternatives.empty()) {
+                glz::generic_u64::array_t list{};
+                for (auto const& alternative : alternatives) {
+                    auto const meta = units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
+                    glz::generic_u64 entry{};
+                    entry["id"] = std::string{meta.id};
+                    entry["display"] = std::string{meta.display};
+                    entry["decimals"] = std::uint64_t{meta.defaultDecimals};
+                    entry["num"] = alternative.num;
+                    entry["den"] = alternative.den;
+                    list.emplace_back(std::move(entry));
+                }
+                property["x-unitAlternatives"] = list;
+            }
         }
         if constexpr (isChoice<Member>) {
             // Which action serves the options, and which result-row fields

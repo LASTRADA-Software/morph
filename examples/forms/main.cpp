@@ -69,8 +69,10 @@ label .req { color:var(--err); }
 .row { display:flex; align-items:center; gap:.5rem; }
 input, select { flex:1; font:inherit; padding:.45rem .6rem; border:1px solid var(--line); border-radius:6px; background:transparent; color:inherit; }
 .unit { min-width:3.2rem; color:var(--muted); }
+select.unit { min-width:4.5rem; padding:.35rem .4rem; }
 button { margin-top:1rem; font:inherit; padding:.5rem 1rem; border-radius:6px; border:0; background:var(--accent); color:#fff; cursor:pointer; }
 button:disabled { opacity:.45; cursor:not-allowed; }
+button.mini { margin-top:0; padding:.35rem .6rem; background:transparent; border:1px solid var(--line); color:var(--muted); }
 pre { background:rgba(127,127,127,.12); padding:.6rem .8rem; border-radius:6px; overflow-x:auto; font-size:.8rem; white-space:pre-wrap; }
 </style>
 </head>
@@ -104,15 +106,46 @@ function resolve(schema, prop) {
 }
 function typeSet(p) { const t = p.type; return new Set(Array.isArray(t) ? t : (t ? [t] : [])); }
 
-// "2650.5" + dp -> exact '{"num":..,"den":..,"dp":..}' JSON. BigInt digits go
-// straight into the JSON text, so no precision is lost at any magnitude.
-function rationalJson(text, dp) {
+// Digits of a decimal string as an exact scaled BigInt (value * 10^dp).
+function scaledBig(text, dp) {
   const neg = text.startsWith('-');
   const [intPart, fracPart = ''] = (neg ? text.slice(1) : text).split('.');
   const frac = (fracPart + '0'.repeat(dp)).slice(0, dp);
-  let num = BigInt(intPart || '0') * 10n ** BigInt(dp) + BigInt(frac || '0');
-  if (neg) num = -num;
-  return '{"num":' + num.toString() + ',"den":' + (10n ** BigInt(dp)).toString() + ',"dp":' + dp + '}';
+  const scaled = BigInt(intPart || '0') * 10n ** BigInt(dp) + BigInt(frac || '0');
+  return neg ? -scaled : scaled;
+}
+
+// Exact rational JSON for a value typed in `unit` ({decimals,num,den}: the
+// exact unit-to-canonical ratio). The payload always carries the canonical
+// unit: value_canonical = digits/10^decimals * num/den.
+function rationalJson(text, unit, canonDp) {
+  const num = scaledBig(text, unit.decimals) * BigInt(unit.num);
+  const den = 10n ** BigInt(unit.decimals) * BigInt(unit.den);
+  return '{"num":' + num.toString() + ',"den":' + den.toString() + ',"dp":' + canonDp + '}';
+}
+
+function divRoundBig(a, b) {  // round half away from zero; b > 0
+  const neg = a < 0n;
+  const abs = neg ? -a : a;
+  const q = (abs * 2n + b) / (2n * b);
+  return neg ? -q : q;
+}
+
+function formatScaled(value, dp) {  // BigInt value * 10^-dp -> decimal string
+  const neg = value < 0n;
+  let digits = (neg ? -value : value).toString();
+  if (dp === 0) return (neg ? '-' : '') + digits;
+  digits = digits.padStart(dp + 1, '0');
+  return (neg ? '-' : '') + digits.slice(0, -dp) + '.' + digits.slice(-dp);
+}
+
+// Recalculate a decimal string from one unit into another, exactly, rounded
+// to the target unit's decimals.
+function convertText(text, from, to) {
+  if (!/^-?\d+(\.\d+)?$/.test(text)) return '';
+  const numer = scaledBig(text, from.decimals) * BigInt(from.num) * BigInt(to.den) * 10n ** BigInt(to.decimals);
+  const denom = BigInt(from.den) * BigInt(to.num) * 10n ** BigInt(from.decimals);
+  return formatScaled(divRoundBig(numer, denom), to.decimals);
 }
 
 function build() {
@@ -169,11 +202,21 @@ function build() {
         control.step = (10 ** -dp).toFixed(dp);
         control.dataset.dp = dp;
       } else if (p.format === 'date-time') {
-        // The demo treats the entered time as UTC (appends 'Z').
+        // The demo treats the entered time as UTC (appends 'Z'). The native
+        // datetime-local control is the picker; "now" fills the current UTC time.
         kind = 'datetime';
         control = document.createElement('input');
         control.type = 'datetime-local';
         control.step = '1';
+        const nowBtn = document.createElement('button');
+        nowBtn.type = 'button';
+        nowBtn.className = 'mini';
+        nowBtn.textContent = 'now';
+        nowBtn.addEventListener('click', () => {
+          control.value = new Date().toISOString().slice(0, 19);
+          control.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        row.appendChild(nowBtn);
       } else if (types.has('integer')) {
         kind = 'integer';
         control = document.createElement('input');
@@ -187,10 +230,47 @@ function build() {
       if (p.minimum !== undefined) control.min = p.minimum;
       if (p.maximum !== undefined) control.max = p.maximum;
       row.appendChild(control);
-      const unit = (p.ExtUnits && (p.ExtUnits.unitUnicode || p.ExtUnits.unitAscii)) || '';
-      if (unit) { const u = document.createElement('span'); u.className = 'unit'; u.textContent = unit; row.appendChild(u); }
+
+      // Unit display: a plain suffix, or a selector when the unit system
+      // declares convertible alternatives (x-unitAlternatives) — switching
+      // recalculates the entered value exactly.
+      const unitText = (p.ExtUnits && (p.ExtUnits.unitUnicode || p.ExtUnits.unitAscii)) || '';
+      const field = { name: name, input: control, kind: kind, req: req };
+      if (kind === 'quantity') {
+        const canonDp = +control.dataset.dp;
+        field.canonDp = canonDp;
+        field.units = [{ display: unitText || '(1)', decimals: canonDp, num: 1, den: 1 }];
+        for (const alt of (raw['x-unitAlternatives'] || p['x-unitAlternatives'] || [])) {
+          field.units.push({ display: alt.display || alt.id, decimals: alt.decimals, num: alt.num, den: alt.den });
+        }
+        field.unitIndex = 0;
+      }
+      if (field.units && field.units.length > 1) {
+        const unitSelect = document.createElement('select');
+        unitSelect.className = 'unit';
+        unitSelect.style.flex = '0 0 auto';
+        field.units.forEach((u, index) => {
+          const opt = document.createElement('option');
+          opt.value = index;
+          opt.textContent = u.display;
+          unitSelect.appendChild(opt);
+        });
+        unitSelect.addEventListener('change', () => {
+          const fromUnit = field.units[field.unitIndex];
+          field.unitIndex = +unitSelect.value;
+          const toUnit = field.units[field.unitIndex];
+          if (control.value.trim() !== '') control.value = convertText(control.value.trim(), fromUnit, toUnit);
+          control.step = (10 ** -toUnit.decimals).toFixed(toUnit.decimals);
+        });
+        row.appendChild(unitSelect);
+      } else if (unitText) {
+        const u = document.createElement('span');
+        u.className = 'unit';
+        u.textContent = unitText;
+        row.appendChild(u);
+      }
       form.appendChild(row);
-      fields.push({ name: name, input: control, kind: kind, req: req });
+      fields.push(field);
     }
 
     const btn = document.createElement('button');
@@ -215,7 +295,7 @@ function build() {
           parts.push(JSON.stringify(f.name) + ':' + JSON.stringify((t.length === 16 ? t + ':00' : t) + 'Z'));
         } else if (f.kind === 'quantity') {
           if (!/^-?\d+(\.\d+)?$/.test(t) || !f.input.checkValidity()) { ok = false; continue; }
-          parts.push(JSON.stringify(f.name) + ':' + rationalJson(t, +f.input.dataset.dp));
+          parts.push(JSON.stringify(f.name) + ':' + rationalJson(t, f.units[f.unitIndex], f.canonDp));
         } else if (f.kind === 'integer') {
           if (!/^-?\d+$/.test(t) || !f.input.checkValidity()) { ok = false; continue; }
           // Normalise "007" -> "7": JSON forbids leading zeros in numbers.

@@ -16,6 +16,7 @@
 #include <format>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -28,7 +29,7 @@ using morph::math::Rational;
 // A miniature application unit system: enum + UnitTraits + consteval algebra.
 // ---------------------------------------------------------------------------
 
-enum class QFUnit : std::uint8_t { scalar, percent, kg, m3, kg_per_m3 };
+enum class QFUnit : std::uint8_t { scalar, percent, kg, m3, kg_per_m3, g };
 
 template <>
 struct morph::units::UnitTraits<QFUnit> {
@@ -39,8 +40,19 @@ struct morph::units::UnitTraits<QFUnit> {
             case QFUnit::kg:        return {.id = "kg", .display = "kg", .defaultDecimals = 3};
             case QFUnit::m3:        return {.id = "m3", .display = "m³", .defaultDecimals = 3};
             case QFUnit::kg_per_m3: return {.id = "kg_per_m3", .display = "kg/m³", .defaultDecimals = 1};
+            case QFUnit::g:         return {.id = "g", .display = "g", .defaultDecimals = 1};
         }
         return {.id = "?", .display = "?", .defaultDecimals = 3};
+    }
+
+    static constexpr std::array<morph::units::UnitAlternative<QFUnit>, 1> kMassAlternatives{
+        {{.unit = QFUnit::g, .num = 1, .den = 1000}}};
+
+    static constexpr std::span<const morph::units::UnitAlternative<QFUnit>> alternatives(QFUnit unit) noexcept {
+        if (unit == QFUnit::kg) {
+            return kMassAlternatives;
+        }
+        return {};
     }
 };
 
@@ -512,4 +524,30 @@ TEST_CASE("Forms::DispatchChoiceActionThroughRegistry", "[forms]") {
     auto const result = morph::model::detail::ActionDispatcher::instance().dispatch(
         "QFLabModel", "QFSchedule", *holder, R"({"slot":4,"startsAt":"2026-07-06T09:00:00Z"})");
     CHECK(ActionTraits<QFSchedule>::resultFromJson(result) == "slot 4 at 2026-07-06T09:00:00.000Z");
+}
+
+// ---------------------------------------------------------------------------
+// Convertible entry units: declared per unit system, surfaced in schemas.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+static_assert(morph::units::HasUnitAlternatives<QFUnit>);
+static_assert(Q<QFUnit::kg>::unitAlternatives().size() == 1);
+static_assert(Q<QFUnit::kg>::unitAlternatives()[0].unit == QFUnit::g);
+static_assert(Q<QFUnit::kg>::unitAlternatives()[0].num == 1);
+static_assert(Q<QFUnit::kg>::unitAlternatives()[0].den == 1000);
+static_assert(Q<QFUnit::percent>::unitAlternatives().empty());
+
+}  // namespace
+
+TEST_CASE("Forms::SchemaJson::UnitAlternativesSurface", "[forms]") {
+    // massDry is kg, which declares grams as a convertible entry unit: the
+    // schema carries the exact alternative-to-canonical ratio.
+    auto const schema = morph::forms::schemaJson<QFComputeDryDensity>();
+    CHECK(schema.contains(R"("x-unitAlternatives":[{"id":"g","display":"g","decimals":1,"num":1,"den":1000}])"));
+
+    // Units without declared alternatives get no such key.
+    auto const percentSchema = morph::forms::schemaJson<QFRecordMeasurement>();
+    CHECK_FALSE(percentSchema.contains("x-unitAlternatives"));
 }
