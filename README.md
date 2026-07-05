@@ -227,6 +227,10 @@ struct LabModel {
 - Values are exact `int64` fractions with a decimal-precision tag — no
   floating-point rounding, canonical `{"num":617,"den":50,"dp":2}` on the wire.
   Units never travel; they live in the C++ types and the schemas.
+- Each field *declares* its precision in the type — the unit's default unless
+  overridden (`Quantity<Unit::m3, 4>`) — which becomes the form's input step
+  (`x-decimalPlaces`); the value's actual precision stays runtime data that
+  propagates through arithmetic and can be retagged (`withDecimalPlaces`).
 - A `Quantity` can be *empty* ("not measured yet"). A field is required unless
   it is `std::optional` or listed in the action's `optionalFields` opt-out —
   the same declaration drives the schema's `required` array, the form's

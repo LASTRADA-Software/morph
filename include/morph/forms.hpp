@@ -135,7 +135,9 @@ template <typename A>
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
         if constexpr (units::is_quantity_v<Member>) {
-            property["x-decimalPlaces"] = std::uint64_t{Member::unitMeta().defaultDecimals};
+            // The field's *declared* precision: the unit default unless the
+            // field's type overrides it (Quantity<Unit::m3, 4>).
+            property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
         }
     });
     // Always assign — an explicit empty array beats leaving whatever the

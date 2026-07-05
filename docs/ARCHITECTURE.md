@@ -456,6 +456,15 @@ Design decisions, in order:
 - **Units never travel.** The wire payload is just the nullable Rational
   (`glz::meta` unwraps the member), so a client cannot send a mismatched
   unit. Units appear in generated schemas (`ExtUnits`) and in C++ types only.
+- **Declared precision lives in the type; actual precision is runtime
+  data.** `Quantity<U, Decimals>`'s second argument is the field's declared
+  decimal count — defaulted from `UnitTraits`, overridable per field
+  (`Quantity<Unit::m3, 4>`) — and feeds `x-decimalPlaces` and `FromDouble`.
+  The value's actual precision is the Rational's runtime tag: it
+  max-propagates through arithmetic and is adjustable at run time
+  (`withDecimalPlaces` / `atDeclaredPrecision`). Same-unit quantities
+  convert freely across declared precisions; computed temporaries carry the
+  unit default.
 
 ### `morph::forms` — schemas for auto-built GUIs
 

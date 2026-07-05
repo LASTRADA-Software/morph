@@ -28,7 +28,11 @@ namespace lab {
 /// @brief Compute dry density from oven-dry mass and mould volume.
 struct ComputeDryDensity {
     Mass massDry{};
-    Volume volume{};
+
+    /// Declared-precision override: this field is specified to 4 decimals,
+    /// while the m³ unit default is 3 — the schema advertises
+    /// `x-decimalPlaces: 4` and the form input adapts automatically.
+    Quantity<Unit::m3, 4> volume{};
 
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };

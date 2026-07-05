@@ -74,9 +74,10 @@ consteval Unit operator/(Unit lhs, Unit rhs) {
     throw "lab::Unit: unsupported unit quotient";
 }
 
-/// @brief Shorthand for quantities in this unit system.
-template <Unit U>
-using Quantity = morph::units::Quantity<U>;
+/// @brief Shorthand for quantities in this unit system. The second argument
+///        overrides the field's declared precision (defaults from `UnitTraits`).
+template <Unit U, std::uint32_t Decimals = morph::units::UnitTraits<Unit>::meta(U).defaultDecimals>
+using Quantity = morph::units::Quantity<U, Decimals>;
 
 using Mass = Quantity<Unit::kg>;
 using Volume = Quantity<Unit::m3>;

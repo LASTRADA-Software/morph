@@ -23,6 +23,14 @@
 ///   nullable Rational payload; the unit appears only in generated JSON
 ///   Schemas (as `ExtUnits`) and in C++ types. A client cannot send a
 ///   mismatched unit.
+/// - **Precision is declared in the type; actual precision is runtime
+///   data.** Each field carries a *declared* decimal count as a template
+///   argument — defaulting from the unit's metadata, overridable per field
+///   (`Quantity<Unit::m3, 4>`) — which drives the schema's
+///   `x-decimalPlaces` and `FromDouble`. The value's *actual* precision is
+///   the runtime `DecimalPlaces` tag inside the Rational: it max-propagates
+///   through arithmetic and can be changed at run time
+///   (`withDecimalPlaces`, `atDeclaredPrecision`).
 /// - **Empty propagates.** Arithmetic on an empty quantity yields an empty
 ///   quantity (spreadsheet/SQL-NULL semantics). Division by zero also yields
 ///   empty — the framework cannot distinguish "no data" from "no result"
@@ -101,24 +109,84 @@ concept UnitEnum = std::is_enum_v<E> && requires(E unit) {
     { UnitTraits<E>::meta(unit) } -> std::convertible_to<UnitMeta>;
 };
 
-/// @brief A unit-tagged, optionally-empty exact value.
+/// @brief A unit-tagged, optionally-empty exact value with a *declared*
+///        precision in its type.
 ///
-/// Aggregate; default state is *empty* — a form draft starts blank while the
-/// unit (and its default precision) are already known from the type.
+/// Two precisions exist by design and must not be conflated:
 ///
-/// @tparam U An enumerator of an application unit enum satisfying `UnitEnum`.
-template <auto U>
+/// - **Declared precision** (`DeclaredDecimals`, a template argument): a
+///   property of the *field* — how many decimals this slot is specified to
+///   hold. It defaults from the unit's `UnitTraits` metadata and can be
+///   overridden per field (`Quantity<Unit::m3, 4>`). It feeds the generated
+///   schema (`x-decimalPlaces`), `FromDouble`, and `atDeclaredPrecision`.
+/// - **Actual precision**: a property of the *value* — the runtime
+///   `DecimalPlaces` tag inside the `Rational` payload. It propagates through
+///   arithmetic (max rule) and can be changed at run time
+///   (`withDecimalPlaces`).
+///
+/// Default state is *empty* — a form draft starts blank while the unit and
+/// the declared precision are already known from the type. Same-unit
+/// quantities convert freely across declared precisions (the value,
+/// including its runtime tag, carries over unchanged).
+///
+/// @tparam U                An enumerator of an application unit enum
+///                          satisfying `UnitEnum`.
+/// @tparam DeclaredDecimals Declared decimal places of the field; defaults
+///                          to the unit's `UnitMeta::defaultDecimals`.
+template <auto U, std::uint32_t DeclaredDecimals = UnitTraits<decltype(U)>::meta(U).defaultDecimals>
     requires UnitEnum<decltype(U)>
 struct Quantity {
+    static_assert(DeclaredDecimals >= 1 && DeclaredDecimals <= math::kMaxDecimalPlaces,
+                  "declared decimals must be within [1, kMaxDecimalPlaces]");
+
     /// @brief The payload; `std::nullopt` means "not entered / not measured".
     std::optional<math::Rational> value{};
+
+    /// @brief Constructs the empty state.
+    constexpr Quantity() noexcept = default;
+
+    /// @brief Engages with @p engaged (which keeps its own runtime precision).
+    /// @param engaged The exact value to hold.
+    constexpr Quantity(math::Rational engaged) noexcept : value{engaged} {}
+
+    /// @brief Adopts an optional payload as-is.
+    /// @param payload Engaged or empty payload.
+    constexpr Quantity(std::optional<math::Rational> payload) noexcept : value{payload} {}
+
+    /// @brief Converts from the same unit at another declared precision; the
+    ///        value and its runtime precision tag carry over unchanged.
+    /// @param other Same-unit quantity with a different declared precision.
+    template <std::uint32_t OtherDecimals>
+        requires(OtherDecimals != DeclaredDecimals)
+    constexpr Quantity(const Quantity<U, OtherDecimals>& other) noexcept : value{other.value} {}
 
     /// @brief The unit this quantity is denominated in (compile-time).
     static constexpr auto unit = U;
 
+    /// @brief Declared decimal places of this field (compile-time).
+    static constexpr std::uint32_t declaredDecimals = DeclaredDecimals;
+
     /// @brief The unit's static metadata (id, display text, default decimals).
     /// @return The `UnitMeta` from the application's `UnitTraits` specialisation.
     [[nodiscard]] static constexpr UnitMeta unitMeta() noexcept { return UnitTraits<decltype(U)>::meta(U); }
+
+    /// @brief The declared precision as a `DecimalPlaces` strong type.
+    /// @return `DecimalPlaces{declaredDecimals}`.
+    [[nodiscard]] static constexpr math::DecimalPlaces declaredPrecision() noexcept {
+        return math::DecimalPlaces{DeclaredDecimals};
+    }
+
+    /// @brief Converts a floating-point reading at the declared precision.
+    /// @param raw The value to convert.
+    /// @return The engaged quantity, or empty when @p raw is not finite or
+    ///         does not fit (empty-propagation philosophy: no error channel).
+    [[nodiscard]] static Quantity FromDouble(double raw) noexcept {
+        auto converted = math::Rational::FromFloat(raw, declaredPrecision());
+        if (!converted) {
+            return {};
+        }
+        return Quantity{*converted};
+    }
 
     /// @brief Whether a value has been entered/measured.
     /// @return `true` if the payload is engaged.
@@ -129,21 +197,55 @@ struct Quantity {
     /// @return The engaged exact value.
     [[nodiscard]] constexpr const math::Rational& operator*() const noexcept { return *value; }
 
-    /// @brief Ordering/equality on the payload; empty sorts before engaged
-    ///        (std::optional semantics), values compare exactly.
-    /// @param other Quantity of the same unit to compare against.
-    /// @return The ordering of the two payloads.
-    [[nodiscard]] constexpr auto operator<=>(const Quantity& other) const noexcept = default;
+    /// @brief Retags the value's *runtime* precision (the exact value itself
+    ///        is unchanged — precision only affects rounding and formatting).
+    /// @param newPrecision Runtime precision; silently clamped to the valid range.
+    /// @return The retagged quantity, or empty if this is empty.
+    [[nodiscard]] constexpr Quantity withDecimalPlaces(math::DecimalPlaces newPrecision) const noexcept {
+        if (!value) {
+            return {};
+        }
+        auto adjusted = *value;
+        adjusted.decimalPlaces = math::DecimalPlaces{math::detail::clampWireDecimalPlaces(newPrecision.value)};
+        return Quantity{adjusted};
+    }
+
+    /// @brief Retags the value's runtime precision to the declared one —
+    ///        e.g. before display, after arithmetic widened it.
+    /// @return The retagged quantity, or empty if this is empty.
+    [[nodiscard]] constexpr Quantity atDeclaredPrecision() const noexcept {
+        return withDecimalPlaces(declaredPrecision());
+    }
 };
+
+/// @brief Ordering across same-unit quantities of any declared precision;
+///        empty sorts before engaged, engaged values compare exactly.
+/// @param lhs Left operand.
+/// @param rhs Right operand (same unit, any declared precision).
+/// @return The ordering of the two payloads.
+template <auto U, std::uint32_t DecA, std::uint32_t DecB>
+[[nodiscard]] constexpr std::strong_ordering operator<=>(const Quantity<U, DecA>& lhs,
+                                                         const Quantity<U, DecB>& rhs) noexcept {
+    return lhs.value <=> rhs.value;
+}
+
+/// @brief Equality across same-unit quantities of any declared precision.
+/// @param lhs Left operand.
+/// @param rhs Right operand (same unit, any declared precision).
+/// @return `true` when both are empty or both engaged with equal values.
+template <auto U, std::uint32_t DecA, std::uint32_t DecB>
+[[nodiscard]] constexpr bool operator==(const Quantity<U, DecA>& lhs, const Quantity<U, DecB>& rhs) noexcept {
+    return lhs.value == rhs.value;
+}
 
 namespace detail {
 
-/// @brief Trait: is `T` some `Quantity<U>`?
+/// @brief Trait: is `T` some `Quantity<U, Decimals>`?
 template <typename T>
 struct IsQuantity : std::false_type {};
 
-template <auto U>
-struct IsQuantity<Quantity<U>> : std::true_type {};
+template <auto U, std::uint32_t Decimals>
+struct IsQuantity<Quantity<U, Decimals>> : std::true_type {};
 
 }  // namespace detail
 
@@ -153,41 +255,49 @@ inline constexpr bool is_quantity_v = detail::IsQuantity<std::remove_cvref_t<T>>
 
 // ---------------------------------------------------------------------------
 // Arithmetic. Empty propagates; division by zero yields empty.
+//
+// Binary results carry the unit's *default* declared precision: the declared
+// tag is a property of a declared field, not of a computed temporary (the
+// value's runtime precision still max-propagates inside Rational, and the
+// same-unit converting constructor stores results into fields with any
+// declared precision).
 // ---------------------------------------------------------------------------
 
-/// @brief Same-unit sum. Empty if either operand is empty.
+/// @brief Same-unit sum across any declared precisions. Empty if either
+///        operand is empty.
 /// @param lhs Left operand.
 /// @param rhs Right operand.
 /// @return The exact sum, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator+(const Quantity<U>& lhs, const Quantity<U>& rhs) noexcept {
+template <auto U, std::uint32_t DecA, std::uint32_t DecB>
+[[nodiscard]] constexpr Quantity<U> operator+(const Quantity<U, DecA>& lhs, const Quantity<U, DecB>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
         return {};
     }
     return Quantity<U>{*lhs.value + *rhs.value};
 }
 
-/// @brief Same-unit difference. Empty if either operand is empty.
+/// @brief Same-unit difference across any declared precisions. Empty if
+///        either operand is empty.
 /// @param lhs Left operand.
 /// @param rhs Right operand.
 /// @return The exact difference, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator-(const Quantity<U>& lhs, const Quantity<U>& rhs) noexcept {
+template <auto U, std::uint32_t DecA, std::uint32_t DecB>
+[[nodiscard]] constexpr Quantity<U> operator-(const Quantity<U, DecA>& lhs, const Quantity<U, DecB>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
         return {};
     }
     return Quantity<U>{*lhs.value - *rhs.value};
 }
 
-/// @brief Negation. Empty stays empty.
+/// @brief Negation. Empty stays empty; the declared precision is kept.
 /// @param operand Value to negate.
 /// @return The negated value, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator-(const Quantity<U>& operand) noexcept {
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] constexpr Quantity<U, Dec> operator-(const Quantity<U, Dec>& operand) noexcept {
     if (!operand.value) {
         return {};
     }
-    return Quantity<U>{-*operand.value};
+    return Quantity<U, Dec>{-*operand.value};
 }
 
 /// @brief Cross-unit product; the result unit is `A * B` per the application's
@@ -196,9 +306,10 @@ template <auto U>
 /// @param lhs Left operand.
 /// @param rhs Right operand.
 /// @return The exact product in the deduced unit, or empty.
-template <auto A, auto B>
+template <auto A, std::uint32_t DecA, auto B, std::uint32_t DecB>
     requires requires { typename std::type_identity_t<Quantity<A * B>>; }
-[[nodiscard]] constexpr Quantity<A * B> operator*(const Quantity<A>& lhs, const Quantity<B>& rhs) noexcept {
+[[nodiscard]] constexpr Quantity<A * B> operator*(const Quantity<A, DecA>& lhs,
+                                                  const Quantity<B, DecB>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
         return {};
     }
@@ -211,9 +322,10 @@ template <auto A, auto B>
 /// @param lhs Dividend.
 /// @param rhs Divisor.
 /// @return The exact quotient in the deduced unit, or empty.
-template <auto A, auto B>
+template <auto A, std::uint32_t DecA, auto B, std::uint32_t DecB>
     requires requires { typename std::type_identity_t<Quantity<A / B>>; }
-[[nodiscard]] constexpr Quantity<A / B> operator/(const Quantity<A>& lhs, const Quantity<B>& rhs) noexcept {
+[[nodiscard]] constexpr Quantity<A / B> operator/(const Quantity<A, DecA>& lhs,
+                                                  const Quantity<B, DecB>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
         return {};
     }
@@ -226,34 +338,39 @@ template <auto A, auto B>
     return Quantity<A / B>{*quotient};
 }
 
-/// @brief Scales by a dimensionless rational (unit unchanged).
+/// @brief Scales by a dimensionless rational (unit and declared precision
+///        unchanged).
 /// @param lhs    Quantity to scale.
 /// @param factor Dimensionless factor.
 /// @return The scaled quantity, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator*(const Quantity<U>& lhs, const math::Rational& factor) noexcept {
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] constexpr Quantity<U, Dec> operator*(const Quantity<U, Dec>& lhs,
+                                                   const math::Rational& factor) noexcept {
     if (!lhs.value) {
         return {};
     }
-    return Quantity<U>{*lhs.value * factor};
+    return Quantity<U, Dec>{*lhs.value * factor};
 }
 
-/// @brief Scales by a dimensionless rational (unit unchanged).
+/// @brief Scales by a dimensionless rational (unit and declared precision
+///        unchanged).
 /// @param factor Dimensionless factor.
 /// @param rhs    Quantity to scale.
 /// @return The scaled quantity, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator*(const math::Rational& factor, const Quantity<U>& rhs) noexcept {
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] constexpr Quantity<U, Dec> operator*(const math::Rational& factor,
+                                                   const Quantity<U, Dec>& rhs) noexcept {
     return rhs * factor;
 }
 
-/// @brief Divides by a dimensionless rational (unit unchanged). Empty when the
-///        quantity is empty or the divisor is zero.
+/// @brief Divides by a dimensionless rational (unit and declared precision
+///        unchanged). Empty when the quantity is empty or the divisor is zero.
 /// @param lhs     Quantity to divide.
 /// @param divisor Dimensionless divisor.
 /// @return The divided quantity, or empty.
-template <auto U>
-[[nodiscard]] constexpr Quantity<U> operator/(const Quantity<U>& lhs, const math::Rational& divisor) noexcept {
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] constexpr Quantity<U, Dec> operator/(const Quantity<U, Dec>& lhs,
+                                                   const math::Rational& divisor) noexcept {
     if (!lhs.value) {
         return {};
     }
@@ -261,7 +378,7 @@ template <auto U>
     if (!quotient) {
         return {};
     }
-    return Quantity<U>{*quotient};
+    return Quantity<U, Dec>{*quotient};
 }
 
 }  // namespace morph::units
@@ -270,23 +387,26 @@ template <auto U>
 // Glaze integration: wire shape + schema units.
 // ---------------------------------------------------------------------------
 
-/// @brief On the wire a Quantity is its nullable Rational payload — the unit
-///        never travels; it lives in the C++ type and in generated schemas.
-template <auto U>
-struct glz::meta<morph::units::Quantity<U>> {
-    static constexpr auto value = &morph::units::Quantity<U>::value;
+/// @brief On the wire a Quantity is its nullable Rational payload — neither
+///        the unit nor the declared precision travels; both live in the C++
+///        type and in generated schemas.
+template <auto U, std::uint32_t Dec>
+struct glz::meta<morph::units::Quantity<U, Dec>> {
+    static constexpr auto value = &morph::units::Quantity<U, Dec>::value;
     static constexpr std::string_view name = morph::units::UnitTraits<decltype(U)>::meta(U).id;
 };
 
 namespace glz::detail {
 
-/// @brief Schema generation for `Quantity<U>`: the nullable-Rational schema
-///        with the unit stamped on as `ExtUnits`, sourced from `UnitTraits`.
+/// @brief Schema generation for `Quantity<U, Dec>`: the nullable-Rational
+///        schema with the unit stamped on as `ExtUnits`, sourced from
+///        `UnitTraits` (the declared precision surfaces separately as
+///        `x-decimalPlaces` via `morph::forms::schemaJson`).
 ///
 /// `to_json_schema` is glaze's own per-type schema hook (every built-in type
 /// specialises it); glaze is pinned in the build, so relying on it is safe.
-template <auto U>
-struct to_json_schema<morph::units::Quantity<U>> {
+template <auto U, std::uint32_t Dec>
+struct to_json_schema<morph::units::Quantity<U, Dec>> {
     template <auto Opts>
     static void op(auto& s, auto& defs) {
         to_json_schema<std::optional<morph::math::Rational>>::template op<Opts>(s, defs);

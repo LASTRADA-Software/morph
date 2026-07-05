@@ -93,6 +93,9 @@ pointing it at a networked server later means swapping the transport inside
 
 - Units never appear in payloads — they live in the C++ types and the
   schemas, so a client cannot submit a mismatched unit.
+- `ComputeDryDensity.volume` demonstrates a field-level declared-precision
+  override (`Quantity<Unit::m3, 4>` vs the unit default of 3): the schema
+  advertises `x-decimalPlaces: 4` and both renderers adapt automatically.
 - Quantity JSON is the nullable exact rational `{"num","den","dp"}`;
   non-canonical or hostile payloads are canonicalised/clamped on read.
 - Both clients assemble the rational JSON from the typed digit string itself

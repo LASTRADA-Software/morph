@@ -10,9 +10,11 @@
 #include <array>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using morph::math::DecimalPlaces;
 using morph::math::Rational;
@@ -77,6 +79,19 @@ static_assert(morph::units::is_quantity_v<Q<QFUnit::kg>>);
 static_assert(!morph::units::is_quantity_v<Rational>);
 static_assert(!morph::units::is_quantity_v<std::optional<Q<QFUnit::kg>>>);
 
+// Declared precision: defaults from UnitTraits, overridable per field, and
+// binary results fall back to the unit default (a computed temporary is not
+// a declared field).
+using PreciseMass = morph::units::Quantity<QFUnit::kg, 5>;
+static_assert(Q<QFUnit::kg>::declaredDecimals == 3);
+static_assert(Q<QFUnit::percent>::declaredDecimals == 1);
+static_assert(PreciseMass::declaredDecimals == 5);
+static_assert(morph::units::is_quantity_v<PreciseMass>);
+static_assert(std::same_as<decltype(std::declval<PreciseMass>() + std::declval<Q<QFUnit::kg>>()), Q<QFUnit::kg>>);
+static_assert(std::same_as<decltype(std::declval<PreciseMass>() / std::declval<Q<QFUnit::m3>>()),
+                           Q<QFUnit::kg_per_m3>>);
+static_assert(std::same_as<decltype(-std::declval<PreciseMass>()), PreciseMass>);
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -101,14 +116,20 @@ struct QFComputeDryDensity {
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
+struct QFCalibrate {
+    morph::units::Quantity<QFUnit::kg, 5> referenceMass{};
+};
+
 struct QFLabModel {
     Q<QFUnit::kg_per_m3> execute(const QFComputeDryDensity& action) { return action.massDry / action.volume; }
     std::int64_t execute(const QFRecordMeasurement& action) { return action.sampleId; }
+    bool execute(const QFCalibrate& action) { return action.referenceMass.hasValue(); }
 };
 
 BRIDGE_REGISTER_MODEL(QFLabModel, "QFLabModel")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFComputeDryDensity, "QFComputeDryDensity")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFRecordMeasurement, "QFRecordMeasurement")
+BRIDGE_REGISTER_ACTION(QFLabModel, QFCalibrate, "QFCalibrate")
 
 // ---------------------------------------------------------------------------
 // Arithmetic semantics.
@@ -166,6 +187,46 @@ TEST_CASE("Quantity::Comparison", "[quantity]") {
     CHECK(kilograms(1) < kilograms(2));
     CHECK(kilograms(2, 4) == kilograms(1, 2));  // exact value equality
     CHECK(Q<QFUnit::kg>{} == Q<QFUnit::kg>{});
+
+    // Declared precisions are transparent to comparison and conversion.
+    PreciseMass const precise{Rational{1, 2, dp3}};
+    CHECK(precise == kilograms(1, 2));
+    CHECK(precise < kilograms(1));
+    Q<QFUnit::kg> const widened = precise;  // same unit, different declared precision
+    CHECK(widened == precise);
+}
+
+TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
+    // FromDouble converts at the field's declared precision.
+    auto const coarse = Q<QFUnit::kg>::FromDouble(2.5);
+    REQUIRE(coarse.hasValue());
+    CHECK(*coarse == Rational{5, 2, dp3});
+    CHECK((*coarse).GetDecimalPlaces() == dp3);
+
+    auto const fine = PreciseMass::FromDouble(2.5);
+    REQUIRE(fine.hasValue());
+    CHECK((*fine).GetDecimalPlaces() == DecimalPlaces{5});
+
+    CHECK_FALSE(Q<QFUnit::kg>::FromDouble(std::numeric_limits<double>::quiet_NaN()).hasValue());
+
+    // The value's runtime precision is data and can be retagged; the exact
+    // value never changes.
+    auto const retagged = coarse.withDecimalPlaces(DecimalPlaces{9});
+    REQUIRE(retagged.hasValue());
+    CHECK(*retagged == *coarse);
+    CHECK((*retagged).GetDecimalPlaces() == DecimalPlaces{9});
+    CHECK((*retagged.atDeclaredPrecision()).GetDecimalPlaces() == dp3);
+    CHECK_FALSE(Q<QFUnit::kg>{}.withDecimalPlaces(DecimalPlaces{9}).hasValue());
+
+    // Out-of-range runtime precision clamps silently (runtime data, no assert).
+    CHECK((*coarse.withDecimalPlaces(DecimalPlaces{99})).GetDecimalPlaces()
+          == DecimalPlaces{morph::math::kMaxDecimalPlaces});
+
+    // Mixed declared precisions combine; the runtime tag max-propagates.
+    auto const sum = fine + coarse;
+    REQUIRE(sum.hasValue());
+    CHECK(*sum == Rational{5, dp3});
+    CHECK((*sum).GetDecimalPlaces() == DecimalPlaces{5});
 }
 
 // ---------------------------------------------------------------------------
@@ -261,6 +322,14 @@ TEST_CASE("Forms::SchemaJson", "[forms]") {
 TEST_CASE("Forms::SchemaJson::AllFieldsRequiredWithoutOptOut", "[forms]") {
     auto const schema = morph::forms::schemaJson<QFComputeDryDensity>();
     CHECK(schema.find(R"("required":["massDry","volume"])") != std::string::npos);
+}
+
+TEST_CASE("Forms::SchemaJson::DeclaredPrecisionOverrideSurfaces", "[forms]") {
+    // A field-level declared-precision override (Quantity<kg, 5>) beats the
+    // unit default (3) in the generated schema.
+    auto const schema = morph::forms::schemaJson<QFCalibrate>();
+    CHECK(schema.find(R"("x-decimalPlaces":5)") != std::string::npos);
+    CHECK(schema.find(R"("required":["referenceMass"])") != std::string::npos);
 }
 
 TEST_CASE("Forms::SchemaJson::Memoized", "[forms]") {
