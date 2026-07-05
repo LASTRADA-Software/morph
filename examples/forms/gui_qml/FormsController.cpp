@@ -37,9 +37,21 @@ QString FormsController::schemasJson() const {
 }
 
 void FormsController::submit(const QString& actionType, const QString& bodyJson) {
-    auto const action = actionType.toStdString();
+    sendExecute(actionType, bodyJson, /*asOptions=*/false);
+}
+
+void FormsController::fetchOptions(const QString& optionsAction) {
+    sendExecute(optionsAction, QStringLiteral("{}"), /*asOptions=*/true);
+}
+
+void FormsController::sendExecute(const QString& actionType, const QString& bodyJson, bool asOptions) {
     if (_modelId.load() == 0) {
-        emit replyReceived(actionType, false, QStringLiteral("model not registered yet"));
+        auto const message = QStringLiteral("model not registered yet");
+        if (asOptions) {
+            emit optionsReceived(actionType, false, message);
+        } else {
+            emit replyReceived(actionType, false, message);
+        }
         return;
     }
 
@@ -48,10 +60,10 @@ void FormsController::submit(const QString& actionType, const QString& bodyJson)
     envelope.callId = _nextCallId.fetch_add(1);
     envelope.modelId = _modelId.load();
     envelope.modelType = "LabModel";
-    envelope.actionType = action;
+    envelope.actionType = actionType.toStdString();
     envelope.body = bodyJson.toStdString();
 
-    _server->handle(morph::wire::encode(envelope), [this, actionType](const std::string& replyJson) {
+    _server->handle(morph::wire::encode(envelope), [this, actionType, asOptions](const std::string& replyJson) {
         bool ok = false;
         QString payload;
         try {
@@ -63,7 +75,14 @@ void FormsController::submit(const QString& actionType, const QString& bodyJson)
         }
         // The reply lands on a worker-pool thread; hop to the GUI thread.
         QMetaObject::invokeMethod(
-            this, [this, actionType, ok, payload] { emit replyReceived(actionType, ok, payload); },
+            this,
+            [this, actionType, ok, payload, asOptions] {
+                if (asOptions) {
+                    emit optionsReceived(actionType, ok, payload);
+                } else {
+                    emit replyReceived(actionType, ok, payload);
+                }
+            },
             Qt::QueuedConnection);
     });
 }

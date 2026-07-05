@@ -4,6 +4,8 @@
 //   x-order          -> field order          required  -> asterisk + submit gate
 //   ExtUnits         -> unit suffix          minimum/maximum -> input hints
 //   x-decimalPlaces  -> quantity fields (decimal input -> exact {num,den,dp})
+//   x-optionsAction  -> combo box (options fetched by executing that action)
+//   format date-time -> ISO-8601 UTC text input
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -22,6 +24,8 @@ Frame {
     property var controller
 
     property var fieldValues: ({})
+    property var fieldOptions: ({})
+    property int optionsRevision: 0
     property bool ready: false
     property string previewLine: ""
     property string resultText: ""
@@ -54,11 +58,17 @@ Frame {
                 const p = resolveProp(raw)
                 const types = Array.isArray(p.type) ? p.type : (p.type === undefined ? [] : [p.type])
                 const dp = opt(raw["x-decimalPlaces"], p["x-decimalPlaces"])
+                const optionsAction = opt(raw["x-optionsAction"], p["x-optionsAction"])
                 const extUnits = opt(p.ExtUnits, {})
                 return {
                     name: name,
                     description: opt(p.description, ""),
                     unit: opt(extUnits.unitUnicode, opt(extUnits.unitAscii, "")),
+                    isChoice: optionsAction !== undefined,
+                    optionsAction: opt(optionsAction, ""),
+                    valueField: opt(opt(raw["x-optionValue"], p["x-optionValue"]), "id"),
+                    labelField: opt(opt(raw["x-optionLabel"], p["x-optionLabel"]), "name"),
+                    isDateTime: p.format === "date-time",
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
                     isInteger: types.indexOf("integer") !== -1,
@@ -95,7 +105,14 @@ Frame {
                     ok = false
                 continue
             }
-            if (f.isQuantity) {
+            if (f.isChoice) {
+                parts.push(JSON.stringify(f.name) + ":" + text)  // stored as a JSON literal
+            } else if (f.isDateTime) {
+                if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(text)) { ok = false; continue }
+                // The demo treats the entered time as UTC.
+                parts.push(JSON.stringify(f.name) + ":"
+                           + JSON.stringify((text.length === 16 ? text + ":00" : text) + "Z"))
+            } else if (f.isQuantity) {
                 if (!/^-?\d+(\.\d+)?$/.test(text)) { ok = false; continue }
                 // Reject more decimals than the field's declared precision
                 // instead of silently rounding them away.
@@ -125,6 +142,18 @@ Frame {
         revalidate()
     }
 
+    // Extracts the option rows from an options action's result: the result
+    // itself when it is an array, otherwise its first array-valued member.
+    function optionRows(result) {
+        if (Array.isArray(result))
+            return result
+        for (const key in result) {
+            if (Array.isArray(result[key]))
+                return result[key]
+        }
+        return []
+    }
+
     // If the reply is a bare rational, append its decimal reading.
     function humanize(payload) {
         try {
@@ -142,6 +171,21 @@ Frame {
                 return
             form.resultOk = ok
             form.resultText = ok ? form.humanize(payload) : payload
+        }
+        function onOptionsReceived(optionsAction, ok, payload) {
+            if (!ok)
+                return
+            let parsed
+            try { parsed = JSON.parse(payload) } catch (ignored) { return }
+            for (let i = 0; i < form.fields.length; ++i) {
+                const f = form.fields[i]
+                if (!f.isChoice || f.optionsAction !== optionsAction)
+                    continue
+                form.fieldOptions[f.name] = form.optionRows(parsed).map(function (row) {
+                    return { label: String(row[f.labelField]), valueJson: JSON.stringify(row[f.valueField]) }
+                })
+            }
+            form.optionsRevision++
         }
     }
 
@@ -189,11 +233,24 @@ Frame {
                 RowLayout {
                     Layout.fillWidth: true
 
-                    TextField {
+                    ComboBox {
+                        visible: fieldColumn.modelData.isChoice
                         Layout.fillWidth: true
-                        placeholderText: fieldColumn.modelData.isQuantity
-                                         ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
-                                         : (fieldColumn.modelData.isInteger ? "0" : "")
+                        textRole: "label"
+                        currentIndex: -1
+                        displayText: currentIndex < 0 ? "— select —" : currentText
+                        model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
+                        onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
+                    }
+
+                    TextField {
+                        visible: !fieldColumn.modelData.isChoice
+                        Layout.fillWidth: true
+                        placeholderText: fieldColumn.modelData.isDateTime
+                                         ? "YYYY-MM-DDTHH:MM:SS"
+                                         : (fieldColumn.modelData.isQuantity
+                                            ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
+                                            : (fieldColumn.modelData.isInteger ? "0" : ""))
                         inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                           ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                         onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
@@ -236,5 +293,11 @@ Frame {
         }
     }
 
-    Component.onCompleted: revalidate()
+    Component.onCompleted: {
+        revalidate()
+        for (let i = 0; i < fields.length; ++i) {
+            if (fields[i].isChoice)
+                controller.fetchOptions(fields[i].optionsAction)
+        }
+    }
 }

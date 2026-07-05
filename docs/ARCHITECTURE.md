@@ -23,7 +23,8 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
 | `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitEnum`, `isQuantity` |
-| `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()` |
+| `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
+| `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
 Every nested `detail` namespace under those topics holds implementation symbols. These do appear in some public signatures (e.g. `Bridge`'s constructor takes `unique_ptr<backend::detail::IBackend>`), but callers never type a detail name directly — `std::make_unique<morph::backend::LocalBackend>(...)` converts implicitly.
@@ -73,7 +74,9 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 | `file_action_log.hpp` | `FileActionLog` (`morph::journal::`) — append-only NDJSON `IActionLog`, `flush()` fsyncs |
 | `rational.hpp` | `Rational`, `DecimalPlaces`, `RationalError` (`morph::math::`) — exact int64 rational arithmetic with a decimal-precision tag; Glaze wire codec (`{"num","den","dp"}`, canonicalised on read) and `std::formatter` |
 | `quantity.hpp` | `Quantity<U>`, `UnitMeta`, `UnitTraits` (`morph::units::`) — unit-tagged optional value over `Rational`; units are application enum NTTPs, schemas get `ExtUnits` automatically |
-| `forms.hpp` | `schemaJson<A>()`, `allRequiredEngaged()` (`morph::forms::`) — JSON Schema per action with derived `required`, `x-decimalPlaces`, `x-order` |
+| `datetime.hpp` | `DateTime`, `Timestamp` (`morph::time::`) — UTC instant (ms precision) with a strict ISO-8601 wire codec (malformed input is a read *error*) and the optionally-empty field wrapper; schemas carry `"format": "date-time"` |
+| `choice.hpp` | `Choice<T, "ListX", "id", "name">`, `FixedString`, `isChoice` (`morph::forms::`) — a field whose options are the result of executing the named action; surfaces as `x-optionsAction`/`x-optionValue`/`x-optionLabel` in schemas, renders as a combo box |
+| `forms.hpp` | `schemaJson<A>()`, `allRequiredEngaged()`, `EmptyCapableField` (`morph::forms::`) — JSON Schema per action with derived `required`, `x-decimalPlaces`, `x-order`, `x-options*` |
 | `backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
 | `remote.hpp` | `RemoteServer` (now with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
 | `bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (now carrying `contextKey`), `MemberPointerTraits` (detail) |
@@ -481,10 +484,33 @@ closes the gaps a form renderer needs:
   layout survives schema round-trips through order-losing DOMs.
 
 `allRequiredEngaged(action)` is the matching readiness predicate ("every
-required `Quantity` is engaged") intended as the body of the action's
+required empty-capable field is engaged" — `Quantity`, `Choice`, `Timestamp`,
+or any type with a `hasValue()`) intended as the body of the action's
 `validate()` — which the existing `ActionValidator` resolution picks up
 automatically. One declaration then drives the schema's `required` array, the
 client-side submit gate, and the fielded-action readiness check.
+
+### `morph::time::Timestamp` and `morph::forms::Choice` — dates and combo boxes
+
+Two further field types follow the same one-kind-of-empty pattern:
+
+- **`Timestamp`** (over `morph::time::DateTime`, adapted from LASTRADA
+  `Toolbox/Chrono.hpp`): a UTC instant travelling as a strict ISO-8601 string
+  (`"2026-07-05T14:30:00.000Z"`). The parser is hand-rolled (no locale, no
+  `std::chrono::parse`) so behaviour is identical across standard libraries,
+  and — unlike the clamping `Rational` codec — a malformed timestamp is a
+  JSON **read error**: there is no meaningful clamp for a mistyped instant.
+  Schemas carry the standard `"format": "date-time"` annotation.
+- **`Choice<T, "ListSamples", "id", "name">`**: declares in the type that the
+  field is *not free input* — its options are the rows returned by executing
+  the named action (itself just a registered action, typically
+  `Loggable::No`). The schema carries `x-optionsAction`/`x-optionValue`/
+  `x-optionLabel`; renderers execute the options action, build a combo box
+  from the rows, and submit the selected `valueField` as the payload. On the
+  wire a `Choice` is its bare nullable value — options metadata never
+  travels. The demo's HTML page resolves options at emit time (a static page
+  cannot fetch); the QML client fetches them live over the same in-process
+  wire it submits on.
 
 ## Known limitations
 
@@ -540,3 +566,5 @@ If `runFor(timeout)` returns because the timeout expired rather than because the
 | One optionality: empty state inside `Quantity` | Drafts and lab data genuinely have "no value yet" with the unit still known; a second `std::optional` wrapper would split one concept across two types. |
 | Units are enum NTTPs with app-defined algebra | Mixing units is a compile error and result units are deduced, while morph stays domain-agnostic — the application owns the enum, metadata, and algebra. |
 | `required` derived from types + one opt-out list | The same declaration drives the schema, the client submit gate, and `validate()` — required-ness cannot drift between server and GUI. |
+| Combo-box options declared as an action reference (`Choice<T, "ListX">`) | Option lists are living data, so the single source is the action that serves them; the schema only carries the *reference*, and every renderer resolves it through the same dispatch seam as submits. |
+| Strict (non-clamping) datetime codec | `Rational` clamps hostile input because any int pair still denotes a value; a malformed timestamp denotes nothing — rejecting the read beats fabricating an epoch. |

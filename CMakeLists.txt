@@ -82,6 +82,8 @@ target_sources(morph
         include/morph/file_action_log.hpp
         include/morph/rational.hpp
         include/morph/quantity.hpp
+        include/morph/datetime.hpp
+        include/morph/choice.hpp
         include/morph/forms.hpp
         include/morph/registry.hpp
         include/morph/backend.hpp

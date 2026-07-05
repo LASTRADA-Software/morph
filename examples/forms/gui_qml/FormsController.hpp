@@ -38,12 +38,25 @@ public:
     ///        The reply arrives via `replyReceived` on the GUI thread.
     Q_INVOKABLE void submit(const QString& actionType, const QString& bodyJson);
 
+    /// @brief Executes @p optionsAction with an empty body to fetch combo-box
+    ///        options (a `Choice` field's declared provider). The reply
+    ///        arrives via `optionsReceived` on the GUI thread.
+    Q_INVOKABLE void fetchOptions(const QString& optionsAction);
+
 signals:
     /// @brief Emitted once per `submit`. @p payload is the result JSON when
     ///        @p ok, otherwise the server's error message.
     void replyReceived(const QString& actionType, bool ok, const QString& payload);
 
+    /// @brief Emitted once per `fetchOptions`. @p payload is the options
+    ///        action's result JSON when @p ok, otherwise the error message.
+    void optionsReceived(const QString& optionsAction, bool ok, const QString& payload);
+
 private:
+    /// @brief Shared envelope send: emits @p asOptions ? optionsReceived
+    ///        : replyReceived on the GUI thread when the reply lands.
+    void sendExecute(const QString& actionType, const QString& bodyJson, bool asOptions);
+
     std::shared_ptr<morph::backend::RemoteServer> _server;
     std::atomic<std::uint64_t> _modelId{0};
     std::atomic<std::uint64_t> _nextCallId{1};

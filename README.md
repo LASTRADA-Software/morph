@@ -231,6 +231,13 @@ struct LabModel {
   overridden (`Quantity<Unit::m3, 4>`) — which becomes the form's input step
   (`x-decimalPlaces`); the value's actual precision stays runtime data that
   propagates through arithmetic and can be retagged (`withDecimalPlaces`).
+- `morph::time::Timestamp` fields travel as strict ISO-8601 UTC strings and
+  render as date-time inputs (`"format": "date-time"`); malformed timestamps
+  are wire *errors*, not clamped values.
+- `morph::forms::Choice<std::int64_t, "ListSamples">` declares a combo box:
+  the options are the rows returned by executing the named action, referenced
+  from the schema via `x-optionsAction` — the option list stays living data
+  served by the model, never a copy baked into the form.
 - A `Quantity` can be *empty* ("not measured yet"). A field is required unless
   it is `std::optional` or listed in the action's `optionalFields` opt-out —
   the same declaration drives the schema's `required` array, the form's

@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <morph/choice.hpp>
+#include <morph/datetime.hpp>
 #include <morph/forms.hpp>
 #include <morph/quantity.hpp>
 #include <morph/rational.hpp>
@@ -8,13 +10,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <concepts>
 #include <cstdint>
+#include <format>
 #include <limits>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 using morph::math::DecimalPlaces;
 using morph::math::Rational;
@@ -130,16 +135,43 @@ struct QFCalibrate {
     morph::units::Quantity<QFUnit::kg, 5> referenceMass;
 };
 
+struct QFSlotInfo {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+struct QFSlotList {
+    std::vector<QFSlotInfo> slots;
+};
+
+struct QFListSlots {};
+
+struct QFSchedule {
+    morph::forms::Choice<std::int64_t, "QFListSlots"> slot;
+    morph::time::Timestamp startsAt;
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+
 struct QFLabModel {
     Q<QFUnit::kg_per_m3> execute(const QFComputeDryDensity& action) { return action.massDry / action.volume; }
     std::int64_t execute(const QFRecordMeasurement& action) { return action.sampleId; }
     bool execute(const QFCalibrate& action) { return action.referenceMass.hasValue(); }
+    QFSlotList execute(const QFListSlots& action) {
+        static_cast<void>(action);
+        return QFSlotList{.slots = {{.id = 4, .name = "Morning"}, {.id = 9, .name = "Afternoon"}}};
+    }
+    std::string execute(const QFSchedule& action) {
+        return std::format("slot {} at {}", *action.slot, *action.startsAt);
+    }
 };
 
 BRIDGE_REGISTER_MODEL(QFLabModel, "QFLabModel")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFComputeDryDensity, "QFComputeDryDensity")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFRecordMeasurement, "QFRecordMeasurement")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFCalibrate, "QFCalibrate")
+BRIDGE_REGISTER_ACTION(QFLabModel, QFListSlots, "QFListSlots", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(QFLabModel, QFSchedule, "QFSchedule")
 
 // ---------------------------------------------------------------------------
 // Arithmetic semantics.
@@ -378,4 +410,106 @@ TEST_CASE("Forms::DispatchQuantityActionThroughRegistry", "[forms][quantity]") {
     auto const result = ActionTraits<QFComputeDryDensity>::resultFromJson(resultJson);
     REQUIRE(result.hasValue());
     CHECK(*result == Rational{5301, 2, dp1});
+}
+
+// ---------------------------------------------------------------------------
+// Choice fields: declared options provider + wire + schema + engagement.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+using SlotChoice = morph::forms::Choice<std::int64_t, "QFListSlots">;
+using CodeChoice = morph::forms::Choice<std::string, "QFListCodes", "code", "title">;
+
+static_assert(SlotChoice::optionsAction() == "QFListSlots");
+static_assert(SlotChoice::valueField() == "id");
+static_assert(SlotChoice::labelField() == "name");
+static_assert(CodeChoice::valueField() == "code");
+static_assert(CodeChoice::labelField() == "title");
+static_assert(morph::forms::isChoice<SlotChoice>);
+static_assert(!morph::forms::isChoice<Q<QFUnit::kg>>);
+static_assert(morph::forms::EmptyCapableField<SlotChoice>);
+static_assert(morph::forms::EmptyCapableField<morph::time::Timestamp>);
+static_assert(morph::forms::EmptyCapableField<Q<QFUnit::kg>>);
+static_assert(!morph::forms::EmptyCapableField<std::int64_t>);
+
+}  // namespace
+
+TEST_CASE("Choice::EmptyStateAndWire", "[forms]") {
+    SlotChoice blank;
+    CHECK_FALSE(blank.hasValue());
+    CHECK(SlotChoice{std::optional<std::int64_t>{}} == blank);
+
+    auto const engaged = SlotChoice{9};
+    CHECK(engaged.hasValue());
+    CHECK(*engaged == 9);
+
+    QFSchedule action;
+    action.slot = engaged;
+    action.startsAt = morph::time::Timestamp{morph::time::DateTime{
+        std::chrono::year{2026}, std::chrono::month{7}, std::chrono::day{6}, std::chrono::hours{9},
+        std::chrono::minutes{0}, std::chrono::seconds{0}}};
+
+    // On the wire a Choice is its bare underlying value; the options
+    // metadata never travels.
+    auto const json = glz::write_json(action);
+    REQUIRE(json.has_value());
+    CHECK(*json == R"({"slot":9,"startsAt":"2026-07-06T09:00:00.000Z"})");
+
+    QFSchedule restored{};
+    REQUIRE_FALSE(glz::read_json(restored, *json));
+    CHECK(restored.slot == action.slot);
+    CHECK(restored.startsAt == action.startsAt);
+
+    // Explicit null clears the selection.
+    REQUIRE_FALSE(glz::read_json(restored, R"({"slot":null})"));
+    CHECK_FALSE(restored.slot.hasValue());
+
+    // String-valued choices work the same way.
+    CodeChoice code{std::string{"EN-13286"}};
+    CHECK(*code == "EN-13286");
+}
+
+TEST_CASE("Choice::DrivesReadiness", "[forms]") {
+    QFSchedule draft;
+    CHECK_FALSE(draft.validate());
+    draft.slot = 4;
+    CHECK_FALSE(draft.validate());  // timestamp still missing
+    draft.startsAt = morph::time::Timestamp::now();
+    CHECK(draft.validate());
+    CHECK_FALSE(morph::model::ActionValidator<QFSchedule>::ready(QFSchedule{}));
+}
+
+TEST_CASE("Forms::SchemaJson::ChoiceAndDateTime", "[forms]") {
+    auto const schema = morph::forms::schemaJson<QFSchedule>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    // The declared options provider and its row fields surface as x- keys.
+    CHECK(schema.contains(R"("x-optionsAction":"QFListSlots")"));
+    CHECK(schema.contains(R"("x-optionValue":"id")"));
+    CHECK(schema.contains(R"("x-optionLabel":"name")"));
+
+    // The timestamp carries the standard date-time format annotation.
+    CHECK(schema.contains(R"("format":"date-time")"));
+
+    // Both fields are required (non-optional, no opt-out).
+    CHECK(schema.contains(R"("required":["slot","startsAt"])"));
+}
+
+TEST_CASE("Forms::DispatchChoiceActionThroughRegistry", "[forms]") {
+    using morph::model::ActionTraits;
+
+    auto holder = morph::model::detail::ModelFactory::create<QFLabModel>();
+
+    // The options provider is itself just an action.
+    auto const rows = morph::model::detail::ActionDispatcher::instance().dispatch("QFLabModel", "QFListSlots",
+                                                                                  *holder, "{}");
+    CHECK(rows == R"({"slots":[{"id":4,"name":"Morning"},{"id":9,"name":"Afternoon"}]})");
+
+    // Submitting the selected value round-trips through the same seam.
+    auto const result = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "QFLabModel", "QFSchedule", *holder, R"({"slot":4,"startsAt":"2026-07-06T09:00:00Z"})");
+    CHECK(ActionTraits<QFSchedule>::resultFromJson(result) == "slot 4 at 2026-07-06T09:00:00.000Z");
 }

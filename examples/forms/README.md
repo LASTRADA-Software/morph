@@ -56,9 +56,12 @@ in `optionalFields`, `note` because it is `std::optional`:
 ```
 
 Open `forms_demo.html` in a browser. The page contains no knowledge of the
-actions — a ~150-line vanilla-JS renderer builds each form from the embedded
-schema: field order, labels, unit suffixes, decimal steps, min/max, required
-markers, and a submit gate. Filling a form produces a line like
+actions — a vanilla-JS renderer builds each form from the embedded schema:
+field order, labels, unit suffixes, decimal steps, min/max, required markers,
+a date-time input for the `format: "date-time"` field, a combo box for the
+`x-optionsAction` field (its options were resolved at emit time by executing
+`ListSamples`; the QML client fetches them live instead), and a submit gate.
+Filling a form produces a line like
 
 ```
 ComputeDryDensity {"massDry":{"num":26505,"den":10,"dp":1},"volume":{"num":1,"den":1,"dp":3}}
@@ -96,6 +99,12 @@ pointing it at a networked server later means swapping the transport inside
 - `ComputeDryDensity.volume` demonstrates a field-level declared-precision
   override (`Quantity<Unit::m3, 4>` vs the unit default of 3): the schema
   advertises `x-decimalPlaces: 4` and both renderers adapt automatically.
+- `RecordMeasurement.sampleId` is a `Choice<std::int64_t, "ListSamples">`:
+  the combo box options are served by the `ListSamples` action and referenced
+  from the schema (`x-optionsAction`), never baked into the form definition.
+- `RecordMeasurement.measuredAt` is a `morph::time::Timestamp`: ISO-8601 UTC
+  on the wire, `format: "date-time"` in the schema, and a malformed string is
+  rejected as a wire error (try it in the REPL).
 - Quantity JSON is the nullable exact rational `{"num","den","dp"}`;
   non-canonical or hostile payloads are canonicalised/clamped on read.
 - Both clients assemble the rational JSON from the typed digit string itself

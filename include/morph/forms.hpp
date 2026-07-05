@@ -23,6 +23,14 @@
 /// - **`x-order`** — the member's declaration index on every property, so a
 ///   renderer can lay fields out in declaration order (JSON object key order
 ///   is not reliable once schemas pass through DOMs/maps).
+/// - **`x-optionsAction` / `x-optionValue` / `x-optionLabel`** — for
+///   `morph::forms::Choice` members: which registered action serves the
+///   options, and which result-row fields carry the submitted value and the
+///   display label. Renderers turn these into combo boxes populated by
+///   executing the named action.
+///
+/// `morph::time::Timestamp` members need no extension keys: their schema
+/// carries the standard `"format": "date-time"` annotation.
 ///
 /// @par Declaring optional fields
 /// Required is the default. An action opts individual fields out with a
@@ -40,7 +48,8 @@
 ///
 /// @par Readiness helper
 /// `allRequiredEngaged(action)` returns `true` when every *required*
-/// `Quantity` member is engaged. Wire it up as the action's `validate()`
+/// empty-capable member (`Quantity`, `Choice`, `Timestamp` — anything with a
+/// `hasValue()`) is engaged. Wire it up as the action's `validate()`
 /// (the existing `ActionValidator` machinery picks that method up
 /// automatically) so the same declaration drives the schema's `required`
 /// array, the client-side submit gate, and the fielded-action readiness
@@ -57,9 +66,17 @@
 #include <type_traits>
 #include <utility>
 
+#include "choice.hpp"
 #include "quantity.hpp"
 
 namespace morph::forms {
+
+/// @brief Concept: a field type with an internal empty state (`Quantity`,
+///        `Choice`, `Timestamp`, or any user type exposing `hasValue()`).
+template <typename T>
+concept EmptyCapableField = requires(const T& field) {
+    { field.hasValue() } -> std::convertible_to<bool>;
+};
 
 namespace detail {
 
@@ -139,6 +156,13 @@ template <typename A>
             // field's type overrides it (Quantity<Unit::m3, 4>).
             property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
         }
+        if constexpr (isChoice<Member>) {
+            // Which action serves the options, and which result-row fields
+            // carry the submitted value / display label.
+            property["x-optionsAction"] = std::string{Member::optionsAction()};
+            property["x-optionValue"] = std::string{Member::valueField()};
+            property["x-optionLabel"] = std::string{Member::labelField()};
+        }
     });
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
@@ -152,20 +176,22 @@ template <typename A>
 
 }  // namespace detail
 
-/// @brief Whether every required `morph::units::Quantity` member of
-///        @p action is engaged (has a value).
+/// @brief Whether every required empty-capable member of @p action is
+///        engaged (has a value).
 ///
-/// Required means: not a `std::optional<...>` member and not listed in
-/// `A::optionalFields`. Intended as the body of the action's `validate()`.
+/// Empty-capable covers `Quantity`, `Choice`, `Timestamp`, and any user type
+/// satisfying `EmptyCapableField`. Required means: not a `std::optional<...>`
+/// member and not listed in `A::optionalFields`. Intended as the body of the
+/// action's `validate()`.
 /// @tparam A     Action type (a reflectable aggregate).
-/// @param action Draft whose quantity fields are checked.
-/// @return `true` when no required quantity is empty.
+/// @param action Draft whose fields are checked.
+/// @return `true` when no required empty-capable field is empty.
 template <typename A>
 [[nodiscard]] constexpr bool allRequiredEngaged(const A& action) noexcept {
     bool allEngaged = true;
     detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
-        if constexpr (units::isQuantity<Member>) {
+        if constexpr (EmptyCapableField<Member>) {
             if (!detail::declaredOptional<A>(name) && !member.hasValue()) {
                 allEngaged = false;
             }
