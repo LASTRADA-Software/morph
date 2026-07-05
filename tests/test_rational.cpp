@@ -358,6 +358,15 @@ TEST_CASE("Rational::FromFloat::ErrorPaths", "[rational]")
     auto const overflow = Rational::FromFloat(1e20, dp9);
     REQUIRE_FALSE(overflow.has_value());
     CHECK(overflow.error() == RationalError::Overflow);
+
+    // Near the 2^63 boundary: just under scales fine, just over is rejected
+    // (the guard compares against 2^63 exactly, so this holds even where
+    // long double == double and casting INT64_MAX would round up).
+    auto const justUnder = Rational::FromFloat(4.0e17, dp1);  // scaled 4e18 < 2^63
+    REQUIRE(justUnder.has_value());
+    auto const justOver = Rational::FromFloat(1.0e18, dp1);  // scaled 1e19 > 2^63
+    REQUIRE_FALSE(justOver.has_value());
+    CHECK(justOver.error() == RationalError::Overflow);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +380,8 @@ TEST_CASE("Rational::ExactArithmetic", "[rational]")
     CHECK(Rational { 1, 10, dp9 } + Rational { 2, 10, dp9 } == Rational { 3, 10, dp9 });
     CHECK(Rational { 1, 7, dp9 } * Rational { 7, dp9 } == Rational::One(dp9));
     CHECK(Rational { 5, 6, dp9 } - Rational { 1, 6, dp9 } == Rational { 2, 3, dp9 });
+    // Negative left operand exercises the sign handling in the cross-cancel.
+    CHECK(Rational { -2, 3, dp9 } * Rational { 3, 2, dp9 } == -Rational::One(dp9));
 
     auto const tenth = Rational { 1, 10, dp9 };
     auto const fifth = Rational { 1, 5, dp9 };
@@ -693,8 +704,92 @@ TEST_CASE("Rational::Mixed::FloatInheritsRationalPrecision", "[rational]")
 }
 
 // ---------------------------------------------------------------------------
+// Rational — predicates, rounding fallback, and exact-comparison extremes
+// (morph additions)
+// ---------------------------------------------------------------------------
+
+TEST_CASE("Rational::Predicates::IsNegative", "[rational]")
+{
+    CHECK(Rational { -1, 2, dp9 }.IsNegative());
+    CHECK(Rational { 1, -2, dp9 }.IsNegative());
+    CHECK_FALSE(Rational { 1, 2, dp9 }.IsNegative());
+    CHECK_FALSE(Rational::Zero(dp9).IsNegative());
+}
+
+TEST_CASE("Rational::ToDouble::OverlargePrecisionFallsBackUnrounded", "[rational]")
+{
+    // Requested precision beyond 18 cannot be scaled in int64; the conversion
+    // falls back to the unrounded quotient.
+    auto const oneThird = Rational { 1, 3, dp9 };
+    CHECK(oneThird.ToDouble(19) == Catch::Approx(1.0 / 3.0).epsilon(1e-15));
+    CHECK(oneThird.ToDouble(99) == Catch::Approx(1.0 / 3.0).epsilon(1e-15));
+}
+
+TEST_CASE("Rational::Mixed::ErrorPropagation::EveryOperatorBothSides", "[rational]")
+{
+    auto const poisoned = Rational::One(dp9) / Rational::Zero(dp9);
+    REQUIRE_FALSE(poisoned.has_value());
+
+    auto const leftMinus = poisoned - Rational::One(dp9);
+    REQUIRE_FALSE(leftMinus.has_value());
+    CHECK(leftMinus.error() == RationalError::DivisionByZero);
+
+    auto const leftDiv = poisoned / Rational::One(dp9);
+    REQUIRE_FALSE(leftDiv.has_value());
+    CHECK(leftDiv.error() == RationalError::DivisionByZero);
+
+    auto const rightDiv = Rational::One(dp9) / poisoned;
+    REQUIRE_FALSE(rightDiv.has_value());
+    CHECK(rightDiv.error() == RationalError::DivisionByZero);
+
+    auto const rightMinus = Rational::One(dp9) - poisoned;
+    REQUIRE_FALSE(rightMinus.has_value());
+    CHECK(rightMinus.error() == RationalError::DivisionByZero);
+}
+
+TEST_CASE("Rational::Comparison::ExactAtInt64Extremes", "[rational]")
+{
+    // The cross products of these two differ by exactly 1 at ~2^124 — a
+    // long-double comparison would round both to the same value and call
+    // them equal. The 128-bit comparison must not.
+    auto constexpr big = std::int64_t { 1 } << 62;
+    auto const left = Rational { big + 1, big, dp9 };    // 1 + 1/2^62
+    auto const right = Rational { big, big - 1, dp9 };   // 1 + 1/(2^62-1)
+
+    CHECK(left != right);
+    CHECK(left < right);
+    CHECK((left <=> right) == std::strong_ordering::less);
+    CHECK((right <=> left) == std::strong_ordering::greater);
+
+    // The negative mirror flips the ordering (both directions)...
+    CHECK(-left > -right);
+    CHECK(((-left) <=> (-right)) == std::strong_ordering::greater);
+    CHECK(((-right) <=> (-left)) == std::strong_ordering::less);
+    // ...and equal values stay equal through the sign-flipped path.
+    CHECK(((-left) <=> (-left)) == std::strong_ordering::equal);
+
+    // Canonical zeros compare equal regardless of precision.
+    CHECK((Rational::Zero(dp3) <=> Rational::Zero(dp9)) == std::strong_ordering::equal);
+}
+
+// ---------------------------------------------------------------------------
 // Rational — Glaze wire codec (morph addition)
 // ---------------------------------------------------------------------------
+
+TEST_CASE("Rational::Wire::Int64MinComponentsClamp", "[rational]")
+{
+    // INT64_MIN cannot be negated; the codec clamps it to -INT64_MAX so the
+    // canonicalising constructor (and later arithmetic) stays defined.
+    Rational numeratorCase {};
+    REQUIRE_FALSE(glz::read_json(numeratorCase, R"({"num":-9223372036854775808,"den":2,"dp":1})"));
+    CHECK(numeratorCase.denominator > 0);
+    CHECK(numeratorCase == Rational { -std::numeric_limits<std::int64_t>::max(), 2, dp1 });
+
+    Rational denominatorCase {};
+    REQUIRE_FALSE(glz::read_json(denominatorCase, R"({"num":3,"den":-9223372036854775808,"dp":1})"));
+    CHECK(denominatorCase.denominator > 0);
+    CHECK(denominatorCase.IsNegative());
+}
 
 TEST_CASE("Rational::Wire::RoundTrip", "[rational]")
 {

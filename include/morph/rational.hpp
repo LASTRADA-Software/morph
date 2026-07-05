@@ -78,10 +78,13 @@
 /// (`den == 0`, out-of-range `dp`) always lands as a valid, reduced value.
 ///
 /// @note Negating a `Rational` built from `INT64_MIN` overflows; avoid that
-///       extreme value.
-/// @note Comparison cross-multiplies through `long double`. Products beyond
-///       ~2^63 per side can exceed the 64-bit mantissa and misorder extreme
-///       values (on MSVC `long double == double`, so headroom is smaller).
+///       extreme value in code (the wire codec clamps it away for untrusted
+///       input).
+/// @note Comparison is exact over the full int64 range (128-bit cross
+///       products). Arithmetic, however, has the usual fixed-width envelope:
+///       `+`, `-`, `*` overflow int64 when reduced cross terms exceed ~2^63
+///       (e.g. sums over large coprime denominators). Keep operands within
+///       the decimal-scaled ranges the precision tags imply.
 
 #include <glaze/glaze.hpp>
 
@@ -110,9 +113,13 @@ struct DecimalPlaces {
     constexpr DecimalPlaces() noexcept = default;
 
     /// @brief Explicit so a bare integer never silently becomes a precision.
+    /// @param raw The digit count to box.
     constexpr explicit DecimalPlaces(std::uint32_t raw) noexcept : value{raw} {}
 
-    [[nodiscard]] constexpr auto operator<=>(const DecimalPlaces&) const noexcept = default;
+    /// @brief Value ordering/equality on the raw digit count.
+    /// @param other Precision to compare against.
+    /// @return The ordering of the two raw counts.
+    [[nodiscard]] constexpr auto operator<=>(const DecimalPlaces& other) const noexcept = default;
 };
 
 /// @brief Largest decimal precision the type supports: `10^18` is the
@@ -128,9 +135,9 @@ enum class RationalError : std::uint8_t {
 
 namespace detail {
 
-/// @brief Clamps a raw precision into `[1, kMaxDecimalPlaces]`, asserting in debug.
-[[nodiscard]] inline constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
-    assert(rawDecimalPlaces >= 1 && rawDecimalPlaces <= kMaxDecimalPlaces);
+/// @brief Clamps a raw precision into `[1, kMaxDecimalPlaces]` silently — for
+///        untrusted wire input.
+[[nodiscard]] inline constexpr std::uint32_t clampWireDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
     if (rawDecimalPlaces < 1) {
         return 1;
     }
@@ -140,15 +147,44 @@ namespace detail {
     return rawDecimalPlaces;
 }
 
-/// @brief Clamps like `clampDecimalPlaces` but silently — for untrusted wire input.
-[[nodiscard]] inline constexpr std::uint32_t clampWireDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
-    if (rawDecimalPlaces < 1) {
-        return 1;
-    }
-    if (rawDecimalPlaces > kMaxDecimalPlaces) {
-        return kMaxDecimalPlaces;
-    }
-    return rawDecimalPlaces;
+/// @brief Clamps like `clampWireDecimalPlaces` but asserts in debug — for
+///        call sites that state a precision in code, where out-of-range is a bug.
+[[nodiscard]] inline constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
+    assert(rawDecimalPlaces >= 1 && rawDecimalPlaces <= kMaxDecimalPlaces);
+    return clampWireDecimalPlaces(rawDecimalPlaces);
+}
+
+/// @brief A 64x64 -> 128-bit unsigned product, comparable high-word-first.
+struct U128 {
+    std::uint64_t hi{};
+    std::uint64_t lo{};
+    [[nodiscard]] constexpr auto operator<=>(const U128&) const noexcept = default;
+};
+
+/// @brief Multiplies two u64 exactly into 128 bits (for exact fraction comparison).
+[[nodiscard]] inline constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
+#if defined(__SIZEOF_INT128__)
+    auto const product = static_cast<unsigned __int128>(lhs) * rhs;
+    return U128{static_cast<std::uint64_t>(product >> 64), static_cast<std::uint64_t>(product)};
+#else
+    // Portable 32-bit limb multiplication (MSVC has no __int128).
+    constexpr std::uint64_t mask = 0xffffffffULL;
+    auto const lhsLow = lhs & mask;
+    auto const lhsHigh = lhs >> 32;
+    auto const rhsLow = rhs & mask;
+    auto const rhsHigh = rhs >> 32;
+    auto const lowLow = lhsLow * rhsLow;
+    auto const lowHigh = lhsLow * rhsHigh;
+    auto const highLow = lhsHigh * rhsLow;
+    auto const highHigh = lhsHigh * rhsHigh;
+    auto const mid = (lowLow >> 32) + (lowHigh & mask) + (highLow & mask);
+    return U128{highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32), (mid << 32) | (lowLow & mask)};
+#endif
+}
+
+/// @brief Magnitude of a signed 64-bit value as u64; well-defined for INT64_MIN.
+[[nodiscard]] inline constexpr std::uint64_t absU64(std::int64_t value) noexcept {
+    return value < 0 ? 0ULL - static_cast<std::uint64_t>(value) : static_cast<std::uint64_t>(value);
 }
 
 }  // namespace detail
@@ -190,7 +226,11 @@ struct Rational {
         canonicalise();
     }
 
-    /// @brief Validating factory: returns `DivisionByZero` if @p wantedDenominator is 0.
+    /// @brief Validating factory.
+    /// @param wantedNumerator   Signed numerator.
+    /// @param wantedDenominator Denominator; `0` is rejected instead of clamped.
+    /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
+    /// @return The canonical rational, or `DivisionByZero` if @p wantedDenominator is 0.
     [[nodiscard]] static constexpr std::expected<Rational, RationalError> From(
         std::int64_t wantedNumerator, std::int64_t wantedDenominator, DecimalPlaces wantedPrecision) noexcept {
         if (wantedDenominator == 0) {
@@ -200,50 +240,69 @@ struct Rational {
     }
 
     /// @brief Converts a `double` to a Rational scaled to @p wantedPrecision.
+    /// @param value           Source value.
+    /// @param wantedPrecision Decimal precision to scale to.
     /// @return A canonical Rational, or an error (NotFinite / Overflow).
     /// @note `noexcept` but not `constexpr` — uses `std::llround` / `std::isfinite`.
     [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(double value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Converts a `float` to a Rational scaled to @p wantedPrecision.
+    /// @param value           Source value.
+    /// @param wantedPrecision Decimal precision to scale to.
+    /// @return A canonical Rational, or an error (NotFinite / Overflow).
     [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(float value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Converts a `long double` to a Rational scaled to @p wantedPrecision.
+    /// @param value           Source value.
+    /// @param wantedPrecision Decimal precision to scale to.
+    /// @return A canonical Rational, or an error (NotFinite / Overflow).
     [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(long double value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Canonical zero (`0/1`) at the given precision.
+    /// @param wantedPrecision Decimal precision of the returned value.
+    /// @return `0/1` tagged with @p wantedPrecision.
     [[nodiscard]] static constexpr Rational Zero(DecimalPlaces wantedPrecision) noexcept {
         return Rational{0, 1, wantedPrecision};
     }
 
     /// @brief Canonical one (`1/1`) at the given precision.
+    /// @param wantedPrecision Decimal precision of the returned value.
+    /// @return `1/1` tagged with @p wantedPrecision.
     [[nodiscard]] static constexpr Rational One(DecimalPlaces wantedPrecision) noexcept {
         return Rational{1, 1, wantedPrecision};
     }
 
-    /// @brief Returns the value's current decimal precision.
+    /// @brief The value's current decimal precision.
+    /// @return The `decimalPlaces` tag.
     [[nodiscard]] constexpr DecimalPlaces GetDecimalPlaces() const noexcept { return decimalPlaces; }
 
-    /// @brief Returns `true` if the value equals `0/1`.
+    /// @brief Whether the value equals `0/1`.
+    /// @return `true` if the numerator is zero.
     [[nodiscard]] constexpr bool IsZero() const noexcept { return numerator == 0; }
 
-    /// @brief Returns `true` if the value is an integer (`denominator == 1`).
+    /// @brief Whether the value is an integer.
+    /// @return `true` if the denominator is 1.
     [[nodiscard]] constexpr bool IsInteger() const noexcept { return denominator == 1; }
 
-    /// @brief Returns `true` if the value is strictly less than zero.
+    /// @brief Whether the value is strictly less than zero.
+    /// @return `true` if the numerator is negative.
     [[nodiscard]] constexpr bool IsNegative() const noexcept { return numerator < 0; }
 
     /// @brief Converts to `double`, rounded to this value's `decimalPlaces`.
+    /// @return The rounded floating-point reading.
     [[nodiscard]] double ToDouble() const noexcept { return ToDouble(decimalPlaces.value); }
 
     /// @brief Converts to `double`, rounded to @p requestedDecimalPlaces.
     /// @param requestedDecimalPlaces Number of decimal digits to keep. Values
     ///                               `> 18` fall back to unrounded conversion.
+    /// @return The rounded floating-point reading.
     [[nodiscard]] double ToDouble(std::uint32_t requestedDecimalPlaces) const noexcept;
 
     /// @brief Negates. @note Negating a Rational built from `INT64_MIN` overflows.
+    /// @return The value with the numerator's sign flipped.
     [[nodiscard]] constexpr Rational operator-() const noexcept {
         return Rational{-numerator, denominator, decimalPlaces};
     }
@@ -261,37 +320,45 @@ struct Rational {
     }
 
     /// @brief Three-way comparison. Value-only: ignores `decimalPlaces`.
+    ///
+    /// Exact for the full int64 range: cross-products are computed in 128
+    /// bits, so the ordering is always consistent with `operator==`.
+    /// @param other Value to compare against.
+    /// @return The ordering of the two exact values.
     [[nodiscard]] constexpr std::strong_ordering operator<=>(const Rational& other) const noexcept {
-        if (numerator == other.numerator && denominator == other.denominator) {
-            return std::strong_ordering::equal;
-        }
-
         auto const leftSign = (numerator > 0) - (numerator < 0);
         auto const rightSign = (other.numerator > 0) - (other.numerator < 0);
         if (leftSign != rightSign) {
             return leftSign <=> rightSign;
         }
+        if (leftSign == 0) {
+            return std::strong_ordering::equal;
+        }
 
-        auto const leftScaled =
-            static_cast<long double>(numerator) * static_cast<long double>(other.denominator);
-        auto const rightScaled =
-            static_cast<long double>(other.numerator) * static_cast<long double>(denominator);
-        if (leftScaled < rightScaled) {
-            return std::strong_ordering::less;
+        auto const leftProduct = detail::mulU64(detail::absU64(numerator),
+                                                static_cast<std::uint64_t>(other.denominator));
+        auto const rightProduct = detail::mulU64(detail::absU64(other.numerator),
+                                                 static_cast<std::uint64_t>(denominator));
+        auto const magnitude = leftProduct <=> rightProduct;
+        if (leftSign > 0) {
+            return magnitude;
         }
-        if (leftScaled > rightScaled) {
-            return std::strong_ordering::greater;
-        }
-        return std::strong_ordering::equal;
+        return magnitude < 0   ? std::strong_ordering::greater
+               : magnitude > 0 ? std::strong_ordering::less
+                               : std::strong_ordering::equal;
     }
 
     /// @brief Equality. Value-only: ignores `decimalPlaces`.
+    /// @param other Value to compare against.
+    /// @return `true` when the canonical pairs are identical.
     [[nodiscard]] constexpr bool operator==(const Rational& other) const noexcept {
         return numerator == other.numerator && denominator == other.denominator;
     }
 
     /// @brief In-place addition. Result precision becomes `max` of the two.
     /// Uses reduce-before-multiply to extend the safe int64 range (Knuth 4.5.1).
+    /// @param rhs Value to add.
+    /// @return `*this`.
     constexpr Rational& operator+=(const Rational& rhs) noexcept {
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
@@ -304,6 +371,8 @@ struct Rational {
     }
 
     /// @brief In-place subtraction. Result precision becomes `max` of the two.
+    /// @param rhs Value to subtract.
+    /// @return `*this`.
     constexpr Rational& operator-=(const Rational& rhs) noexcept {
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
@@ -317,6 +386,8 @@ struct Rational {
 
     /// @brief In-place multiplication. Result precision becomes `max` of the two.
     /// Cross-cancels common factors before multiplying.
+    /// @param rhs Value to multiply by.
+    /// @return `*this`.
     constexpr Rational& operator*=(const Rational& rhs) noexcept {
         auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
         auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
@@ -334,6 +405,7 @@ struct Rational {
     }
 
     /// @brief Non-throwing division. Result precision becomes `max` of the two.
+    /// @param rhs Divisor.
     /// @return `*this / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
     [[nodiscard]] constexpr std::expected<Rational, RationalError> DividedBy(const Rational& rhs) const noexcept {
         if (rhs.numerator == 0) {
@@ -350,19 +422,26 @@ struct Rational {
     ///
     /// Field names are the wire contract: `{"num":..,"den":..,"dp":..}`.
     struct Wire {
-        std::int64_t num{0};
-        std::int64_t den{1};
-        std::uint32_t dp{1};
+        std::int64_t num{0};   ///< Signed numerator as sent/received.
+        std::int64_t den{1};   ///< Denominator as sent/received; may be non-canonical.
+        std::uint32_t dp{1};   ///< Decimal-precision tag as sent/received.
     };
 
     /// @brief Wire-codec entry (Glaze read side): rebuilds through the
     ///        canonicalising constructor, silently clamping hostile input
-    ///        (`den == 0`, out-of-range `dp`) instead of asserting.
+    ///        (`den == 0`, out-of-range `dp`, `INT64_MIN` components whose
+    ///        negation would overflow) instead of asserting.
+    /// @param wire Raw values decoded from JSON.
     void setWire(Wire wire) noexcept {
-        *this = Rational{wire.num, wire.den, DecimalPlaces{detail::clampWireDecimalPlaces(wire.dp)}};
+        constexpr auto int64Min = std::numeric_limits<std::int64_t>::min();
+        constexpr auto negatableMin = -std::numeric_limits<std::int64_t>::max();
+        *this = Rational{wire.num == int64Min ? negatableMin : wire.num,
+                         wire.den == int64Min ? negatableMin : wire.den,
+                         DecimalPlaces{detail::clampWireDecimalPlaces(wire.dp)}};
     }
 
     /// @brief Wire-codec exit (Glaze write side).
+    /// @return The canonical members, ready for JSON encoding.
     [[nodiscard]] Wire getWire() const noexcept { return Wire{numerator, denominator, decimalPlaces.value}; }
 
 private:
@@ -403,11 +482,15 @@ static_assert(std::is_standard_layout_v<Rational>);
 // ---------------------------------------------------------------------------
 
 /// @brief Absolute value of a rational. Precision is preserved.
+/// @param value Value to take the absolute value of.
+/// @return The non-negative value with the same magnitude.
 [[nodiscard]] constexpr Rational abs(const Rational& value) noexcept {
     return value.numerator < 0 ? Rational{-value.numerator, value.denominator, value.decimalPlaces} : value;
 }
 
-/// @brief Rounds toward positive infinity. @return The smallest integer `>= value`.
+/// @brief Rounds toward positive infinity.
+/// @param value Value to round.
+/// @return The smallest integer `>= value`.
 [[nodiscard]] constexpr std::int64_t ceil(const Rational& value) noexcept {
     auto const quotient = value.numerator / value.denominator;
     auto const remainder = value.numerator % value.denominator;
@@ -417,7 +500,9 @@ static_assert(std::is_standard_layout_v<Rational>);
     return quotient;
 }
 
-/// @brief Rounds toward negative infinity. @return The largest integer `<= value`.
+/// @brief Rounds toward negative infinity.
+/// @param value Value to round.
+/// @return The largest integer `<= value`.
 [[nodiscard]] constexpr std::int64_t floor(const Rational& value) noexcept {
     auto const quotient = value.numerator / value.denominator;
     auto const remainder = value.numerator % value.denominator;
@@ -427,7 +512,9 @@ static_assert(std::is_standard_layout_v<Rational>);
     return quotient;
 }
 
-/// @brief Truncates toward zero. @return The integer part of the value.
+/// @brief Truncates toward zero.
+/// @param value Value to truncate.
+/// @return The integer part of the value.
 [[nodiscard]] constexpr std::int64_t trunc(const Rational& value) noexcept {
     return value.numerator / value.denominator;
 }
@@ -437,6 +524,9 @@ static_assert(std::is_standard_layout_v<Rational>);
 // ---------------------------------------------------------------------------
 
 /// @brief Adds two Rationals. Result precision is `max` of the two.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact sum.
 [[nodiscard]] constexpr Rational operator+(const Rational& lhs, const Rational& rhs) noexcept {
     auto result = lhs;
     result += rhs;
@@ -444,6 +534,9 @@ static_assert(std::is_standard_layout_v<Rational>);
 }
 
 /// @brief Subtracts two Rationals. Result precision is `max` of the two.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact difference.
 [[nodiscard]] constexpr Rational operator-(const Rational& lhs, const Rational& rhs) noexcept {
     auto result = lhs;
     result -= rhs;
@@ -451,6 +544,9 @@ static_assert(std::is_standard_layout_v<Rational>);
 }
 
 /// @brief Multiplies two Rationals. Result precision is `max` of the two.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact product.
 [[nodiscard]] constexpr Rational operator*(const Rational& lhs, const Rational& rhs) noexcept {
     auto result = lhs;
     result *= rhs;
@@ -458,6 +554,8 @@ static_assert(std::is_standard_layout_v<Rational>);
 }
 
 /// @brief Divides two Rationals. Result precision is `max` of the two.
+/// @param lhs Dividend.
+/// @param rhs Divisor.
 /// @return `lhs / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
 [[nodiscard]] constexpr std::expected<Rational, RationalError> operator/(const Rational& lhs,
                                                                          const Rational& rhs) noexcept {
@@ -533,6 +631,9 @@ template <typename Left, typename Right>
 }  // namespace detail
 
 /// @brief Mixed-type addition with automatic expected-propagation.
+/// @param lhs Left operand (Rational, expected-Rational, or floating point).
+/// @param rhs Right operand (Rational, expected-Rational, or floating point).
+/// @return The exact sum, or the first error encountered left to right.
 template <typename Left, typename Right>
     requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
             && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
@@ -551,6 +652,9 @@ template <typename Left, typename Right>
 }
 
 /// @brief Mixed-type subtraction with automatic expected-propagation.
+/// @param lhs Left operand (Rational, expected-Rational, or floating point).
+/// @param rhs Right operand (Rational, expected-Rational, or floating point).
+/// @return The exact difference, or the first error encountered left to right.
 template <typename Left, typename Right>
     requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
             && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
@@ -569,6 +673,9 @@ template <typename Left, typename Right>
 }
 
 /// @brief Mixed-type multiplication with automatic expected-propagation.
+/// @param lhs Left operand (Rational, expected-Rational, or floating point).
+/// @param rhs Right operand (Rational, expected-Rational, or floating point).
+/// @return The exact product, or the first error encountered left to right.
 template <typename Left, typename Right>
     requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
             && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
@@ -587,6 +694,9 @@ template <typename Left, typename Right>
 }
 
 /// @brief Mixed-type division with automatic expected-propagation.
+/// @param lhs Dividend (Rational, expected-Rational, or floating point).
+/// @param rhs Divisor (Rational, expected-Rational, or floating point).
+/// @return The exact quotient, or the first error encountered left to right.
 template <typename Left, typename Right>
     requires(detail::RationalLike<Left> || detail::RationalLike<Right>)
             && (detail::NeedsLifting<Left> || detail::NeedsLifting<Right>)
@@ -630,15 +740,17 @@ template <std::floating_point Float>
     }
 
     auto const rawPrecision = clampDecimalPlaces(wantedPrecision.value);
+    // rawPrecision is clamped to <= kMaxDecimalPlaces, so powerOfTen cannot
+    // return its overflow sentinel here.
     auto const scale = powerOfTen(rawPrecision);
-    if (scale == 0) {
-        return std::unexpected(RationalError::Overflow);
-    }
 
     auto const scaled = static_cast<long double>(value) * static_cast<long double>(scale);
-    auto const int64Max = static_cast<long double>(std::numeric_limits<std::int64_t>::max());
-    auto const int64Min = static_cast<long double>(std::numeric_limits<std::int64_t>::min());
-    if (scaled > int64Max || scaled < int64Min) {
+    // Bound against 2^63 exactly (representable in every long double format).
+    // Casting INT64_MAX instead would round *up* to 2^63 on platforms where
+    // long double == double, letting scaled == 2^63 slip through to overflow
+    // in llround. INT64_MIN == -2^63 is itself valid, hence `<` not `<=`.
+    constexpr auto twoPow63 = 0x1p63L;
+    if (scaled >= twoPow63 || scaled < -twoPow63) {
         return std::unexpected(RationalError::Overflow);
     }
 

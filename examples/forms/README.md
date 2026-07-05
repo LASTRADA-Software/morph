@@ -95,6 +95,7 @@ pointing it at a networked server later means swapping the transport inside
   schemas, so a client cannot submit a mismatched unit.
 - Quantity JSON is the nullable exact rational `{"num","den","dp"}`;
   non-canonical or hostile payloads are canonicalised/clamped on read.
-- The demo clients build rationals with `Number`/`Math.round`, exact for demo
-  magnitudes; a production client would use BigInt end to end (the HTML page
-  already does).
+- Both clients assemble the rational JSON from the typed digit string itself
+  (no float round-trip), so payloads are exact at any magnitude, and input
+  with more decimals than the field's `x-decimalPlaces` is rejected rather
+  than silently rounded.

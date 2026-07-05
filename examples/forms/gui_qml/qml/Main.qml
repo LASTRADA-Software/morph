@@ -19,10 +19,12 @@ ApplicationWindow {
     visible: true
     title: "morph forms — QML renderer"
 
-    property var schemas: JSON.parse(controller.schemasJson)
+    // Distinct id: DynamicForm has its own `controller` property, and although
+    // QML ids outrank scope properties, shadowing them invites confusion.
+    property var schemas: JSON.parse(formsController.schemasJson)
 
     FormsController {
-        id: controller
+        id: formsController
     }
 
     ScrollView {
@@ -54,7 +56,7 @@ ApplicationWindow {
                     Layout.rightMargin: 12
                     actionType: modelData
                     schema: root.schemas[modelData]
-                    controller: controller
+                    controller: formsController
                 }
             }
 

@@ -96,26 +96,65 @@ template <typename A>
     return false;
 }
 
-/// @brief Invokes @p visitor as `visitor(name, member)` for every reflected
+/// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
 ///        member of @p action (glaze pure reflection).
 template <typename A, typename Visitor>
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
     constexpr auto memberCount = glz::reflect<Plain>::size;
+    auto memberTie = glz::to_tie(action);
     [&]<std::size_t... I>(std::index_sequence<I...>) {
-        (visitor.template operator()<I>(glz::reflect<Plain>::keys[I],
-                                        glz::get_member(action, get<I>(glz::to_tie(action)))),
+        (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], glz::get_member(action, get<I>(memberTie))),
          ...);
     }(std::make_index_sequence<memberCount>{});
 }
 
+/// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
+///        array, `x-order`, and `x-decimalPlaces` to a glaze-produced schema.
+///
+/// Separated from `schemaJson` so the fallback path (malformed input passes
+/// through unchanged) is directly testable.
+template <typename A>
+[[nodiscard]] std::string mergeSchemaExtras(std::string rawSchema) {
+    // u64 number mode: the schema carries int64/uint64 bounds in $defs, which
+    // the default double-only DOM would silently round.
+    glz::generic_u64 dom{};
+    if (glz::read_json(dom, rawSchema)) {
+        return rawSchema;
+    }
+
+    glz::generic_u64::array_t requiredNames{};
+    A probe{};
+    forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        using Member = std::remove_cvref_t<decltype(member)>;
+        static_cast<void>(member);
+        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name);
+        if (!isOptional) {
+            requiredNames.emplace_back(std::string{name});
+        }
+        auto& property = dom["properties"][std::string{name}];
+        property["x-order"] = std::uint64_t{I};
+        if constexpr (units::is_quantity_v<Member>) {
+            property["x-decimalPlaces"] = std::uint64_t{Member::unitMeta().defaultDecimals};
+        }
+    });
+    // Always assign — an explicit empty array beats leaving whatever the
+    // schema writer may have emitted (or omitted) for `required`.
+    dom["required"] = std::move(requiredNames);
+
+    return glz::write_json(dom).value_or(std::move(rawSchema));
+}
+
 }  // namespace detail
 
-/// @brief Returns `true` when every required `morph::units::Quantity` member
-///        of @p action is engaged (has a value).
+/// @brief Whether every required `morph::units::Quantity` member of
+///        @p action is engaged (has a value).
 ///
 /// Required means: not a `std::optional<...>` member and not listed in
 /// `A::optionalFields`. Intended as the body of the action's `validate()`.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Draft whose quantity fields are checked.
+/// @return `true` when no required quantity is empty.
 template <typename A>
 [[nodiscard]] constexpr bool allRequiredEngaged(const A& action) noexcept {
     bool allEngaged = true;
@@ -138,46 +177,20 @@ template <typename A>
 ///
 /// glaze's `write_json_schema<A>()` output, post-processed with:
 ///   - a top-level `required` array (see file docs for the rule),
-///   - `x-decimalPlaces` on every `Quantity` property (the unit's default).
+///   - `x-decimalPlaces` on every `Quantity` property (the unit's default),
+///   - `x-order` (declaration index) on every property.
 ///
-/// On any internal failure the unmerged glaze schema (or an empty string if
-/// even that failed) is returned rather than throwing — schema generation
-/// is a description facility, never worth crashing a server over.
+/// The result is fixed per type, so it is computed once and cached. On any
+/// internal failure the unmerged glaze schema (or an empty string if even
+/// that failed) is returned rather than throwing — schema generation is a
+/// description facility, never worth crashing a server over.
+/// @tparam A Action type (a reflectable aggregate).
+/// @return The merged schema JSON.
 template <typename A>
 [[nodiscard]] std::string schemaJson() {
-    auto rawSchema = glz::write_json_schema<A>();
-    if (!rawSchema) {
-        return {};
-    }
-
-    // u64 number mode: the schema carries int64/uint64 bounds in $defs, which
-    // the default double-only DOM would silently round.
-    glz::generic_u64 dom{};
-    if (glz::read_json(dom, *rawSchema)) {
-        return *rawSchema;
-    }
-
-    glz::generic_u64::array_t requiredNames{};
-    A probe{};
-    detail::forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
-        using Member = std::remove_cvref_t<decltype(member)>;
-        static_cast<void>(member);
-        const bool isOptional = detail::isStdOptional<Member> || detail::declaredOptional<A>(name);
-        if (!isOptional) {
-            requiredNames.emplace_back(std::string{name});
-        }
-        auto& property = dom["properties"][std::string{name}];
-        property["x-order"] = std::uint64_t{I};
-        if constexpr (units::is_quantity_v<Member>) {
-            property["x-decimalPlaces"] = std::uint64_t{Member::unitMeta().defaultDecimals};
-        }
-    });
-    if (!requiredNames.empty()) {
-        dom["required"] = std::move(requiredNames);
-    }
-
-    auto merged = glz::write_json(dom);
-    return merged ? *merged : *rawSchema;
+    static const std::string cached =
+        detail::mergeSchemaExtras<A>(glz::write_json_schema<A>().value_or(std::string{}));
+    return cached;
 }
 
 }  // namespace morph::forms

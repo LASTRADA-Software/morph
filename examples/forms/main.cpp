@@ -29,6 +29,22 @@ namespace {
 
 using lab::schemasJson;
 
+/// @brief Escapes `<` as `<` so schema text (descriptions, unit labels)
+///        can never terminate the surrounding `<script>` element. `<` only
+///        occurs inside JSON strings, where the escape is valid.
+[[nodiscard]] std::string escapeForScriptEmbed(const std::string& json) {
+    std::string out;
+    out.reserve(json.size());
+    for (char ch : json) {
+        if (ch == '<') {
+            out += "\\u003C";
+        } else {
+            out += ch;
+        }
+    }
+    return out;
+}
+
 // The demo page, split around the embedded schemas object. Everything is
 // inline (no CDN, no framework): the point is that the schema alone carries
 // enough to build the GUI.
@@ -86,14 +102,15 @@ function resolve(schema, prop) {
 }
 function typeSet(p) { const t = p.type; return new Set(Array.isArray(t) ? t : (t ? [t] : [])); }
 
-// "2650.5" + dp -> exact {num, den, dp} (the Rational wire object).
-function toRational(text, dp) {
+// "2650.5" + dp -> exact '{"num":..,"den":..,"dp":..}' JSON. BigInt digits go
+// straight into the JSON text, so no precision is lost at any magnitude.
+function rationalJson(text, dp) {
   const neg = text.startsWith('-');
   const [intPart, fracPart = ''] = (neg ? text.slice(1) : text).split('.');
   const frac = (fracPart + '0'.repeat(dp)).slice(0, dp);
   let num = BigInt(intPart || '0') * 10n ** BigInt(dp) + BigInt(frac || '0');
   if (neg) num = -num;
-  return { num: Number(num), den: Number(10n ** BigInt(dp)), dp: dp };
+  return '{"num":' + num.toString() + ',"den":' + (10n ** BigInt(dp)).toString() + ',"dp":' + dp + '}';
 }
 
 function build() {
@@ -157,23 +174,25 @@ function build() {
     form.appendChild(out);
 
     const compose = () => {
-      const body = {};
+      // The body is assembled as JSON text (not via JSON.stringify) so BigInt
+      // rational digits and int64-sized integers stay exact.
+      const parts = [];
       let ok = true;
       for (const f of fields) {
         const t = f.input.value.trim();
         if (t === '') { if (f.req) ok = false; continue; }
         if (f.kind === 'quantity') {
           if (!/^-?\d+(\.\d+)?$/.test(t) || !f.input.checkValidity()) { ok = false; continue; }
-          body[f.name] = toRational(t, +f.input.dataset.dp);
+          parts.push(JSON.stringify(f.name) + ':' + rationalJson(t, +f.input.dataset.dp));
         } else if (f.kind === 'integer') {
           if (!/^-?\d+$/.test(t) || !f.input.checkValidity()) { ok = false; continue; }
-          body[f.name] = Number(t);
+          parts.push(JSON.stringify(f.name) + ':' + t);  // validated digits: already a JSON number
         } else {
-          body[f.name] = t;
+          parts.push(JSON.stringify(f.name) + ':' + JSON.stringify(t));
         }
       }
       btn.disabled = !ok;
-      out.textContent = ok ? (action + ' ' + JSON.stringify(body)) : '… fill the required (*) fields';
+      out.textContent = ok ? (action + ' {' + parts.join(',') + '}') : '… fill the required (*) fields';
       return ok ? out.textContent : null;
     };
     form.addEventListener('input', compose);
@@ -181,8 +200,14 @@ function build() {
       ev.preventDefault();
       const line = compose();
       if (!line) return;
-      if (navigator.clipboard) navigator.clipboard.writeText(line);
-      document.getElementById('log').textContent = line + '\n\n(copied — paste into the morph_forms_demo REPL)';
+      const log = document.getElementById('log');
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(line).then(
+          () => { log.textContent = line + '\n\n(copied — paste into the morph_forms_demo REPL)'; },
+          () => { log.textContent = line + '\n\n(clipboard blocked — copy the line above manually)'; });
+      } else {
+        log.textContent = line + '\n\n(clipboard unavailable here — copy the line above manually)';
+      }
     });
     compose();
     host.appendChild(form);
@@ -245,7 +270,7 @@ int main(int argc, char** argv) {
             std::println(stderr, "error: cannot write {}", path);
             return 1;
         }
-        file << kHtmlHead << schemasJson() << kHtmlTail;
+        file << kHtmlHead << escapeForScriptEmbed(schemasJson()) << kHtmlTail;
         std::println("wrote {} — open it in a browser, then run ./morph_forms_demo for the REPL", path);
         return 0;
     }

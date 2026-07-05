@@ -149,6 +149,11 @@ TEST_CASE("Quantity::Arithmetic::EmptyPropagates", "[quantity]") {
     CHECK_FALSE((engaged / Q<QFUnit::m3>{}).hasValue());
     CHECK_FALSE((-empty).hasValue());
     CHECK_FALSE((empty * Rational{2, dp1}).hasValue());
+    CHECK_FALSE((empty / Rational{2, dp1}).hasValue());
+
+    // Cross-unit product propagates emptiness from either side.
+    CHECK_FALSE((Q<QFUnit::kg_per_m3>{} * cubicMetres(2)).hasValue());
+    CHECK_FALSE((Q<QFUnit::kg_per_m3>{Rational{5, 2, dp1}} * Q<QFUnit::m3>{}).hasValue());
 }
 
 TEST_CASE("Quantity::Arithmetic::DivisionByZeroYieldsEmpty", "[quantity]") {
@@ -256,6 +261,19 @@ TEST_CASE("Forms::SchemaJson", "[forms]") {
 TEST_CASE("Forms::SchemaJson::AllFieldsRequiredWithoutOptOut", "[forms]") {
     auto const schema = morph::forms::schemaJson<QFComputeDryDensity>();
     CHECK(schema.find(R"("required":["massDry","volume"])") != std::string::npos);
+}
+
+TEST_CASE("Forms::SchemaJson::Memoized", "[forms]") {
+    // The schema is fixed per type; repeated calls return the cached result.
+    CHECK(morph::forms::schemaJson<QFComputeDryDensity>() == morph::forms::schemaJson<QFComputeDryDensity>());
+}
+
+TEST_CASE("Forms::MergeSchemaExtras::MalformedInputPassesThrough", "[forms]") {
+    // The post-merge is deliberately non-throwing: input the DOM cannot parse
+    // is returned unchanged (including the empty string from an upstream
+    // schema-generation failure).
+    CHECK(morph::forms::detail::mergeSchemaExtras<QFComputeDryDensity>("not json") == "not json");
+    CHECK(morph::forms::detail::mergeSchemaExtras<QFComputeDryDensity>(std::string{}).empty());
 }
 
 // ---------------------------------------------------------------------------

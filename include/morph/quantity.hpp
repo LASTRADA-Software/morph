@@ -117,18 +117,23 @@ struct Quantity {
     static constexpr auto unit = U;
 
     /// @brief The unit's static metadata (id, display text, default decimals).
+    /// @return The `UnitMeta` from the application's `UnitTraits` specialisation.
     [[nodiscard]] static constexpr UnitMeta unitMeta() noexcept { return UnitTraits<decltype(U)>::meta(U); }
 
-    /// @brief Returns `true` if a value has been entered/measured.
+    /// @brief Whether a value has been entered/measured.
+    /// @return `true` if the payload is engaged.
     [[nodiscard]] constexpr bool hasValue() const noexcept { return value.has_value(); }
 
     /// @brief Unchecked access to the engaged value (UB when empty, exactly
     ///        like `std::optional`).
+    /// @return The engaged exact value.
     [[nodiscard]] constexpr const math::Rational& operator*() const noexcept { return *value; }
 
     /// @brief Ordering/equality on the payload; empty sorts before engaged
     ///        (std::optional semantics), values compare exactly.
-    [[nodiscard]] constexpr auto operator<=>(const Quantity&) const noexcept = default;
+    /// @param other Quantity of the same unit to compare against.
+    /// @return The ordering of the two payloads.
+    [[nodiscard]] constexpr auto operator<=>(const Quantity& other) const noexcept = default;
 };
 
 namespace detail {
@@ -151,6 +156,9 @@ inline constexpr bool is_quantity_v = detail::IsQuantity<std::remove_cvref_t<T>>
 // ---------------------------------------------------------------------------
 
 /// @brief Same-unit sum. Empty if either operand is empty.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact sum, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator+(const Quantity<U>& lhs, const Quantity<U>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
@@ -160,6 +168,9 @@ template <auto U>
 }
 
 /// @brief Same-unit difference. Empty if either operand is empty.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact difference, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator-(const Quantity<U>& lhs, const Quantity<U>& rhs) noexcept {
     if (!lhs.value || !rhs.value) {
@@ -169,6 +180,8 @@ template <auto U>
 }
 
 /// @brief Negation. Empty stays empty.
+/// @param operand Value to negate.
+/// @return The negated value, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator-(const Quantity<U>& operand) noexcept {
     if (!operand.value) {
@@ -180,6 +193,9 @@ template <auto U>
 /// @brief Cross-unit product; the result unit is `A * B` per the application's
 ///        consteval unit algebra. Does not participate in overload resolution
 ///        when the algebra rejects the combination.
+/// @param lhs Left operand.
+/// @param rhs Right operand.
+/// @return The exact product in the deduced unit, or empty.
 template <auto A, auto B>
     requires requires { typename std::type_identity_t<Quantity<A * B>>; }
 [[nodiscard]] constexpr Quantity<A * B> operator*(const Quantity<A>& lhs, const Quantity<B>& rhs) noexcept {
@@ -192,12 +208,17 @@ template <auto A, auto B>
 /// @brief Cross-unit quotient; the result unit is `A / B` per the application's
 ///        consteval unit algebra. Empty when either side is empty *or* the
 ///        divisor is zero.
+/// @param lhs Dividend.
+/// @param rhs Divisor.
+/// @return The exact quotient in the deduced unit, or empty.
 template <auto A, auto B>
     requires requires { typename std::type_identity_t<Quantity<A / B>>; }
 [[nodiscard]] constexpr Quantity<A / B> operator/(const Quantity<A>& lhs, const Quantity<B>& rhs) noexcept {
-    if (!lhs.value || !rhs.value || rhs.value->IsZero()) {
+    if (!lhs.value || !rhs.value) {
         return {};
     }
+    // DividedBy is the single division-by-zero authority: it reports exactly
+    // when the divisor is zero, which maps to the empty result here.
     auto quotient = lhs.value->DividedBy(*rhs.value);
     if (!quotient) {
         return {};
@@ -206,6 +227,9 @@ template <auto A, auto B>
 }
 
 /// @brief Scales by a dimensionless rational (unit unchanged).
+/// @param lhs    Quantity to scale.
+/// @param factor Dimensionless factor.
+/// @return The scaled quantity, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator*(const Quantity<U>& lhs, const math::Rational& factor) noexcept {
     if (!lhs.value) {
@@ -215,6 +239,9 @@ template <auto U>
 }
 
 /// @brief Scales by a dimensionless rational (unit unchanged).
+/// @param factor Dimensionless factor.
+/// @param rhs    Quantity to scale.
+/// @return The scaled quantity, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator*(const math::Rational& factor, const Quantity<U>& rhs) noexcept {
     return rhs * factor;
@@ -222,9 +249,12 @@ template <auto U>
 
 /// @brief Divides by a dimensionless rational (unit unchanged). Empty when the
 ///        quantity is empty or the divisor is zero.
+/// @param lhs     Quantity to divide.
+/// @param divisor Dimensionless divisor.
+/// @return The divided quantity, or empty.
 template <auto U>
 [[nodiscard]] constexpr Quantity<U> operator/(const Quantity<U>& lhs, const math::Rational& divisor) noexcept {
-    if (!lhs.value || divisor.IsZero()) {
+    if (!lhs.value) {
         return {};
     }
     auto quotient = lhs.value->DividedBy(divisor);

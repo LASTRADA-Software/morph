@@ -5,8 +5,8 @@
 //   ExtUnits         -> unit suffix          minimum/maximum -> input hints
 //   x-decimalPlaces  -> quantity fields (decimal input -> exact {num,den,dp})
 //
-// Quantity payloads are built with Math.round(value * 10^dp) — exact for demo
-// magnitudes (< 2^53 minor units); a production client would use BigInt.
+// Quantity payloads are assembled as JSON text from the typed digit string,
+// so they are exact at any magnitude (same contract as the HTML renderer).
 
 pragma ComponentBehavior: Bound
 
@@ -71,13 +71,21 @@ Frame {
 
     // --- draft state --------------------------------------------------------
 
-    function toRational(text, dp) {
-        const scale = Math.pow(10, dp)
-        return { num: Math.round(parseFloat(text) * scale), den: scale, dp: dp }
+    // "2650.5" + dp -> exact '{"num":..,"den":..,"dp":..}' JSON built from the
+    // digit string itself — no float round-trip, exact at any magnitude.
+    function rationalJson(text, dp) {
+        const neg = text.startsWith("-")
+        const pieces = (neg ? text.slice(1) : text).split(".")
+        const frac = ((pieces[1] || "") + "0".repeat(dp)).slice(0, dp)
+        let digits = ((pieces[0] || "0") + frac).replace(/^0+(?=\d)/, "")
+        const sign = (neg && digits !== "0") ? "-" : ""
+        return '{"num":' + sign + digits + ',"den":1' + "0".repeat(dp) + ',"dp":' + dp + "}"
     }
 
     function revalidate() {
-        const body = {}
+        // Assembled as JSON text (not JSON.stringify) so rational digits and
+        // int64-sized integers stay exact.
+        const parts = []
         let ok = true
         for (let i = 0; i < fields.length; ++i) {
             const f = fields[i]
@@ -89,22 +97,26 @@ Frame {
             }
             if (f.isQuantity) {
                 if (!/^-?\d+(\.\d+)?$/.test(text)) { ok = false; continue }
+                // Reject more decimals than the field's declared precision
+                // instead of silently rounding them away.
+                const fracLen = (text.split(".")[1] || "").length
+                if (fracLen > f.decimals) { ok = false; continue }
                 const value = parseFloat(text)
                 if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
                 if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                body[f.name] = toRational(text, f.decimals)
+                parts.push(JSON.stringify(f.name) + ":" + rationalJson(text, f.decimals))
             } else if (f.isInteger) {
                 if (!/^-?\d+$/.test(text)) { ok = false; continue }
                 const value = parseInt(text)
                 if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
                 if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                body[f.name] = value
+                parts.push(JSON.stringify(f.name) + ":" + text)
             } else {
-                body[f.name] = text
+                parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(text))
             }
         }
         ready = ok
-        previewLine = ok ? JSON.stringify(body) : ""
+        previewLine = ok ? "{" + parts.join(",") + "}" : ""
     }
 
     function setFieldValue(name, text) {

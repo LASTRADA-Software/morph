@@ -15,6 +15,11 @@ option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_FORMS_QML     "Build the Qt Quick renderer for the forms demo" OFF)
+
+if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
+    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: it lives under the forms example, "
+                    "which needs MORPH_BUILD_EXAMPLES=ON and a non-Emscripten toolchain.")
+endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 

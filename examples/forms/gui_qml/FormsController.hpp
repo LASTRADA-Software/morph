@@ -44,8 +44,13 @@ signals:
     void replyReceived(const QString& actionType, bool ok, const QString& payload);
 
 private:
-    morph::exec::ThreadPoolExecutor _pool{2};
     std::shared_ptr<morph::backend::RemoteServer> _server;
     std::atomic<std::uint64_t> _modelId{0};
     std::atomic<std::uint64_t> _nextCallId{1};
+
+    /// @brief Declared last, so it is destroyed first: the pool joins (running
+    ///        any still-queued reply callbacks, which touch the members above)
+    ///        while those members are all still alive. GUI-thread hops queued
+    ///        on a destroyed controller are dropped by Qt's context tracking.
+    morph::exec::ThreadPoolExecutor _pool{2};
 };
