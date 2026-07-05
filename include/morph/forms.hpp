@@ -144,11 +144,10 @@ template <typename A>
     // schema writer may have emitted (or omitted) for `required`.
     dom["required"] = requiredNames;
 
-    auto merged = glz::write_json(dom);
-    if (merged.has_value()) {
-        return std::move(*merged);
-    }
-    return rawSchema;
+    // value_or without a move: the copy is irrelevant (schemaJson memoises),
+    // and keeping the fallback branch inside glaze's expected avoids an
+    // untestable line here (write_json of a DOM we just built cannot fail).
+    return glz::write_json(dom).value_or(rawSchema);
 }
 
 }  // namespace detail
