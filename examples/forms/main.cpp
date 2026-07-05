@@ -96,6 +96,7 @@ const SCHEMAS = )HTML";
 
 constexpr std::string_view kHtmlTail = R"HTML(;
 
+// __MORPH_MATH_BEGIN__ (pure helpers; extracted verbatim by test_html_math.mjs)
 // Follow a $ref into $defs; attributes declared on the field win.
 function resolve(schema, prop) {
   if (prop && prop.$ref) {
@@ -147,6 +148,7 @@ function convertText(text, from, to) {
   const denom = BigInt(from.den) * BigInt(to.num) * 10n ** BigInt(from.decimals);
   return formatScaled(divRoundBig(numer, denom), to.decimals);
 }
+// __MORPH_MATH_END__
 
 function build() {
   const host = document.getElementById('forms');

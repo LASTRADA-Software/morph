@@ -22,7 +22,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`, `SyncWorker`, `SyncResult` |
 | `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
-| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitEnum`, `isQuantity` |
+| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitAlternative<E>`, `HasUnitAlternatives`, `UnitEnum`, `isQuantity` |
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()`, `Choice<T, ...>`, `FixedString`, `isChoice`, `EmptyCapableField` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |

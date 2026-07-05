@@ -25,6 +25,12 @@ option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 
 include(cmake/compiler_options.cmake)
 
+# Registered before any subdirectory so demo-level add_test calls (examples/
+# forms) land in the test set alongside the Catch2 suite.
+if(MORPH_BUILD_TESTS)
+    enable_testing()
+endif()
+
 # ── glaze ────────────────────────────────────────────────────────────────────
 # On Windows vcpkg provides glaze. On Linux we fall back to FetchContent so
 # that CI does not require vcpkg. The version bound matters: without it an
@@ -134,7 +140,6 @@ if(MORPH_BUILD_TESTS)
         FetchContent_MakeAvailable(Catch2)
     endif()
 
-    enable_testing()
     add_subdirectory(tests)
 endif()
 

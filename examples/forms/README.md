@@ -92,6 +92,21 @@ in-process `RemoteServer` — the QML GUI is a JSON-speaking wire client, so
 pointing it at a networked server later means swapping the transport inside
 `FormsController`, not touching the QML.
 
+## Tests
+
+The demo ships with its own test vectors (they run as part of `ctest`):
+
+- `forms_html_math` (needs Node) — emits the page and drives the *shipped*
+  JS math verbatim: exact payload assembly (including beyond 2^53), unit
+  conversion with half-up rounding, schema helpers, embedded options.
+- `forms_repl_roundtrip` (Unix) — pipes canonical and converted-unit
+  submits, a tab-separated line, a malformed datetime, and a missing
+  required field through the real REPL and checks every reply.
+- `forms_qml_logic` (with `MORPH_BUILD_FORMS_QML=ON`) — Qt Quick Test suite
+  against the real `DynamicForm`: schema-to-descriptor mapping, the
+  digit-string long arithmetic, unit conversion, payload composition, the
+  readiness gate, and option-row extraction.
+
 ## Notes
 
 - Units never appear in payloads — they live in the C++ types and the

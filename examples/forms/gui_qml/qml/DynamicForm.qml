@@ -411,6 +411,9 @@ Frame {
 
     Component.onCompleted: {
         revalidate()
+        // Tests instantiate the form without a controller; fetch only when wired.
+        if (!controller)
+            return
         for (let i = 0; i < fields.length; ++i) {
             if (fields[i].isChoice)
                 controller.fetchOptions(fields[i].optionsAction)

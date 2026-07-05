@@ -19,3 +19,18 @@ endif()
 if(MORPH_BUILD_FORMS_QML)
     add_subdirectory(gui_qml)
 endif()
+
+# Demo-level tests: they drive the *shipped* artifacts (the emitted page's JS
+# math via node, and the REPL binary end to end).
+if(MORPH_BUILD_TESTS)
+    find_program(MORPH_NODE NAMES node nodejs)
+    if(MORPH_NODE)
+        add_test(NAME forms_html_math
+                 COMMAND ${MORPH_NODE} ${CMAKE_CURRENT_SOURCE_DIR}/test_html_math.mjs
+                         $<TARGET_FILE:morph_forms_demo>)
+    endif()
+    if(UNIX)
+        add_test(NAME forms_repl_roundtrip
+                 COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/test_repl.sh $<TARGET_FILE:morph_forms_demo>)
+    endif()
+endif()

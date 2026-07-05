@@ -68,6 +68,10 @@
 /// using Mass = morph::units::Quantity<Unit::kg>;
 /// using Volume = morph::units::Quantity<Unit::m3>;
 /// // Mass{...} / Volume{...} -> morph::units::Quantity<Unit::kg_per_m3>
+///
+/// // Optional: convertible entry units with exact ratios. Renderers offer a
+/// // unit selector and recalculate exactly; payloads stay canonical.
+/// // static constexpr std::span<const UnitAlternative<Unit>> alternatives(Unit);
 /// @endcode
 
 #include <glaze/glaze.hpp>
