@@ -22,7 +22,7 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`, `SyncWorker`, `SyncResult` |
 | `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
-| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitEnum`, `is_quantity_v` |
+| `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitEnum`, `isQuantity` |
 | `morph::forms` | JSON-Schema generation for auto-built GUIs | `schemaJson<A>()`, `allRequiredEngaged()` |
 | `morph::qt` | Qt integration (built only when `MORPH_BUILD_QT=ON`) | `QtExecutor`, `QtWebSocketBackend`, `QtWebSocketServer` |
 
@@ -414,7 +414,7 @@ renderers: a self-contained HTML page and a Qt Quick client
 A trivially-copyable `numerator/denominator` pair (`int64_t`) plus a
 `DecimalPlaces` strong type. Arithmetic is exact and reduces to canonical
 form; binary operations propagate the wider precision; comparison ignores
-precision entirely. Fallible operations (`operator/`, `FromFloat`) return
+precision entirely. Fallible operations (`operator/`, `fromFloat`) return
 `std::expected<Rational, RationalError>`, and mixed expressions containing an
 `expected` or a floating-point operand evaluate to `expected` with
 left-to-right error short-circuiting.
@@ -459,7 +459,7 @@ Design decisions, in order:
 - **Declared precision lives in the type; actual precision is runtime
   data.** `Quantity<U, Decimals>`'s second argument is the field's declared
   decimal count — defaulted from `UnitTraits`, overridable per field
-  (`Quantity<Unit::m3, 4>`) — and feeds `x-decimalPlaces` and `FromDouble`.
+  (`Quantity<Unit::m3, 4>`) — and feeds `x-decimalPlaces` and `fromDouble`.
   The value's actual precision is the Rational's runtime tag: it
   max-propagates through arithmetic and is adjustable at run time
   (`withDecimalPlaces` / `atDeclaredPrecision`). Same-unit quantities

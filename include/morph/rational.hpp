@@ -11,8 +11,8 @@
 /// `decimalPlaces`, as a strong type (`DecimalPlaces`). Arithmetic is
 /// *exact* — sums, differences, products, and quotients are reduced to
 /// canonical form with no floating-point rounding error. The precision tag
-/// affects only decimal scaling (`Rational::FromFloat`) and rounding
-/// (`Rational::ToDouble`, formatting); it never changes a stored value.
+/// affects only decimal scaling (`Rational::fromFloat`) and rounding
+/// (`Rational::toDouble`, formatting); it never changes a stored value.
 ///
 /// Adapted from LASTRADA `JPMath/Rational.hpp`, with the `boxed` strong-type
 /// dependency replaced by a self-contained `DecimalPlaces` and a Glaze wire
@@ -44,7 +44,7 @@
 /// @par Error handling
 /// The struct never throws. Operations that may fail (zero divisor,
 /// non-finite floating-point input, overflow during decimal scaling) return
-/// `std::expected<Rational, RationalError>`. `operator/` and `Reciprocal`
+/// `std::expected<Rational, RationalError>`. `operator/` and `reciprocal`
 /// return `expected`; `operator+`, `operator-`, `operator*` on plain
 /// `Rational` pairs cannot fail and return a bare `Rational`.
 ///
@@ -53,8 +53,8 @@
 /// `std::expected<Rational, RationalError>` sub-expression or a
 /// floating-point operand, the whole expression evaluates to
 /// `std::expected<Rational, RationalError>`. The float operand is lifted via
-/// `Rational::FromFloat` — its precision is taken from the Rational
-/// operand's `GetDecimalPlaces()`. Errors short-circuit left to right.
+/// `Rational::fromFloat` — its precision is taken from the Rational
+/// operand's `getDecimalPlaces()`. Errors short-circuit left to right.
 ///
 /// @code{.cpp}
 ///     using morph::math::DecimalPlaces;
@@ -69,7 +69,7 @@
 /// @par Formatting
 /// `std::format` support is split by the supplied spec:
 ///   - empty spec `"{}"`          -> exact rational form (`"n/d"`, or `"n"` when integer)
-///   - non-empty spec `"{:.3f}"`  -> delegated to `std::formatter<double>` on `ToDouble()`
+///   - non-empty spec `"{:.3f}"`  -> delegated to `std::formatter<double>` on `toDouble()`
 ///
 /// @par Wire format
 /// Over the morph JSON wire a `Rational` travels as the object
@@ -128,16 +128,16 @@ inline constexpr std::uint32_t kMaxDecimalPlaces = 18;
 
 /// @brief Error states reachable through `Rational` operations.
 enum class RationalError : std::uint8_t {
-    DivisionByZero,  ///< Divisor numerator is zero (operator/, Reciprocal, From).
-    NotFinite,       ///< Floating-point input was NaN or +/-Inf (FromFloat only).
-    Overflow,        ///< Scaled magnitude exceeds int64_t range (FromFloat only).
+    DivisionByZero,  ///< Divisor numerator is zero (operator/, reciprocal, From).
+    NotFinite,       ///< Floating-point input was NaN or +/-Inf (fromFloat only).
+    Overflow,        ///< Scaled magnitude exceeds int64_t range (fromFloat only).
 };
 
 namespace detail {
 
 /// @brief Clamps a raw precision into `[1, kMaxDecimalPlaces]` silently — for
 ///        untrusted wire input.
-[[nodiscard]] inline constexpr std::uint32_t clampWireDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
+[[nodiscard]] constexpr std::uint32_t clampWireDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
     if (rawDecimalPlaces < 1) {
         return 1;
     }
@@ -149,7 +149,7 @@ namespace detail {
 
 /// @brief Clamps like `clampWireDecimalPlaces` but asserts in debug — for
 ///        call sites that state a precision in code, where out-of-range is a bug.
-[[nodiscard]] inline constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
+[[nodiscard]] constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
     assert(rawDecimalPlaces >= 1 && rawDecimalPlaces <= kMaxDecimalPlaces);
     return clampWireDecimalPlaces(rawDecimalPlaces);
 }
@@ -162,10 +162,10 @@ struct U128 {
 };
 
 /// @brief Multiplies two u64 exactly into 128 bits (for exact fraction comparison).
-[[nodiscard]] inline constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
-#if defined(__SIZEOF_INT128__)
+[[nodiscard]] constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
+#ifdef __SIZEOF_INT128__
     auto const product = static_cast<unsigned __int128>(lhs) * rhs;
-    return U128{static_cast<std::uint64_t>(product >> 64), static_cast<std::uint64_t>(product)};
+    return U128{.hi = static_cast<std::uint64_t>(product >> 64), .lo = static_cast<std::uint64_t>(product)};
 #else
     // Portable 32-bit limb multiplication (MSVC has no __int128).
     constexpr std::uint64_t mask = 0xffffffffULL;
@@ -178,12 +178,13 @@ struct U128 {
     auto const highLow = lhsHigh * rhsLow;
     auto const highHigh = lhsHigh * rhsHigh;
     auto const mid = (lowLow >> 32) + (lowHigh & mask) + (highLow & mask);
-    return U128{highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32), (mid << 32) | (lowLow & mask)};
+    return U128{.hi = highHigh + (lowHigh >> 32) + (highLow >> 32) + (mid >> 32),
+                .lo = (mid << 32) | (lowLow & mask)};
 #endif
 }
 
 /// @brief Magnitude of a signed 64-bit value as u64; well-defined for INT64_MIN.
-[[nodiscard]] inline constexpr std::uint64_t absU64(std::int64_t value) noexcept {
+[[nodiscard]] constexpr std::uint64_t absU64(std::int64_t value) noexcept {
     return value < 0 ? 0ULL - static_cast<std::uint64_t>(value) : static_cast<std::uint64_t>(value);
 }
 
@@ -207,13 +208,13 @@ struct Rational {
     /// @param whole            The integer value; stored as `whole/1`.
     /// @param wantedPrecision  Decimal precision; clamped to [1, kMaxDecimalPlaces].
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
-        : numerator{whole}, denominator{1}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
+        : numerator{whole}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
 
     /// @brief Constructs from explicit numerator/denominator, then canonicalises.
     ///
     /// A negative @p wantedDenominator flips the sign of @p wantedNumerator,
     /// the pair is reduced by `gcd`, and a denominator of `0` is clamped to
-    /// `1`. Use `From` for explicit zero-denominator detection.
+    /// `1`. Use `from` for explicit zero-denominator detection.
     ///
     /// @param wantedNumerator   Signed numerator.
     /// @param wantedDenominator Denominator. May be negative or zero on input.
@@ -231,7 +232,7 @@ struct Rational {
     /// @param wantedDenominator Denominator; `0` is rejected instead of clamped.
     /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
     /// @return The canonical rational, or `DivisionByZero` if @p wantedDenominator is 0.
-    [[nodiscard]] static constexpr std::expected<Rational, RationalError> From(
+    [[nodiscard]] static constexpr std::expected<Rational, RationalError> from(
         std::int64_t wantedNumerator, std::int64_t wantedDenominator, DecimalPlaces wantedPrecision) noexcept {
         if (wantedDenominator == 0) {
             return std::unexpected(RationalError::DivisionByZero);
@@ -244,62 +245,62 @@ struct Rational {
     /// @param wantedPrecision Decimal precision to scale to.
     /// @return A canonical Rational, or an error (NotFinite / Overflow).
     /// @note `noexcept` but not `constexpr` — uses `std::llround` / `std::isfinite`.
-    [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(double value,
+    [[nodiscard]] static std::expected<Rational, RationalError> fromFloat(double value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Converts a `float` to a Rational scaled to @p wantedPrecision.
     /// @param value           Source value.
     /// @param wantedPrecision Decimal precision to scale to.
     /// @return A canonical Rational, or an error (NotFinite / Overflow).
-    [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(float value,
+    [[nodiscard]] static std::expected<Rational, RationalError> fromFloat(float value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Converts a `long double` to a Rational scaled to @p wantedPrecision.
     /// @param value           Source value.
     /// @param wantedPrecision Decimal precision to scale to.
     /// @return A canonical Rational, or an error (NotFinite / Overflow).
-    [[nodiscard]] static std::expected<Rational, RationalError> FromFloat(long double value,
+    [[nodiscard]] static std::expected<Rational, RationalError> fromFloat(long double value,
                                                                           DecimalPlaces wantedPrecision) noexcept;
 
     /// @brief Canonical zero (`0/1`) at the given precision.
     /// @param wantedPrecision Decimal precision of the returned value.
     /// @return `0/1` tagged with @p wantedPrecision.
-    [[nodiscard]] static constexpr Rational Zero(DecimalPlaces wantedPrecision) noexcept {
+    [[nodiscard]] static constexpr Rational zero(DecimalPlaces wantedPrecision) noexcept {
         return Rational{0, 1, wantedPrecision};
     }
 
     /// @brief Canonical one (`1/1`) at the given precision.
     /// @param wantedPrecision Decimal precision of the returned value.
     /// @return `1/1` tagged with @p wantedPrecision.
-    [[nodiscard]] static constexpr Rational One(DecimalPlaces wantedPrecision) noexcept {
+    [[nodiscard]] static constexpr Rational one(DecimalPlaces wantedPrecision) noexcept {
         return Rational{1, 1, wantedPrecision};
     }
 
     /// @brief The value's current decimal precision.
     /// @return The `decimalPlaces` tag.
-    [[nodiscard]] constexpr DecimalPlaces GetDecimalPlaces() const noexcept { return decimalPlaces; }
+    [[nodiscard]] constexpr DecimalPlaces getDecimalPlaces() const noexcept { return decimalPlaces; }
 
     /// @brief Whether the value equals `0/1`.
     /// @return `true` if the numerator is zero.
-    [[nodiscard]] constexpr bool IsZero() const noexcept { return numerator == 0; }
+    [[nodiscard]] constexpr bool isZero() const noexcept { return numerator == 0; }
 
     /// @brief Whether the value is an integer.
     /// @return `true` if the denominator is 1.
-    [[nodiscard]] constexpr bool IsInteger() const noexcept { return denominator == 1; }
+    [[nodiscard]] constexpr bool isInteger() const noexcept { return denominator == 1; }
 
     /// @brief Whether the value is strictly less than zero.
     /// @return `true` if the numerator is negative.
-    [[nodiscard]] constexpr bool IsNegative() const noexcept { return numerator < 0; }
+    [[nodiscard]] constexpr bool isNegative() const noexcept { return numerator < 0; }
 
     /// @brief Converts to `double`, rounded to this value's `decimalPlaces`.
     /// @return The rounded floating-point reading.
-    [[nodiscard]] double ToDouble() const noexcept { return ToDouble(decimalPlaces.value); }
+    [[nodiscard]] double toDouble() const noexcept { return toDouble(decimalPlaces.value); }
 
     /// @brief Converts to `double`, rounded to @p requestedDecimalPlaces.
     /// @param requestedDecimalPlaces Number of decimal digits to keep. Values
     ///                               `> 18` fall back to unrounded conversion.
     /// @return The rounded floating-point reading.
-    [[nodiscard]] double ToDouble(std::uint32_t requestedDecimalPlaces) const noexcept;
+    [[nodiscard]] double toDouble(std::uint32_t requestedDecimalPlaces) const noexcept;
 
     /// @brief Negates. @note Negating a Rational built from `INT64_MIN` overflows.
     /// @return The value with the numerator's sign flipped.
@@ -309,7 +310,7 @@ struct Rational {
 
     /// @brief Multiplicative inverse.
     /// @return `denominator/numerator`, or `unexpected(DivisionByZero)` if zero.
-    [[nodiscard]] constexpr std::expected<Rational, RationalError> Reciprocal() const noexcept {
+    [[nodiscard]] constexpr std::expected<Rational, RationalError> reciprocal() const noexcept {
         if (numerator == 0) {
             return std::unexpected(RationalError::DivisionByZero);
         }
@@ -326,8 +327,8 @@ struct Rational {
     /// @param other Value to compare against.
     /// @return The ordering of the two exact values.
     [[nodiscard]] constexpr std::strong_ordering operator<=>(const Rational& other) const noexcept {
-        auto const leftSign = (numerator > 0) - (numerator < 0);
-        auto const rightSign = (other.numerator > 0) - (other.numerator < 0);
+        auto const leftSign = static_cast<int>(numerator > 0) - static_cast<int>(numerator < 0);
+        auto const rightSign = static_cast<int>(other.numerator > 0) - static_cast<int>(other.numerator < 0);
         if (leftSign != rightSign) {
             return leftSign <=> rightSign;
         }
@@ -343,9 +344,13 @@ struct Rational {
         if (leftSign > 0) {
             return magnitude;
         }
-        return magnitude < 0   ? std::strong_ordering::greater
-               : magnitude > 0 ? std::strong_ordering::less
-                               : std::strong_ordering::equal;
+        if (std::is_lt(magnitude)) {
+            return std::strong_ordering::greater;
+        }
+        if (std::is_gt(magnitude)) {
+            return std::strong_ordering::less;
+        }
+        return std::strong_ordering::equal;
     }
 
     /// @brief Equality. Value-only: ignores `decimalPlaces`.
@@ -363,7 +368,7 @@ struct Rational {
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
         auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = numerator * rightDenominatorScaled + rhs.numerator * leftDenominatorScaled;
+        numerator = (numerator * rightDenominatorScaled) + (rhs.numerator * leftDenominatorScaled);
         denominator = denominator * rightDenominatorScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
@@ -377,7 +382,7 @@ struct Rational {
         auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
         auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
         auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = numerator * rightDenominatorScaled - rhs.numerator * leftDenominatorScaled;
+        numerator = (numerator * rightDenominatorScaled) - (rhs.numerator * leftDenominatorScaled);
         denominator = denominator * rightDenominatorScaled;
         widenPrecisionTo(rhs.decimalPlaces);
         canonicalise();
@@ -407,7 +412,7 @@ struct Rational {
     /// @brief Non-throwing division. Result precision becomes `max` of the two.
     /// @param rhs Divisor.
     /// @return `*this / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
-    [[nodiscard]] constexpr std::expected<Rational, RationalError> DividedBy(const Rational& rhs) const noexcept {
+    [[nodiscard]] constexpr std::expected<Rational, RationalError> dividedBy(const Rational& rhs) const noexcept {
         if (rhs.numerator == 0) {
             return std::unexpected(RationalError::DivisionByZero);
         }
@@ -442,7 +447,7 @@ struct Rational {
 
     /// @brief Wire-codec exit (Glaze write side).
     /// @return The canonical members, ready for JSON encoding.
-    [[nodiscard]] Wire getWire() const noexcept { return Wire{numerator, denominator, decimalPlaces.value}; }
+    [[nodiscard]] Wire getWire() const noexcept { return Wire{.num = numerator, .den = denominator, .dp = decimalPlaces.value}; }
 
 private:
     /// @brief Restores the canonical-form invariants in place (denominator > 0,
@@ -559,7 +564,7 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// @return `lhs / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
 [[nodiscard]] constexpr std::expected<Rational, RationalError> operator/(const Rational& lhs,
                                                                          const Rational& rhs) noexcept {
-    return lhs.DividedBy(rhs);
+    return lhs.dividedBy(rhs);
 }
 
 // ---------------------------------------------------------------------------
@@ -595,26 +600,26 @@ template <typename T>
 concept NeedsLifting = IsExpectedRational<T> || IsFloat<T>;
 
 /// @brief Lifts a `Rational` to `ExpectedRational` (always succeeds).
-[[nodiscard]] inline constexpr ExpectedRational lift(const Rational& value, DecimalPlaces) noexcept {
+[[nodiscard]] constexpr ExpectedRational lift(const Rational& value, DecimalPlaces) noexcept {
     return ExpectedRational{value};
 }
 
 /// @brief Forwards an `ExpectedRational` unchanged.
-[[nodiscard]] inline constexpr ExpectedRational lift(const ExpectedRational& value, DecimalPlaces) noexcept {
+[[nodiscard]] constexpr ExpectedRational lift(const ExpectedRational& value, DecimalPlaces) noexcept {
     return value;
 }
 
-/// @brief Lifts a floating-point value via `Rational::FromFloat` at @p fallback precision.
+/// @brief Lifts a floating-point value via `Rational::fromFloat` at @p fallback precision.
 template <std::floating_point Float>
 [[nodiscard]] inline ExpectedRational lift(Float value, DecimalPlaces fallback) noexcept {
-    return Rational::FromFloat(value, fallback);
+    return Rational::fromFloat(value, fallback);
 }
 
 /// @brief The precision to lift a float operand to: the Rational-family
 ///        operand's precision. Picks whichever side carries one (at least one
 ///        always does).
 template <typename Left, typename Right>
-[[nodiscard]] inline constexpr DecimalPlaces liftPrecision(const Left& lhs, const Right& rhs) noexcept {
+[[nodiscard]] constexpr DecimalPlaces liftPrecision(const Left& lhs, const Right& rhs) noexcept {
     if constexpr (IsRational<Left>) {
         return lhs.decimalPlaces;
     } else if constexpr (IsExpectedRational<Left>) {
@@ -715,13 +720,13 @@ template <typename Left, typename Right>
 }
 
 // ---------------------------------------------------------------------------
-// FromFloat and ToDouble out-of-class implementations.
+// fromFloat and toDouble out-of-class implementations.
 // ---------------------------------------------------------------------------
 
 namespace detail {
 
 /// @brief Computes `10^decimalPlaces` as `std::int64_t`. Returns `0` on overflow.
-[[nodiscard]] inline constexpr std::int64_t powerOfTen(std::uint32_t decimalPlaces) noexcept {
+[[nodiscard]] constexpr std::int64_t powerOfTen(std::uint32_t decimalPlaces) noexcept {
     if (decimalPlaces > 18) {
         return 0;
     }
@@ -732,7 +737,7 @@ namespace detail {
     return result;
 }
 
-/// @brief Shared implementation of the three `Rational::FromFloat` overloads.
+/// @brief Shared implementation of the three `Rational::fromFloat` overloads.
 template <std::floating_point Float>
 [[nodiscard]] inline ExpectedRational fromFloatImpl(Float value, DecimalPlaces wantedPrecision) noexcept {
     if (!std::isfinite(value)) {
@@ -762,22 +767,22 @@ template <std::floating_point Float>
 
 }  // namespace detail
 
-inline std::expected<Rational, RationalError> Rational::FromFloat(double value,
+inline std::expected<Rational, RationalError> Rational::fromFloat(double value,
                                                                   DecimalPlaces wantedPrecision) noexcept {
     return detail::fromFloatImpl(value, wantedPrecision);
 }
 
-inline std::expected<Rational, RationalError> Rational::FromFloat(float value,
+inline std::expected<Rational, RationalError> Rational::fromFloat(float value,
                                                                   DecimalPlaces wantedPrecision) noexcept {
     return detail::fromFloatImpl(value, wantedPrecision);
 }
 
-inline std::expected<Rational, RationalError> Rational::FromFloat(long double value,
+inline std::expected<Rational, RationalError> Rational::fromFloat(long double value,
                                                                   DecimalPlaces wantedPrecision) noexcept {
     return detail::fromFloatImpl(value, wantedPrecision);
 }
 
-inline double Rational::ToDouble(std::uint32_t requestedDecimalPlaces) const noexcept {
+inline double Rational::toDouble(std::uint32_t requestedDecimalPlaces) const noexcept {
     auto const raw = static_cast<double>(numerator) / static_cast<double>(denominator);
     auto const scale = detail::powerOfTen(requestedDecimalPlaces);
     if (scale == 0) {
@@ -809,8 +814,8 @@ namespace glz::detail {
 template <>
 struct to_json_schema<morph::math::Rational> {
     template <auto Opts>
-    static void op(auto& s, auto& defs) {
-        to_json_schema<morph::math::Rational::Wire>::template op<Opts>(s, defs);
+    static void op(auto& outSchema, auto& defs) {
+        to_json_schema<morph::math::Rational::Wire>::template op<Opts>(outSchema, defs);
     }
 };
 
@@ -823,16 +828,15 @@ struct to_json_schema<morph::math::Rational> {
 /// @brief std::format support for `morph::math::Rational`.
 ///
 /// Empty specs print the exact rational form (`n/d`, or `n` when integer).
-/// Non-empty specs are forwarded to `std::formatter<double>` on `ToDouble()`.
+/// Non-empty specs are forwarded to `std::formatter<double>` on `toDouble()`.
 template <>
 struct std::formatter<morph::math::Rational> {
     bool delegateToDouble{false};
-    std::formatter<double> doubleFormatter{};
+    std::formatter<double> doubleFormatter;
 
     constexpr auto parse(std::format_parse_context& ctx) {
-        auto const begin = ctx.begin();
-        if (begin == ctx.end() || *begin == '}') {
-            return begin;
+        if (ctx.begin() == ctx.end() || *ctx.begin() == '}') {
+            return ctx.begin();
         }
         delegateToDouble = true;
         return doubleFormatter.parse(ctx);
@@ -840,7 +844,7 @@ struct std::formatter<morph::math::Rational> {
 
     auto format(const morph::math::Rational& value, std::format_context& ctx) const {
         if (delegateToDouble) {
-            return doubleFormatter.format(value.ToDouble(), ctx);
+            return doubleFormatter.format(value.toDouble(), ctx);
         }
         if (value.denominator == 1) {
             return std::format_to(ctx.out(), "{}", value.numerator);

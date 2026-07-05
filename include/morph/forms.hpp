@@ -134,7 +134,7 @@ template <typename A>
         }
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
-        if constexpr (units::is_quantity_v<Member>) {
+        if constexpr (units::isQuantity<Member>) {
             // The field's *declared* precision: the unit default unless the
             // field's type overrides it (Quantity<Unit::m3, 4>).
             property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
@@ -142,9 +142,13 @@ template <typename A>
     });
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
-    dom["required"] = std::move(requiredNames);
+    dom["required"] = requiredNames;
 
-    return glz::write_json(dom).value_or(std::move(rawSchema));
+    auto merged = glz::write_json(dom);
+    if (merged.has_value()) {
+        return std::move(*merged);
+    }
+    return rawSchema;
 }
 
 }  // namespace detail
@@ -162,7 +166,7 @@ template <typename A>
     bool allEngaged = true;
     detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
-        if constexpr (units::is_quantity_v<Member>) {
+        if constexpr (units::isQuantity<Member>) {
             if (!detail::declaredOptional<A>(name) && !member.hasValue()) {
                 allEngaged = false;
             }

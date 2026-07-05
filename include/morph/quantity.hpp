@@ -27,7 +27,7 @@
 ///   data.** Each field carries a *declared* decimal count as a template
 ///   argument — defaulting from the unit's metadata, overridable per field
 ///   (`Quantity<Unit::m3, 4>`) — which drives the schema's
-///   `x-decimalPlaces` and `FromDouble`. The value's *actual* precision is
+///   `x-decimalPlaces` and `fromDouble`. The value's *actual* precision is
 ///   the runtime `DecimalPlaces` tag inside the Rational: it max-propagates
 ///   through arithmetic and can be changed at run time
 ///   (`withDecimalPlaces`, `atDeclaredPrecision`).
@@ -118,7 +118,7 @@ concept UnitEnum = std::is_enum_v<E> && requires(E unit) {
 ///   property of the *field* — how many decimals this slot is specified to
 ///   hold. It defaults from the unit's `UnitTraits` metadata and can be
 ///   overridden per field (`Quantity<Unit::m3, 4>`). It feeds the generated
-///   schema (`x-decimalPlaces`), `FromDouble`, and `atDeclaredPrecision`.
+///   schema (`x-decimalPlaces`), `fromDouble`, and `atDeclaredPrecision`.
 /// - **Actual precision**: a property of the *value* — the runtime
 ///   `DecimalPlaces` tag inside the `Rational` payload. It propagates through
 ///   arithmetic (max rule) and can be changed at run time
@@ -140,7 +140,7 @@ struct Quantity {
                   "declared decimals must be within [1, kMaxDecimalPlaces]");
 
     /// @brief The payload; `std::nullopt` means "not entered / not measured".
-    std::optional<math::Rational> value{};
+    std::optional<math::Rational> value;
 
     /// @brief Constructs the empty state.
     constexpr Quantity() noexcept = default;
@@ -180,12 +180,11 @@ struct Quantity {
     /// @param raw The value to convert.
     /// @return The engaged quantity, or empty when @p raw is not finite or
     ///         does not fit (empty-propagation philosophy: no error channel).
-    [[nodiscard]] static Quantity FromDouble(double raw) noexcept {
-        auto converted = math::Rational::FromFloat(raw, declaredPrecision());
-        if (!converted) {
-            return {};
+    [[nodiscard]] static Quantity fromDouble(double raw) noexcept {
+        if (auto converted = math::Rational::fromFloat(raw, declaredPrecision()); converted.has_value()) {
+            return Quantity{*converted};
         }
-        return Quantity{*converted};
+        return {};
     }
 
     /// @brief Whether a value has been entered/measured.
@@ -193,8 +192,9 @@ struct Quantity {
     [[nodiscard]] constexpr bool hasValue() const noexcept { return value.has_value(); }
 
     /// @brief Unchecked access to the engaged value (UB when empty, exactly
-    ///        like `std::optional`).
+    ///        like `std::optional` — the unchecked contract is the point).
     /// @return The engaged exact value.
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access)
     [[nodiscard]] constexpr const math::Rational& operator*() const noexcept { return *value; }
 
     /// @brief Retags the value's *runtime* precision (the exact value itself
@@ -251,7 +251,7 @@ struct IsQuantity<Quantity<U, Decimals>> : std::true_type {};
 
 /// @brief `true` when `T` (cvref-stripped) is a `morph::units::Quantity`.
 template <typename T>
-inline constexpr bool is_quantity_v = detail::IsQuantity<std::remove_cvref_t<T>>::value;
+inline constexpr bool isQuantity = detail::IsQuantity<std::remove_cvref_t<T>>::value;
 
 // ---------------------------------------------------------------------------
 // Arithmetic. Empty propagates; division by zero yields empty.
@@ -329,9 +329,9 @@ template <auto A, std::uint32_t DecA, auto B, std::uint32_t DecB>
     if (!lhs.value || !rhs.value) {
         return {};
     }
-    // DividedBy is the single division-by-zero authority: it reports exactly
+    // dividedBy is the single division-by-zero authority: it reports exactly
     // when the divisor is zero, which maps to the empty result here.
-    auto quotient = lhs.value->DividedBy(*rhs.value);
+    auto quotient = lhs.value->dividedBy(*rhs.value);
     if (!quotient) {
         return {};
     }
@@ -374,7 +374,7 @@ template <auto U, std::uint32_t Dec>
     if (!lhs.value) {
         return {};
     }
-    auto quotient = lhs.value->DividedBy(divisor);
+    auto quotient = lhs.value->dividedBy(divisor);
     if (!quotient) {
         return {};
     }
@@ -408,10 +408,10 @@ namespace glz::detail {
 template <auto U, std::uint32_t Dec>
 struct to_json_schema<morph::units::Quantity<U, Dec>> {
     template <auto Opts>
-    static void op(auto& s, auto& defs) {
-        to_json_schema<std::optional<morph::math::Rational>>::template op<Opts>(s, defs);
+    static void op(auto& outSchema, auto& defs) {
+        to_json_schema<std::optional<morph::math::Rational>>::template op<Opts>(outSchema, defs);
         constexpr auto unitMeta = morph::units::UnitTraits<decltype(U)>::meta(U);
-        s.ExtUnits = ExtUnits{.unitAscii = unitMeta.id, .unitUnicode = unitMeta.display};
+        outSchema.ExtUnits = ExtUnits{.unitAscii = unitMeta.id, .unitUnicode = unitMeta.display};
     }
 };
 

@@ -23,25 +23,29 @@ using morph::math::Rational;
 // A miniature application unit system: enum + UnitTraits + consteval algebra.
 // ---------------------------------------------------------------------------
 
-enum class QFUnit : std::uint16_t { scalar, percent, kg, m3, kg_per_m3 };
+enum class QFUnit : std::uint8_t { scalar, percent, kg, m3, kg_per_m3 };
 
 template <>
 struct morph::units::UnitTraits<QFUnit> {
     static constexpr morph::units::UnitMeta meta(QFUnit unit) noexcept {
         switch (unit) {
-            case QFUnit::scalar:    return {"scalar", "", 3};
-            case QFUnit::percent:   return {"percent", "%", 1};
-            case QFUnit::kg:        return {"kg", "kg", 3};
-            case QFUnit::m3:        return {"m3", "m³", 3};
-            case QFUnit::kg_per_m3: return {"kg_per_m3", "kg/m³", 1};
+            case QFUnit::scalar:    return {.id = "scalar", .display = "", .defaultDecimals = 3};
+            case QFUnit::percent:   return {.id = "percent", .display = "%", .defaultDecimals = 1};
+            case QFUnit::kg:        return {.id = "kg", .display = "kg", .defaultDecimals = 3};
+            case QFUnit::m3:        return {.id = "m3", .display = "m³", .defaultDecimals = 3};
+            case QFUnit::kg_per_m3: return {.id = "kg_per_m3", .display = "kg/m³", .defaultDecimals = 1};
         }
-        return {"?", "?", 3};
+        return {.id = "?", .display = "?", .defaultDecimals = 3};
     }
 };
 
 consteval QFUnit operator*(QFUnit lhs, QFUnit rhs) {
-    if (lhs == QFUnit::scalar) return rhs;
-    if (rhs == QFUnit::scalar) return lhs;
+    if (lhs == QFUnit::scalar) {
+        return rhs;
+    }
+    if (rhs == QFUnit::scalar) {
+        return lhs;
+    }
     if ((lhs == QFUnit::kg_per_m3 && rhs == QFUnit::m3) || (lhs == QFUnit::m3 && rhs == QFUnit::kg_per_m3)) {
         return QFUnit::kg;
     }
@@ -49,9 +53,15 @@ consteval QFUnit operator*(QFUnit lhs, QFUnit rhs) {
 }
 
 consteval QFUnit operator/(QFUnit lhs, QFUnit rhs) {
-    if (rhs == QFUnit::scalar) return lhs;
-    if (lhs == rhs) return QFUnit::scalar;
-    if (lhs == QFUnit::kg && rhs == QFUnit::m3) return QFUnit::kg_per_m3;
+    if (rhs == QFUnit::scalar) {
+        return lhs;
+    }
+    if (lhs == rhs) {
+        return QFUnit::scalar;
+    }
+    if (lhs == QFUnit::kg && rhs == QFUnit::m3) {
+        return QFUnit::kg_per_m3;
+    }
     throw "unsupported unit quotient";
 }
 
@@ -75,9 +85,9 @@ constexpr DecimalPlaces dp3{3};
 static_assert(std::same_as<decltype(kilograms(1) / cubicMetres(1)), Q<QFUnit::kg_per_m3>>);
 static_assert(std::same_as<decltype((kilograms(1) / cubicMetres(1)) * cubicMetres(1)), Q<QFUnit::kg>>);
 static_assert(std::same_as<decltype(kilograms(1) / kilograms(1)), Q<QFUnit::scalar>>);
-static_assert(morph::units::is_quantity_v<Q<QFUnit::kg>>);
-static_assert(!morph::units::is_quantity_v<Rational>);
-static_assert(!morph::units::is_quantity_v<std::optional<Q<QFUnit::kg>>>);
+static_assert(morph::units::isQuantity<Q<QFUnit::kg>>);
+static_assert(!morph::units::isQuantity<Rational>);
+static_assert(!morph::units::isQuantity<std::optional<Q<QFUnit::kg>>>);
 
 // Declared precision: defaults from UnitTraits, overridable per field, and
 // binary results fall back to the unit default (a computed temporary is not
@@ -86,7 +96,7 @@ using PreciseMass = morph::units::Quantity<QFUnit::kg, 5>;
 static_assert(Q<QFUnit::kg>::declaredDecimals == 3);
 static_assert(Q<QFUnit::percent>::declaredDecimals == 1);
 static_assert(PreciseMass::declaredDecimals == 5);
-static_assert(morph::units::is_quantity_v<PreciseMass>);
+static_assert(morph::units::isQuantity<PreciseMass>);
 static_assert(std::same_as<decltype(std::declval<PreciseMass>() + std::declval<Q<QFUnit::kg>>()), Q<QFUnit::kg>>);
 static_assert(std::same_as<decltype(std::declval<PreciseMass>() / std::declval<Q<QFUnit::m3>>()),
                            Q<QFUnit::kg_per_m3>>);
@@ -100,9 +110,9 @@ static_assert(std::same_as<decltype(-std::declval<PreciseMass>()), PreciseMass>)
 
 struct QFRecordMeasurement {
     std::int64_t sampleId = 0;
-    Q<QFUnit::kg_per_m3> density{};
-    Q<QFUnit::percent> moisture{};
-    std::optional<std::string> note{};
+    Q<QFUnit::kg_per_m3> density;
+    Q<QFUnit::percent> moisture;
+    std::optional<std::string> note;
 
     static constexpr std::array optionalFields{std::string_view{"moisture"}};
 
@@ -110,14 +120,14 @@ struct QFRecordMeasurement {
 };
 
 struct QFComputeDryDensity {
-    Q<QFUnit::kg> massDry{};
-    Q<QFUnit::m3> volume{};
+    Q<QFUnit::kg> massDry;
+    Q<QFUnit::m3> volume;
 
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
 struct QFCalibrate {
-    morph::units::Quantity<QFUnit::kg, 5> referenceMass{};
+    morph::units::Quantity<QFUnit::kg, 5> referenceMass;
 };
 
 struct QFLabModel {
@@ -142,7 +152,7 @@ TEST_CASE("Quantity::Arithmetic::ExactWithPrecisionPropagation", "[quantity]") {
     auto const density = mass / volume;
     REQUIRE(density.hasValue());
     CHECK(*density == Rational{5301, 2, dp1});
-    CHECK((*density).GetDecimalPlaces() == dp3);  // max(1, 3) propagates
+    CHECK((*density).getDecimalPlaces() == dp3);  // max(1, 3) propagates
 
     auto const massBack = density * volume;
     REQUIRE(massBack.hasValue());
@@ -179,7 +189,7 @@ TEST_CASE("Quantity::Arithmetic::EmptyPropagates", "[quantity]") {
 
 TEST_CASE("Quantity::Arithmetic::DivisionByZeroYieldsEmpty", "[quantity]") {
     CHECK_FALSE((kilograms(5) / cubicMetres(0)).hasValue());
-    CHECK_FALSE((kilograms(5) / Rational::Zero(dp1)).hasValue());
+    CHECK_FALSE((kilograms(5) / Rational::zero(dp1)).hasValue());
 }
 
 TEST_CASE("Quantity::Comparison", "[quantity]") {
@@ -197,36 +207,36 @@ TEST_CASE("Quantity::Comparison", "[quantity]") {
 }
 
 TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
-    // FromDouble converts at the field's declared precision.
-    auto const coarse = Q<QFUnit::kg>::FromDouble(2.5);
+    // fromDouble converts at the field's declared precision.
+    auto const coarse = Q<QFUnit::kg>::fromDouble(2.5);
     REQUIRE(coarse.hasValue());
     CHECK(*coarse == Rational{5, 2, dp3});
-    CHECK((*coarse).GetDecimalPlaces() == dp3);
+    CHECK((*coarse).getDecimalPlaces() == dp3);
 
-    auto const fine = PreciseMass::FromDouble(2.5);
+    auto const fine = PreciseMass::fromDouble(2.5);
     REQUIRE(fine.hasValue());
-    CHECK((*fine).GetDecimalPlaces() == DecimalPlaces{5});
+    CHECK((*fine).getDecimalPlaces() == DecimalPlaces{5});
 
-    CHECK_FALSE(Q<QFUnit::kg>::FromDouble(std::numeric_limits<double>::quiet_NaN()).hasValue());
+    CHECK_FALSE(Q<QFUnit::kg>::fromDouble(std::numeric_limits<double>::quiet_NaN()).hasValue());
 
     // The value's runtime precision is data and can be retagged; the exact
     // value never changes.
     auto const retagged = coarse.withDecimalPlaces(DecimalPlaces{9});
     REQUIRE(retagged.hasValue());
     CHECK(*retagged == *coarse);
-    CHECK((*retagged).GetDecimalPlaces() == DecimalPlaces{9});
-    CHECK((*retagged.atDeclaredPrecision()).GetDecimalPlaces() == dp3);
+    CHECK((*retagged).getDecimalPlaces() == DecimalPlaces{9});
+    CHECK((*retagged.atDeclaredPrecision()).getDecimalPlaces() == dp3);
     CHECK_FALSE(Q<QFUnit::kg>{}.withDecimalPlaces(DecimalPlaces{9}).hasValue());
 
     // Out-of-range runtime precision clamps silently (runtime data, no assert).
-    CHECK((*coarse.withDecimalPlaces(DecimalPlaces{99})).GetDecimalPlaces()
+    CHECK((*coarse.withDecimalPlaces(DecimalPlaces{99})).getDecimalPlaces()
           == DecimalPlaces{morph::math::kMaxDecimalPlaces});
 
     // Mixed declared precisions combine; the runtime tag max-propagates.
     auto const sum = fine + coarse;
     REQUIRE(sum.hasValue());
     CHECK(*sum == Rational{5, dp3});
-    CHECK((*sum).GetDecimalPlaces() == DecimalPlaces{5});
+    CHECK((*sum).getDecimalPlaces() == DecimalPlaces{5});
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +244,9 @@ TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("Quantity::Wire::UnitNeverTravels", "[quantity][forms]") {
-    QFRecordMeasurement action{.sampleId = 9, .density = {Rational{23, 10, dp1}}};
+    QFRecordMeasurement action;
+    action.sampleId = 9;
+    action.density = Rational{23, 10, dp1};
 
     auto const json = glz::write_json(action);
     REQUIRE(json.has_value());
@@ -250,7 +262,8 @@ TEST_CASE("Quantity::Wire::UnitNeverTravels", "[quantity][forms]") {
 }
 
 TEST_CASE("Quantity::Wire::PartialPatchEngagesDraft", "[quantity][forms]") {
-    QFRecordMeasurement draft{.sampleId = 42};
+    QFRecordMeasurement draft;
+    draft.sampleId = 42;
     REQUIRE_FALSE(glz::read_json(draft, R"({"density":{"num":5,"den":2,"dp":1}})"));
     CHECK(draft.sampleId == 42);  // untouched by the partial patch
     REQUIRE(draft.density.hasValue());
@@ -266,10 +279,13 @@ TEST_CASE("Quantity::Wire::PartialPatchEngagesDraft", "[quantity][forms]") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("Forms::AllRequiredEngaged", "[forms]") {
-    QFRecordMeasurement blank{.sampleId = 1};
+    QFRecordMeasurement blank;
+    blank.sampleId = 1;
     CHECK_FALSE(morph::forms::allRequiredEngaged(blank));  // density missing
 
-    QFRecordMeasurement densityOnly{.sampleId = 1, .density = {Rational{23, 10, dp1}}};
+    QFRecordMeasurement densityOnly;
+    densityOnly.sampleId = 1;
+    densityOnly.density = Rational{23, 10, dp1};
     CHECK(morph::forms::allRequiredEngaged(densityOnly));  // moisture is opt-out
 
     // The validator machinery picks up validate() (which delegates here).
@@ -298,38 +314,38 @@ TEST_CASE("Forms::SchemaJson", "[forms]") {
 
     // Required derives from the member types + the opt-out list: moisture
     // (declared optional) and note (std::optional) are excluded.
-    CHECK(schema.find(R"("required":["sampleId","density"])") != std::string::npos);
+    CHECK(schema.contains(R"("required":["sampleId","density"])"));
 
     // Quantity fields carry the unit and its default decimals.
-    CHECK(schema.find(R"("unitAscii":"kg_per_m3")") != std::string::npos);
-    CHECK(schema.find(R"("unitUnicode":"kg/m³")") != std::string::npos);
-    CHECK(schema.find(R"("x-decimalPlaces":1)") != std::string::npos);
+    CHECK(schema.contains(R"("unitAscii":"kg_per_m3")"));
+    CHECK(schema.contains(R"("unitUnicode":"kg/m³")"));
+    CHECK(schema.contains(R"("x-decimalPlaces":1)"));
 
     // Every property records its declaration index for renderer layout.
-    CHECK(schema.find(R"("x-order":0)") != std::string::npos);
-    CHECK(schema.find(R"("x-order":3)") != std::string::npos);
+    CHECK(schema.contains(R"("x-order":0)"));
+    CHECK(schema.contains(R"("x-order":3)"));
 
     // The Rational wire object shape is described, not an opaque blob.
-    CHECK(schema.find(R"("num")") != std::string::npos);
-    CHECK(schema.find(R"("den")") != std::string::npos);
-    CHECK(schema.find(R"("dp")") != std::string::npos);
+    CHECK(schema.contains(R"("num")"));
+    CHECK(schema.contains(R"("den")"));
+    CHECK(schema.contains(R"("dp")"));
 
     // int64 bounds survive the post-merge exactly (u64 DOM, no rounding).
-    CHECK(schema.find("9223372036854775807") != std::string::npos);
-    CHECK(schema.find("-9223372036854775808") != std::string::npos);
+    CHECK(schema.contains("9223372036854775807"));
+    CHECK(schema.contains("-9223372036854775808"));
 }
 
 TEST_CASE("Forms::SchemaJson::AllFieldsRequiredWithoutOptOut", "[forms]") {
     auto const schema = morph::forms::schemaJson<QFComputeDryDensity>();
-    CHECK(schema.find(R"("required":["massDry","volume"])") != std::string::npos);
+    CHECK(schema.contains(R"("required":["massDry","volume"])"));
 }
 
 TEST_CASE("Forms::SchemaJson::DeclaredPrecisionOverrideSurfaces", "[forms]") {
     // A field-level declared-precision override (Quantity<kg, 5>) beats the
     // unit default (3) in the generated schema.
     auto const schema = morph::forms::schemaJson<QFCalibrate>();
-    CHECK(schema.find(R"("x-decimalPlaces":5)") != std::string::npos);
-    CHECK(schema.find(R"("required":["referenceMass"])") != std::string::npos);
+    CHECK(schema.contains(R"("x-decimalPlaces":5)"));
+    CHECK(schema.contains(R"("required":["referenceMass"])"));
 }
 
 TEST_CASE("Forms::SchemaJson::Memoized", "[forms]") {
