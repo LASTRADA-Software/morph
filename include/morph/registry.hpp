@@ -290,6 +290,14 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     return true;
 }
 
+/// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`'s generic-execute registration.
+///
+/// Forward declaration only; the definition is in `bridge.hpp` (after `ActionExecuteRegistry`
+/// is visible) to avoid a `registry.hpp` -> `bridge.hpp` include cycle. `bridge.hpp` already
+/// includes `registry.hpp`, not the other way round.
+template <typename Model, typename Action>
+bool registerActionExecutorOnce(std::string_view modelId, std::string_view actionId) noexcept;
+
 }  // namespace detail
 
 }  // namespace morph::model
@@ -379,6 +387,8 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     namespace {                                                                                          \
     [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                            \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
+    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                       \
+        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME); \
     }
 /// @endcond
 

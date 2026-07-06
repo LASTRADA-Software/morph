@@ -21,6 +21,75 @@
 
 namespace morph::bridge {
 
+/// @brief Type-erased, JSON-in/JSON-out execute path for actions whose
+///        concrete C++ type is only known by its registered string id at
+///        the call site (e.g. a schema-driven GUI that reads action names
+///        out of a JSON Schema at runtime).
+///
+/// Populated automatically by `BRIDGE_REGISTER_ACTION` — no action-specific
+/// code is required at any call site. Every entry calls through the real
+/// `BridgeHandler<Model>::execute<Action>()` (so sessions, backend
+/// switches, and completions all behave exactly as they do for hand-written
+/// call sites), unlike `morph::model::detail::ActionDispatcher`, which
+/// calls `Model::execute` directly against an already-owned model holder
+/// and is only ever used server-side.
+class ActionExecuteRegistry {
+public:
+    /// @brief Deserialises `bodyJson`, dispatches through the handler's
+    ///        `Bridge`, and resolves with the JSON-encoded result.
+    using Executor = std::function<::morph::async::Completion<std::string>(void*, std::string_view)>;
+
+    /// @brief Registers the executor for `(Model, Action)` under the given string ids.
+    /// Defined out-of-line after BridgeHandler to avoid forward reference issues.
+    template <typename Model, typename Action>
+    void registerAction(std::string_view modelId, std::string_view actionId);
+
+    /// @brief Looks up and invokes the executor for `(modelId, actionId)`.
+    /// @throws std::runtime_error if no executor was registered for that pair.
+    [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
+                                                                    void* handler, std::string_view bodyJson) const {
+        auto iter = _executors.find(Key{std::string{modelId}, std::string{actionId}});
+        if (iter == _executors.end()) {
+            throw std::runtime_error("unknown action for executeJson: " + std::string{modelId} + "/" +
+                                     std::string{actionId});
+        }
+        return iter->second(handler, bodyJson);
+    }
+
+    /// @brief Returns the process-level singleton registry.
+    static ActionExecuteRegistry& instance();
+
+private:
+    using Key = std::pair<std::string, std::string>;
+    struct KeyHash {
+        std::size_t operator()(const Key& key) const noexcept {
+            std::size_t seed = std::hash<std::string>{}(key.first);
+            seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            return seed;
+        }
+    };
+    std::unordered_map<Key, Executor, KeyHash> _executors;
+};
+
+inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
+    static ActionExecuteRegistry inst;
+    return inst;
+}
+
+}  // namespace morph::bridge
+
+namespace morph::model::detail {
+
+template <typename Model, typename Action>
+inline bool registerActionExecutorOnce(std::string_view modelId, std::string_view actionId) noexcept {
+    ::morph::bridge::ActionExecuteRegistry::instance().registerAction<Model, Action>(modelId, actionId);
+    return true;
+}
+
+}  // namespace morph::model::detail
+
+namespace morph::bridge {
+
 namespace detail {
 
 /// @brief Compile-time decomposition of a pointer-to-data-member type.
@@ -414,6 +483,28 @@ public:
         return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
     }
 
+    /// @brief Type-erased execute: looks up the action by its registered
+    ///        string id and dispatches it through `ActionExecuteRegistry`.
+    ///
+    /// Use this only when the concrete `Action` type is not known at the
+    /// call site (e.g. a schema-driven UI reading action names out of a
+    /// JSON Schema at runtime). Prefer the templated `execute<Action>()`
+    /// whenever the type is known at compile time.
+    ///
+    /// @param actionType Registered action type-id (the `NAME` passed to `BRIDGE_REGISTER_ACTION`).
+    /// @param bodyJson   JSON-encoded action body.
+    /// @return Completion resolving with the JSON-encoded result.
+    /// @throws std::runtime_error if `actionType` was never registered for `Model`.
+    [[nodiscard]] ::morph::async::Completion<std::string> executeJson(std::string_view actionType,
+                                                                        std::string_view bodyJson) {
+        return ActionExecuteRegistry::instance().execute(
+            std::string{::morph::model::ModelTraits<Model>::typeId()}, actionType, this, bodyJson);
+    }
+
+    /// @brief The executor used to deliver this handler's `Completion` callbacks.
+    /// @return The GUI/callback executor passed at construction.
+    [[nodiscard]] ::morph::exec::IExecutor* guiExecutor() const noexcept { return _guiExec; }
+
     /// @brief Subscribes to results of action type @p Action.
     ///
     /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
@@ -596,5 +687,27 @@ private:
     std::shared_ptr<detail::HandlerBinding> _binding;
     std::shared_ptr<SubscriberState> _subs;
 };
+
+/// Out-of-line definition of ActionExecuteRegistry::registerAction.
+/// Placed here after BridgeHandler is fully defined so we can safely cast and call its methods.
+template <typename Model, typename Action>
+inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std::string_view actionId) {
+    Key key{std::string{modelId}, std::string{actionId}};
+    _executors[key] = [](void* handlerVoid, std::string_view bodyJson) -> ::morph::async::Completion<std::string> {
+        auto* handler = static_cast<BridgeHandler<Model>*>(handlerVoid);
+        auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
+        try {
+            Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
+            handler->template execute<Action>(std::move(action))
+                .then([resultState](typename ::morph::model::ActionTraits<Action>::Result result) {
+                    resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
+                })
+                .onError([resultState](const std::exception_ptr& err) { resultState->setException(err); });
+        } catch (...) {
+            resultState->setException(std::current_exception());
+        }
+        return {resultState, handler->guiExecutor()};
+    };
+}
 
 }  // namespace morph::bridge

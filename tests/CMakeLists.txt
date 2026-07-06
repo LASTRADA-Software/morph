@@ -12,6 +12,7 @@ add_executable(morph_tests
     test_registry_extra.cpp
     test_bridge_local.cpp
     test_bridge_remote.cpp
+    test_bridge_execute_json.cpp
     test_remote_extra.cpp
     test_dispatch_di.cpp
     test_handler_binding.cpp
