@@ -342,6 +342,7 @@ Frame {
 
                     TextField {
                         id: entry
+                        objectName: "field_" + fieldColumn.modelData.name
                         visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                         Layout.fillWidth: true
                         placeholderText: fieldColumn.modelData.isQuantity
