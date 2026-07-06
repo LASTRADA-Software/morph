@@ -7,6 +7,7 @@
 // is placed first on the WASM include path so it wins over the native one.
 
 #include <morph/registry.hpp>
+#include <morph/bridge.hpp>
 
 #include "bank/dto/auth_dto.hpp"
 #include "bank/dto/common.hpp"

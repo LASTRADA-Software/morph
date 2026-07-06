@@ -2,6 +2,7 @@
 #pragma once
 
 #include <morph/registry.hpp>
+#include <morph/bridge.hpp>
 
 #include "bank/db/db_model.hpp"
 #include "bank/dto/card_dto.hpp"

@@ -4,6 +4,7 @@
 // WASM shadow of include/bank/models/transaction_model.hpp (in-memory backend).
 
 #include <morph/registry.hpp>
+#include <morph/bridge.hpp>
 
 #include "bank/dto/transaction_dto.hpp"
 

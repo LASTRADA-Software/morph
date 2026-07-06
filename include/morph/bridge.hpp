@@ -33,6 +33,14 @@ namespace morph::bridge {
 /// call sites), unlike `morph::model::detail::ActionDispatcher`, which
 /// calls `Model::execute` directly against an already-owned model holder
 /// and is only ever used server-side.
+///
+/// HARD REQUIREMENT (other direction of the same constraint documented on
+/// `morph::model::detail::registerActionExecutorOnce` in `registry.hpp`): registration into
+/// this registry happens via `registerActionExecutorOnce<Model, Action>`, which
+/// `BRIDGE_REGISTER_ACTION` calls unconditionally but which is only defined here, in
+/// `bridge.hpp`. Every translation unit that calls `BRIDGE_REGISTER_ACTION` must therefore
+/// include this header (directly or transitively), or that translation unit's static
+/// initializer will fail to link.
 class ActionExecuteRegistry {
 public:
     /// @brief Deserialises `bodyJson`, dispatches through the handler's

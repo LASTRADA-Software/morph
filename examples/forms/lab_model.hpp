@@ -14,6 +14,7 @@
 #include <morph/datetime.hpp>
 #include <morph/forms.hpp>
 #include <morph/registry.hpp>
+#include <morph/bridge.hpp>
 
 #include <array>
 #include <cstdint>
