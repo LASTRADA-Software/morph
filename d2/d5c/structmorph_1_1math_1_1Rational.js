@@ -1,0 +1,26 @@
+var structmorph_1_1math_1_1Rational =
+[
+    [ "Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire" ],
+    [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#aef9b384b28e72f3e5c2ed6902ab0d8c2", null ],
+    [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#a620d2fbc33a4a41684a5add7eadc0ab5", null ],
+    [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#a4f9dab44b36f2a360c77f875f5583321", null ],
+    [ "getDecimalPlaces", "d2/d5c/structmorph_1_1math_1_1Rational.html#a83aa3a8c561ea09daaf3d9d470a918d1", null ],
+    [ "isZero", "d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd", null ],
+    [ "isInteger", "d2/d5c/structmorph_1_1math_1_1Rational.html#a5a8cdad28c1018af5717a362b9048547", null ],
+    [ "isNegative", "d2/d5c/structmorph_1_1math_1_1Rational.html#a475dff8a3da3dc6bbec031941b107b4d", null ],
+    [ "toDouble", "d2/d5c/structmorph_1_1math_1_1Rational.html#a3cd9f4e3830cd78a079cf153f0c6b262", null ],
+    [ "toDouble", "d2/d5c/structmorph_1_1math_1_1Rational.html#ad23677b23350cb20d9608258ef7db282", null ],
+    [ "operator-", "d2/d5c/structmorph_1_1math_1_1Rational.html#acf99fea25a17c84917e208f5e8b0f613", null ],
+    [ "reciprocal", "d2/d5c/structmorph_1_1math_1_1Rational.html#a5f7cfb3f58a21f8e9539ddd3463ee076", null ],
+    [ "operator<=>", "d2/d5c/structmorph_1_1math_1_1Rational.html#a31b10a5dfb52b164d8d29147d36f71e2", null ],
+    [ "operator==", "d2/d5c/structmorph_1_1math_1_1Rational.html#a86adea2d65bf10099eec1a4621ca5a37", null ],
+    [ "operator+=", "d2/d5c/structmorph_1_1math_1_1Rational.html#afce38269c0caa6629d07eb333c7b701b", null ],
+    [ "operator-=", "d2/d5c/structmorph_1_1math_1_1Rational.html#abd3c4d2829cd78c8f1b45f618770d415", null ],
+    [ "operator*=", "d2/d5c/structmorph_1_1math_1_1Rational.html#aaf2f23d2c56c968bd550756dfe4bfab5", null ],
+    [ "dividedBy", "d2/d5c/structmorph_1_1math_1_1Rational.html#a4f0257fbb8ad768df0d2c16ea4f9fabf", null ],
+    [ "setWire", "d2/d5c/structmorph_1_1math_1_1Rational.html#accfa4dfaaa11bd421cc62f0941d71d31", null ],
+    [ "getWire", "d2/d5c/structmorph_1_1math_1_1Rational.html#a7338c559da93d37a286f222ce825931c", null ],
+    [ "numerator", "d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd", null ],
+    [ "denominator", "d2/d5c/structmorph_1_1math_1_1Rational.html#ad6c59c25744a54b8f27699e4c3c43800", null ],
+    [ "decimalPlaces", "d2/d5c/structmorph_1_1math_1_1Rational.html#a75fabddd91c6c69a9707e0ba9ef067c2", null ]
+];

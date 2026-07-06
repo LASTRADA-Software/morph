@@ -21,6 +21,10 @@ var annotated_dup =
         [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ],
         [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ]
       ] ],
+      [ "forms", null, [
+        [ "Choice", "df/d65/structmorph_1_1forms_1_1Choice.html", "df/d65/structmorph_1_1forms_1_1Choice" ],
+        [ "FixedString", "df/d5e/structmorph_1_1forms_1_1FixedString.html", "df/d5e/structmorph_1_1forms_1_1FixedString" ]
+      ] ],
       [ "journal", null, [
         [ "FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", "d0/d2e/classmorph_1_1journal_1_1FileActionLog" ],
         [ "IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", "df/d4e/structmorph_1_1journal_1_1IActionLog" ],
@@ -32,6 +36,10 @@ var annotated_dup =
       ] ],
       [ "log", null, [
         [ "ScopedLoggerOverride", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride" ]
+      ] ],
+      [ "math", null, [
+        [ "DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", "da/d03/structmorph_1_1math_1_1DecimalPlaces" ],
+        [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ]
       ] ],
       [ "model", null, [
         [ "ActionLogPolicy", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
@@ -63,6 +71,16 @@ var annotated_dup =
         [ "AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer" ],
         [ "Context", "dd/d85/structmorph_1_1session_1_1Context.html", "dd/d85/structmorph_1_1session_1_1Context" ],
         [ "IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", "d5/d07/structmorph_1_1session_1_1IAuthorizer" ]
+      ] ],
+      [ "time", null, [
+        [ "DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", "d5/d44/structmorph_1_1time_1_1DateTime" ],
+        [ "Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", "db/dec/structmorph_1_1time_1_1Timestamp" ]
+      ] ],
+      [ "units", null, [
+        [ "Quantity", "d5/dda/structmorph_1_1units_1_1Quantity.html", "d5/dda/structmorph_1_1units_1_1Quantity" ],
+        [ "UnitAlternative", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", "d5/d23/structmorph_1_1units_1_1UnitAlternative" ],
+        [ "UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", "d8/dab/structmorph_1_1units_1_1UnitMeta" ],
+        [ "UnitTraits", "de/d93/structmorph_1_1units_1_1UnitTraits.html", null ]
       ] ],
       [ "wire", null, [
         [ "Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", "d5/d77/structmorph_1_1wire_1_1Envelope" ]

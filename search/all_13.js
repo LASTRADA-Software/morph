@@ -1,5 +1,30 @@
 var searchData=
 [
-  ['undolast_0',['undoLast',['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333',1,'morph::journal::SessionLog']]],
-  ['unsubscribe_1',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a6ea83bd14e9cb81f66f9613b0ce75576',1,'morph::bridge::BridgeHandler']]]
+  ['t_0',['Completion&lt;T&gt;',['../index.html#completiont',1,'']]],
+  ['the_20wire_1',['&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
+  ['then_2',['then',['../dd/de7/classmorph_1_1async_1_1Completion.html#a60f4fe2dac5ce113b346c73b9f7fce03',1,'morph::async::Completion']]],
+  ['thread_20safety_3',['Thread safety',['../index.html#thread-safety',1,'']]],
+  ['threadpoolexecutor_4',['threadpoolexecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html',1,'morph::exec::ThreadPoolExecutor'],['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#ab3b2f3ea1e73b4cc34cc07c0d98dbf09',1,'morph::exec::ThreadPoolExecutor::ThreadPoolExecutor()']]],
+  ['timeout_5',['&lt;tt&gt;MainThreadExecutor::runFor&lt;/tt&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['timestamp_6',['timestamp',['../db/dec/structmorph_1_1time_1_1Timestamp.html',1,'morph::time::Timestamp'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a6f0011d4b7e6f830120f26ecf1e72158',1,'morph::time::Timestamp::Timestamp() noexcept=default'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#acccb28c6dec977648081e13ec4b179fa',1,'morph::time::Timestamp::Timestamp(DateTime instant) noexcept'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a55072b0f18766e9c598e28db21c6304f',1,'morph::time::Timestamp::Timestamp(std::optional&lt; DateTime &gt; payload) noexcept']]],
+  ['timestampms_7',['timestampMs',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07',1,'morph::journal::LogEntry']]],
+  ['todouble_8',['todouble',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad23677b23350cb20d9608258ef7db282',1,'morph::math::Rational::toDouble(std::uint32_t requestedDecimalPlaces) const noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3cd9f4e3830cd78a079cf153f0c6b262',1,'morph::math::Rational::toDouble() const noexcept']]],
+  ['toiso8601_9',['toIso8601',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a3eae093e49a3d3b00399ccb33b69bb50',1,'morph::time::DateTime']]],
+  ['topologies_10',['Deployment topologies',['../index.html#deployment-topologies',1,'']]],
+  ['trunc_11',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]],
+  ['tryreconnect_12',['tryReconnect',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['tt_20bridge_3a_3aswitchbackend_20tt_20must_20not_20be_20called_20from_20tt_20onbackendchanged_20tt_13',['&lt;tt&gt;Bridge::switchBackend&lt;/tt&gt; must not be called from &lt;tt&gt;onBackendChanged&lt;/tt&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]],
+  ['tt_20completionstate_20tt_20requires_20a_20non_20null_20executor_20before_20callbacks_20fire_14',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
+  ['tt_20include_20morph_20qt_20tt_15',['Qt integration headers (&lt;tt&gt;include/morph/qt/&lt;/tt&gt;)',['../index.html#qt-integration-headers-includemorphqt',1,'']]],
+  ['tt_20include_20morph_20tt_16',['Core headers (&lt;tt&gt;include/morph/&lt;/tt&gt;)',['../index.html#core-headers-includemorph',1,'']]],
+  ['tt_20mainthreadexecutor_3a_3arunfor_20tt_20does_20not_20drain_20on_20timeout_17',['&lt;tt&gt;MainThreadExecutor::runFor&lt;/tt&gt; does not drain on timeout',['../index.html#mainthreadexecutorrunfor-does-not-drain-on-timeout',1,'']]],
+  ['tt_20morph_3a_3aforms_20tt_20—_20schemas_20for_20auto_20built_20guis_18',['&lt;tt&gt;morph::forms&lt;/tt&gt; — schemas for auto-built GUIs',['../index.html#morphforms--schemas-for-auto-built-guis',1,'']]],
+  ['tt_20morph_3a_3amath_3a_3arational_20tt_20—_20exact_20numbers_20on_20the_20wire_19',['&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
+  ['tt_20morph_3a_3atime_3a_3atimestamp_20tt_20and_20tt_20morph_3a_3aforms_3a_3achoice_20tt_20—_20dates_20and_20combo_20boxes_20',['&lt;tt&gt;morph::time::Timestamp&lt;/tt&gt; and &lt;tt&gt;morph::forms::Choice&lt;/tt&gt; — dates and combo boxes',['../index.html#morphtimetimestamp-and-morphformschoice--dates-and-combo-boxes',1,'']]],
+  ['tt_20morph_3a_3aunits_3a_3aquantity_20u_20tt_20—_20one_20kind_20of_20empty_20units_20as_20types_21',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
+  ['tt_20networkmonitor_20tt_20callbacks_20must_20not_20block_22',['&lt;tt&gt;NetworkMonitor&lt;/tt&gt; callbacks must not block',['../index.html#networkmonitor-callbacks-must-not-block',1,'']]],
+  ['tt_20remoteserver_20tt_20must_20be_20heap_20allocated_23',['&lt;tt&gt;RemoteServer&lt;/tt&gt; must be heap-allocated',['../index.html#remoteserver-must-be-heap-allocated',1,'']]],
+  ['type_20erasure_24',['Registry &amp; type erasure',['../index.html#registry--type-erasure',1,'']]],
+  ['typeid_25',['typeId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#af154f3156a5d37877f06c9ebd33b7192',1,'morph::wire::Envelope']]],
+  ['types_26',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]]
 ];

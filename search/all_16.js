@@ -1,6 +1,8 @@
 var searchData=
 [
-  ['—_20a_20domain_20concern_20not_20a_20framework_20concern_0',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
-  ['—_20ordered_20coalescing_20identity_20aware_20execution_20history_1',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['—_20why_20it_20exists_2',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['waitforconnected_0',['waitForConnected',['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f',1,'morph::qt::QtWebSocketBackend']]],
+  ['why_20it_20exists_1',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
+  ['wire_2',['wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire'],['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html',1,'morph::math::Rational::Wire']]],
+  ['wire_20protocol_3',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['withdecimalplaces_4',['withDecimalPlaces',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a3559a9e86709d0cc0df04f44c8f70c6f',1,'morph::units::Quantity']]]
 ];

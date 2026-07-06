@@ -14,6 +14,8 @@ var hierarchy =
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
       [ "morph::qt::QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", null ]
     ] ],
+    [ "morph::forms::Choice< T, OptionsAction, ValueField, LabelField >", "df/d65/structmorph_1_1forms_1_1Choice.html", null ],
+    [ "morph::forms::FixedString< N >", "df/d5e/structmorph_1_1forms_1_1FixedString.html", null ],
     [ "morph::journal::IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", [
       [ "morph::journal::FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", null ],
       [ "morph::journal::InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", null ],
@@ -22,6 +24,9 @@ var hierarchy =
     [ "morph::journal::LogEntry", "de/d2a/structmorph_1_1journal_1_1LogEntry.html", null ],
     [ "morph::journal::ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", null ],
     [ "morph::log::ScopedLoggerOverride", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html", null ],
+    [ "morph::math::DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", null ],
+    [ "morph::math::Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", null ],
+    [ "morph::math::Rational::Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", null ],
     [ "morph::model::ActionLogPolicy< Action >", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
     [ "morph::model::ActionTraits< Action >", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
     [ "morph::model::ActionValidator< Action >", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
@@ -44,6 +49,12 @@ var hierarchy =
     [ "morph::session::IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", [
       [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ]
     ] ],
+    [ "morph::time::DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", null ],
+    [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
+    [ "morph::units::Quantity< U, DeclaredDecimals >", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],
+    [ "morph::units::UnitAlternative< E >", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", null ],
+    [ "morph::units::UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", null ],
+    [ "morph::units::UnitTraits< E >", "de/d93/structmorph_1_1units_1_1UnitTraits.html", null ],
     [ "morph::wire::Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", null ],
     [ "std::exception", null, [
       [ "std::runtime_error", null, [

@@ -1,10 +1,6 @@
 var searchData=
 [
-  ['ondisconnected_0',['onDisconnected',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a23de858ec93e3a49b91c805caf86d5b3',1,'morph::qt::QtWebSocketServer']]],
-  ['onerror_1',['onError',['../dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8',1,'morph::async::Completion']]],
-  ['onnewconnection_2',['onNewConnection',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a961b4f3170dc9ee8ab596919b6f38edd',1,'morph::qt::QtWebSocketServer']]],
-  ['onoffline_3',['onOffline',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#a1e68df1af6563ea1295f8c48023ae6f5',1,'morph::offline::ReconnectCoordinator']]],
-  ['ononline_4',['onOnline',['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538',1,'morph::offline::ReconnectCoordinator']]],
-  ['ontextmessage_5',['onTextMessage',['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#a29cb9ac5dce058104fdb6513907e5230',1,'morph::qt::QtWebSocketServer']]],
-  ['operator_3d_6',['operator=',['../dd/de7/classmorph_1_1async_1_1Completion.html#aafed4f34a7a3dd00849171db05731700',1,'morph::async::Completion']]]
+  ['networkmonitor_0',['NetworkMonitor',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a1d73c4a868e0b208eb72cd6fe888a1bd',1,'morph::offline::NetworkMonitor']]],
+  ['notifybackendchanged_1',['notifybackendchanged',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#adaa4fa967c7321689e55514788800a91',1,'morph::backend::LocalBackend::notifyBackendChanged()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0',1,'morph::qt::QtWebSocketBackend::notifyBackendChanged()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec',1,'morph::backend::SimulatedRemoteBackend::notifyBackendChanged()']]],
+  ['now_2',['now',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da',1,'morph::time::DateTime::now()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495',1,'morph::time::Timestamp::now()']]]
 ];
