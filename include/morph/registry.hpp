@@ -2,6 +2,7 @@
 
 #pragma once
 #include <concepts>
+#include <cstdint>
 #include <functional>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -97,7 +98,7 @@ struct ActionValidator {
 ///
 /// A strong type instead of a bare `bool` so registration call sites read as
 /// intent (`Loggable::No`) rather than an unexplained `false`.
-enum class Loggable { No, Yes };
+enum class Loggable : std::uint8_t { No, Yes };
 
 /// @brief Per-action policy deciding how repeated executions are checkpointed
 ///        into a durable action log.

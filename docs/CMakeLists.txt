@@ -58,6 +58,17 @@ set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::offline::detail::*"
     "morph::qt::detail"
     "morph::qt::detail::*"
+    "morph::math::detail"
+    "morph::math::detail::*"
+    "morph::units::detail"
+    "morph::units::detail::*"
+    "morph::forms::detail"
+    "morph::forms::detail::*"
+    # Third-party customisation points (glaze codecs/schemas, std::formatter)
+    # are integration shims, not morph API surface.
+    "glz"
+    "glz::*"
+    "std::formatter*"
 )
 
 set(DOCS_SOURCES

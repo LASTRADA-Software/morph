@@ -14,15 +14,29 @@ option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
+option(MORPH_BUILD_FORMS_QML     "Build the Qt Quick renderer for the forms demo" OFF)
+
+if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
+    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: it lives under the forms example, "
+                    "which needs MORPH_BUILD_EXAMPLES=ON and a non-Emscripten toolchain.")
+endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 
 include(cmake/compiler_options.cmake)
 
+# Registered before any subdirectory so demo-level add_test calls (examples/
+# forms) land in the test set alongside the Catch2 suite.
+if(MORPH_BUILD_TESTS)
+    enable_testing()
+endif()
+
 # ── glaze ────────────────────────────────────────────────────────────────────
 # On Windows vcpkg provides glaze. On Linux we fall back to FetchContent so
-# that CI does not require vcpkg.
-find_package(glaze CONFIG QUIET)
+# that CI does not require vcpkg. The version bound matters: without it an
+# older system/user install (e.g. a stray 4.x in ~/.local) silently shadows
+# the pinned v7.4.0 and breaks schema generation.
+find_package(glaze 7.4 CONFIG QUIET)
 if(NOT glaze_FOUND)
     include(FetchContent)
     FetchContent_Declare(
@@ -72,6 +86,11 @@ target_sources(morph
         include/morph/action_log.hpp
         include/morph/journal.hpp
         include/morph/file_action_log.hpp
+        include/morph/rational.hpp
+        include/morph/quantity.hpp
+        include/morph/datetime.hpp
+        include/morph/choice.hpp
+        include/morph/forms.hpp
         include/morph/registry.hpp
         include/morph/backend.hpp
         include/morph/remote.hpp
@@ -98,6 +117,8 @@ if(MORPH_BUILD_EXAMPLES)
         if(AF_COVERAGE)
             apply_coverage(morph_example)
         endif()
+
+        add_subdirectory(examples/forms)
     endif()
 
     if(MORPH_BUILD_BANK_EXAMPLE)
@@ -119,7 +140,6 @@ if(MORPH_BUILD_TESTS)
         FetchContent_MakeAvailable(Catch2)
     endif()
 
-    enable_testing()
     add_subdirectory(tests)
 endif()
 
