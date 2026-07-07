@@ -224,6 +224,8 @@ Frame {
         }
         ready = ok
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
+        if (ready && form.controller)
+            form.controller.submitIfValid(form.actionType, form.previewLine)
     }
 
     function setFieldValue(name, text) {
@@ -340,6 +342,7 @@ Frame {
 
                     TextField {
                         id: entry
+                        objectName: "field_" + fieldColumn.modelData.name
                         visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                         Layout.fillWidth: true
                         placeholderText: fieldColumn.modelData.isQuantity
@@ -381,11 +384,11 @@ Frame {
             }
         }
 
-        Button {
+        Label {
             Layout.topMargin: 8
-            text: "execute"
-            enabled: form.ready
-            onClicked: form.controller.submit(form.actionType, form.previewLine)
+            text: form.ready ? "✓ executes automatically as you type" : "fill the required (*) fields"
+            opacity: 0.6
+            font.italic: true
         }
 
         Label {

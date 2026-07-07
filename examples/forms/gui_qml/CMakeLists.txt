@@ -31,6 +31,26 @@ target_compile_features(morph_forms_module PUBLIC cxx_std_23)
 qt_add_executable(morph_forms_qml main.cpp)
 target_link_libraries(morph_forms_qml PRIVATE morph_forms_moduleplugin Qt6::Quick)
 
+# Deploy Qt's runtime DLLs next to the executable so it can be launched
+# directly (double-click, plain `./morph_forms_qml.exe`) without the Qt bin
+# directory already on PATH.
+if(WIN32)
+    find_program(MORPH_WINDEPLOYQT_EXECUTABLE windeployqt
+        HINTS "${QT6_INSTALL_PREFIX}/bin" "${Qt6_DIR}/../../../bin"
+    )
+    if(MORPH_WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET morph_forms_qml POST_BUILD
+            COMMAND "${MORPH_WINDEPLOYQT_EXECUTABLE}"
+                    --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+                    $<TARGET_FILE:morph_forms_qml>
+            COMMENT "Deploying Qt runtime DLLs next to morph_forms_qml.exe"
+        )
+    else()
+        message(WARNING "windeployqt not found; morph_forms_qml.exe will need "
+                        "Qt's bin directory on PATH to run.")
+    endif()
+endif()
+
 # Qt Quick Test suite for the QML logic (DynamicForm descriptors, exact
 # arithmetic, unit conversion, composition, readiness).
 if(MORPH_BUILD_TESTS)
@@ -38,6 +58,21 @@ if(MORPH_BUILD_TESTS)
 
     qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)
     target_link_libraries(morph_forms_qml_tests PRIVATE morph_forms_moduleplugin Qt6::QuickTest)
+
+    # Same rationale as morph_forms_qml above: without this, running
+    # `ctest -R forms_qml_logic` (or the .exe directly) outside a shell that
+    # already has Qt's bin/plugins on PATH hangs briefly then fails with
+    # STATUS_DLL_NOT_FOUND, since Qt6QuickTestd.dll and the offscreen QPA
+    # plugin are not otherwise deployed next to the test binary.
+    if(WIN32 AND MORPH_WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET morph_forms_qml_tests POST_BUILD
+            COMMAND "${MORPH_WINDEPLOYQT_EXECUTABLE}"
+                    --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+                    --include-plugins qoffscreen
+                    $<TARGET_FILE:morph_forms_qml_tests>
+            COMMENT "Deploying Qt runtime DLLs next to morph_forms_qml_tests.exe"
+        )
+    endif()
 
     add_test(NAME forms_qml_logic
              COMMAND morph_forms_qml_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests)

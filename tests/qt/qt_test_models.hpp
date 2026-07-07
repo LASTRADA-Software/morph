@@ -9,6 +9,7 @@
 
 #pragma once
 #include <morph/registry.hpp>
+#include <morph/bridge.hpp>
 #include <stdexcept>
 
 struct ProcTestEchoAction {

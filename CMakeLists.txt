@@ -23,6 +23,12 @@ endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 
+# Both Qt consumers (the WebSocket backend and the forms QML renderer) need
+# Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
+if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML))
+    include(cmake/FindQt.cmake)
+endif()
+
 include(cmake/compiler_options.cmake)
 
 # Registered before any subdirectory so demo-level add_test calls (examples/
@@ -145,9 +151,6 @@ endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
 if(MORPH_BUILD_QT)
-    if(WIN32)
-        include(cmake/FindQt.cmake)
-    endif()
     find_package(Qt6 COMPONENTS WebSockets REQUIRED)
 
     # Header-only interface for consumers

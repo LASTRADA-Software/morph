@@ -6,6 +6,7 @@
 // support (see catch2/benchmark).
 
 #include <morph/backend.hpp>
+#include <morph/bridge.hpp>
 #include <morph/executor.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>

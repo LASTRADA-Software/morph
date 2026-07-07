@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <morph/bridge.hpp>
 #include <morph/choice.hpp>
 #include <morph/datetime.hpp>
 #include <morph/forms.hpp>

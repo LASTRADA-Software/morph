@@ -290,6 +290,20 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     return true;
 }
 
+/// @brief Static-init helper for `BRIDGE_REGISTER_ACTION`'s generic-execute registration.
+///
+/// Forward declaration only; the definition is in `bridge.hpp` (after `ActionExecuteRegistry`
+/// is visible) to avoid a `registry.hpp` -> `bridge.hpp` include cycle. `bridge.hpp` already
+/// includes `registry.hpp`, not the other way round.
+///
+/// HARD REQUIREMENT: `BRIDGE_REGISTER_ACTION_4` calls this function unconditionally, but only
+/// declares it here — it does NOT define it. Any translation unit that invokes
+/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/bridge.hpp>` (directly or transitively)
+/// somewhere in the same translation unit, or the build will fail to link with an unresolved
+/// external symbol for this function.
+template <typename Model, typename Action>
+bool registerActionExecutorOnce(std::string_view modelId, std::string_view actionId) noexcept;
+
 }  // namespace detail
 
 }  // namespace morph::model
@@ -327,6 +341,13 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
 /// BRIDGE_REGISTER_ACTION(AccountModel, Deposit,    "Deposit")                            // logged
 /// BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount", morph::model::Loggable::No)  // opt out
 /// @endcode
+///
+/// HARD REQUIREMENT: this macro's expansion unconditionally calls
+/// `morph::model::detail::registerActionExecutorOnce<M, A>`, which is only *declared* in
+/// `registry.hpp` and *defined* in `<morph/bridge.hpp>`. Every translation unit that invokes
+/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/bridge.hpp>` (directly or transitively) in
+/// that same translation unit, or the build will fail to link with an unresolved external
+/// symbol for `registerActionExecutorOnce<M, A>`.
 ///
 /// @param M    Concrete model type that handles the action.
 /// @param A    Concrete action type.
@@ -379,6 +400,8 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
     namespace {                                                                                          \
     [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                            \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
+    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                       \
+        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME); \
     }
 /// @endcond
 
