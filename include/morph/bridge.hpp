@@ -49,10 +49,19 @@ public:
 
     /// @brief Registers the executor for `(Model, Action)` under the given string ids.
     /// Defined out-of-line after BridgeHandler to avoid forward reference issues.
+    /// @tparam Model  Model type whose handler will execute the action.
+    /// @tparam Action Action type to register.
+    /// @param modelId  String id the model is registered under.
+    /// @param actionId String id the action is registered under.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId);
 
     /// @brief Looks up and invokes the executor for `(modelId, actionId)`.
+    /// @param modelId  String id of the target model.
+    /// @param actionId String id of the action to execute.
+    /// @param handler  Type-erased `BridgeHandler<Model>*` matching `modelId`.
+    /// @param bodyJson JSON-encoded action payload.
+    /// @return Completion that resolves with the JSON-encoded action result.
     /// @throws std::runtime_error if no executor was registered for that pair.
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
                                                                     void* handler, std::string_view bodyJson) const {
@@ -65,6 +74,7 @@ public:
     }
 
     /// @brief Returns the process-level singleton registry.
+    /// @return Reference to the singleton `ActionExecuteRegistry`.
     static ActionExecuteRegistry& instance();
 
 private:
