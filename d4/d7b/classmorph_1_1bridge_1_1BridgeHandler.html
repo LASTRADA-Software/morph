@@ -124,6 +124,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a8c6341aaf8719bd097f2af013204b03b"><td class="memTemplItemLeft" align="right" valign="top"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">execute</a> (Action action)</td></tr>
 <tr class="memdesc:a8c6341aaf8719bd097f2af013204b03b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code>action</code> via the underlying <code><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></code> and returns a <code>Completion</code>.  <br /></td></tr>
 <tr class="separator:a8c6341aaf8719bd097f2af013204b03b"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5ad7969d7f0857c922f56a74a02e3897" id="r_a5ad7969d7f0857c922f56a74a02e3897"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a5ad7969d7f0857c922f56a74a02e3897">executeJson</a> (std::string_view actionType, std::string_view bodyJson)</td></tr>
+<tr class="memdesc:a5ad7969d7f0857c922f56a74a02e3897"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type-erased execute: looks up the action by its registered string id and dispatches it through <code><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></code>.  <br /></td></tr>
+<tr class="separator:a5ad7969d7f0857c922f56a74a02e3897"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac515f6cc1ed451d1f0eff55ff356ad89" id="r_ac515f6cc1ed451d1f0eff55ff356ad89"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ac515f6cc1ed451d1f0eff55ff356ad89">guiExecutor</a> () const noexcept</td></tr>
+<tr class="memdesc:ac515f6cc1ed451d1f0eff55ff356ad89"><td class="mdescLeft">&#160;</td><td class="mdescRight">The executor used to deliver this handler's <code>Completion</code> callbacks.  <br /></td></tr>
+<tr class="separator:ac515f6cc1ed451d1f0eff55ff356ad89"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa289505b2d7130d3a250e76745ef8753" id="r_aa289505b2d7130d3a250e76745ef8753"><td class="memTemplParams" colspan="2">template&lt;typename Action &gt; </td></tr>
 <tr class="memitem:aa289505b2d7130d3a250e76745ef8753"><td class="memTemplItemLeft" align="right" valign="top">void&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">subscribe</a> (std::function&lt; void(typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result)&gt; cb)</td></tr>
 <tr class="memdesc:aa289505b2d7130d3a250e76745ef8753"><td class="mdescLeft">&#160;</td><td class="mdescRight">Subscribes to results of action type <code>Action</code>.  <br /></td></tr>
@@ -166,7 +172,7 @@ class morph::bridge::BridgeHandler&lt; Model &gt;</div><p>RAII wrapper that bind
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00364">364</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00451">451</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a25d3e99c7bfb7dff687e179f40265432" name="a25d3e99c7bfb7dff687e179f40265432"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a25d3e99c7bfb7dff687e179f40265432">&#9670;&#160;</a></span>BridgeHandler() <span class="overload">[1/2]</span></h2>
@@ -213,7 +219,7 @@ template&lt;typename Model &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00457">457</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,7 +275,7 @@ template&lt;typename Model &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00385">385</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -300,7 +306,7 @@ template&lt;typename Model &gt; </div>
 
 <p>Deregisters the binding from the bridge. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00398">398</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00485">485</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +355,96 @@ template&lt;typename Action &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves on the GUI executor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00500">500</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5ad7969d7f0857c922f56a74a02e3897" name="a5ad7969d7f0857c922f56a74a02e3897"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5ad7969d7f0857c922f56a74a02e3897">&#9670;&#160;</a></span>executeJson()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model &gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::executeJson </td>
+          <td>(</td>
+          <td class="paramtype">std::string_view&#160;</td>
+          <td class="paramname"><em>actionType</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view&#160;</td>
+          <td class="paramname"><em>bodyJson</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Type-erased execute: looks up the action by its registered string id and dispatches it through <code><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></code>. </p>
+<p>Use this only when the concrete <code>Action</code> type is not known at the call site (e.g. a schema-driven UI reading action names out of a JSON Schema at runtime). Prefer the templated <code>execute&lt;Action&gt;()</code> whenever the type is known at compile time.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">actionType</td><td>Registered action type-id (the <code>NAME</code> passed to <code>BRIDGE_REGISTER_ACTION</code>). </td></tr>
+    <tr><td class="paramname">bodyJson</td><td>JSON-encoded action body. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion resolving with the JSON-encoded result. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if <code>actionType</code> was never registered for <code>Model</code>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00516">516</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac515f6cc1ed451d1f0eff55ff356ad89" name="ac515f6cc1ed451d1f0eff55ff356ad89"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac515f6cc1ed451d1f0eff55ff356ad89">&#9670;&#160;</a></span>guiExecutor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model &gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> * <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::guiExecutor </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The executor used to deliver this handler's <code>Completion</code> callbacks. </p>
+<dl class="section return"><dt>Returns</dt><dd>The GUI/callback executor passed at construction. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00524">524</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -395,7 +490,7 @@ template&lt;typename Action &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00422">422</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -452,7 +547,7 @@ template&lt;typename Action &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00437">437</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -485,7 +580,7 @@ template&lt;typename Action &gt; </div>
 
 <p>Removes the subscriber for action type <code>Action</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00446">446</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00555">555</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -531,7 +626,7 @@ template&lt;auto FieldPtr&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00460">460</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -564,7 +659,7 @@ template&lt;typename Action &gt; </div>
 
 <p>Discards the in-progress draft for action <code>Action</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00475">475</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00584">584</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -596,7 +691,7 @@ template&lt;typename Model &gt; </div>
 <p>Returns the underlying <code>HandlerBinding</code>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the binding owned by this handler. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00486">486</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

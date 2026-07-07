@@ -13,6 +13,7 @@ var annotated_dup =
         [ "SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend" ]
       ] ],
       [ "bridge", null, [
+        [ "ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry" ],
         [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", "d0/ddc/classmorph_1_1bridge_1_1Bridge" ],
         [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ]
       ] ],

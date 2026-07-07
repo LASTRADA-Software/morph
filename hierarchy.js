@@ -7,6 +7,7 @@ var hierarchy =
       [ "morph::qt::QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html", null ]
     ] ],
     [ "morph::backend::RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", null ],
+    [ "morph::bridge::ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", null ],
     [ "morph::bridge::Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", null ],
     [ "morph::bridge::BridgeHandler< Model >", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", null ],
     [ "morph::exec::IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", [
