@@ -20,6 +20,10 @@ if(MORPH_BUILD_FORMS_QML)
     add_subdirectory(gui_qml)
 endif()
 
+if(MORPH_BUILD_FORMS_QML_SHELL AND MORPH_BUILD_FORMS_QML)
+    add_subdirectory(gui_qml_shell)
+endif()
+
 # Demo-level tests: they drive the *shipped* artifacts (the emitted page's JS
 # math via node, and the REPL binary end to end).
 if(MORPH_BUILD_TESTS)
