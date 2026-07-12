@@ -92,11 +92,11 @@ constexpr DecimalPlaces dp1{1};
 constexpr DecimalPlaces dp3{3};
 
 [[nodiscard]] Q<QFUnit::kg> kilograms(std::int64_t num, std::int64_t den = 1) {
-    return {Rational{num, den, dp3}};
+    return {Rational{Numerator{num}, Denominator{den}, dp3}};
 }
 
 [[nodiscard]] Q<QFUnit::m3> cubicMetres(std::int64_t num, std::int64_t den = 1) {
-    return {Rational{num, den, dp3}};
+    return {Rational{Numerator{num}, Denominator{den}, dp3}};
 }
 
 // Compile-time facts: unit algebra deduction and the quantity trait.
@@ -191,12 +191,12 @@ BRIDGE_REGISTER_ACTION(QFLabModel, QFSchedule, "QFSchedule")
 // ---------------------------------------------------------------------------
 
 TEST_CASE("Quantity::Arithmetic::ExactWithPrecisionPropagation", "[quantity]") {
-    auto const mass = Q<QFUnit::kg>{Rational{26505, 10, dp1}};
+    auto const mass = Q<QFUnit::kg>{Rational{Numerator{26505}, Denominator{10}, dp1}};
     auto const volume = cubicMetres(1);
 
     auto const density = mass / volume;
     REQUIRE(density.hasValue());
-    CHECK(*density == Rational{5301, 2, dp1});
+    CHECK(*density == Rational{Numerator{5301}, Denominator{2}, dp1});
     CHECK((*density).getDecimalPlaces() == dp3);  // max(1, 3) propagates
 
     auto const massBack = density * volume;
@@ -212,7 +212,7 @@ TEST_CASE("Quantity::Arithmetic::ExactWithPrecisionPropagation", "[quantity]") {
     static_assert(std::same_as<decltype(scaled), const Q<QFUnit::kg>>);
     CHECK(*scaled == Rational{6, dp3});
     CHECK(*(Rational{2, dp1} * kilograms(3)) == Rational{6, dp3});
-    CHECK(*(kilograms(3) / Rational{2, dp1}) == Rational{3, 2, dp3});
+    CHECK(*(kilograms(3) / Rational{2, dp1}) == Rational{Numerator{3}, Denominator{2}, dp3});
 }
 
 TEST_CASE("Quantity::Arithmetic::EmptyPropagates", "[quantity]") {
@@ -229,7 +229,7 @@ TEST_CASE("Quantity::Arithmetic::EmptyPropagates", "[quantity]") {
 
     // Cross-unit product propagates emptiness from either side.
     CHECK_FALSE((Q<QFUnit::kg_per_m3>{} * cubicMetres(2)).hasValue());
-    CHECK_FALSE((Q<QFUnit::kg_per_m3>{Rational{5, 2, dp1}} * Q<QFUnit::m3>{}).hasValue());
+    CHECK_FALSE((Q<QFUnit::kg_per_m3>{Rational{Numerator{5}, Denominator{2}, dp1}} * Q<QFUnit::m3>{}).hasValue());
 }
 
 TEST_CASE("Quantity::Arithmetic::DivisionByZeroYieldsEmpty", "[quantity]") {
@@ -244,7 +244,7 @@ TEST_CASE("Quantity::Comparison", "[quantity]") {
     CHECK(Q<QFUnit::kg>{} == Q<QFUnit::kg>{});
 
     // Declared precisions are transparent to comparison and conversion.
-    PreciseMass const precise{Rational{1, 2, dp3}};
+    PreciseMass const precise{Rational{Numerator{1}, Denominator{2}, dp3}};
     CHECK(precise == kilograms(1, 2));
     CHECK(precise < kilograms(1));
     Q<QFUnit::kg> const widened = precise;  // same unit, different declared precision
@@ -255,7 +255,7 @@ TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
     // fromDouble converts at the field's declared precision.
     auto const coarse = Q<QFUnit::kg>::fromDouble(2.5);
     REQUIRE(coarse.hasValue());
-    CHECK(*coarse == Rational{5, 2, dp3});
+    CHECK(*coarse == Rational{Numerator{5}, Denominator{2}, dp3});
     CHECK((*coarse).getDecimalPlaces() == dp3);
 
     auto const fine = PreciseMass::fromDouble(2.5);
@@ -291,7 +291,7 @@ TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
 TEST_CASE("Quantity::Wire::UnitNeverTravels", "[quantity][forms]") {
     QFRecordMeasurement action;
     action.sampleId = 9;
-    action.density = Rational{23, 10, dp1};
+    action.density = Rational{Numerator{23}, Denominator{10}, dp1};
 
     auto const json = glz::write_json(action);
     REQUIRE(json.has_value());
@@ -312,7 +312,7 @@ TEST_CASE("Quantity::Wire::PartialPatchEngagesDraft", "[quantity][forms]") {
     REQUIRE_FALSE(glz::read_json(draft, R"({"density":{"num":5,"den":2,"dp":1}})"));
     CHECK(draft.sampleId == 42);  // untouched by the partial patch
     REQUIRE(draft.density.hasValue());
-    CHECK(*draft.density == Rational{5, 2, dp1});
+    CHECK(*draft.density == Rational{Numerator{5}, Denominator{2}, dp1});
 
     // Explicit null clears the field again.
     REQUIRE_FALSE(glz::read_json(draft, R"({"density":null})"));
@@ -330,7 +330,7 @@ TEST_CASE("Forms::AllRequiredEngaged", "[forms]") {
 
     QFRecordMeasurement densityOnly;
     densityOnly.sampleId = 1;
-    densityOnly.density = Rational{23, 10, dp1};
+    densityOnly.density = Rational{Numerator{23}, Denominator{10}, dp1};
     CHECK(morph::forms::allRequiredEngaged(densityOnly));  // moisture is opt-out
 
     // The validator machinery picks up validate() (which delegates here).
@@ -413,7 +413,7 @@ TEST_CASE("Forms::MergeSchemaExtras::MalformedInputPassesThrough", "[forms]") {
 TEST_CASE("Forms::DispatchQuantityActionThroughRegistry", "[forms][quantity]") {
     using morph::model::ActionTraits;
 
-    QFComputeDryDensity action{.massDry = Q<QFUnit::kg>{Rational{26505, 10, dp1}}, .volume = cubicMetres(1)};
+    QFComputeDryDensity action{.massDry = Q<QFUnit::kg>{Rational{Numerator{26505}, Denominator{10}, dp1}}, .volume = cubicMetres(1)};
     auto const payload = ActionTraits<QFComputeDryDensity>::toJson(action);
 
     auto holder = morph::model::detail::ModelFactory::create<QFLabModel>();
@@ -422,7 +422,7 @@ TEST_CASE("Forms::DispatchQuantityActionThroughRegistry", "[forms][quantity]") {
 
     auto const result = ActionTraits<QFComputeDryDensity>::resultFromJson(resultJson);
     REQUIRE(result.hasValue());
-    CHECK(*result == Rational{5301, 2, dp1});
+    CHECK(*result == Rational{Numerator{5301}, Denominator{2}, dp1});
 }
 
 // ---------------------------------------------------------------------------

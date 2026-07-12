@@ -118,7 +118,7 @@ inline std::string encode(const Envelope& env) {
 inline Envelope decode(std::string_view json) {
     Envelope env{};
     if (auto errCode = glz::read_json(env, json)) {
-        throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, std::string{json}));
+        throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }
     return env;
 }

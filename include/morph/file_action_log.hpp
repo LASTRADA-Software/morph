@@ -12,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #include <io.h>
 #else
 #include <unistd.h>
@@ -57,6 +57,7 @@ public:
     /// valid handle or throws before completing (in which case this destructor
     /// never runs), and copy/move are deleted, so there is no path that could
     /// null it out afterwards.
+    // NOLINTNEXTLINE(cert-err33-c) — destructor context, can't propagate errors
     ~FileActionLog() override { std::fclose(_file); }
 
     FileActionLog(const FileActionLog&) = delete;
@@ -67,18 +68,20 @@ public:
     /// @brief Appends @p entry as one JSON line. Buffered until `flush()`. Thread-safe.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
+        // NOLINTNEXTLINE(cert-err33-c) — append-only; fwrite errors checked via subsequent fsync
         std::fwrite(line.data(), 1, line.size(), _file);
     }
 
     /// @brief Flushes stdio's buffer, then fsyncs the file descriptor. Thread-safe.
     void flush() override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
+        // NOLINTNEXTLINE(cert-err33-c) — errors logged by caller after flush
         std::fflush(_file);
-#if defined(_WIN32)
+#ifdef _WIN32
         _commit(_fileno(_file));
 #else
         ::fsync(fileno(_file));
@@ -94,7 +97,7 @@ public:
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in on-disk (append) order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         std::ifstream in{_path};
         std::vector<LogEntry> out;
         std::string line;

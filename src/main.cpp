@@ -7,6 +7,7 @@
 #include <iostream>
 #include <thread>
 
+// NOLINTBEGIN(misc-use-internal-linkage)
 struct IncrementAction {
     int by = 0;
 };
@@ -21,6 +22,7 @@ struct CounterModel {
     }
     int execute(FailingAction) { throw std::runtime_error("intentional failure from FailingAction"); }
 };
+// NOLINTEND(misc-use-internal-linkage)
 
 BRIDGE_REGISTER_MODEL(CounterModel, "CounterModel")
 BRIDGE_REGISTER_ACTION(CounterModel, IncrementAction, "IncrementAction")

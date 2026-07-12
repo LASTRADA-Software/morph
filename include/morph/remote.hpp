@@ -71,22 +71,22 @@ public:
         }
     }
 
-    /// @brief Asynchronously processes @p msg and calls @p reply with the response.
+    /// @brief Asynchronously processes a JSON `Envelope` and calls @p reply with the response.
     ///
     /// The message is dispatched to the worker pool. @p reply is called exactly
     /// once from the pool thread when processing completes.
     ///
     /// Thread-safe. Safe to call before the previous call's reply has been delivered.
     ///
-    /// @param msg   Pipe-delimited protocol message.
-    /// @param reply Callback invoked with the response string.
+    /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @param reply Callback invoked with the JSON-encoded reply envelope.
     void handle(std::string msg, std::function<void(std::string)> reply) {
         auto self = shared_from_this();
         _pool.post(
             [self, msg = std::move(msg), reply = std::move(reply)]() mutable { self->dispatchMessage(msg, reply); });
     }
 
-    /// @brief Synchronously processes @p msg on the calling thread and returns the reply.
+    /// @brief Synchronously processes a JSON `Envelope` on the calling thread and returns the reply.
     ///
     /// Equivalent to `handle()` but never posts to the worker pool, so it is safe
     /// to call from a thread that *is* the worker pool — for example, from a
@@ -96,8 +96,8 @@ public:
     /// messages still post to the strand and would return before the result is
     /// produced. The implementation rejects `execute` to make this explicit.
     ///
-    /// @param msg Pipe-delimited control message.
-    /// @return Reply string the async path would have produced.
+    /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @return JSON-encoded reply envelope.
     std::string handleInline(const std::string& msg) {
         std::string reply;
         std::function<void(std::string)> capture = [&reply](std::string out) { reply = std::move(out); };
@@ -123,7 +123,7 @@ public:
     /// provider (new registrations get no log). Thread-safe.
     /// @param provider Callable invoked synchronously while handling `register`.
     void setLogProvider(LogProvider provider) {
-        std::scoped_lock lock{_logProviderMtx};
+        std::scoped_lock const lock{_logProviderMtx};
         _logProvider = std::move(provider);
     }
 
@@ -145,7 +145,7 @@ private:
                 if (!env.contextKey.empty()) {
                     LogProvider provider;
                     {
-                        std::scoped_lock lock{_logProviderMtx};
+                        std::scoped_lock const lock{_logProviderMtx};
                         provider = _logProvider;
                     }
                     if (provider) {
@@ -154,15 +154,15 @@ private:
                         }
                     }
                 }
-                ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
+                ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
                 {
-                    std::scoped_lock lock{_regMtx};
+                    std::scoped_lock const lock{_regMtx};
                     _models[mid] = std::move(holder);
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
                 {
-                    std::scoped_lock lock{_regMtx};
+                    std::scoped_lock const lock{_regMtx};
                     _models.erase(::morph::exec::detail::ModelId{env.modelId});
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
@@ -182,10 +182,10 @@ private:
             reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
             return;
         }
-        ::morph::exec::detail::ModelId mid{env.modelId};
+        ::morph::exec::detail::ModelId const mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         {
-            std::scoped_lock lock{_regMtx};
+            std::scoped_lock const lock{_regMtx};
             auto iter = _models.find(mid);
             if (iter != _models.end()) {
                 holder = iter->second;
@@ -198,7 +198,7 @@ private:
         _strand.post(mid, [&disp = _dispatcher, env = std::move(env), holder = std::move(holder),
                            reply = std::move(reply)]() mutable {
             try {
-                ::morph::session::detail::ScopedContext scoped{env.session};
+                ::morph::session::detail::ScopedContext const scoped{env.session};
                 auto result = disp.dispatch(env.modelType, env.actionType, *holder, env.body);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
@@ -246,8 +246,8 @@ public:
     /// @throws std::runtime_error if the server replies with an error.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
-        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()>) override {
-        return registerModelWithContext(typeId, nullptr, {});
+        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) override {
+        return registerModelWithContext(typeId, {}, {});
     }
 
     /// @brief Registers the model type on the server, carrying @p contextKey across
@@ -261,7 +261,7 @@ public:
     /// @return `ModelId` assigned by the server.
     /// @throws std::runtime_error if the server replies with an error.
     ::morph::exec::detail::ModelId registerModelWithContext(
-        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()>,
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
         auto reply = ::morph::wire::decode(_server.handleInline(
             ::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey}))));
@@ -329,7 +329,7 @@ public:
     void cancelPending(const std::exception_ptr& exc) override {
         std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
         {
-            std::scoped_lock lock{_pendingMtx};
+            std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
         }
         for (auto& weak : snapshot) {
@@ -341,7 +341,7 @@ public:
 
 private:
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
-        std::scoped_lock lock{_pendingMtx};
+        std::scoped_lock const lock{_pendingMtx};
         std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
         _pending.emplace_back(state);
     }

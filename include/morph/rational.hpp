@@ -122,6 +122,34 @@ struct DecimalPlaces {
     [[nodiscard]] constexpr auto operator<=>(const DecimalPlaces& other) const noexcept = default;
 };
 
+/// @brief Strong type for a Rational numerator.
+///
+/// Prevents numerator/denominator argument swapping at construction sites.
+struct Numerator {
+    /// @brief Raw signed integer value.
+    std::int64_t value{};
+
+    constexpr Numerator() noexcept = default;
+
+    /// @brief Explicit so the type must be spelled out.
+    /// @param raw The integer to box as a numerator.
+    constexpr explicit Numerator(std::int64_t raw) noexcept : value{raw} {}
+};
+
+/// @brief Strong type for a Rational denominator.
+///
+/// Prevents numerator/denominator argument swapping at construction sites.
+struct Denominator {
+    /// @brief Raw signed integer value; must never be zero after canonicalisation.
+    std::int64_t value{};
+
+    constexpr Denominator() noexcept = default;
+
+    /// @brief Explicit so the type must be spelled out.
+    /// @param raw The integer to box as a denominator.
+    constexpr explicit Denominator(std::int64_t raw) noexcept : value{raw} {}
+};
+
 /// @brief Largest decimal precision the type supports: `10^18` is the
 ///        greatest power of ten that fits in `std::int64_t`.
 inline constexpr std::uint32_t kMaxDecimalPlaces = 18;
@@ -210,7 +238,7 @@ struct Rational {
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
         : numerator{whole}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
 
-    /// @brief Constructs from explicit numerator/denominator, then canonicalises.
+        /// @brief Constructs from explicit numerator/denominator, then canonicalises.
     ///
     /// A negative @p wantedDenominator flips the sign of @p wantedNumerator,
     /// the pair is reduced by `gcd`, and a denominator of `0` is clamped to
@@ -219,10 +247,10 @@ struct Rational {
     /// @param wantedNumerator   Signed numerator.
     /// @param wantedDenominator Denominator. May be negative or zero on input.
     /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
-    constexpr Rational(std::int64_t wantedNumerator, std::int64_t wantedDenominator,
+    constexpr Rational(Numerator wantedNumerator, Denominator wantedDenominator,
                        DecimalPlaces wantedPrecision) noexcept
-        : numerator{wantedNumerator},
-          denominator{wantedDenominator},
+        : numerator{wantedNumerator.value},
+          denominator{wantedDenominator.value},
           decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {
         canonicalise();
     }
@@ -233,8 +261,8 @@ struct Rational {
     /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
     /// @return The canonical rational, or `DivisionByZero` if @p wantedDenominator is 0.
     [[nodiscard]] static constexpr std::expected<Rational, RationalError> from(
-        std::int64_t wantedNumerator, std::int64_t wantedDenominator, DecimalPlaces wantedPrecision) noexcept {
-        if (wantedDenominator == 0) {
+        Numerator wantedNumerator, Denominator wantedDenominator, DecimalPlaces wantedPrecision) noexcept {
+        if (wantedDenominator.value == 0) {
             return std::unexpected(RationalError::DivisionByZero);
         }
         return Rational{wantedNumerator, wantedDenominator, wantedPrecision};
@@ -266,14 +294,14 @@ struct Rational {
     /// @param wantedPrecision Decimal precision of the returned value.
     /// @return `0/1` tagged with @p wantedPrecision.
     [[nodiscard]] static constexpr Rational zero(DecimalPlaces wantedPrecision) noexcept {
-        return Rational{0, 1, wantedPrecision};
+        return Rational{Numerator{0}, Denominator{1}, wantedPrecision};
     }
 
     /// @brief Canonical one (`1/1`) at the given precision.
     /// @param wantedPrecision Decimal precision of the returned value.
     /// @return `1/1` tagged with @p wantedPrecision.
     [[nodiscard]] static constexpr Rational one(DecimalPlaces wantedPrecision) noexcept {
-        return Rational{1, 1, wantedPrecision};
+        return Rational{Numerator{1}, Denominator{1}, wantedPrecision};
     }
 
     /// @brief The value's current decimal precision.
@@ -305,7 +333,7 @@ struct Rational {
     /// @brief Negates. @note Negating a Rational built from `INT64_MIN` overflows.
     /// @return The value with the numerator's sign flipped.
     [[nodiscard]] constexpr Rational operator-() const noexcept {
-        return Rational{-numerator, denominator, decimalPlaces};
+        return Rational{Numerator{-numerator}, Denominator{denominator}, decimalPlaces};
     }
 
     /// @brief Multiplicative inverse.
@@ -315,9 +343,9 @@ struct Rational {
             return std::unexpected(RationalError::DivisionByZero);
         }
         if (numerator < 0) {
-            return Rational{-denominator, -numerator, decimalPlaces};
+            return Rational{Numerator{-denominator}, Denominator{-numerator}, decimalPlaces};
         }
-        return Rational{denominator, numerator, decimalPlaces};
+        return Rational{Numerator{denominator}, Denominator{numerator}, decimalPlaces};
     }
 
     /// @brief Three-way comparison. Value-only: ignores `decimalPlaces`.
@@ -419,7 +447,7 @@ struct Rational {
         auto leftCopy = *this;
         auto const reciprocalNumerator = rhs.numerator > 0 ? rhs.denominator : -rhs.denominator;
         auto const reciprocalDenominator = rhs.numerator > 0 ? rhs.numerator : -rhs.numerator;
-        leftCopy *= Rational{reciprocalNumerator, reciprocalDenominator, rhs.decimalPlaces};
+        leftCopy *= Rational{Numerator{reciprocalNumerator}, Denominator{reciprocalDenominator}, rhs.decimalPlaces};
         return leftCopy;
     }
 
@@ -437,11 +465,11 @@ struct Rational {
     ///        (`den == 0`, out-of-range `dp`, `INT64_MIN` components whose
     ///        negation would overflow) instead of asserting.
     /// @param wire Raw values decoded from JSON.
-    void setWire(Wire wire) noexcept {
+void setWire(Wire wire) noexcept {
         constexpr auto int64Min = std::numeric_limits<std::int64_t>::min();
         constexpr auto negatableMin = -std::numeric_limits<std::int64_t>::max();
-        *this = Rational{wire.num == int64Min ? negatableMin : wire.num,
-                         wire.den == int64Min ? negatableMin : wire.den,
+        *this = Rational{Numerator{wire.num == int64Min ? negatableMin : wire.num},
+                         Denominator{wire.den == int64Min ? negatableMin : wire.den},
                          DecimalPlaces{detail::clampWireDecimalPlaces(wire.dp)}};
     }
 
@@ -490,7 +518,8 @@ static_assert(std::is_standard_layout_v<Rational>);
 /// @param value Value to take the absolute value of.
 /// @return The non-negative value with the same magnitude.
 [[nodiscard]] constexpr Rational abs(const Rational& value) noexcept {
-    return value.numerator < 0 ? Rational{-value.numerator, value.denominator, value.decimalPlaces} : value;
+    return value.numerator < 0 ? Rational{Numerator{-value.numerator}, Denominator{value.denominator}, value.decimalPlaces}
+                               : value;
 }
 
 /// @brief Rounds toward positive infinity.
@@ -600,12 +629,12 @@ template <typename T>
 concept NeedsLifting = IsExpectedRational<T> || IsFloat<T>;
 
 /// @brief Lifts a `Rational` to `ExpectedRational` (always succeeds).
-[[nodiscard]] constexpr ExpectedRational lift(const Rational& value, DecimalPlaces) noexcept {
+[[nodiscard]] constexpr ExpectedRational lift(const Rational& value, DecimalPlaces /*wantedPrecision*/) noexcept {
     return ExpectedRational{value};
 }
 
 /// @brief Forwards an `ExpectedRational` unchanged.
-[[nodiscard]] constexpr ExpectedRational lift(const ExpectedRational& value, DecimalPlaces) noexcept {
+[[nodiscard]] constexpr ExpectedRational lift(const ExpectedRational& value, DecimalPlaces /*wantedPrecision*/) noexcept {
     return value;
 }
 
@@ -762,7 +791,7 @@ template <std::floating_point Float>
     }
 
     auto const scaledNumerator = static_cast<std::int64_t>(std::llround(scaled));
-    return Rational{scaledNumerator, scale, DecimalPlaces{rawPrecision}};
+    return Rational{Numerator{scaledNumerator}, Denominator{scale}, DecimalPlaces{rawPrecision}};
 }
 
 }  // namespace detail

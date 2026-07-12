@@ -42,6 +42,7 @@ struct Context {
 /// Default implementation supplied by the framework is `AllowAllAuthorizer`. Real
 /// deployments install a custom subclass that checks principal claims, action
 /// permissions, rate limits, etc.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IAuthorizer {
     virtual ~IAuthorizer() = default;
 
@@ -51,9 +52,12 @@ struct IAuthorizer {
     /// @param modelType  String id of the target model type.
     /// @param actionType String id of the action being invoked.
     /// @return `true` to allow dispatch, `false` to reject with `err|unauthorized`.
-    [[nodiscard]] virtual bool authorize(const Context& ctx, std::string_view modelType,
-                                         std::string_view actionType) const = 0;
+    [[nodiscard]] virtual bool authorize(const Context& ctx,
+                                         // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+                                         std::string_view modelType,
+                                          std::string_view actionType) const = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Default authorizer that permits everything.
 ///
@@ -66,6 +70,7 @@ struct AllowAllAuthorizer : IAuthorizer {
     /// @param actionType Ignored.
     /// @return Always `true`.
     [[nodiscard]] bool authorize([[maybe_unused]] const Context& ctx,
+                                 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                  [[maybe_unused]] std::string_view modelType,
                                  [[maybe_unused]] std::string_view actionType) const override {
         return true;

@@ -99,7 +99,7 @@ public:
     /// Thread-safe.
     void stop() {
         {
-            std::scoped_lock lock{_mtx};
+            std::scoped_lock const lock{_mtx};
             if (_stopped) {
                 return;
             }

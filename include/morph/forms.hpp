@@ -108,7 +108,7 @@ concept HasOptionalFields = requires {
 template <typename A>
 [[nodiscard]] constexpr bool declaredOptional(std::string_view fieldName) noexcept {
     if constexpr (HasOptionalFields<A>) {
-        for (std::string_view candidate : A::optionalFields) {
+        for (std::string_view const candidate : A::optionalFields) {
             if (candidate == fieldName) {
                 return true;
             }
@@ -122,11 +122,13 @@ template <typename A>
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
 ///        member of @p action (glaze pure reflection).
 template <typename A, typename Visitor>
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — member-tie iteration
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
     constexpr auto memberCount = glz::reflect<Plain>::size;
     auto memberTie = glz::to_tie(action);
     [&]<std::size_t... I>(std::index_sequence<I...>) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index bounded by reflect::size
         (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], glz::get_member(action, get<I>(memberTie))),
          ...);
     }(std::make_index_sequence<memberCount>{});
@@ -137,6 +139,7 @@ constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
 ///
 /// Separated from `schemaJson` so the fallback path (malformed input passes
 /// through unchanged) is directly testable.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
 template <typename A>
 [[nodiscard]] std::string mergeSchemaExtras(std::string rawSchema) {
     // u64 number mode: the schema carries int64/uint64 bounds in $defs, which
@@ -196,6 +199,7 @@ template <typename A>
     // untestable line here (write_json of a DOM we just built cannot fail).
     return glz::write_json(dom).value_or(rawSchema);
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace detail
 

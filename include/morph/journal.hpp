@@ -63,7 +63,7 @@ public:
     /// nothing is coalesced or dropped here.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         entry.seq = ++_nextSeq;
         _all.push_back(std::move(entry));
     }
@@ -75,7 +75,7 @@ public:
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         if (entityKey.empty()) {
             return _all;
         }
@@ -106,7 +106,7 @@ public:
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
         std::vector<LogEntry> remaining;
         {
-            std::scoped_lock lock{_mtx};
+            std::scoped_lock const lock{_mtx};
             if (!_all.empty()) {
                 _all.pop_back();
                 _committedUpTo = std::min(_committedUpTo, _all.size());
@@ -132,7 +132,7 @@ public:
                     ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
         std::vector<LogEntry> pending;
         {
-            std::scoped_lock lock{_mtx};
+            std::scoped_lock const lock{_mtx};
             if (_committedUpTo >= _all.size()) {
                 return;
             }
@@ -165,6 +165,7 @@ private:
                 lastIndexForKey.emplace(std::move(key), out.size());
                 out.push_back(entry);
             } else {
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index from same loop
                 out[iter->second] = entry;
             }
         }

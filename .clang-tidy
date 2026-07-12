@@ -3,17 +3,22 @@ Checks: >
   clang-diagnostic-*,
   clang-analyzer-*,
   bugprone-*,
+  cppcoreguidelines-*,
+  misc-*,
   modernize-*,
   performance-*,
+  portability-*,
   readability-*,
+  cert-*,
+  concurrency-*,
   -modernize-use-trailing-return-type,
   -readability-magic-numbers,
-  -readability-named-parameter,
-  -bugprone-easily-swappable-parameters,
-  -readability-convert-member-functions-to-static,
-  -bugprone-empty-catch
+  -cppcoreguidelines-avoid-magic-numbers,
+  -misc-non-private-member-variables-in-classes,
+  -portability-avoid-pragma-once,
+  -misc-include-cleaner
 
-WarningsAsErrors: ""
+WarningsAsErrors: "*"
 
 HeaderFilterRegex: "include/morph/.*"
 

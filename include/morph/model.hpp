@@ -23,6 +23,7 @@ struct ModelHolder;
 /// Implemented automatically by `ModelHolder<M>` when `M` declares
 /// `void onBackendChanged()`. `Bridge::switchBackend()` discovers this
 /// capability via `dynamic_cast` without coupling to the concrete type.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IBackendChangedSink {
     virtual ~IBackendChangedSink() = default;
 
@@ -30,6 +31,7 @@ struct IBackendChangedSink {
     ///        re-registered all handlers on it.
     virtual void onBackendChanged() = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 // ── Concept ───────────────────────────────────────────────────────────────────
 
@@ -57,6 +59,7 @@ struct BackendChangedMixin<M, true> : IBackendChangedSink {
 /// @brief Type-erased wrapper that owns a single model instance.
 ///
 /// Used internally by backends to store heterogeneous models in a single map.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IModelHolder {
     virtual ~IModelHolder() = default;
 
@@ -118,6 +121,7 @@ private:
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Concrete holder that stores a `Model` by value.
 ///

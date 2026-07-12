@@ -7,7 +7,6 @@
 #include <functional>
 #include <mutex>
 #include <queue>
-#include <string>
 #include <thread>
 #include <vector>
 
@@ -19,6 +18,7 @@ namespace morph::exec {
 ///
 /// Concrete implementations decide *where* and *when* posted tasks run
 /// (thread pool, main thread, Qt event loop, …).
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IExecutor {
     virtual ~IExecutor() = default;
 
@@ -30,12 +30,14 @@ struct IExecutor {
     /// @param task Callable to execute.
     virtual void post(std::function<void()> task) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Multi-threaded executor backed by a fixed-size thread pool.
 ///
 /// Tasks are placed in a FIFO queue and consumed by worker threads.
 /// Exceptions thrown by tasks are silently caught and discarded.
 /// The destructor blocks until all worker threads have exited.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ThreadPoolExecutor : public IExecutor {
 public:
     /// @brief Constructs the pool with @p n worker threads.
@@ -51,7 +53,7 @@ public:
     /// Remaining queued tasks that have not started are dropped.
     ~ThreadPoolExecutor() override {
         {
-            std::scoped_lock lock{_m};
+            std::scoped_lock const lock{_m};
             _stop = true;
         }
         _cv.notify_all();
@@ -64,7 +66,7 @@ public:
     /// @param task Callable to execute. Thread-safe.
     void post(std::function<void()> task) override {
         {
-            std::scoped_lock lock{_m};
+            std::scoped_lock const lock{_m};
             _q.push(std::move(task));
         }
         _cv.notify_one();
@@ -85,6 +87,7 @@ private:
             }
             try {
                 task();
+            // NOLINTNEXTLINE(bugprone-empty-catch) — task exceptions are intentionally discarded
             } catch (...) {
             }
         }
@@ -109,7 +112,7 @@ public:
     /// @param task Callable to execute.
     void post(std::function<void()> task) override {
         {
-            std::scoped_lock lock{_m};
+            std::scoped_lock const lock{_m};
             _q.push(std::move(task));
         }
         _cv.notify_all();
