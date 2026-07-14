@@ -24,7 +24,9 @@
 // (`.value` instead of `unbox<...>`); wire-codec cases added at the end.
 
 using morph::math::DecimalPlaces;
+using morph::math::Denominator;
 using morph::math::kMaxDecimalPlaces;
+using morph::math::Numerator;
 using morph::math::Rational;
 using morph::math::RationalError;
 
@@ -203,14 +205,14 @@ TEST_CASE("Rational::PrecisionCap", "[rational]")
     CHECK(kMaxDecimalPlaces == 18);
 
     // Precision at the cap is accepted unchanged.
-    CHECK(Rational { 1, 2, DecimalPlaces { 18 } }.getDecimalPlaces() == DecimalPlaces { 18 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 18 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 
     // In a release build (NDEBUG) an out-of-range precision is clamped into
     // [1, kMaxDecimalPlaces]. A debug build asserts before reaching here, so
     // these clamp checks only run when NDEBUG is defined.
 #ifdef NDEBUG
-    CHECK(Rational { 1, 2, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 1 });
-    CHECK(Rational { 1, 2, DecimalPlaces { 99 } }.getDecimalPlaces() == DecimalPlaces { 18 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 1 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 99 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 #endif
 }
 
@@ -244,7 +246,7 @@ TEST_CASE("Rational::DenominatorAlwaysPositive", "[rational]")
     CHECK((left * right).denominator > 0);
     CHECK((*(left / right)).denominator > 0);
 
-    Rational mutating { 1, 2, dp9 };
+    Rational mutating { Numerator{1}, Denominator{2}, dp9 };
     mutating += right;
     CHECK(mutating.denominator > 0);
     mutating -= right;
@@ -468,13 +470,13 @@ TEST_CASE("Rational::Conversions", "[rational]")
 TEST_CASE("Rational::OverflowReduction", "[rational]")
 {
     auto constexpr large = std::int64_t { std::numeric_limits<std::int32_t>::max() };
-    auto const left = Rational { large, 1, dp9 };
-    auto const right = Rational { 1, large, dp9 };
+    auto const left = Rational { Numerator{large}, Denominator{1}, dp9 };
+    auto const right = Rational { Numerator{1}, Denominator{large}, dp9 };
     auto const sum = left + right;
     CHECK(sum.denominator == large);
     CHECK(sum.numerator == (large * large) + 1);
 
-    auto const cancelling = Rational { large, 7, dp9 } * Rational { 7, large, dp9 };
+    auto const cancelling = Rational { Numerator{large}, Denominator{7}, dp9 } * Rational { Numerator{7}, Denominator{large}, dp9 };
     CHECK(cancelling == Rational::one(dp9));
 }
 
@@ -764,8 +766,8 @@ TEST_CASE("Rational::Comparison::ExactAtInt64Extremes", "[rational]")
     // long-double comparison would round both to the same value and call
     // them equal. The 128-bit comparison must not.
     auto constexpr big = std::int64_t { 1 } << 62;
-    auto const left = Rational { big + 1, big, dp9 };    // 1 + 1/2^62
-    auto const right = Rational { big, big - 1, dp9 };   // 1 + 1/(2^62-1)
+    auto const left = Rational { Numerator{big + 1}, Denominator{big}, dp9 };    // 1 + 1/2^62
+    auto const right = Rational { Numerator{big}, Denominator{big - 1}, dp9 };   // 1 + 1/(2^62-1)
 
     CHECK(left != right);
     CHECK(left < right);
@@ -794,7 +796,7 @@ TEST_CASE("Rational::Wire::Int64MinComponentsClamp", "[rational]")
     Rational numeratorCase {};
     REQUIRE_FALSE(glz::read_json(numeratorCase, R"({"num":-9223372036854775808,"den":2,"dp":1})"));
     CHECK(numeratorCase.denominator > 0);
-    CHECK(numeratorCase == Rational { -std::numeric_limits<std::int64_t>::max(), 2, dp1 });
+    CHECK(numeratorCase == Rational { Numerator{-std::numeric_limits<std::int64_t>::max()}, Denominator{2}, dp1 });
 
     Rational denominatorCase {};
     REQUIRE_FALSE(glz::read_json(denominatorCase, R"({"num":3,"den":-9223372036854775808,"dp":1})"));
@@ -849,7 +851,7 @@ TEST_CASE("Rational::Wire::HostileInputClamps", "[rational]")
 TEST_CASE("Rational::Wire::MissingFieldsUseWireDefaults", "[rational]")
 {
     // Absent keys fall back to Wire's member defaults (0/1 at precision 1).
-    Rational value { 9, 4, dp9 };
+    Rational value { Numerator{9}, Denominator{4}, dp9 };
     REQUIRE_FALSE(glz::read_json(value, R"({})"));
     CHECK(value == Rational::zero(dp1));
     CHECK(value.getDecimalPlaces() == dp1);

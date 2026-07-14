@@ -24,6 +24,8 @@
 #include <vector>
 
 using morph::math::DecimalPlaces;
+using morph::math::Denominator;
+using morph::math::Numerator;
 using morph::math::Rational;
 
 // ---------------------------------------------------------------------------

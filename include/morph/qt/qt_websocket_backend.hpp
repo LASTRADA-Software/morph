@@ -123,7 +123,7 @@ public:
     /// @brief Installs the handler `Bridge` uses to re-register handlers after a reconnect.
     /// @param handler Callable invoked on the Qt thread after every successful reconnect.
     ///                Pass `nullptr` to clear.
-    void setReconnectHandler(std::function<void()> handler) override;
+    void setReconnectHandler(const std::function<void()>& handler) override;
 
 private:
     /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
