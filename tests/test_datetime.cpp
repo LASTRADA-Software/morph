@@ -151,3 +151,20 @@ TEST_CASE("Timestamp::EmptyStateAndWire", "[datetime][forms]") {
     REQUIRE_FALSE(glz::read_json(restored, R"({"at":null})"));
     CHECK_FALSE(restored.at.hasValue());
 }
+
+TEST_CASE("Timestamp::Difference", "[datetime][forms]") {
+    auto const earlier = Timestamp{sample()};
+    auto const later = Timestamp{sample() + std::chrono::minutes{5}};
+
+    // Both engaged: the signed chrono duration between the instants.
+    auto const delta = later - earlier;
+    REQUIRE(delta.has_value());
+    CHECK(*delta == std::chrono::minutes{5});
+    CHECK((earlier - later).value() == -std::chrono::minutes{5});
+
+    // Either operand empty collapses to nullopt.
+    Timestamp const blank;
+    CHECK_FALSE((later - blank).has_value());
+    CHECK_FALSE((blank - later).has_value());
+    CHECK_FALSE((blank - blank).has_value());
+}
