@@ -24,7 +24,9 @@
 // (`.value` instead of `unbox<...>`); wire-codec cases added at the end.
 
 using morph::math::DecimalPlaces;
+using morph::math::Denominator;
 using morph::math::kMaxDecimalPlaces;
+using morph::math::Numerator;
 using morph::math::Rational;
 using morph::math::RationalError;
 
@@ -72,14 +74,14 @@ static_assert(Rational {}.numerator == 0);
 static_assert(Rational {}.denominator == 1);
 static_assert(Rational { 7, dp9 }.numerator == 7);
 static_assert(Rational { 7, dp9 }.denominator == 1);
-static_assert(Rational { 2, 4, dp9 }.numerator == 1);
-static_assert(Rational { 2, 4, dp9 }.denominator == 2);
-static_assert(Rational { -1, -2, dp9 }.numerator == 1);
-static_assert(Rational { -1, -2, dp9 }.denominator == 2);
-static_assert(Rational { 3, -4, dp9 }.numerator == -3);
-static_assert(Rational { 3, -4, dp9 }.denominator == 4);
-static_assert(Rational { 5, 0, dp9 }.numerator == 5);
-static_assert(Rational { 5, 0, dp9 }.denominator == 1);
+static_assert(Rational { Numerator{2}, Denominator{4}, dp9 }.numerator == 1);
+static_assert(Rational { Numerator{2}, Denominator{4}, dp9 }.denominator == 2);
+static_assert(Rational { Numerator{-1}, Denominator{-2}, dp9 }.numerator == 1);
+static_assert(Rational { Numerator{-1}, Denominator{-2}, dp9 }.denominator == 2);
+static_assert(Rational { Numerator{3}, Denominator{-4}, dp9 }.numerator == -3);
+static_assert(Rational { Numerator{3}, Denominator{-4}, dp9 }.denominator == 4);
+static_assert(Rational { Numerator{5}, Denominator{0}, dp9 }.numerator == 5);
+static_assert(Rational { Numerator{5}, Denominator{0}, dp9 }.denominator == 1);
 
 // Precision is carried and queryable at compile time.
 static_assert((Rational { 7, dp9 }.getDecimalPlaces()).value == 9);
@@ -92,47 +94,47 @@ static_assert(Rational::one(dp9).numerator == 1);
 static_assert(Rational::one(dp9).denominator == 1);
 
 // From factory.
-static_assert(Rational::from(1, 2, dp9).has_value());
-static_assert(!Rational::from(1, 0, dp9).has_value());
-static_assert(Rational::from(1, 0, dp9).error() == RationalError::DivisionByZero);
+static_assert(Rational::from(Numerator{1}, Denominator{2}, dp9).has_value());
+static_assert(!Rational::from(Numerator{1}, Denominator{0}, dp9).has_value());
+static_assert(Rational::from(Numerator{1}, Denominator{0}, dp9).error() == RationalError::DivisionByZero);
 
 // Arithmetic.
-static_assert(Rational { 1, 3, dp9 } + Rational { 1, 3, dp9 } + Rational { 1, 3, dp9 }
+static_assert(Rational { Numerator{1}, Denominator{3}, dp9 } + Rational { Numerator{1}, Denominator{3}, dp9 } + Rational { Numerator{1}, Denominator{3}, dp9 }
               == Rational::one(dp9));
-static_assert(Rational { 1, 10, dp9 } + Rational { 2, 10, dp9 } == Rational { 3, 10, dp9 });
-static_assert(Rational { 5, 6, dp9 } - Rational { 1, 6, dp9 } == Rational { 2, 3, dp9 });
-static_assert(Rational { 2, 3, dp9 } * Rational { 3, 5, dp9 } == Rational { 2, 5, dp9 });
-static_assert((Rational { 1, 7, dp9 } * Rational { 7, 1, dp9 }) == Rational::one(dp9));
+static_assert(Rational { Numerator{1}, Denominator{10}, dp9 } + Rational { Numerator{2}, Denominator{10}, dp9 } == Rational { Numerator{3}, Denominator{10}, dp9 });
+static_assert(Rational { Numerator{5}, Denominator{6}, dp9 } - Rational { Numerator{1}, Denominator{6}, dp9 } == Rational { Numerator{2}, Denominator{3}, dp9 });
+static_assert(Rational { Numerator{2}, Denominator{3}, dp9 } * Rational { Numerator{3}, Denominator{5}, dp9 } == Rational { Numerator{2}, Denominator{5}, dp9 });
+static_assert((Rational { Numerator{1}, Denominator{7}, dp9 } * Rational { Numerator{7}, Denominator{1}, dp9 }) == Rational::one(dp9));
 
 // Division returns expected.
-static_assert((Rational { 1, 2, dp9 } / Rational { 1, 4, dp9 }).has_value());
-static_assert(*(Rational { 1, 2, dp9 } / Rational { 1, 4, dp9 }) == Rational { 2, dp9 });
-static_assert(!(Rational { 1, 2, dp9 } / Rational::zero(dp9)).has_value());
+static_assert((Rational { Numerator{1}, Denominator{2}, dp9 } / Rational { Numerator{1}, Denominator{4}, dp9 }).has_value());
+static_assert(*(Rational { Numerator{1}, Denominator{2}, dp9 } / Rational { Numerator{1}, Denominator{4}, dp9 }) == Rational { 2, dp9 });
+static_assert(!(Rational { Numerator{1}, Denominator{2}, dp9 } / Rational::zero(dp9)).has_value());
 
 // reciprocal.
-static_assert(Rational { 3, 4, dp9 }.reciprocal().has_value());
-static_assert(*Rational { 3, 4, dp9 }.reciprocal() == Rational { 4, 3, dp9 });
-static_assert(*Rational { -3, 4, dp9 }.reciprocal() == Rational { -4, 3, dp9 });
+static_assert(Rational { Numerator{3}, Denominator{4}, dp9 }.reciprocal().has_value());
+static_assert(*Rational { Numerator{3}, Denominator{4}, dp9 }.reciprocal() == Rational { Numerator{4}, Denominator{3}, dp9 });
+static_assert(*Rational { Numerator{-3}, Denominator{4}, dp9 }.reciprocal() == Rational { Numerator{-4}, Denominator{3}, dp9 });
 static_assert(!Rational::zero(dp9).reciprocal().has_value());
 
 // Comparison (value-only).
-static_assert(Rational { 1, 2, dp9 } < Rational { 2, 3, dp9 });
-static_assert(Rational { -1, 2, dp9 } < Rational { 0, dp9 });
-static_assert(Rational { 2, 4, dp9 } == Rational { 1, 2, dp9 });
+static_assert(Rational { Numerator{1}, Denominator{2}, dp9 } < Rational { Numerator{2}, Denominator{3}, dp9 });
+static_assert(Rational { Numerator{-1}, Denominator{2}, dp9 } < Rational { 0, dp9 });
+static_assert(Rational { Numerator{2}, Denominator{4}, dp9 } == Rational { Numerator{1}, Denominator{2}, dp9 });
 // Comparison ignores precision: same value, different precision -> equal.
-static_assert(Rational { 1, 2, dp3 } == Rational { 1, 2, dp9 });
+static_assert(Rational { Numerator{1}, Denominator{2}, dp3 } == Rational { Numerator{1}, Denominator{2}, dp9 });
 
 // Conversion helpers (free functions; ADL through Rational).
-static_assert(trunc(Rational { 7, 2, dp9 }) == 3);
-static_assert(trunc(Rational { -7, 2, dp9 }) == -3);
-static_assert(floor(Rational { 7, 2, dp9 }) == 3);
-static_assert(floor(Rational { -7, 2, dp9 }) == -4);
-static_assert(ceil(Rational { 7, 2, dp9 }) == 4);
-static_assert(ceil(Rational { -7, 2, dp9 }) == -3);
+static_assert(trunc(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
+static_assert(trunc(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -3);
+static_assert(floor(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
+static_assert(floor(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -4);
+static_assert(ceil(Rational { Numerator{7}, Denominator{2}, dp9 }) == 4);
+static_assert(ceil(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -3);
 
 // Abs / unary minus.
-static_assert((-Rational { 3, 4, dp9 }) == Rational { -3, 4, dp9 });
-static_assert(abs(Rational { -3, 4, dp9 }) == Rational { 3, 4, dp9 });
+static_assert((-Rational { Numerator{3}, Denominator{4}, dp9 }) == Rational { Numerator{-3}, Denominator{4}, dp9 });
+static_assert(abs(Rational { Numerator{-3}, Denominator{4}, dp9 }) == Rational { Numerator{3}, Denominator{4}, dp9 });
 
 // Plain arithmetic result type is Rational; division wraps in expected.
 static_assert(std::same_as<decltype(Rational {} + Rational {}), Rational>);
@@ -177,25 +179,25 @@ TEST_CASE("Rational::Construction", "[rational]")
     CHECK(Rational { 7, dp9 }.numerator == 7);
     CHECK(Rational { 7, dp9 }.denominator == 1);
 
-    CHECK(Rational { 2, 4, dp9 }.numerator == 1);
-    CHECK(Rational { 2, 4, dp9 }.denominator == 2);
+    CHECK(Rational { Numerator{2}, Denominator{4}, dp9 }.numerator == 1);
+    CHECK(Rational { Numerator{2}, Denominator{4}, dp9 }.denominator == 2);
 
-    CHECK(Rational { -1, -2, dp9 }.numerator == 1);
-    CHECK(Rational { -1, -2, dp9 }.denominator == 2);
-    CHECK(Rational { 3, -4, dp9 }.numerator == -3);
-    CHECK(Rational { 3, -4, dp9 }.denominator == 4);
+    CHECK(Rational { Numerator{-1}, Denominator{-2}, dp9 }.numerator == 1);
+    CHECK(Rational { Numerator{-1}, Denominator{-2}, dp9 }.denominator == 2);
+    CHECK(Rational { Numerator{3}, Denominator{-4}, dp9 }.numerator == -3);
+    CHECK(Rational { Numerator{3}, Denominator{-4}, dp9 }.denominator == 4);
 
-    CHECK(Rational { 5, 0, dp9 }.numerator == 5);
-    CHECK(Rational { 5, 0, dp9 }.denominator == 1);
+    CHECK(Rational { Numerator{5}, Denominator{0}, dp9 }.numerator == 5);
+    CHECK(Rational { Numerator{5}, Denominator{0}, dp9 }.denominator == 1);
 }
 
 TEST_CASE("Rational::PrecisionQuery", "[rational]")
 {
     // getDecimalPlaces is public API and returns the constructed precision.
-    CHECK(Rational { 1, 2, dp9 }.getDecimalPlaces() == dp9);
-    CHECK(Rational { 1, 2, dp3 }.getDecimalPlaces() == dp3);
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp9 }.getDecimalPlaces() == dp9);
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp3 }.getDecimalPlaces() == dp3);
     CHECK(Rational { 7, dp6 }.getDecimalPlaces() == dp6);
-    CHECK((Rational { 1, 2, dp9 }.getDecimalPlaces()).value == 9);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp9 }.getDecimalPlaces()).value == 9);
 }
 
 TEST_CASE("Rational::PrecisionCap", "[rational]")
@@ -203,14 +205,14 @@ TEST_CASE("Rational::PrecisionCap", "[rational]")
     CHECK(kMaxDecimalPlaces == 18);
 
     // Precision at the cap is accepted unchanged.
-    CHECK(Rational { 1, 2, DecimalPlaces { 18 } }.getDecimalPlaces() == DecimalPlaces { 18 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 18 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 
     // In a release build (NDEBUG) an out-of-range precision is clamped into
     // [1, kMaxDecimalPlaces]. A debug build asserts before reaching here, so
     // these clamp checks only run when NDEBUG is defined.
 #ifdef NDEBUG
-    CHECK(Rational { 1, 2, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 1 });
-    CHECK(Rational { 1, 2, DecimalPlaces { 99 } }.getDecimalPlaces() == DecimalPlaces { 18 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 1 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 99 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 #endif
 }
 
@@ -229,22 +231,22 @@ TEST_CASE("Rational::DenominatorAlwaysPositive", "[rational]")
 {
     auto const samples = std::array {
         Rational { 0, dp9 },      Rational { 7, dp9 },      Rational { -7, dp9 },
-        Rational { 2, 4, dp9 },   Rational { -2, 4, dp9 },  Rational { 2, -4, dp9 },
-        Rational { -2, -4, dp9 }, Rational { 5, 0, dp9 },   Rational::zero(dp9),
+        Rational { Numerator{2}, Denominator{4}, dp9 },   Rational { Numerator{-2}, Denominator{4}, dp9 },  Rational { Numerator{2}, Denominator{-4}, dp9 },
+        Rational { Numerator{-2}, Denominator{-4}, dp9 }, Rational { Numerator{5}, Denominator{0}, dp9 },   Rational::zero(dp9),
         Rational::one(dp9),
     };
     for (auto const& value : samples) {
         CHECK(value.denominator > 0);
     }
 
-    auto const left = Rational { 3, 5, dp9 };
-    auto const right = Rational { -7, 11, dp9 };
+    auto const left = Rational { Numerator{3}, Denominator{5}, dp9 };
+    auto const right = Rational { Numerator{-7}, Denominator{11}, dp9 };
     CHECK((left + right).denominator > 0);
     CHECK((left - right).denominator > 0);
     CHECK((left * right).denominator > 0);
     CHECK((*(left / right)).denominator > 0);
 
-    Rational mutating { 1, 2, dp9 };
+    Rational mutating { Numerator{1}, Denominator{2}, dp9 };
     mutating += right;
     CHECK(mutating.denominator > 0);
     mutating -= right;
@@ -260,11 +262,11 @@ TEST_CASE("Rational::DenominatorAlwaysPositive", "[rational]")
 
 TEST_CASE("Rational::FromExpected", "[rational]")
 {
-    auto const valid = Rational::from(1, 2, dp9);
+    auto const valid = Rational::from(Numerator{1}, Denominator{2}, dp9);
     REQUIRE(valid.has_value());
-    CHECK(*valid == Rational { 1, 2, dp9 });
+    CHECK(*valid == Rational { Numerator{1}, Denominator{2}, dp9 });
 
-    auto const invalid = Rational::from(1, 0, dp9);
+    auto const invalid = Rational::from(Numerator{1}, Denominator{0}, dp9);
     REQUIRE_FALSE(invalid.has_value());
     CHECK(invalid.error() == RationalError::DivisionByZero);
 }
@@ -288,22 +290,22 @@ TEST_CASE("Rational::fromFloat::Roundtrip", "[rational]")
     {
         auto const value = Rational::fromFloat(0.5, dp1);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { 1, 2, dp1 });
+        CHECK(*value == Rational { Numerator{1}, Denominator{2}, dp1 });
     }
     {
         auto const value = Rational::fromFloat(0.25, dp2);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { 1, 4, dp2 });
+        CHECK(*value == Rational { Numerator{1}, Denominator{4}, dp2 });
     }
     {
         auto const value = Rational::fromFloat(0.1, dp1);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { 1, 10, dp1 });
+        CHECK(*value == Rational { Numerator{1}, Denominator{10}, dp1 });
     }
     {
         auto const value = Rational::fromFloat(-1.75, dp2);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { -7, 4, dp2 });
+        CHECK(*value == Rational { Numerator{-7}, Denominator{4}, dp2 });
     }
     {
         auto const value = Rational::fromFloat(0.0, dp6);
@@ -313,12 +315,12 @@ TEST_CASE("Rational::fromFloat::Roundtrip", "[rational]")
     {
         auto const value = Rational::fromFloat(0.5F, dp1);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { 1, 2, dp1 });
+        CHECK(*value == Rational { Numerator{1}, Denominator{2}, dp1 });
     }
     {
         auto const value = Rational::fromFloat(0.5L, dp1);
         REQUIRE(value.has_value());
-        CHECK(*value == Rational { 1, 2, dp1 });
+        CHECK(*value == Rational { Numerator{1}, Denominator{2}, dp1 });
     }
 
     auto const negative = Rational::fromFloat(-1.75, dp2);
@@ -330,15 +332,15 @@ TEST_CASE("Rational::fromFloat::Precision", "[rational]")
 {
     auto const oneThirdAt3 = Rational::fromFloat(1.0 / 3.0, dp3);
     REQUIRE(oneThirdAt3.has_value());
-    CHECK(*oneThirdAt3 == Rational { 333, 1000, dp3 });
+    CHECK(*oneThirdAt3 == Rational { Numerator{333}, Denominator{1000}, dp3 });
 
     auto const oneThirdAt6 = Rational::fromFloat(1.0 / 3.0, dp6);
     REQUIRE(oneThirdAt6.has_value());
-    CHECK(*oneThirdAt6 == Rational { 333333, 1000000, dp6 });
+    CHECK(*oneThirdAt6 == Rational { Numerator{333333}, Denominator{1000000}, dp6 });
 
     auto const half = Rational::fromFloat(0.5, dp6);
     REQUIRE(half.has_value());
-    CHECK(*half == Rational { 1, 2, dp6 });
+    CHECK(*half == Rational { Numerator{1}, Denominator{2}, dp6 });
 }
 
 TEST_CASE("Rational::fromFloat::ErrorPaths", "[rational]")
@@ -386,46 +388,46 @@ TEST_CASE("Rational::fromFloat::ErrorPaths", "[rational]")
 
 TEST_CASE("Rational::ExactArithmetic", "[rational]")
 {
-    CHECK(Rational { 1, 3, dp9 } + Rational { 1, 3, dp9 } + Rational { 1, 3, dp9 }
+    CHECK(Rational { Numerator{1}, Denominator{3}, dp9 } + Rational { Numerator{1}, Denominator{3}, dp9 } + Rational { Numerator{1}, Denominator{3}, dp9 }
           == Rational::one(dp9));
-    CHECK(Rational { 1, 10, dp9 } + Rational { 2, 10, dp9 } == Rational { 3, 10, dp9 });
-    CHECK(Rational { 1, 7, dp9 } * Rational { 7, dp9 } == Rational::one(dp9));
-    CHECK(Rational { 5, 6, dp9 } - Rational { 1, 6, dp9 } == Rational { 2, 3, dp9 });
+    CHECK(Rational { Numerator{1}, Denominator{10}, dp9 } + Rational { Numerator{2}, Denominator{10}, dp9 } == Rational { Numerator{3}, Denominator{10}, dp9 });
+    CHECK(Rational { Numerator{1}, Denominator{7}, dp9 } * Rational { 7, dp9 } == Rational::one(dp9));
+    CHECK(Rational { Numerator{5}, Denominator{6}, dp9 } - Rational { Numerator{1}, Denominator{6}, dp9 } == Rational { Numerator{2}, Denominator{3}, dp9 });
     // Negative left operand exercises the sign handling in the cross-cancel.
-    CHECK(Rational { -2, 3, dp9 } * Rational { 3, 2, dp9 } == -Rational::one(dp9));
+    CHECK(Rational { Numerator{-2}, Denominator{3}, dp9 } * Rational { Numerator{3}, Denominator{2}, dp9 } == -Rational::one(dp9));
 
-    auto const tenth = Rational { 1, 10, dp9 };
-    auto const fifth = Rational { 1, 5, dp9 };
-    CHECK(tenth + fifth == Rational { 3, 10, dp9 });
+    auto const tenth = Rational { Numerator{1}, Denominator{10}, dp9 };
+    auto const fifth = Rational { Numerator{1}, Denominator{5}, dp9 };
+    CHECK(tenth + fifth == Rational { Numerator{3}, Denominator{10}, dp9 });
 }
 
 TEST_CASE("Rational::Comparison", "[rational]")
 {
-    CHECK(Rational { 2, 4, dp9 } == Rational { 1, 2, dp9 });
-    CHECK(Rational { 1, 2, dp9 } != Rational { 1, 3, dp9 });
-    CHECK(Rational { 1, 3, dp9 } < Rational { 1, 2, dp9 });
-    CHECK(Rational { -1, 2, dp9 } < Rational { 1, 100, dp9 });
-    CHECK(Rational { 1, 2, dp9 } > Rational { 1, 3, dp9 });
+    CHECK(Rational { Numerator{2}, Denominator{4}, dp9 } == Rational { Numerator{1}, Denominator{2}, dp9 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp9 } != Rational { Numerator{1}, Denominator{3}, dp9 });
+    CHECK(Rational { Numerator{1}, Denominator{3}, dp9 } < Rational { Numerator{1}, Denominator{2}, dp9 });
+    CHECK(Rational { Numerator{-1}, Denominator{2}, dp9 } < Rational { Numerator{1}, Denominator{100}, dp9 });
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp9 } > Rational { Numerator{1}, Denominator{3}, dp9 });
     CHECK(Rational { 0, dp9 } == Rational::zero(dp9));
-    CHECK((Rational { 2, 4, dp9 } <=> Rational { 1, 2, dp9 }) == std::strong_ordering::equal);
-    CHECK((Rational { 1, 3, dp9 } <=> Rational { 1, 2, dp9 }) == std::strong_ordering::less);
+    CHECK((Rational { Numerator{2}, Denominator{4}, dp9 } <=> Rational { Numerator{1}, Denominator{2}, dp9 }) == std::strong_ordering::equal);
+    CHECK((Rational { Numerator{1}, Denominator{3}, dp9 } <=> Rational { Numerator{1}, Denominator{2}, dp9 }) == std::strong_ordering::less);
 
     // Precision-independent: same value at different precision compares equal.
-    CHECK(Rational { 1, 2, dp3 } == Rational { 1, 2, dp9 });
-    CHECK((Rational { 1, 2, dp3 } <=> Rational { 1, 2, dp9 }) == std::strong_ordering::equal);
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp3 } == Rational { Numerator{1}, Denominator{2}, dp9 });
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp3 } <=> Rational { Numerator{1}, Denominator{2}, dp9 }) == std::strong_ordering::equal);
 }
 
 TEST_CASE("Rational::DivisionByZero", "[rational]")
 {
-    auto const result = Rational { 1, 2, dp9 } / Rational::zero(dp9);
+    auto const result = Rational { Numerator{1}, Denominator{2}, dp9 } / Rational::zero(dp9);
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error() == RationalError::DivisionByZero);
 
-    auto const named = Rational { 1, 2, dp9 }.dividedBy(Rational::zero(dp9));
+    auto const named = Rational { Numerator{1}, Denominator{2}, dp9 }.dividedBy(Rational::zero(dp9));
     REQUIRE_FALSE(named.has_value());
     CHECK(named.error() == RationalError::DivisionByZero);
 
-    auto const chained = Rational::from(1, 2, dp9).and_then(
+    auto const chained = Rational::from(Numerator{1}, Denominator{2}, dp9).and_then(
         [](Rational value) { return value.dividedBy(Rational::zero(dp9)); });
     REQUIRE_FALSE(chained.has_value());
     CHECK(chained.error() == RationalError::DivisionByZero);
@@ -433,13 +435,13 @@ TEST_CASE("Rational::DivisionByZero", "[rational]")
 
 TEST_CASE("Rational::reciprocal", "[rational]")
 {
-    auto const reciprocal = Rational { 3, 4, dp9 }.reciprocal();
+    auto const reciprocal = Rational { Numerator{3}, Denominator{4}, dp9 }.reciprocal();
     REQUIRE(reciprocal.has_value());
-    CHECK(*reciprocal == Rational { 4, 3, dp9 });
+    CHECK(*reciprocal == Rational { Numerator{4}, Denominator{3}, dp9 });
 
-    auto const negativeReciprocal = Rational { -3, 4, dp9 }.reciprocal();
+    auto const negativeReciprocal = Rational { Numerator{-3}, Denominator{4}, dp9 }.reciprocal();
     REQUIRE(negativeReciprocal.has_value());
-    CHECK(*negativeReciprocal == Rational { -4, 3, dp9 });
+    CHECK(*negativeReciprocal == Rational { Numerator{-4}, Denominator{3}, dp9 });
     CHECK(negativeReciprocal->denominator > 0);
 
     auto const zeroReciprocal = Rational::zero(dp9).reciprocal();
@@ -449,32 +451,32 @@ TEST_CASE("Rational::reciprocal", "[rational]")
 
 TEST_CASE("Rational::Conversions", "[rational]")
 {
-    CHECK(Rational { 1, 2, dp9 }.toDouble() == Catch::Approx(0.5));
-    CHECK(Rational { -3, 4, dp9 }.toDouble() == Catch::Approx(-0.75));
+    CHECK(Rational { Numerator{1}, Denominator{2}, dp9 }.toDouble() == Catch::Approx(0.5));
+    CHECK(Rational { Numerator{-3}, Denominator{4}, dp9 }.toDouble() == Catch::Approx(-0.75));
 
-    CHECK(trunc(Rational { 7, 2, dp9 }) == 3);
-    CHECK(trunc(Rational { -7, 2, dp9 }) == -3);
-    CHECK(trunc(Rational { 6, 2, dp9 }) == 3);
+    CHECK(trunc(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
+    CHECK(trunc(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -3);
+    CHECK(trunc(Rational { Numerator{6}, Denominator{2}, dp9 }) == 3);
 
-    CHECK(floor(Rational { 7, 2, dp9 }) == 3);
-    CHECK(floor(Rational { -7, 2, dp9 }) == -4);
-    CHECK(floor(Rational { 6, 2, dp9 }) == 3);
+    CHECK(floor(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
+    CHECK(floor(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -4);
+    CHECK(floor(Rational { Numerator{6}, Denominator{2}, dp9 }) == 3);
 
-    CHECK(ceil(Rational { 7, 2, dp9 }) == 4);
-    CHECK(ceil(Rational { -7, 2, dp9 }) == -3);
-    CHECK(ceil(Rational { 6, 2, dp9 }) == 3);
+    CHECK(ceil(Rational { Numerator{7}, Denominator{2}, dp9 }) == 4);
+    CHECK(ceil(Rational { Numerator{-7}, Denominator{2}, dp9 }) == -3);
+    CHECK(ceil(Rational { Numerator{6}, Denominator{2}, dp9 }) == 3);
 }
 
 TEST_CASE("Rational::OverflowReduction", "[rational]")
 {
     auto constexpr large = std::int64_t { std::numeric_limits<std::int32_t>::max() };
-    auto const left = Rational { large, 1, dp9 };
-    auto const right = Rational { 1, large, dp9 };
+    auto const left = Rational { Numerator{large}, Denominator{1}, dp9 };
+    auto const right = Rational { Numerator{1}, Denominator{large}, dp9 };
     auto const sum = left + right;
     CHECK(sum.denominator == large);
     CHECK(sum.numerator == (large * large) + 1);
 
-    auto const cancelling = Rational { large, 7, dp9 } * Rational { 7, large, dp9 };
+    auto const cancelling = Rational { Numerator{large}, Denominator{7}, dp9 } * Rational { Numerator{7}, Denominator{large}, dp9 };
     CHECK(cancelling == Rational::one(dp9));
 }
 
@@ -485,50 +487,50 @@ TEST_CASE("Rational::OverflowReduction", "[rational]")
 TEST_CASE("Rational::Mixed::ResultTypes", "[rational]")
 {
     using Expected = std::expected<Rational, RationalError>;
-    auto const oneHalf = Rational { 1, 2, dp9 };
-    auto const oneQuarter = Rational { 1, 4, dp9 };
+    auto const oneHalf = Rational { Numerator{1}, Denominator{2}, dp9 };
+    auto const oneQuarter = Rational { Numerator{1}, Denominator{4}, dp9 };
     auto const expectedHalf = Expected { oneHalf };
 
-    CHECK(*(oneHalf + 0.25) == Rational { 3, 4, dp9 });
-    CHECK(*(0.25 + oneHalf) == Rational { 3, 4, dp9 });
-    CHECK(*(expectedHalf + oneQuarter) == Rational { 3, 4, dp9 });
+    CHECK(*(oneHalf + 0.25) == Rational { Numerator{3}, Denominator{4}, dp9 });
+    CHECK(*(0.25 + oneHalf) == Rational { Numerator{3}, Denominator{4}, dp9 });
+    CHECK(*(expectedHalf + oneQuarter) == Rational { Numerator{3}, Denominator{4}, dp9 });
     CHECK(*(oneHalf + expectedHalf) == Rational::one(dp9));
     CHECK(*(expectedHalf + expectedHalf) == Rational::one(dp9));
-    CHECK(*(expectedHalf - oneQuarter) == Rational { 1, 4, dp9 });
+    CHECK(*(expectedHalf - oneQuarter) == Rational { Numerator{1}, Denominator{4}, dp9 });
     CHECK(*(oneHalf * 2.0) == Rational::one(dp9));
-    CHECK(*(expectedHalf / 2.0) == Rational { 1, 4, dp9 });
+    CHECK(*(expectedHalf / 2.0) == Rational { Numerator{1}, Denominator{4}, dp9 });
 }
 
 TEST_CASE("Rational::Mixed::ExactValuesHappy", "[rational]")
 {
-    auto const sum = Rational { 1, 2, dp9 } + 0.25;
+    auto const sum = Rational { Numerator{1}, Denominator{2}, dp9 } + 0.25;
     REQUIRE(sum.has_value());
-    CHECK(*sum == Rational { 3, 4, dp9 });
+    CHECK(*sum == Rational { Numerator{3}, Denominator{4}, dp9 });
 
     auto const composed =
-        Rational { 1, 2, dp9 } / Rational { 2, dp9 } + Rational { 1, 4, dp9 } * 2.0;
+        Rational { Numerator{1}, Denominator{2}, dp9 } / Rational { 2, dp9 } + Rational { Numerator{1}, Denominator{4}, dp9 } * 2.0;
     REQUIRE(composed.has_value());
-    CHECK(*composed == Rational { 3, 4, dp9 });
+    CHECK(*composed == Rational { Numerator{3}, Denominator{4}, dp9 });
 
-    auto const sevenHalves = Rational { 7, 2, dp9 };
+    auto const sevenHalves = Rational { Numerator{7}, Denominator{2}, dp9 };
     auto const two = Rational { 2, dp9 };
-    auto const oneHalf = Rational { 1, 2, dp9 };
+    auto const oneHalf = Rational { Numerator{1}, Denominator{2}, dp9 };
     auto const expression = sevenHalves / two + oneHalf * 3.5;
     REQUIRE(expression.has_value());
-    CHECK(*expression == Rational { 7, 2, dp9 });
+    CHECK(*expression == Rational { Numerator{7}, Denominator{2}, dp9 });
 }
 
 TEST_CASE("Rational::Mixed::ErrorPropagation::DivByZero", "[rational]")
 {
-    auto const result = Rational { 1, 2, dp9 } / Rational::zero(dp9) + Rational { 3, 4, dp9 };
+    auto const result = Rational { Numerator{1}, Denominator{2}, dp9 } / Rational::zero(dp9) + Rational { Numerator{3}, Denominator{4}, dp9 };
     REQUIRE_FALSE(result.has_value());
     CHECK(result.error() == RationalError::DivisionByZero);
 
-    auto const otherSide = Rational { 1, 4, dp9 } + Rational { 1, dp9 } / Rational::zero(dp9);
+    auto const otherSide = Rational { Numerator{1}, Denominator{4}, dp9 } + Rational { 1, dp9 } / Rational::zero(dp9);
     REQUIRE_FALSE(otherSide.has_value());
     CHECK(otherSide.error() == RationalError::DivisionByZero);
 
-    auto const product = (Rational { 1, dp9 } / Rational::zero(dp9)) * Rational { 7, 8, dp9 };
+    auto const product = (Rational { 1, dp9 } / Rational::zero(dp9)) * Rational { Numerator{7}, Denominator{8}, dp9 };
     REQUIRE_FALSE(product.has_value());
     CHECK(product.error() == RationalError::DivisionByZero);
 }
@@ -541,12 +543,12 @@ TEST_CASE("Rational::Mixed::ErrorPropagation::FloatNonFinite", "[rational]")
     CHECK(result.error() == RationalError::NotFinite);
 
     auto const positiveInfinity = std::numeric_limits<double>::infinity();
-    auto const product = Rational { 1, 2, dp9 } * positiveInfinity;
+    auto const product = Rational { Numerator{1}, Denominator{2}, dp9 } * positiveInfinity;
     REQUIRE_FALSE(product.has_value());
     CHECK(product.error() == RationalError::NotFinite);
 
     auto const negativeInfinity = -std::numeric_limits<double>::infinity();
-    auto const difference = Rational { 1, 2, dp9 } - negativeInfinity;
+    auto const difference = Rational { Numerator{1}, Denominator{2}, dp9 } - negativeInfinity;
     REQUIRE_FALSE(difference.has_value());
     CHECK(difference.error() == RationalError::NotFinite);
 }
@@ -565,20 +567,20 @@ TEST_CASE("Rational::Mixed::ErrorPropagation::FirstErrorWins", "[rational]")
 
 TEST_CASE("Rational::Formatter::Default", "[rational]")
 {
-    CHECK(std::format("{}", Rational { 3, 4, dp9 }) == "3/4");
-    CHECK(std::format("{}", Rational { 7, 1, dp9 }) == "7");
-    CHECK(std::format("{}", Rational { -3, 4, dp9 }) == "-3/4");
+    CHECK(std::format("{}", Rational { Numerator{3}, Denominator{4}, dp9 }) == "3/4");
+    CHECK(std::format("{}", Rational { Numerator{7}, Denominator{1}, dp9 }) == "7");
+    CHECK(std::format("{}", Rational { Numerator{-3}, Denominator{4}, dp9 }) == "-3/4");
     CHECK(std::format("{}", Rational::zero(dp9)) == "0");
     CHECK(std::format("{}", Rational::one(dp9)) == "1");
 }
 
 TEST_CASE("Rational::Formatter::DelegatesToDouble", "[rational]")
 {
-    CHECK(std::format("{:.3f}", Rational { 1, 3, dp9 }) == "0.333");
-    CHECK(std::format("{:.6f}", Rational { 22, 7, dp9 }) == "3.142857");
-    CHECK(std::format("{:+.2e}", Rational { -1, 4, dp9 }) == "-2.50e-01");
+    CHECK(std::format("{:.3f}", Rational { Numerator{1}, Denominator{3}, dp9 }) == "0.333");
+    CHECK(std::format("{:.6f}", Rational { Numerator{22}, Denominator{7}, dp9 }) == "3.142857");
+    CHECK(std::format("{:+.2e}", Rational { Numerator{-1}, Denominator{4}, dp9 }) == "-2.50e-01");
 
-    auto const ratio = Rational { 1, 8, dp9 };
+    auto const ratio = Rational { Numerator{1}, Denominator{8}, dp9 };
     CHECK(std::format("{:.4f}", ratio) == std::format("{:.4f}", ratio.toDouble()));
     CHECK(std::format("{:10.4g}", ratio) == std::format("{:10.4g}", ratio.toDouble()));
 }
@@ -589,7 +591,7 @@ TEST_CASE("Rational::Formatter::DelegatesToDouble", "[rational]")
 
 TEST_CASE("Rational::TriviallyCopyable", "[rational]")
 {
-    auto const original = Rational { -3, 4, dp9 };
+    auto const original = Rational { Numerator{-3}, Denominator{4}, dp9 };
     Rational copy {};
     std::memcpy(&copy, &original, sizeof(Rational));
     CHECK(copy == original);
@@ -612,7 +614,7 @@ TEST_CASE("Rational::toDouble::PrecisionRoundtrip", "[rational]")
     CHECK(oneThird.toDouble(6) == Catch::Approx(0.333333).epsilon(1e-12));
     CHECK(oneThird.toDouble(9) == Catch::Approx(oneThird.toDouble()).epsilon(1e-15));
 
-    auto const negativeQuarter = Rational { -1, 4, dp9 };
+    auto const negativeQuarter = Rational { Numerator{-1}, Denominator{4}, dp9 };
     CHECK(negativeQuarter.toDouble(2) == Catch::Approx(-0.25).epsilon(1e-12));
     CHECK(negativeQuarter.toDouble(1) == Catch::Approx(-0.3).epsilon(1e-12));
 }
@@ -621,7 +623,7 @@ TEST_CASE("Rational::CommonArithmetic::PiApproximation22Over7", "[rational]")
 {
     auto const exactQuotient = Rational { 22, dp3 } / Rational { 7, dp3 };
     REQUIRE(exactQuotient.has_value());
-    CHECK(*exactQuotient == Rational { 22, 7, dp3 });
+    CHECK(*exactQuotient == Rational { Numerator{22}, Denominator{7}, dp3 });
     CHECK(exactQuotient->toDouble() == Catch::Approx(3.143).epsilon(1e-12));
     CHECK(exactQuotient->toDouble(3) == Catch::Approx(3.143).epsilon(1e-12));
     CHECK(std::format("{:.3f}", *exactQuotient) == "3.143");
@@ -632,33 +634,33 @@ TEST_CASE("Rational::CommonArithmetic::PiApproximation22Over7", "[rational]")
     REQUIRE(divisor.has_value());
     auto const liftedQuotient = *dividend / *divisor;
     REQUIRE(liftedQuotient.has_value());
-    CHECK(*liftedQuotient == Rational { 22, 7, dp3 });
+    CHECK(*liftedQuotient == Rational { Numerator{22}, Denominator{7}, dp3 });
     CHECK(liftedQuotient->toDouble() == Catch::Approx(3.143).epsilon(1e-12));
 
     auto const mixedQuotient = Rational { 22, dp3 } / 7.0;
     REQUIRE(mixedQuotient.has_value());
-    CHECK(*mixedQuotient == Rational { 22, 7, dp3 });
+    CHECK(*mixedQuotient == Rational { Numerator{22}, Denominator{7}, dp3 });
     CHECK(mixedQuotient->toDouble() == Catch::Approx(3.143).epsilon(1e-12));
 }
 
 TEST_CASE("Rational::FreeFunctions::AbsCeilFloorTrunc", "[rational]")
 {
-    CHECK(abs(Rational { -3, 4, dp9 }) == Rational { 3, 4, dp9 });
-    CHECK(abs(Rational { 3, 4, dp9 }) == Rational { 3, 4, dp9 });
+    CHECK(abs(Rational { Numerator{-3}, Denominator{4}, dp9 }) == Rational { Numerator{3}, Denominator{4}, dp9 });
+    CHECK(abs(Rational { Numerator{3}, Denominator{4}, dp9 }) == Rational { Numerator{3}, Denominator{4}, dp9 });
     CHECK(abs(Rational::zero(dp9)) == Rational::zero(dp9));
 
-    CHECK(ceil(Rational { 7, 2, dp9 }) == 4);
-    CHECK(floor(Rational { 7, 2, dp9 }) == 3);
-    CHECK(trunc(Rational { 7, 2, dp9 }) == 3);
+    CHECK(ceil(Rational { Numerator{7}, Denominator{2}, dp9 }) == 4);
+    CHECK(floor(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
+    CHECK(trunc(Rational { Numerator{7}, Denominator{2}, dp9 }) == 3);
 
     using std::abs;
     using std::ceil;
     using std::floor;
     using std::trunc;
     CHECK(abs(-2.5) == Catch::Approx(2.5));
-    CHECK(abs(Rational { -3, 4, dp9 }) == Rational { 3, 4, dp9 });
+    CHECK(abs(Rational { Numerator{-3}, Denominator{4}, dp9 }) == Rational { Numerator{3}, Denominator{4}, dp9 });
     CHECK(ceil(2.1) == Catch::Approx(3.0));
-    CHECK(ceil(Rational { 7, 2, dp9 }) == 4);
+    CHECK(ceil(Rational { Numerator{7}, Denominator{2}, dp9 }) == 4);
 }
 
 // ---------------------------------------------------------------------------
@@ -668,31 +670,31 @@ TEST_CASE("Rational::FreeFunctions::AbsCeilFloorTrunc", "[rational]")
 TEST_CASE("Rational::CrossPrecision::MaxPropagates", "[rational]")
 {
     // Result precision is the max of the two operands' precisions.
-    CHECK((Rational { 1, 2, dp3 } + Rational { 1, 4, dp9 }).getDecimalPlaces() == dp9);
-    CHECK((Rational { 1, 2, dp9 } + Rational { 1, 4, dp3 }).getDecimalPlaces() == dp9);
-    CHECK((Rational { 1, 2, dp3 } + Rational { 1, 4, dp3 }).getDecimalPlaces() == dp3);
-    CHECK((Rational { 1, 2, dp3 } - Rational { 1, 4, dp9 }).getDecimalPlaces() == dp9);
-    CHECK((Rational { 1, 2, dp3 } * Rational { 1, 4, dp9 }).getDecimalPlaces() == dp9);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp3 } + Rational { Numerator{1}, Denominator{4}, dp9 }).getDecimalPlaces() == dp9);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp9 } + Rational { Numerator{1}, Denominator{4}, dp3 }).getDecimalPlaces() == dp9);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp3 } + Rational { Numerator{1}, Denominator{4}, dp3 }).getDecimalPlaces() == dp3);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp3 } - Rational { Numerator{1}, Denominator{4}, dp9 }).getDecimalPlaces() == dp9);
+    CHECK((Rational { Numerator{1}, Denominator{2}, dp3 } * Rational { Numerator{1}, Denominator{4}, dp9 }).getDecimalPlaces() == dp9);
 
-    auto const quotient = Rational { 3, 4, dp3 } / Rational { 1, 2, dp9 };
+    auto const quotient = Rational { Numerator{3}, Denominator{4}, dp3 } / Rational { Numerator{1}, Denominator{2}, dp9 };
     REQUIRE(quotient.has_value());
     CHECK(quotient->getDecimalPlaces() == dp9);
 }
 
 TEST_CASE("Rational::CrossPrecision::ValueCorrectness", "[rational]")
 {
-    auto const sum = Rational { 1, 2, dp3 } + Rational { 1, 4, dp9 };
-    CHECK(sum == Rational { 3, 4, dp9 });
+    auto const sum = Rational { Numerator{1}, Denominator{2}, dp3 } + Rational { Numerator{1}, Denominator{4}, dp9 };
+    CHECK(sum == Rational { Numerator{3}, Denominator{4}, dp9 });
 
-    auto const difference = Rational { 2, 3, dp9 } - Rational { 1, 3, dp3 };
-    CHECK(difference == Rational { 1, 3, dp9 });
+    auto const difference = Rational { Numerator{2}, Denominator{3}, dp9 } - Rational { Numerator{1}, Denominator{3}, dp3 };
+    CHECK(difference == Rational { Numerator{1}, Denominator{3}, dp9 });
 
-    auto const product = Rational { 2, 3, dp3 } * Rational { 3, 2, dp9 };
+    auto const product = Rational { Numerator{2}, Denominator{3}, dp3 } * Rational { Numerator{3}, Denominator{2}, dp9 };
     CHECK(product == Rational::one(dp9));
 
-    auto const quotient = Rational { 3, 4, dp3 } / Rational { 1, 2, dp9 };
+    auto const quotient = Rational { Numerator{3}, Denominator{4}, dp3 } / Rational { Numerator{1}, Denominator{2}, dp9 };
     REQUIRE(quotient.has_value());
-    CHECK(*quotient == Rational { 3, 2, dp9 });
+    CHECK(*quotient == Rational { Numerator{3}, Denominator{2}, dp9 });
 }
 
 TEST_CASE("Rational::Mixed::FloatInheritsRationalPrecision", "[rational]")
@@ -703,13 +705,13 @@ TEST_CASE("Rational::Mixed::FloatInheritsRationalPrecision", "[rational]")
                                std::expected<Rational, RationalError>>);
 
     // 1/2 (precision 3) + 0.25 (lifted at precision 3) = 3/4 at precision 3.
-    auto const lifted = Rational { 1, 2, dp3 } + 0.25;
+    auto const lifted = Rational { Numerator{1}, Denominator{2}, dp3 } + 0.25;
     REQUIRE(lifted.has_value());
     CHECK(lifted->getDecimalPlaces() == dp3);
-    CHECK(*lifted == Rational { 3, 4, dp3 });
+    CHECK(*lifted == Rational { Numerator{3}, Denominator{4}, dp3 });
 
     // Float lifts to precision 9 when the Rational operand carries 9.
-    auto const liftedAt9 = Rational { 1, 2, dp9 } + 0.25;
+    auto const liftedAt9 = Rational { Numerator{1}, Denominator{2}, dp9 } + 0.25;
     REQUIRE(liftedAt9.has_value());
     CHECK(liftedAt9->getDecimalPlaces() == dp9);
 }
@@ -721,9 +723,9 @@ TEST_CASE("Rational::Mixed::FloatInheritsRationalPrecision", "[rational]")
 
 TEST_CASE("Rational::Predicates::isNegative", "[rational]")
 {
-    CHECK(Rational { -1, 2, dp9 }.isNegative());
-    CHECK(Rational { 1, -2, dp9 }.isNegative());
-    CHECK_FALSE(Rational { 1, 2, dp9 }.isNegative());
+    CHECK(Rational { Numerator{-1}, Denominator{2}, dp9 }.isNegative());
+    CHECK(Rational { Numerator{1}, Denominator{-2}, dp9 }.isNegative());
+    CHECK_FALSE(Rational { Numerator{1}, Denominator{2}, dp9 }.isNegative());
     CHECK_FALSE(Rational::zero(dp9).isNegative());
 }
 
@@ -731,7 +733,7 @@ TEST_CASE("Rational::toDouble::OverlargePrecisionFallsBackUnrounded", "[rational
 {
     // Requested precision beyond 18 cannot be scaled in int64; the conversion
     // falls back to the unrounded quotient.
-    auto const oneThird = Rational { 1, 3, dp9 };
+    auto const oneThird = Rational { Numerator{1}, Denominator{3}, dp9 };
     CHECK(oneThird.toDouble(19) == Catch::Approx(1.0 / 3.0).epsilon(1e-15));
     CHECK(oneThird.toDouble(99) == Catch::Approx(1.0 / 3.0).epsilon(1e-15));
 }
@@ -764,8 +766,8 @@ TEST_CASE("Rational::Comparison::ExactAtInt64Extremes", "[rational]")
     // long-double comparison would round both to the same value and call
     // them equal. The 128-bit comparison must not.
     auto constexpr big = std::int64_t { 1 } << 62;
-    auto const left = Rational { big + 1, big, dp9 };    // 1 + 1/2^62
-    auto const right = Rational { big, big - 1, dp9 };   // 1 + 1/(2^62-1)
+    auto const left = Rational { Numerator{big + 1}, Denominator{big}, dp9 };    // 1 + 1/2^62
+    auto const right = Rational { Numerator{big}, Denominator{big - 1}, dp9 };   // 1 + 1/(2^62-1)
 
     CHECK(left != right);
     CHECK(left < right);
@@ -794,7 +796,7 @@ TEST_CASE("Rational::Wire::Int64MinComponentsClamp", "[rational]")
     Rational numeratorCase {};
     REQUIRE_FALSE(glz::read_json(numeratorCase, R"({"num":-9223372036854775808,"den":2,"dp":1})"));
     CHECK(numeratorCase.denominator > 0);
-    CHECK(numeratorCase == Rational { -std::numeric_limits<std::int64_t>::max(), 2, dp1 });
+    CHECK(numeratorCase == Rational { Numerator{-std::numeric_limits<std::int64_t>::max()}, Denominator{2}, dp1 });
 
     Rational denominatorCase {};
     REQUIRE_FALSE(glz::read_json(denominatorCase, R"({"num":3,"den":-9223372036854775808,"dp":1})"));
@@ -804,7 +806,7 @@ TEST_CASE("Rational::Wire::Int64MinComponentsClamp", "[rational]")
 
 TEST_CASE("Rational::Wire::RoundTrip", "[rational]")
 {
-    auto const original = Rational { 617, 50, dp2 };
+    auto const original = Rational { Numerator{617}, Denominator{50}, dp2 };
     auto const json = glz::write_json(original);
     REQUIRE(json.has_value());
     CHECK(*json == R"({"num":617,"den":50,"dp":2})");
@@ -823,7 +825,7 @@ TEST_CASE("Rational::Wire::CanonicalisesOnRead", "[rational]")
     REQUIRE_FALSE(glz::read_json(value, R"({"num":1234,"den":100,"dp":2})"));
     CHECK(value.numerator == 617);
     CHECK(value.denominator == 50);
-    CHECK(value == Rational { 1234, 100, dp2 });
+    CHECK(value == Rational { Numerator{1234}, Denominator{100}, dp2 });
 
     Rational negative {};
     REQUIRE_FALSE(glz::read_json(negative, R"({"num":3,"den":-4,"dp":1})"));
@@ -849,7 +851,7 @@ TEST_CASE("Rational::Wire::HostileInputClamps", "[rational]")
 TEST_CASE("Rational::Wire::MissingFieldsUseWireDefaults", "[rational]")
 {
     // Absent keys fall back to Wire's member defaults (0/1 at precision 1).
-    Rational value { 9, 4, dp9 };
+    Rational value { Numerator{9}, Denominator{4}, dp9 };
     REQUIRE_FALSE(glz::read_json(value, R"({})"));
     CHECK(value == Rational::zero(dp1));
     CHECK(value.getDecimalPlaces() == dp1);
@@ -862,7 +864,7 @@ TEST_CASE("Rational::Wire::NullableComposition", "[rational]")
     CHECK_FALSE(maybe.has_value());
 
     REQUIRE_FALSE(glz::read_json(maybe, R"({"num":1,"den":3,"dp":9})"));
-    CHECK(maybe == std::optional<Rational> { Rational { 1, 3, dp9 } });
+    CHECK(maybe == std::optional<Rational> { Rational { Numerator{1}, Denominator{3}, dp9 } });
 
     auto const written = glz::write_json(maybe);
     REQUIRE(written.has_value());

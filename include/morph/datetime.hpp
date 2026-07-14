@@ -97,6 +97,7 @@ struct DateTime {
     /// lowercase separators, no trailing input.
     /// @param text Candidate ISO-8601 string.
     /// @return The parsed instant, or `std::nullopt` when @p text is malformed.
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     [[nodiscard]] static std::optional<DateTime> fromIso8601(std::string_view text) noexcept {
         // Callers only pass offsets within the length-checked prefix below.
         auto const number = [&text](std::size_t offset, std::size_t count) noexcept -> std::optional<int> {
@@ -166,6 +167,7 @@ struct DateTime {
                         std::chrono::seconds{*second},
                         std::chrono::milliseconds{milliseconds}};
     }
+    // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
     /// @brief Ordering on the underlying instant.
     /// @param other Instant to compare against.
@@ -260,6 +262,18 @@ struct Timestamp {
     [[nodiscard]] constexpr auto operator<=>(const Timestamp& other) const noexcept = default;
 };
 
+/// @brief The signed duration between two engaged timestamps.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return `lhs - rhs` as a chrono duration, or `std::nullopt` if either is empty.
+[[nodiscard]] constexpr std::optional<std::chrono::milliseconds> operator-(const Timestamp& lhs,
+                                                                          const Timestamp& rhs) noexcept {
+    if (!lhs.value || !rhs.value) {
+        return std::nullopt;
+    }
+    return *lhs.value - *rhs.value;
+}
+
 }  // namespace morph::time
 
 // ---------------------------------------------------------------------------
@@ -328,6 +342,7 @@ struct to_json_schema<morph::time::DateTime> {
 ///        renders the ISO-8601 UTC form.
 template <>
 struct std::formatter<morph::time::DateTime> {
+    // NOLINTBEGIN(readability-convert-member-functions-to-static) — std::formatter requires non-static methods
     constexpr auto parse(std::format_parse_context& ctx) {
         // The parse context always contains the terminating '}' (the format
         // machinery's contract), so the range is never empty here.
@@ -341,3 +356,4 @@ struct std::formatter<morph::time::DateTime> {
         return std::format_to(ctx.out(), "{}", value.toIso8601());
     }
 };
+// NOLINTEND(readability-convert-member-functions-to-static)

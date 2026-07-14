@@ -22,6 +22,7 @@ if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
+option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
 
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
@@ -30,6 +31,13 @@ if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML))
 endif()
 
 include(cmake/compiler_options.cmake)
+
+# ── clang-tidy integration ─────────────────────────────────────────────────
+if(MORPH_BUILD_CLANG_TIDY)
+    find_program(CLANG_TIDY_BIN clang-tidy REQUIRED)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_BIN};--warnings-as-errors=*;--header-filter=include/morph/.*")
+    message(STATUS "clang-tidy: ${CLANG_TIDY_BIN} (warnings as errors)")
+endif()
 
 # Registered before any subdirectory so demo-level add_test calls (examples/
 # forms) land in the test set alongside the Catch2 suite.

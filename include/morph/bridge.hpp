@@ -79,14 +79,7 @@ public:
 
 private:
     using Key = std::pair<std::string, std::string>;
-    struct KeyHash {
-        std::size_t operator()(const Key& key) const noexcept {
-            std::size_t seed = std::hash<std::string>{}(key.first);
-            seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-            return seed;
-        }
-    };
-    std::unordered_map<Key, Executor, KeyHash> _executors;
+    std::unordered_map<Key, Executor, ::morph::model::detail::PairKeyHash> _executors;
 };
 
 inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
@@ -206,7 +199,7 @@ public:
         auto binding = std::make_shared<detail::HandlerBinding>();
         binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         binding->currentId.store(
             loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
         _handlers.push_back(binding);
@@ -220,7 +213,7 @@ public:
     /// `binding->contextKey` needs to be set before registration (see `HandlerBinding::contextKey`).
     /// @param binding Pre-constructed binding. Its `typeId` and `modelFactory` must be set.
     void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         binding->currentId.store(
             loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
         _handlers.push_back(binding);
@@ -235,14 +228,14 @@ public:
     ///
     /// @param session The new default. Pass `{}` to clear.
     void setDefaultSession(::morph::session::Context session) {
-        std::scoped_lock lock{_sessionMtx};
+        std::scoped_lock const lock{_sessionMtx};
         _defaultSession = std::move(session);
     }
 
     /// @brief Returns a copy of the currently installed default session. Thread-safe.
     /// @return Snapshot of the default `Context`.
     [[nodiscard]] ::morph::session::Context defaultSession() const {
-        std::scoped_lock lock{_sessionMtx};
+        std::scoped_lock const lock{_sessionMtx};
         return _defaultSession;
     }
 
@@ -263,7 +256,7 @@ public:
         auto newShared = std::shared_ptr<::morph::backend::detail::IBackend>(std::move(newBackend));
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
         {
-            std::scoped_lock lock{_mtx};
+            std::scoped_lock const lock{_mtx};
 
             std::vector<std::weak_ptr<detail::HandlerBinding>> live;
             for (auto& weak : _handlers) {
@@ -298,8 +291,8 @@ public:
     /// complete with an error.
     /// @param binding Binding to remove. Must have been returned by `registerHandler()`.
     void deregisterHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
-        std::scoped_lock lock{_mtx};
-        uint64_t raw = binding->currentId.load();
+        std::scoped_lock const lock{_mtx};
+        uint64_t const raw = binding->currentId.load();
         if (raw != 0U) {
             loadBackend()->deregisterModel(::morph::exec::detail::ModelId{raw});
         }
@@ -332,7 +325,7 @@ public:
         using R = ::morph::model::ActionTraits<Action>::Result;
 
         auto backend = loadBackend();
-        uint64_t raw = binding->currentId.load();
+        uint64_t const raw = binding->currentId.load();
 
         auto typedState = std::make_shared<::morph::async::detail::CompletionState<R>>();
         ::morph::async::Completion<R> typed{typedState, cbExec};
@@ -372,7 +365,7 @@ public:
             return result;
         };
         {
-            std::scoped_lock lock{_sessionMtx};
+            std::scoped_lock const lock{_sessionMtx};
             call.session = _defaultSession;
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
@@ -386,13 +379,13 @@ public:
 
 private:
     std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
-        std::scoped_lock lock{_backendMtx};
+        std::scoped_lock const lock{_backendMtx};
         return _backend;
     }
 
     std::shared_ptr<::morph::backend::detail::IBackend> exchangeBackend(
         std::shared_ptr<::morph::backend::detail::IBackend> next) {
-        std::scoped_lock lock{_backendMtx};
+        std::scoped_lock const lock{_backendMtx};
         auto previous = std::move(_backend);
         _backend = std::move(next);
         return previous;
@@ -405,10 +398,10 @@ private:
         // The handler is invoked on the backend's transport thread. We keep a
         // weak_ptr to the same shared backend so a stale callback fired after a
         // switchBackend is a no-op.
-        std::weak_ptr<::morph::backend::detail::IBackend> weakBackend{backend};
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         backend->setReconnectHandler([this, weakBackend] {
             auto pinned = weakBackend.lock();
-            std::scoped_lock lock{_mtx};
+            std::scoped_lock const lock{_mtx};
             if (!pinned || pinned != loadBackend()) {
                 return;  // We've moved on to a different backend; ignore.
             }
@@ -448,6 +441,7 @@ private:
 ///
 /// @tparam Model Concrete model type.
 template <typename Model>
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class BridgeHandler {
 public:
     /// @brief Constructs and registers the handler using the default model factory.
@@ -607,6 +601,9 @@ private:
         Bridge* bridge{nullptr};
         std::shared_ptr<detail::HandlerBinding> binding;
         ::morph::exec::IExecutor* guiExec{nullptr};
+        /// @note Keys are `std::string_view` pointing to string literals from
+        /// `ActionTraits<A>::typeId()` — all call sites pass compile-time strings
+        /// with static storage duration, so the map's keys never dangle.
         std::unordered_map<std::string_view, SubscriberEntry> entries;
     };
 
@@ -710,14 +707,15 @@ private:
 /// Placed here after BridgeHandler is fully defined so we can safely cast and call its methods.
 template <typename Model, typename Action>
 inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std::string_view actionId) {
-    Key key{std::string{modelId}, std::string{actionId}};
+    Key const key{std::string{modelId}, std::string{actionId}};
     _executors[key] = [](void* handlerVoid, std::string_view bodyJson) -> ::morph::async::Completion<std::string> {
         auto* handler = static_cast<BridgeHandler<Model>*>(handlerVoid);
         auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
         try {
             Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
             handler->template execute<Action>(std::move(action))
-                .then([resultState](typename ::morph::model::ActionTraits<Action>::Result result) {
+                // NOLINTNEXTLINE(performance-unnecessary-value-param) — lambda captures the result by value
+                .then([resultState](auto result) {
                     resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
                 })
                 .onError([resultState](const std::exception_ptr& err) { resultState->setException(err); });

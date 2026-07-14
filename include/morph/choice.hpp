@@ -53,9 +53,10 @@ struct FixedString {
 
     /// @brief Captures a string literal.
     /// @param literal The literal to copy, e.g. `"ListSamples"`.
-    // NOLINTNEXTLINE(modernize-avoid-c-arrays) — string literals ARE C arrays.
+    // NOLINTNEXTLINE(modernize-avoid-c-arrays, cppcoreguidelines-avoid-c-arrays, cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — string literals ARE C arrays.
     consteval FixedString(const char (&literal)[N]) noexcept {
         for (std::size_t index = 0; index < N; ++index) {
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
             data[index] = literal[index];
         }
     }

@@ -54,6 +54,7 @@ struct ActionCall {
 /// A backend owns model instances and dispatches actions against them.
 /// `Bridge` holds one active backend at a time and can swap it atomically
 /// via `Bridge::switchBackend()`.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IBackend {
     virtual ~IBackend() = default;
 
@@ -112,8 +113,9 @@ struct IBackend {
     /// `LocalBackend`) never invoke it.
     /// @param handler Callable invoked on the backend's transport thread after a
     ///                successful reconnect. Pass `nullptr` to clear.
-    virtual void setReconnectHandler(std::function<void()> handler) { (void)handler; }
+    virtual void setReconnectHandler(const std::function<void()>& handler) { (void)handler; }
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 }  // namespace detail
 
@@ -161,7 +163,7 @@ public:
         const std::string& /*typeId*/,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
         ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
-        std::scoped_lock lock{_regMtx};
+        std::scoped_lock const lock{_regMtx};
         _models[mid] = factory();
         return mid;
     }
@@ -169,13 +171,13 @@ public:
     /// @brief Removes the model with @p mid. Thread-safe.
     /// @param mid Id returned by a prior `registerModel()` call.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
-        std::scoped_lock lock{_regMtx};
+        std::scoped_lock const lock{_regMtx};
         _models.erase(mid);
     }
 
     /// @brief Notifies every live model that implements `IBackendChangedSink`. Thread-safe.
     void notifyBackendChanged() override {
-        std::scoped_lock lock{_regMtx};
+        std::scoped_lock const lock{_regMtx};
         for (auto& [modelId, holder] : _models) {
             if (auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get())) {
                 sink->onBackendChanged();
@@ -200,7 +202,7 @@ public:
 
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
         {
-            std::scoped_lock lock{_regMtx};
+            std::scoped_lock const lock{_regMtx};
             auto iter = _models.find(mid);
             if (iter != _models.end()) {
                 holder = iter->second;
@@ -217,7 +219,7 @@ public:
         _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
                            session = std::move(session)]() mutable {
             try {
-                ::morph::session::detail::ScopedContext scoped{session};
+                ::morph::session::detail::ScopedContext const scoped{session};
                 compState->setValue(localOp(*holder));
             } catch (...) {
                 compState->setException(std::current_exception());
@@ -231,7 +233,7 @@ public:
     void cancelPending(const std::exception_ptr& exc) override {
         std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> snapshot;
         {
-            std::scoped_lock lock{_pendingMtx};
+            std::scoped_lock const lock{_pendingMtx};
             snapshot.swap(_pending);
         }
         for (auto& weak : snapshot) {
@@ -243,7 +245,7 @@ public:
 
 private:
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
-        std::scoped_lock lock{_pendingMtx};
+        std::scoped_lock const lock{_pendingMtx};
         std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
         _pending.emplace_back(state);
     }

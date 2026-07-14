@@ -39,6 +39,7 @@ struct ModelIdHash {
 ///
 /// This removes the need for per-model mutexes: the model's `execute()` method
 /// is always called from exactly one task at a time.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class StrandExecutor {
 public:
     /// @brief Constructs the strand executor wrapping @p base.
@@ -65,7 +66,7 @@ public:
     void post(ModelId key, std::function<void()> task) {
         std::shared_ptr<Strand> strand;
         {
-            std::scoped_lock lock{_mapMtx};
+            std::scoped_lock const lock{_mapMtx};
             auto& slot = _strands[key];
             if (!slot) {
                 slot = std::make_shared<Strand>();
@@ -75,7 +76,7 @@ public:
         }
         bool schedule = false;
         {
-            std::scoped_lock lock{strand->mtx};
+            std::scoped_lock const lock{strand->mtx};
             strand->pending.push(std::move(task));
             if (!strand->running) {
                 strand->running = true;
@@ -97,18 +98,19 @@ private:
 
     void scheduleNext(const std::shared_ptr<Strand>& strand, ModelId key) {
         {
-            std::scoped_lock lock{_mapMtx};
+            std::scoped_lock const lock{_mapMtx};
             ++_inFlight;
         }
         strand->base->post([this, strand, key] {
             std::function<void()> task;
             {
-                std::scoped_lock lock{strand->mtx};
+                std::scoped_lock const lock{strand->mtx};
                 task = std::move(strand->pending.front());
                 strand->pending.pop();
             }
             try {
                 task();
+            // NOLINTNEXTLINE(bugprone-empty-catch) — task exceptions are intentionally discarded
             } catch (...) {
             }
             // Decide "keep running vs. drain-and-erase" atomically across the
@@ -121,7 +123,7 @@ private:
             // strands could run model tasks concurrently → data race.
             bool more = false;
             {
-                std::scoped_lock lock{_mapMtx, strand->mtx};
+                std::scoped_lock const lock{_mapMtx, strand->mtx};
                 more = !strand->pending.empty();
                 if (!more) {
                     strand->running = false;
@@ -136,7 +138,7 @@ private:
             }
             // Decrement after all map access is done; wake destructor if it is waiting.
             {
-                std::scoped_lock lock{_mapMtx};
+                std::scoped_lock const lock{_mapMtx};
                 if (--_inFlight == 0) {
                     _cv.notify_all();
                 }

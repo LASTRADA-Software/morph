@@ -15,6 +15,7 @@ namespace morph::async {
 
 namespace detail {
 
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 template <typename T>
 struct CompletionState {
     std::mutex mtx;
@@ -29,7 +30,7 @@ struct CompletionState {
     void setValue(T val) {
         std::function<void()> callback;
         {
-            std::scoped_lock lock{mtx};
+            std::scoped_lock const lock{mtx};
             if (ready) {
                 return;
             }
@@ -50,7 +51,7 @@ struct CompletionState {
     void setException(const std::exception_ptr& exc) {
         std::function<void()> callback;
         {
-            std::scoped_lock lock{mtx};
+            std::scoped_lock const lock{mtx};
             if (ready) {
                 return;
             }
@@ -70,7 +71,7 @@ struct CompletionState {
     void attachThen(std::function<void(T)> handler) {
         std::function<void()> fireNow;
         {
-            std::scoped_lock lock{mtx};
+            std::scoped_lock const lock{mtx};
             if (ready && value) {
                 auto savedVal = *value;
                 fireNow = [handler = std::move(handler), savedVal]() mutable { handler(std::move(savedVal)); };
@@ -85,7 +86,7 @@ struct CompletionState {
     void attachOnError(std::function<void(std::exception_ptr)> handler) {
         std::function<void()> fireNow;
         {
-            std::scoped_lock lock{mtx};
+            std::scoped_lock const lock{mtx};
             onErrAttached = true;
             if (ready && error) {
                 auto savedErr = error;
@@ -102,6 +103,7 @@ struct CompletionState {
         if (!ready || !error || onErrAttached) {
             return;
         }
+        // NOLINTBEGIN(bugprone-empty-catch) — logError may throw; we swallow to avoid noexcept-escape
         try {
             std::rethrow_exception(error);
         } catch (const std::exception& exc) {
@@ -115,8 +117,11 @@ struct CompletionState {
             } catch (...) {
             }
         }
+        // NOLINTEND(bugprone-empty-catch)
     }
 };
+
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 }  // namespace detail
 
@@ -125,8 +130,6 @@ struct CompletionState {
 /// Callbacks are posted to the `IExecutor` supplied at construction time, so
 /// they always run on the intended thread (e.g. the GUI thread).
 ///
-/// @tparam T Type of the success value.
-///
 /// @par Thread safety
 /// `then()` and `onError()` may be called from any thread. The registered
 /// callbacks are invoked via the executor, never directly from the producing thread.
@@ -134,7 +137,10 @@ struct CompletionState {
 /// @par Orphan detection
 /// If a `Completion` is destroyed before an `onError()` handler is attached and
 /// the operation has already failed, the exception is logged as an orphan error.
+///
+/// @tparam T Type of the success value.
 template <typename T>
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class Completion {
 public:
     /// @brief Constructs an empty (no-op) completion.

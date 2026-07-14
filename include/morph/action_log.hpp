@@ -104,6 +104,7 @@ inline LogEntry fromJson(std::string_view json) {
 /// items once retried successfully). Implementations range from in-memory
 /// (`InMemoryActionLog`) to file, SQL, or network-backed stores supplied by the
 /// host application.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IActionLog {
     virtual ~IActionLog() = default;
 
@@ -120,6 +121,7 @@ struct IActionLog {
     /// @return Matching entries, in append order.
     [[nodiscard]] virtual std::vector<LogEntry> entries(std::string_view entityKey = {}) const = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 /// @brief Thread-safe in-memory implementation of `IActionLog`.
 ///
@@ -130,7 +132,7 @@ public:
     /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         entry.seq = ++_nextSeq;
         _entries.push_back(std::move(entry));
     }
@@ -142,7 +144,7 @@ public:
     /// @param entityKey If non-empty, restricts the result to that entity's entries.
     /// @return Matching entries, in append order.
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         if (entityKey.empty()) {
             return _entries;
         }
@@ -190,7 +192,7 @@ inline std::pair<std::mutex, std::shared_ptr<IActionLog>>& defaultActionLogState
 ///            (existing instances keep whatever they already have).
 inline void setActionLog(std::shared_ptr<IActionLog> log) {
     auto& [mtx, slot] = detail::defaultActionLogState();
-    std::scoped_lock lock{mtx};
+    std::scoped_lock const lock{mtx};
     slot = std::move(log);
 }
 
@@ -198,7 +200,7 @@ inline void setActionLog(std::shared_ptr<IActionLog> log) {
 ///        if none has been set. Thread-safe.
 [[nodiscard]] inline std::shared_ptr<IActionLog> defaultActionLog() {
     auto& [mtx, slot] = detail::defaultActionLogState();
-    std::scoped_lock lock{mtx};
+    std::scoped_lock const lock{mtx};
     return slot;
 }
 

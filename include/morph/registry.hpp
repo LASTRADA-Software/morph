@@ -34,6 +34,21 @@ struct ActionTraits;
 
 namespace detail {
 
+/// @brief Hash functor for `std::pair<std::string, std::string>` keys used by registries.
+/// Shared between `ActionDispatcher` (server-side dispatch) and `ActionExecuteRegistry`
+/// (client-side generic-execute) since their key types are structurally identical.
+struct PairKeyHash {
+    /// @brief Combines the hashes of `key.first` and `key.second`.
+    /// @param key The pair to hash.
+    /// @return The combined hash value.
+    [[nodiscard]] std::size_t operator()(const std::pair<std::string, std::string>& key) const noexcept {
+        std::size_t seed = std::hash<std::string>{}(key.first);
+        // NOLINTNEXTLINE(readability-magic-numbers, cppcoreguidelines-avoid-magic-numbers)
+        seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+        return seed;
+    }
+};
+
 /// @brief Concept satisfied by actions that expose a `bool validate() const` member.
 ///
 /// Drives the default `ActionValidator::ready(...)` path: if the action supplies
@@ -172,7 +187,7 @@ public:
     /// the executed action is recorded automatically after it succeeds.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
-        Key key{std::string{modelId}, std::string{actionId}};
+        Key const key{std::string{modelId}, std::string{actionId}};
         _runners[key] = [](IModelHolder& holder, std::string_view payloadJson) {
             auto action = ActionTraits<Action>::fromJson(payloadJson);
             auto& model = holder.template into<Model>();
@@ -201,7 +216,7 @@ public:
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
     std::string dispatch(std::string_view modelId, std::string_view actionId, IModelHolder& holder,
                          std::string_view payload) {
-        Key key{std::string{modelId}, std::string{actionId}};
+        Key const key{std::string{modelId}, std::string{actionId}};
         auto iter = _runners.find(key);
         if (iter == _runners.end()) {
             throw std::runtime_error("unknown action: " + key.first + "/" + key.second);
@@ -225,15 +240,8 @@ public:
 
 private:
     using Key = std::pair<std::string, std::string>;
-    struct KeyHash {
-        std::size_t operator()(const Key& key) const noexcept {
-            std::size_t seed = std::hash<std::string>{}(key.first);
-            seed ^= std::hash<std::string>{}(key.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-            return seed;
-        }
-    };
-    std::unordered_map<Key, Runner, KeyHash> _runners;
-    std::unordered_map<Key, bool, KeyHash> _coalesce;
+    std::unordered_map<Key, Runner, PairKeyHash> _runners;
+    std::unordered_map<Key, bool, PairKeyHash> _coalesce;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.
@@ -353,6 +361,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param A    Concrete action type.
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
 #define BRIDGE_REGISTER_ACTION(...)                                                                     \
     BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3)         \
     (__VA_ARGS__)
@@ -417,4 +426,5 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     struct morph::model::ActionValidator<A> {                                  \
         static bool ready(const A& action) { return (FN)(action); }            \
     };
+// NOLINTEND(cppcoreguidelines-macro-usage)
 // NOLINTEND(bugprone-macro-parentheses)

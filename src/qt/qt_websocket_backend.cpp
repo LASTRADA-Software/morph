@@ -150,8 +150,8 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     }
 }
 
-void QtWebSocketBackend::setReconnectHandler(std::function<void()> handler) {
-    _reconnectHandler = std::move(handler);
+void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handler) {
+    _reconnectHandler = handler;
 }
 
 void QtWebSocketBackend::scheduleReconnect() {

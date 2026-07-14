@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <format>
 #include <functional>
 #include <mutex>
 #include <print>
@@ -57,7 +58,7 @@ inline LogState& logState() {
 
 /// @brief Internal emit entry point used by the public level helpers.
 inline void log(LogLevel level, std::string_view msg) {
-    std::scoped_lock lock{logState().mtx};
+    std::scoped_lock const lock{logState().mtx};
     auto& state = logState();
     if (state.sink && level >= state.minLevel) {
         state.sink(level, msg);
@@ -74,7 +75,7 @@ inline void log(LogLevel level, std::string_view msg) {
 /// current minimum. Pass a no-op lambda to silence all output.
 /// @param logger New sink function.
 inline void setLogger(std::function<void(LogLevel, std::string_view)> logger) {
-    std::scoped_lock lock{detail::logState().mtx};
+    std::scoped_lock const lock{detail::logState().mtx};
     detail::logState().sink = std::move(logger);
 }
 
@@ -83,18 +84,28 @@ inline void setLogger(std::function<void(LogLevel, std::string_view)> logger) {
 /// Messages below this level are silently dropped. Thread-safe.
 /// @param level Minimum level to emit.
 inline void setLogLevel(LogLevel level) {
-    std::scoped_lock lock{detail::logState().mtx};
+    std::scoped_lock const lock{detail::logState().mtx};
     detail::logState().minLevel = level;
 }
 
 /// @brief Returns the current minimum log level. Thread-safe.
 /// @return The active minimum level.
 inline LogLevel getLogLevel() {
-    std::scoped_lock lock{detail::logState().mtx};
+    std::scoped_lock const lock{detail::logState().mtx};
     return detail::logState().minLevel;
 }
 
 // ── Level helpers ─────────────────────────────────────────────────────────────
+
+namespace detail {
+
+/// @brief Formats @p fmt with @p args and forwards to `log()`.
+template <typename... Args>
+void logFormat(LogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+    log(level, std::format(fmt, std::forward<Args>(args)...));
+}
+
+}  // namespace detail
 
 /// @brief Logs @p msg at `LogLevel::debug`.
 inline void logDebug(std::string_view msg) { detail::log(LogLevel::debug, msg); }
@@ -104,6 +115,27 @@ inline void logInfo(std::string_view msg) { detail::log(LogLevel::info, msg); }
 inline void logWarn(std::string_view msg) { detail::log(LogLevel::warn, msg); }
 /// @brief Logs @p msg at `LogLevel::error`.
 inline void logError(std::string_view msg) { detail::log(LogLevel::error, msg); }
+
+/// @brief Logs a formatted message at `LogLevel::debug`.
+template <typename... Args>
+void logDebug(std::format_string<Args...> fmt, Args&&... args) {
+    detail::logFormat(LogLevel::debug, fmt, std::forward<Args>(args)...);
+}
+/// @brief Logs a formatted message at `LogLevel::info`.
+template <typename... Args>
+void logInfo(std::format_string<Args...> fmt, Args&&... args) {
+    detail::logFormat(LogLevel::info, fmt, std::forward<Args>(args)...);
+}
+/// @brief Logs a formatted message at `LogLevel::warn`.
+template <typename... Args>
+void logWarn(std::format_string<Args...> fmt, Args&&... args) {
+    detail::logFormat(LogLevel::warn, fmt, std::forward<Args>(args)...);
+}
+/// @brief Logs a formatted message at `LogLevel::error`.
+template <typename... Args>
+void logError(std::format_string<Args...> fmt, Args&&... args) {
+    detail::logFormat(LogLevel::error, fmt, std::forward<Args>(args)...);
+}
 
 // ── Scoped override (test fixture) ────────────────────────────────────────────
 
@@ -131,10 +163,10 @@ public:
     ///
     /// Use this when test code will install its own sink mid-test via
     /// `setLogger()` / `setLogLevel()` and just wants automatic restoration.
-    ScopedLoggerOverride() {
-        std::scoped_lock lock{detail::logState().mtx};
-        _savedSink = detail::logState().sink;
-        _savedLevel = detail::logState().minLevel;
+    ScopedLoggerOverride() : _savedSink(detail::logState().sink), _savedLevel(detail::logState().minLevel) {
+        std::scoped_lock const lock{detail::logState().mtx};
+        
+        
     }
 
     /// @brief Installs @p sink and @p level; saves whatever was there before.
@@ -142,17 +174,17 @@ public:
     /// @param sink  New logger sink. Pass a no-op lambda to suppress output entirely.
     /// @param level New minimum level. Defaults to `debug` so every message reaches @p sink.
     explicit ScopedLoggerOverride(std::function<void(LogLevel, std::string_view)> sink,
-                                  LogLevel level = LogLevel::debug) {
-        std::scoped_lock lock{detail::logState().mtx};
-        _savedSink = std::move(detail::logState().sink);
-        _savedLevel = detail::logState().minLevel;
+                                  LogLevel level = LogLevel::debug) : _savedSink(std::move(detail::logState().sink)), _savedLevel(detail::logState().minLevel) {
+        std::scoped_lock const lock{detail::logState().mtx};
+        
+        
         detail::logState().sink = std::move(sink);
         detail::logState().minLevel = level;
     }
 
     /// @brief Restores the saved sink and level.
     ~ScopedLoggerOverride() {
-        std::scoped_lock lock{detail::logState().mtx};
+        std::scoped_lock const lock{detail::logState().mtx};
         detail::logState().sink = std::move(_savedSink);
         detail::logState().minLevel = _savedLevel;
     }

@@ -76,7 +76,7 @@ struct ControllableBackend : ::morph::backend::detail::IBackend {
     }
     void notifyBackendChanged() override {}
     void cancelPending(const std::exception_ptr& /*exc*/) override {}
-    void setReconnectHandler(std::function<void()> handler) override { reconnect = std::move(handler); }
+    void setReconnectHandler(const std::function<void()>& handler) override { reconnect = std::move(handler); }
 };
 
 // A denying authorizer for the RemoteServer unauthorized path.

@@ -29,6 +29,7 @@ struct QueueItem {
 /// Items accumulate while the system is offline and are replayed by `SyncWorker`
 /// on reconnect. The interface is intentionally minimal so that implementations
 /// can range from in-memory (`InMemoryOfflineQueue`) to SQLite or file-backed stores.
+// NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IOfflineQueue {
     virtual ~IOfflineQueue() = default;
 
@@ -52,6 +53,7 @@ struct IOfflineQueue {
     /// @param itemId Id returned by the corresponding `enqueue()` call.
     virtual void markDone(uint64_t itemId) = 0;
 };
+// NOLINTEND(cppcoreguidelines-special-member-functions)
 
 // ── In-memory implementation ──────────────────────────────────────────────────
 
@@ -65,8 +67,8 @@ public:
     /// @param payload Serialised action to store.
     /// @return Unique id for this item.
     uint64_t enqueue(std::string payload) override {
-        std::scoped_lock lock{_mtx};
-        uint64_t itemId = ++_nextId;
+        std::scoped_lock const lock{_mtx};
+        uint64_t const itemId = ++_nextId;
         _items.push_back(QueueItem{.id = itemId, .payload = std::move(payload)});
         return itemId;
     }
@@ -74,7 +76,7 @@ public:
     /// @brief Returns a snapshot of all pending items. Thread-safe.
     /// @return Copy of all items in insertion order.
     std::vector<QueueItem> drain() override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         return std::vector<QueueItem>{_items.begin(), _items.end()};
     }
 
@@ -83,7 +85,7 @@ public:
     /// No-op if @p itemId is not found.
     /// @param itemId Id of the item to remove.
     void markDone(uint64_t itemId) override {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         auto iter = std::ranges::find_if(_items, [itemId](const QueueItem& item) { return item.id == itemId; });
         if (iter != _items.end()) {
             _items.erase(iter);

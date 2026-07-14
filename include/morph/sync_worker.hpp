@@ -72,8 +72,8 @@ public:
     ///
     /// @return Counts of successful / failed / dead-lettered replays.
     SyncResult run() {
-        std::scoped_lock runLock{_runMtx};
-        bool wasStoppedBeforeRun = _stopped.exchange(false);
+        std::scoped_lock const runLock{_runMtx};
+        bool const wasStoppedBeforeRun = _stopped.exchange(false);
         SyncResult result;
         if (wasStoppedBeforeRun) {
             return result;

@@ -53,6 +53,7 @@ struct ReconnectCoordinatorConfig {
 /// mirroring `SyncWorker::run()`. Calling them concurrently is safe; the second
 /// caller blocks. They are intended to be posted onto a worker executor by the
 /// host (see the wiring note in the design doc), not called on the probe thread.
+// NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ReconnectCoordinator {
 public:
     /// @brief Alias for the configuration struct.
@@ -116,7 +117,7 @@ public:
     ///
     /// @return How the sequence ended (see `ReconnectOutcome`).
     ReconnectOutcome onOnline() {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
 
         for (int attempt = 1; attempt <= _cfg.maxAttempts; ++attempt) {
             if (!callShouldContinue()) {
@@ -150,7 +151,7 @@ public:
     /// Idempotent at the policy level: safe to call when already local. Serialised
     /// against `onOnline()` by an internal mutex.
     void onOffline() {
-        std::scoped_lock lock{_mtx};
+        std::scoped_lock const lock{_mtx};
         _deps.activateLocal();
         _deps.bindContext();
     }
@@ -173,7 +174,7 @@ private:
     }
 
     /// @brief Calls `tryReconnect`, treating a thrown exception as a failed attempt.
-    bool callTryReconnect() noexcept {
+    [[nodiscard]] bool callTryReconnect() const noexcept {
         try {
             return _deps.tryReconnect();
         } catch (...) {
@@ -182,7 +183,7 @@ private:
     }
 
     /// @brief Calls `shouldContinue`, treating a throw as "do not continue".
-    bool callShouldContinue() noexcept {
+    [[nodiscard]] bool callShouldContinue() const noexcept {
         try {
             return _deps.shouldContinue();
         } catch (...) {
