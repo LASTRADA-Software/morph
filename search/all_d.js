@@ -17,5 +17,5 @@ var searchData=
   ['null_20executor_20before_20callbacks_20fire_14',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
   ['num_15',['num',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36',1,'morph::math::Rational::Wire::num'],['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a359f98d03a24ee27e54edb19eb586f54',1,'morph::units::UnitAlternative::num']]],
   ['numbers_20on_20the_20wire_16',['&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
-  ['numerator_17',['numerator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd',1,'morph::math::Rational']]]
+  ['numerator_17',['numerator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd',1,'morph::math::Rational::numerator'],['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator::Numerator()'],['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math::Numerator']]]
 ];

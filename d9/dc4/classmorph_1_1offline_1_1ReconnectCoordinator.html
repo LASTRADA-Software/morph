@@ -153,7 +153,7 @@ Public Member Functions</h2></td></tr>
 </dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd><code><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538" title="Run the reconnect → activate → bind → replay sequence.">onOnline()</a></code> and <code><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#a1e68df1af6563ea1295f8c48023ae6f5" title="Switch to the local backend and rebind context.">onOffline()</a></code> are mutually serialised by an internal mutex, mirroring <code><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">SyncWorker::run()</a></code>. Calling them concurrently is safe; the second caller blocks. They are intended to be posted onto a worker executor by the host (see the wiring note in the design doc), not called on the probe thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 </div><h2 class="groupheader">Member Typedef Documentation</h2>
 <a id="af3e7ffb97a416c00981893ba53d5421b" name="af3e7ffb97a416c00981893ba53d5421b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af3e7ffb97a416c00981893ba53d5421b">&#9670;&#160;</a></span>Config</h2>
@@ -169,7 +169,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <p>In a debug build, a null <code><a class="el" href="../../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html" title="Injected, host-supplied side effects. None may be null.">Deps</a></code> member is logged via <code>morph::log::logError</code>. Invoking the coordinator with any null member is undefined behaviour. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +250,7 @@ Public Member Functions</h2></td></tr>
 <p>Synchronous; runs entirely on the calling thread. Serialised against <code><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#a1e68df1af6563ea1295f8c48023ae6f5" title="Switch to the local backend and rebind context.">onOffline()</a></code> by an internal mutex.</p>
 <dl class="section return"><dt>Returns</dt><dd>How the sequence ended (see <code>ReconnectOutcome</code>). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +280,7 @@ Public Member Functions</h2></td></tr>
 <p>Switch to the local backend and rebind context. </p>
 <p>Idempotent at the policy level: safe to call when already local. Serialised against <code><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538" title="Run the reconnect → activate → bind → replay sequence.">onOnline()</a></code> by an internal mutex. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>

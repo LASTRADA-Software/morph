@@ -9,12 +9,10 @@ var searchData=
   ['error_20propagation_6',['Error propagation',['../index.html#error-propagation',1,'']]],
   ['exact_20numbers_20on_20the_20wire_7',['&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
   ['exact_20values_20units_20and_20schema_20driven_20forms_8',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['execute_9',['execute',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4',1,'morph::backend::SimulatedRemoteBackend::execute()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74',1,'morph::qt::QtWebSocketBackend::execute()'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b',1,'morph::bridge::BridgeHandler::execute()'],['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#abc6521631ae08814323f707f748dbc47',1,'morph::bridge::ActionExecuteRegistry::execute()'],['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4',1,'morph::backend::LocalBackend::execute()']]],
-  ['executejson_10',['executeJson',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a5ad7969d7f0857c922f56a74a02e3897',1,'morph::bridge::BridgeHandler']]],
-  ['executevia_11',['executeVia',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6676a2e068b5739a465d2c29f4570828',1,'morph::bridge::Bridge']]],
-  ['execution_20history_12',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['executor_13',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]],
-  ['executor_20before_20callbacks_20fire_14',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
-  ['executors_15',['Executors',['../index.html#executors',1,'']]],
-  ['exists_16',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['execute_9',['execute',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4',1,'morph::backend::SimulatedRemoteBackend::execute()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74',1,'morph::qt::QtWebSocketBackend::execute()'],['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#abc6521631ae08814323f707f748dbc47',1,'morph::bridge::ActionExecuteRegistry::execute()'],['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4',1,'morph::backend::LocalBackend::execute()']]],
+  ['execution_20history_10',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['executor_11',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]],
+  ['executor_20before_20callbacks_20fire_12',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
+  ['executors_13',['Executors',['../index.html#executors',1,'']]],
+  ['exists_14',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];

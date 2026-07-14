@@ -221,7 +221,7 @@ $(document).ready(function(){initNavTree('dc/de4/wire_8hpp_source.html','../../'
 <div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment"></span><span class="keyword">inline</span> Envelope decode(std::string_view json) {</div>
 <div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>    Envelope env{};</div>
 <div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>    <span class="keywordflow">if</span> (<span class="keyword">auto</span> errCode = glz::read_json(env, json)) {</div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>        <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;envelope decode failed: &quot;</span> + glz::format_error(errCode, std::string{json}));</div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>        <span class="keywordflow">throw</span> std::runtime_error(<span class="stringliteral">&quot;envelope decode failed: &quot;</span> + glz::format_error(errCode, json));</div>
 <div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>    }</div>
 <div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>    <span class="keywordflow">return</span> env;</div>
 <div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>}</div>

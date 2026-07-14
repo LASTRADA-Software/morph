@@ -8,8 +8,6 @@ var hierarchy =
     ] ],
     [ "morph::backend::RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", null ],
     [ "morph::bridge::ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", null ],
-    [ "morph::bridge::Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", null ],
-    [ "morph::bridge::BridgeHandler< Model >", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", null ],
     [ "morph::exec::IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", [
       [ "morph::exec::MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", null ],
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
@@ -26,6 +24,8 @@ var hierarchy =
     [ "morph::journal::ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", null ],
     [ "morph::log::ScopedLoggerOverride", "d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html", null ],
     [ "morph::math::DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", null ],
+    [ "morph::math::Denominator", "de/d17/structmorph_1_1math_1_1Denominator.html", null ],
+    [ "morph::math::Numerator", "d7/d45/structmorph_1_1math_1_1Numerator.html", null ],
     [ "morph::math::Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", null ],
     [ "morph::math::Rational::Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", null ],
     [ "morph::model::ActionLogPolicy< Action >", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],

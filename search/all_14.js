@@ -8,6 +8,5 @@ var searchData=
   ['unitmeta_5',['unitmeta',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html',1,'morph::units::UnitMeta'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a974c58708720c7c1ab9041d4f903d8df',1,'morph::units::Quantity::unitMeta()']]],
   ['units_20and_20schema_20driven_20forms_6',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
   ['units_20as_20types_7',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
-  ['unittraits_8',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]],
-  ['unsubscribe_9',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a6ea83bd14e9cb81f66f9613b0ce75576',1,'morph::bridge::BridgeHandler']]]
+  ['unittraits_8',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]]
 ];

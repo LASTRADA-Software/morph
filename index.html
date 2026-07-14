@@ -424,15 +424,12 @@ Adding a new model and actions</h1>
 </div><!-- fragment --><ol type="1">
 <li>Use from the GUI (same code for local and remote):</li>
 </ol>
-<div class="fragment"><div class="line"><a class="code hl_class" href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a> bridge{std::make_unique&lt;morph::backend::LocalBackend&gt;(pool)};</div>
-<div class="line"><a class="code hl_class" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler&lt;MyModel&gt;</a> handler{bridge, &amp;guiExecutor};</div>
+<div class="fragment"><div class="line">morph::bridge::Bridge bridge{std::make_unique&lt;morph::backend::LocalBackend&gt;(pool)};</div>
+<div class="line">morph::bridge::BridgeHandler&lt;MyModel&gt; handler{bridge, &amp;guiExecutor};</div>
 <div class="line"> </div>
-<div class="line">handler.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">execute</a>(MyAction{21})</div>
+<div class="line">handler.execute(MyAction{21})</div>
 <div class="line">    .then([](<span class="keywordtype">int</span> result) { <span class="comment">/* runs on GUI thread */</span> })</div>
 <div class="line">    .onError([](std::exception_ptr e) { <span class="comment">/* runs on GUI thread */</span> });</div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a></div><div class="ttdoc">RAII wrapper that binds a single model type to a Bridge.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00451">bridge.hpp:451</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_a8c6341aaf8719bd097f2af013204b03b"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8c6341aaf8719bd097f2af013204b03b">morph::bridge::BridgeHandler::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; typename ::morph::model::ActionTraits&lt; Action &gt;::Result &gt; execute(Action action)</div><div class="ttdoc">Dispatches action via the underlying Bridge and returns a Completion.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00500">bridge.hpp:500</a></div></div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1Bridge_html"><div class="ttname"><a href="d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a></div><div class="ttdoc">Central dispatcher that routes typed actions to an IBackend.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00169">bridge.hpp:169</a></div></div>
 </div><!-- fragment --><h1><a class="anchor" id="subscriptions-and-fielded-actions"></a>
 Subscriptions and fielded actions</h1>
 <p>The framework offers two complementary surfaces for invoking actions from the GUI:</p>
@@ -452,11 +449,11 @@ API</h2>
 <div class="line">BRIDGE_REGISTER_VALIDATOR(FormAction, [](<span class="keyword">const</span> FormAction&amp; a) {</div>
 <div class="line">    <span class="keywordflow">return</span> a.a != 0.0 &amp;&amp; a.b != 0.0 &amp;&amp; a.c != 0.0;</div>
 <div class="line">})</div>
-<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a></div><div class="ttdoc">Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00079">registry.hpp:79</a></div></div>
-<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html_a3741692227c70903fcc7fa93011f636d"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a3741692227c70903fcc7fa93011f636d">morph::model::ActionValidator::ready</a></div><div class="ttdeci">static constexpr bool ready(const Action &amp;action)</div><div class="ttdoc">Returns true if the action is in a state that should be executed.</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00087">registry.hpp:87</a></div></div>
-</div><!-- fragment --><div class="fragment"><div class="line"><a class="code hl_class" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler&lt;FormModel&gt;</a> handler{bridge, &amp;guiExec};</div>
+<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html">morph::model::ActionValidator</a></div><div class="ttdoc">Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00094">registry.hpp:94</a></div></div>
+<div class="ttc" id="astructmorph_1_1model_1_1ActionValidator_html_a3741692227c70903fcc7fa93011f636d"><div class="ttname"><a href="d5/d92/structmorph_1_1model_1_1ActionValidator.html#a3741692227c70903fcc7fa93011f636d">morph::model::ActionValidator::ready</a></div><div class="ttdeci">static constexpr bool ready(const Action &amp;action)</div><div class="ttdoc">Returns true if the action is in a state that should be executed.</div><div class="ttdef"><b>Definition</b> <a href="d1/da2/registry_8hpp_source.html#l00102">registry.hpp:102</a></div></div>
+</div><!-- fragment --><div class="fragment"><div class="line">morph::bridge::BridgeHandler&lt;FormModel&gt; handler{bridge, &amp;guiExec};</div>
 <div class="line"> </div>
-<div class="line">handler.<a class="code hl_function" href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">subscribe</a>&lt;FormAction&gt;([](<span class="keywordtype">double</span> sum) { renderTotal(sum); });</div>
+<div class="line">handler.subscribe&lt;FormAction&gt;([](<span class="keywordtype">double</span> sum) { renderTotal(sum); });</div>
 <div class="line"> </div>
 <div class="line">handler.set&lt;&amp;FormAction::a&gt;(3.0);</div>
 <div class="line">handler.set&lt;&amp;FormAction::b&gt;(5.0);</div>
@@ -464,7 +461,6 @@ API</h2>
 <div class="line"> </div>
 <div class="line">handler.unsubscribe&lt;FormAction&gt;();</div>
 <div class="line">handler.reset&lt;FormAction&gt;();</div>
-<div class="ttc" id="aclassmorph_1_1bridge_1_1BridgeHandler_html_aa289505b2d7130d3a250e76745ef8753"><div class="ttname"><a href="d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa289505b2d7130d3a250e76745ef8753">morph::bridge::BridgeHandler::subscribe</a></div><div class="ttdeci">void subscribe(std::function&lt; void(typename ::morph::model::ActionTraits&lt; Action &gt;::Result)&gt; cb)</div><div class="ttdoc">Subscribes to results of action type Action.</div><div class="ttdef"><b>Definition</b> <a href="d6/d1e/bridge_8hpp_source.html#l00531">bridge.hpp:531</a></div></div>
 </div><!-- fragment --><h2><a class="anchor" id="behavior"></a>
 Behavior</h2>
 <table class="markdownTable">

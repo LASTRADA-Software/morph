@@ -12,7 +12,7 @@ var searchData=
   ['forms_9',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
   ['forms_2ehpp_10',['forms.hpp',['../d4/d11/forms_8hpp.html',1,'']]],
   ['framework_20concern_11',['Conflict Resolution — a domain concern, not a framework concern',['../index.html#conflict-resolution--a-domain-concern-not-a-framework-concern',1,'']]],
-  ['from_12',['from',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ab0184c9bafcedff340d484c0adaa05ea',1,'morph::math::Rational']]],
+  ['from_12',['from',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a4c4bb09573c1b8da11b577194fa9e843',1,'morph::math::Rational']]],
   ['from_20tt_20onbackendchanged_20tt_13',['&lt;tt&gt;Bridge::switchBackend&lt;/tt&gt; must not be called from &lt;tt&gt;onBackendChanged&lt;/tt&gt;',['../index.html#bridgeswitchbackend-must-not-be-called-from-onbackendchanged',1,'']]],
   ['fromdouble_14',['fromDouble',['../d5/dda/structmorph_1_1units_1_1Quantity.html#af93658f52b9727462984d692b756bc0c',1,'morph::units::Quantity']]],
   ['fromfloat_15',['fromfloat',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ab31cff5187102ef9e5f07c750760111b',1,'morph::math::Rational::fromFloat(double value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#ace23b5b657e89e9ac35c308d1d5c2aa8',1,'morph::math::Rational::fromFloat(float value, DecimalPlaces wantedPrecision) noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a32739f25a01b28c88b9bedd3036d5c38',1,'morph::math::Rational::fromFloat(long double value, DecimalPlaces wantedPrecision) noexcept']]],

@@ -113,7 +113,7 @@ $(document).ready(function(){initNavTree('d7/da9/file__action__log_8hpp_source.h
 <div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="preprocessor">#include &lt;string_view&gt;</span></div>
 <div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="preprocessor">#include &lt;vector&gt;</span></div>
 <div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span> </div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#if defined(_WIN32)</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="preprocessor">#ifdef _WIN32</span></div>
 <div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="preprocessor">#include &lt;io.h&gt;</span></div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#else</span></div>
 <div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &lt;unistd.h&gt;</span></div>
@@ -161,81 +161,84 @@ $(document).ready(function(){initNavTree('d7/da9/file__action__log_8hpp_source.h
 <div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">    /// valid handle or throws before completing (in which case this destructor</span></div>
 <div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">    /// never runs), and copy/move are deleted, so there is no path that could</span></div>
 <div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">    /// null it out afterwards.</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">   60</a></span><span class="comment"></span>    <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">~FileActionLog</a>()<span class="keyword"> override </span>{ std::fclose(_file); }</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span> </div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>(<a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp; operator=(<a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment"></span> </div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">    /// @brief Appends @p entry as one JSON line. Buffered until `flush()`. Thread-safe.</span></div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.</span></div>
-<div class="foldopen" id="foldopen00069" data-start="{" data-end="}">
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">   69</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">append</a>(<a class="code hl_struct" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>        std::scoped_lock lock{_mtx};</div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">seq</a> = ++_nextSeq;</div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>        <span class="keyword">auto</span> line = toJson(entry);</div>
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>        line.push_back(<span class="charliteral">&#39;\n&#39;</span>);</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>        std::fwrite(line.data(), 1, line.size(), _file);</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>    }</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment"></span>    <span class="comment">// NOLINTNEXTLINE(cert-err33-c) — destructor context, can&#39;t propagate errors</span></div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">   61</a></span>    <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">~FileActionLog</a>()<span class="keyword"> override </span>{ std::fclose(_file); }</div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span> </div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>(<a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    <a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp; operator=(<a class="code hl_class" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">FileActionLog</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment"></span> </div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">    /// @brief Appends @p entry as one JSON line. Buffered until `flush()`. Thread-safe.</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.</span></div>
+<div class="foldopen" id="foldopen00070" data-start="{" data-end="}">
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">   70</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">append</a>(<a class="code hl_struct" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">seq</a> = ++_nextSeq;</div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>        <span class="keyword">auto</span> line = toJson(entry);</div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>        line.push_back(<span class="charliteral">&#39;\n&#39;</span>);</div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>        <span class="comment">// NOLINTNEXTLINE(cert-err33-c) — append-only; fwrite errors checked via subsequent fsync</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>        std::fwrite(line.data(), 1, line.size(), _file);</div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>    }</div>
 </div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment"></span> </div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">    /// @brief Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.</span></div>
-<div class="foldopen" id="foldopen00078" data-start="{" data-end="}">
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">   78</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">flush</a>()<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>        std::scoped_lock lock{_mtx};</div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>        std::fflush(_file);</div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="preprocessor">#if defined(_WIN32)</span></div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>        _commit(_fileno(_file));</div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="preprocessor">#else</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>        ::fsync(fileno(_file));</div>
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>    }</div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment"></span> </div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">    /// @brief Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.</span></div>
+<div class="foldopen" id="foldopen00080" data-start="{" data-end="}">
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">   80</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">flush</a>()<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>        <span class="comment">// NOLINTNEXTLINE(cert-err33-c) — errors logged by caller after flush</span></div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>        std::fflush(_file);</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="preprocessor">#ifdef _WIN32</span></div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span>        _commit(_fileno(_file));</div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="preprocessor">#else</span></div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>        ::fsync(fileno(_file));</div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>    }</div>
 </div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment"></span> </div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment">    /// @brief Re-reads the file from disk and decodes every line. Thread-safe.</span></div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">    /// Reads whatever is currently on disk, including anything written but not</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">    /// yet `flush()`ed if the platform&#39;s stdio buffering has already handed it</span></div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">    /// to the OS — callers that need a guaranteed-durable view should `flush()`</span></div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">    /// first.</span></div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// @param entityKey If non-empty, restricts the result to that entity&#39;s entries.</span></div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">    /// @return Matching entries, in on-disk (append) order.</span></div>
-<div class="foldopen" id="foldopen00096" data-start="{" data-end="}">
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">   96</a></span><span class="comment"></span>    [[nodiscard]] std::vector&lt;LogEntry&gt; <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">entries</a>(std::string_view entityKey = {}) <span class="keyword">const</span> <span class="keyword">override</span> {</div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span>        std::scoped_lock lock{_mtx};</div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span>        std::ifstream in{_path};</div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span>        std::vector&lt;LogEntry&gt; out;</div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>        std::string line;</div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>        <span class="keywordflow">while</span> (std::getline(in, line)) {</div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>            <span class="keywordflow">if</span> (line.empty()) {</div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>                <span class="keywordflow">continue</span>;</div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>            }</div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>            <span class="keyword">auto</span> entry = fromJson(line);</div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>            <span class="keywordflow">if</span> (entityKey.empty() || entry.entityKey == entityKey) {</div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>                out.push_back(std::move(entry));</div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>            }</div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>        }</div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>    }</div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment"></span> </div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">    /// @brief Re-reads the file from disk and decodes every line. Thread-safe.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">    /// Reads whatever is currently on disk, including anything written but not</span></div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// yet `flush()`ed if the platform&#39;s stdio buffering has already handed it</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">    /// to the OS — callers that need a guaranteed-durable view should `flush()`</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">    /// first.</span></div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">    /// @param entityKey If non-empty, restricts the result to that entity&#39;s entries.</span></div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">    /// @return Matching entries, in on-disk (append) order.</span></div>
+<div class="foldopen" id="foldopen00099" data-start="{" data-end="}">
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno"><a class="line" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">   99</a></span><span class="comment"></span>    [[nodiscard]] std::vector&lt;LogEntry&gt; <a class="code hl_function" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">entries</a>(std::string_view entityKey = {}) <span class="keyword">const</span> <span class="keyword">override</span> {</div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>        std::ifstream in{_path};</div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>        std::vector&lt;LogEntry&gt; out;</div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>        std::string line;</div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>        <span class="keywordflow">while</span> (std::getline(in, line)) {</div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>            <span class="keywordflow">if</span> (line.empty()) {</div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>                <span class="keywordflow">continue</span>;</div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>            }</div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>            <span class="keyword">auto</span> entry = fromJson(line);</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>            <span class="keywordflow">if</span> (entityKey.empty() || entry.entityKey == entityKey) {</div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>                out.push_back(std::move(entry));</div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>            }</div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>        }</div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>        <span class="keywordflow">return</span> out;</div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>    }</div>
 </div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span> </div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>    std::filesystem::path _path;</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>    std::FILE* _file = <span class="keyword">nullptr</span>;</div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>    uint64_t _nextSeq{0};</div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>};</div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span> </div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>    std::filesystem::path _path;</div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    std::FILE* _file = <span class="keyword">nullptr</span>;</div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>    uint64_t _nextSeq{0};</div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>};</div>
 </div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span> </div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>}  <span class="comment">// namespace morph::journal</span></div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span> </div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>}  <span class="comment">// namespace morph::journal</span></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html">morph::journal::FileActionLog</a></div><div class="ttdoc">Append-only, newline-delimited-JSON IActionLog backed by a local file.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00042">file_action_log.hpp:42</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_a9a84c25f2d2b8c8bf8354a4070b0bac1"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">morph::journal::FileActionLog::~FileActionLog</a></div><div class="ttdeci">~FileActionLog() override</div><div class="ttdoc">Closes the underlying file.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00060">file_action_log.hpp:60</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_a9ae4ceee86a705a0dab6388abc8c87a3"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">morph::journal::FileActionLog::flush</a></div><div class="ttdeci">void flush() override</div><div class="ttdoc">Flushes stdio's buffer, then fsyncs the file descriptor. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00078">file_action_log.hpp:78</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_a9a84c25f2d2b8c8bf8354a4070b0bac1"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1">morph::journal::FileActionLog::~FileActionLog</a></div><div class="ttdeci">~FileActionLog() override</div><div class="ttdoc">Closes the underlying file.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00061">file_action_log.hpp:61</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_a9ae4ceee86a705a0dab6388abc8c87a3"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9ae4ceee86a705a0dab6388abc8c87a3">morph::journal::FileActionLog::flush</a></div><div class="ttdeci">void flush() override</div><div class="ttdoc">Flushes stdio's buffer, then fsyncs the file descriptor. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00080">file_action_log.hpp:80</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_ac31c936b2ec3c6a63f979aca51a92fd5"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ac31c936b2ec3c6a63f979aca51a92fd5">morph::journal::FileActionLog::FileActionLog</a></div><div class="ttdeci">FileActionLog(std::filesystem::path path)</div><div class="ttdoc">Opens (creating if necessary) path for appending.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00047">file_action_log.hpp:47</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_ae5f2328fc8fdc456e2592b610ec2feea"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">morph::journal::FileActionLog::append</a></div><div class="ttdeci">void append(LogEntry entry) override</div><div class="ttdoc">Appends entry as one JSON line. Buffered until flush(). Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00069">file_action_log.hpp:69</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_aee38ac14807005f7ba0e194d884b6cc3"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">morph::journal::FileActionLog::entries</a></div><div class="ttdeci">std::vector&lt; LogEntry &gt; entries(std::string_view entityKey={}) const override</div><div class="ttdoc">Re-reads the file from disk and decodes every line. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00096">file_action_log.hpp:96</a></div></div>
-<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00107">action_log.hpp:107</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_ae5f2328fc8fdc456e2592b610ec2feea"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#ae5f2328fc8fdc456e2592b610ec2feea">morph::journal::FileActionLog::append</a></div><div class="ttdeci">void append(LogEntry entry) override</div><div class="ttdoc">Appends entry as one JSON line. Buffered until flush(). Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00070">file_action_log.hpp:70</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1FileActionLog_html_aee38ac14807005f7ba0e194d884b6cc3"><div class="ttname"><a href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3">morph::journal::FileActionLog::entries</a></div><div class="ttdeci">std::vector&lt; LogEntry &gt; entries(std::string_view entityKey={}) const override</div><div class="ttdoc">Re-reads the file from disk and decodes every line. Thread-safe.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/da9/file__action__log_8hpp_source.html#l00099">file_action_log.hpp:99</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00108">action_log.hpp:108</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">morph::journal::LogEntry</a></div><div class="ttdoc">One recorded execution of an action against a model instance.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00020">action_log.hpp:20</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_af622c4dbb839692d172057ecaec56a2d"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">morph::journal::LogEntry::seq</a></div><div class="ttdeci">uint64_t seq</div><div class="ttdoc">Monotonic order assigned by the sink on append(). Callers pass 0.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00022">action_log.hpp:22</a></div></div>
 </div><!-- fragment --></div><!-- contents -->

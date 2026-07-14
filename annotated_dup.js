@@ -13,9 +13,7 @@ var annotated_dup =
         [ "SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend" ]
       ] ],
       [ "bridge", null, [
-        [ "ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry" ],
-        [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", "d0/ddc/classmorph_1_1bridge_1_1Bridge" ],
-        [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ]
+        [ "ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry" ]
       ] ],
       [ "exec", null, [
         [ "IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", "d4/d49/structmorph_1_1exec_1_1IExecutor" ],
@@ -40,6 +38,8 @@ var annotated_dup =
       ] ],
       [ "math", null, [
         [ "DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", "da/d03/structmorph_1_1math_1_1DecimalPlaces" ],
+        [ "Denominator", "de/d17/structmorph_1_1math_1_1Denominator.html", "de/d17/structmorph_1_1math_1_1Denominator" ],
+        [ "Numerator", "d7/d45/structmorph_1_1math_1_1Numerator.html", "d7/d45/structmorph_1_1math_1_1Numerator" ],
         [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ]
       ] ],
       [ "model", null, [

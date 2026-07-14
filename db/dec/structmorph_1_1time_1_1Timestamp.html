@@ -143,7 +143,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>An optionally-empty timestamp field. </p>
 <p>The blank state ("not entered / not recorded") lives inside, exactly like <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html" title="A unit-tagged, optionally-empty exact value with a declared precision in its type.">morph::units::Quantity</a></code>: action structs never wrap a <code><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">Timestamp</a></code> in <code>std::optional</code>, and a non-optional <code><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">Timestamp</a></code> member is <em>required</em> by the <code>morph::forms</code> rules. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="acccb28c6dec977648081e13ec4b179fa" name="acccb28c6dec977648081e13ec4b179fa"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#acccb28c6dec977648081e13ec4b179fa">&#9670;&#160;</a></span>Timestamp() <span class="overload">[1/2]</span></h2>
@@ -177,7 +177,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -213,7 +213,7 @@ Public Attributes</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00243">243</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -244,7 +244,7 @@ Public Attributes</h2></td></tr>
 <p>An engaged timestamp holding the current UTC instant. </p>
 <dl class="section return"><dt>Returns</dt><dd><code><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">Timestamp</a>{<a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a>}</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -274,7 +274,7 @@ Public Attributes</h2></td></tr>
 <p>Whether an instant has been entered. </p>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> if the payload is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00251">251</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +304,7 @@ Public Attributes</h2></td></tr>
 <p>Unchecked access to the engaged instant (UB when empty, exactly like <code>std::optional</code> — the unchecked contract is the point). </p>
 <dl class="section return"><dt>Returns</dt><dd>The engaged instant. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00255">255</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00257">257</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>
@@ -358,7 +358,7 @@ Public Attributes</h2></td></tr>
 
 <p>The payload; <code>std::nullopt</code> means "not entered". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>

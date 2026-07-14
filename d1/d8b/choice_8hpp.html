@@ -136,7 +136,7 @@ Variables</h2></td></tr>
 <div class="line">    <a class="code hl_struct" href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a>&lt;std::int64_t, <span class="stringliteral">&quot;ListSamples&quot;</span>&gt; sampleId;  <span class="comment">// combo box</span></div>
 <div class="line">    ...</div>
 <div class="line">};</div>
-<div class="ttc" id="astructmorph_1_1forms_1_1Choice_html"><div class="ttname"><a href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a></div><div class="ttdoc">An optionally-empty value selected from options served by another action.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00078">choice.hpp:78</a></div></div>
+<div class="ttc" id="astructmorph_1_1forms_1_1Choice_html"><div class="ttname"><a href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a></div><div class="ttdoc">An optionally-empty value selected from options served by another action.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00079">choice.hpp:79</a></div></div>
 </div><!-- fragment --><p>In the generated schema the declaration surfaces as <code>x-optionsAction</code> / <code>x-optionValue</code> / <code>x-optionLabel</code> on the property (added by <code><a class="el" href="../../d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a></code>), so a client knows <em>which action to call</em> and <em>which result fields to use</em> without hardcoding anything.</p>
 <p>On the wire a <code>Choice</code> is its nullable underlying value (<code>T</code>); the options metadata never travels with payloads. Like <code>Quantity</code> and <code>Timestamp</code>, the blank state ("nothing selected") lives inside, and a non-optional <code>Choice</code> member is <em>required</em> by the <code>morph::forms</code> rules. </p>
 
@@ -166,7 +166,7 @@ template&lt;typename T &gt; </div>
 
 <p><code>true</code> when <code>T</code> (cvref-stripped) is a <code><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">morph::forms::Choice</a></code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d8b/choice_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d8b/choice_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
 
 </div>
 </div>

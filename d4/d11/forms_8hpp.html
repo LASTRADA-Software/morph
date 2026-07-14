@@ -148,7 +148,7 @@ Functions</h2></td></tr>
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::array optionalFields{std::string_view{<span class="stringliteral">&quot;moisture&quot;</span>}};</div>
 <div class="line">    [[nodiscard]] <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> <a class="code hl_function" href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a>(*<span class="keyword">this</span>); }</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00213">forms.hpp:213</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00217">forms.hpp:217</a></div></div>
 </div><!-- fragment --></dd></dl>
 <dl class="section user"><dt>Readiness helper</dt><dd><code>allRequiredEngaged(action)</code> returns <code>true</code> when every <em>required</em> empty-capable member (<code>Quantity</code>, <code>Choice</code>, <code>Timestamp</code> — anything with a <code>hasValue()</code>) is engaged. Wire it up as the action's <code>validate()</code> (the existing <code>ActionValidator</code> machinery picks that method up automatically) so the same declaration drives the schema's <code>required</code> array, the client-side submit gate, and the fielded-action readiness check. Non-quantity members are not checked — a plain <code>int64_t</code> cannot express "not filled in"; use a <code>Quantity</code> (or a custom <code>validate()</code>) when that distinction matters. </dd></dl>
 
@@ -195,7 +195,7 @@ template&lt;typename A &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> when no required empty-capable field is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +230,7 @@ template&lt;typename A &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The merged schema JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

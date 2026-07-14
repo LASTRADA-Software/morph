@@ -1,6 +1,8 @@
 var rational_8hpp =
 [
     [ "morph::math::DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", "da/d03/structmorph_1_1math_1_1DecimalPlaces" ],
+    [ "morph::math::Numerator", "d7/d45/structmorph_1_1math_1_1Numerator.html", "d7/d45/structmorph_1_1math_1_1Numerator" ],
+    [ "morph::math::Denominator", "de/d17/structmorph_1_1math_1_1Denominator.html", "de/d17/structmorph_1_1math_1_1Denominator" ],
     [ "morph::math::Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ],
     [ "morph::math::Rational::Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire" ],
     [ "RationalError", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9e", [

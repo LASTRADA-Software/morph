@@ -121,10 +121,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a3125da15823891abf6a3bf4fc6355bb3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a server with a custom authorizer.  <br /></td></tr>
 <tr class="separator:a3125da15823891abf6a3bf4fc6355bb3"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ae0a8a4b505069b41f9005705e93d4701" id="r_ae0a8a4b505069b41f9005705e93d4701"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701">handle</a> (std::string msg, std::function&lt; void(std::string)&gt; reply)</td></tr>
-<tr class="memdesc:ae0a8a4b505069b41f9005705e93d4701"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asynchronously processes <code>msg</code> and calls <code>reply</code> with the response.  <br /></td></tr>
+<tr class="memdesc:ae0a8a4b505069b41f9005705e93d4701"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asynchronously processes a JSON <code>Envelope</code> and calls <code>reply</code> with the response.  <br /></td></tr>
 <tr class="separator:ae0a8a4b505069b41f9005705e93d4701"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:abcdee5e1504ebcbef2415b029eec8818" id="r_abcdee5e1504ebcbef2415b029eec8818"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818">handleInline</a> (const std::string &amp;msg)</td></tr>
-<tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Synchronously processes <code>msg</code> on the calling thread and returns the reply.  <br /></td></tr>
+<tr class="memdesc:abcdee5e1504ebcbef2415b029eec8818"><td class="mdescLeft">&#160;</td><td class="mdescRight">Synchronously processes a JSON <code>Envelope</code> on the calling thread and returns the reply.  <br /></td></tr>
 <tr class="separator:abcdee5e1504ebcbef2415b029eec8818"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a99f2c685f538d7cbdbdc8f762c9cca47" id="r_a99f2c685f538d7cbdbdc8f762c9cca47"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a99f2c685f538d7cbdbdc8f762c9cca47">setLogProvider</a> (<a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127">LogProvider</a> provider)</td></tr>
 <tr class="memdesc:a99f2c685f538d7cbdbdc8f762c9cca47"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code>provider</code>, consulted on every <code>register</code> envelope whose <code>contextKey</code> is non-empty.  <br /></td></tr>
@@ -133,7 +133,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Server-side message handler that owns model instances and dispatches actions. </p>
 <p><code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> receives JSON envelopes (<code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code>) from any transport (WebSocket, in-process simulation, …) and executes the corresponding model operations via an <code>ActionDispatcher</code>. Authorization is delegated to an <code>IAuthorizer</code> that defaults to allow-all.</p>
-<dl class="section user"><dt>Heap allocation requirement</dt><dd><code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> <b>must</b> be heap-allocated via <code>std::make_shared</code>. <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes msg and calls reply with the response.">handle()</a></code> captures <code>shared_from_this()</code> to prevent use-after-free when the worker pool outlives the server object.</dd></dl>
+<dl class="section user"><dt>Heap allocation requirement</dt><dd><code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></code> <b>must</b> be heap-allocated via <code>std::make_shared</code>. <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></code> captures <code>shared_from_this()</code> to prevent use-after-free when the worker pool outlives the server object.</dd></dl>
 <dl class="section user"><dt>Wire format</dt><dd>All requests and replies are encoded as <code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code> JSON. See <code><a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a></code> for the field semantics. The <code>kind</code> field is the discriminator. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00037">37</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
@@ -308,13 +308,13 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Asynchronously processes <code>msg</code> and calls <code>reply</code> with the response. </p>
+<p>Asynchronously processes a JSON <code>Envelope</code> and calls <code>reply</code> with the response. </p>
 <p>The message is dispatched to the worker pool. <code>reply</code> is called exactly once from the pool thread when processing completes.</p>
 <p>Thread-safe. Safe to call before the previous call's reply has been delivered.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">msg</td><td>Pipe-delimited protocol message. </td></tr>
-    <tr><td class="paramname">reply</td><td>Callback invoked with the response string. </td></tr>
+    <tr><td class="paramname">msg</td><td>JSON-encoded <code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code> (via <code>wire::encode</code>). </td></tr>
+    <tr><td class="paramname">reply</td><td>Callback invoked with the JSON-encoded reply envelope. </td></tr>
   </table>
   </dd>
 </dl>
@@ -347,16 +347,16 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Synchronously processes <code>msg</code> on the calling thread and returns the reply. </p>
-<p>Equivalent to <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes msg and calls reply with the response.">handle()</a></code> but never posts to the worker pool, so it is safe to call from a thread that <em>is</em> the worker pool — for example, from a <code>BridgeHandler</code> constructor invoked from inside an action handler.</p>
+<p>Synchronously processes a JSON <code>Envelope</code> on the calling thread and returns the reply. </p>
+<p>Equivalent to <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></code> but never posts to the worker pool, so it is safe to call from a thread that <em>is</em> the worker pool — for example, from a <code>BridgeHandler</code> constructor invoked from inside an action handler.</p>
 <p>Only safe for control messages (<code>register</code>, <code>deregister</code>) — <code>execute</code> messages still post to the strand and would return before the result is produced. The implementation rejects <code>execute</code> to make this explicit.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">msg</td><td>Pipe-delimited control message. </td></tr>
+    <tr><td class="paramname">msg</td><td>JSON-encoded <code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code> (via <code>wire::encode</code>). </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>Reply string the async path would have produced. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 

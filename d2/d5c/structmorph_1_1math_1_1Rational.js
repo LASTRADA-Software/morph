@@ -3,7 +3,7 @@ var structmorph_1_1math_1_1Rational =
     [ "Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire" ],
     [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#aef9b384b28e72f3e5c2ed6902ab0d8c2", null ],
     [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#a620d2fbc33a4a41684a5add7eadc0ab5", null ],
-    [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#a4f9dab44b36f2a360c77f875f5583321", null ],
+    [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html#aa535d0fb524bc19ba0b437a491aa7eb2", null ],
     [ "getDecimalPlaces", "d2/d5c/structmorph_1_1math_1_1Rational.html#a83aa3a8c561ea09daaf3d9d470a918d1", null ],
     [ "isZero", "d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd", null ],
     [ "isInteger", "d2/d5c/structmorph_1_1math_1_1Rational.html#a5a8cdad28c1018af5717a362b9048547", null ],

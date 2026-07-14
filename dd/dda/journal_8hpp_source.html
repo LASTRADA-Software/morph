@@ -166,7 +166,7 @@ $(document).ready(function(){initNavTree('dd/dda/journal_8hpp_source.html','../.
 <div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.</span></div>
 <div class="foldopen" id="foldopen00065" data-start="{" data-end="}">
 <div class="line"><a id="l00065" name="l00065"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">   65</a></span><span class="comment"></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">append</a>(<a class="code hl_struct" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>        std::scoped_lock lock{_mtx};</div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
 <div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">seq</a> = ++_nextSeq;</div>
 <div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span>        _all.push_back(std::move(entry));</div>
 <div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>    }</div>
@@ -180,7 +180,7 @@ $(document).ready(function(){initNavTree('dd/dda/journal_8hpp_source.html','../.
 <div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">    /// @return Matching entries, in append order.</span></div>
 <div class="foldopen" id="foldopen00077" data-start="{" data-end="}">
 <div class="line"><a id="l00077" name="l00077"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">   77</a></span><span class="comment"></span>    [[nodiscard]] std::vector&lt;LogEntry&gt; <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">entries</a>(std::string_view entityKey = {}) <span class="keyword">const</span> <span class="keyword">override</span> {</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>        std::scoped_lock lock{_mtx};</div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
 <div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span>        <span class="keywordflow">if</span> (entityKey.empty()) {</div>
 <div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>            <span class="keywordflow">return</span> _all;</div>
 <div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>        }</div>
@@ -213,7 +213,7 @@ $(document).ready(function(){initNavTree('dd/dda/journal_8hpp_source.html','../.
 <div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>        ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
 <div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>        std::vector&lt;LogEntry&gt; remaining;</div>
 <div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>        {</div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>            std::scoped_lock lock{_mtx};</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
 <div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>            <span class="keywordflow">if</span> (!_all.empty()) {</div>
 <div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>                _all.pop_back();</div>
 <div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>                _committedUpTo = std::min(_committedUpTo, _all.size());</div>
@@ -241,7 +241,7 @@ $(document).ready(function(){initNavTree('dd/dda/journal_8hpp_source.html','../.
 <div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>                    ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
 <div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>        std::vector&lt;LogEntry&gt; pending;</div>
 <div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>        {</div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>            std::scoped_lock lock{_mtx};</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
 <div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>            <span class="keywordflow">if</span> (_committedUpTo &gt;= _all.size()) {</div>
 <div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>                <span class="keywordflow">return</span>;</div>
 <div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>            }</div>
@@ -275,27 +275,28 @@ $(document).ready(function(){initNavTree('dd/dda/journal_8hpp_source.html','../.
 <div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>                lastIndexForKey.emplace(std::move(key), out.size());</div>
 <div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>                out.push_back(entry);</div>
 <div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                out[iter-&gt;second] = entry;</div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>            }</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>        }</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>    }</div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span> </div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>    std::vector&lt;LogEntry&gt; _all;</div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>    std::size_t _committedUpTo{0};</div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    uint64_t _nextSeq{0};</div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>};</div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>                <span class="comment">// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index from same loop</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>                out[iter-&gt;second] = entry;</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>            }</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>        }</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>        <span class="keywordflow">return</span> out;</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>    }</div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span> </div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>    std::vector&lt;LogEntry&gt; _all;</div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    std::size_t _committedUpTo{0};</div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>    uint64_t _nextSeq{0};</div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>};</div>
 </div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span> </div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>}  <span class="comment">// namespace morph::journal</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span> </div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>}  <span class="comment">// namespace morph::journal</span></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">morph::journal::SessionLog</a></div><div class="ttdoc">Full-fidelity, in-memory log of one model instance's executed actions.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00058">journal.hpp:58</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a1582b1dab2f48f9e3f9f84b54b425d0b"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">morph::journal::SessionLog::entries</a></div><div class="ttdeci">std::vector&lt; LogEntry &gt; entries(std::string_view entityKey={}) const override</div><div class="ttdoc">Returns the full history (or one entity's slice of it) in append order.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00077">journal.hpp:77</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a8a0a9e604a71fe05ce39de064e298333"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">morph::journal::SessionLog::undoLast</a></div><div class="ttdeci">std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt; undoLast(std::string_view modelTypeId, ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Drops the most recently appended entry and replays everything that remains against a fresh model inst...</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00103">journal.hpp:103</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a9d1dab7c6941547a60111c39393fcbfa"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">morph::journal::SessionLog::checkpoint</a></div><div class="ttdeci">void checkpoint(IActionLog &amp;durableSink, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Coalesces entries appended since the last checkpoint and forwards the reduced set,...</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00131">journal.hpp:131</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_ad7fb2e3940c88d02d4d0fc0c29434e90"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">morph::journal::SessionLog::append</a></div><div class="ttdeci">void append(LogEntry entry) override</div><div class="ttdoc">Appends entry, assigning a monotonically increasing seq.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00065">journal.hpp:65</a></div></div>
 <div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_aeff64f58add6666d429a581a485c4b65"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">morph::journal::SessionLog::flush</a></div><div class="ttdeci">void flush() override</div><div class="ttdoc">No-op — checkpoint() is this class's real commit point.</div><div class="ttdef"><b>Definition</b> <a href="../../dd/dda/journal_8hpp_source.html#l00072">journal.hpp:72</a></div></div>
-<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00107">action_log.hpp:107</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00108">action_log.hpp:108</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html_a1166c1f704607f315395a209c27e2bf9"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog::flush</a></div><div class="ttdeci">virtual void flush()=0</div><div class="ttdoc">Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....</div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html_ac49e1e4a818057762c752994295549db"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog::append</a></div><div class="ttdeci">virtual void append(LogEntry entry)=0</div><div class="ttdoc">Appends entry. Implementations assign entry.seq.</div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">morph::journal::LogEntry</a></div><div class="ttdoc">One recorded execution of an action against a model instance.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00020">action_log.hpp:20</a></div></div>
