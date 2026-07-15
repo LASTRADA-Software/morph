@@ -252,7 +252,7 @@ TEST_CASE("Quantity::formatting", "[quantity]") {
     CHECK(std::format("{}", Tariff::fromDouble(0.3)) == "0.3EUR/kWh");
 }
 
-TEST_CASE("Quantity::conversion — ratio, chaining, reverse", "[quantity]") {
+TEST_CASE("Quantity::conversion - ratio, chaining, reverse", "[quantity]") {
     // Direct ratio (W -> kW) and reverse (kW -> W).
     CHECK((*static_cast<Kilowatt>(Watt::fromDouble(2000.0))).toDouble() == 2.0);
     CHECK((*static_cast<Watt>(Kilowatt::fromDouble(2.0))).toDouble() == 2000.0);
@@ -271,7 +271,7 @@ TEST_CASE("Quantity::conversion — ratio, chaining, reverse", "[quantity]") {
     CHECK((*diff).toDouble() == 1.5);
 }
 
-TEST_CASE("Quantity::conversion — user override (non-ratio)", "[quantity]") {
+TEST_CASE("Quantity::conversion - user override (non-ratio)", "[quantity]") {
     auto boiling = static_cast<Fahrenheit>(Celsius::fromDouble(100.0));
     CHECK((*boiling).toDouble() == 212.0);
     CHECK_FALSE(static_cast<Fahrenheit>(Celsius{}).hasValue());
@@ -290,7 +290,7 @@ TEST_CASE("Quantity::unitAlternatives derived from relations", "[quantity]") {
     CHECK(Euro::unitAlternatives().empty());
 }
 
-TEST_CASE("equation() — degenerate roots", "[quantity][equation]") {
+TEST_CASE("equation() - degenerate roots", "[quantity][equation]") {
     // Empty -> single N/A.
     CHECK(Kilowatt{}.equation() == std::vector<std::string>{"N/A"});
     // Computed-but-empty -> still N/A.
@@ -304,7 +304,7 @@ TEST_CASE("equation() — degenerate roots", "[quantity][equation]") {
     CHECK(static_cast<Kilowatt>(Watt::fromDouble(2000.0)).equation() == std::vector<std::string>{"2"});
 }
 
-TEST_CASE("equation() — engaged payload without a recorded node", "[quantity][equation]") {
+TEST_CASE("equation() - engaged payload without a recorded node", "[quantity][equation]") {
     // A payload populated directly (bypassing the value constructors) has no
     // derivation node; equation() falls back to the formatted value.
     Kilowatt manual;
@@ -312,7 +312,7 @@ TEST_CASE("equation() — engaged payload without a recorded node", "[quantity][
     CHECK(manual.equation() == std::vector<std::string>{"5"});
 }
 
-TEST_CASE("equation() — operand without a node contributes its raw value", "[quantity][equation]") {
+TEST_CASE("equation() - operand without a node contributes its raw value", "[quantity][equation]") {
     // `manual` has an engaged payload but no derivation node; as an operand its
     // value is read straight from the recorded step (the node-less fallback).
     KilowattHour manual;
@@ -326,7 +326,7 @@ TEST_CASE("equation() — operand without a node contributes its raw value", "[q
     CHECK(lines[2] == "    = 8");
 }
 
-TEST_CASE("equation() — worked formula with inlined values", "[quantity][equation]") {
+TEST_CASE("equation() - worked formula with inlined values", "[quantity][equation]") {
     auto heater = static_cast<Kilowatt>(Watt::fromDouble(2000.0)).named("heater");
     auto runtime = Hours::fromDouble(3.0);
     auto solar = KilowattHour::fromDouble(1.8).named("solar");
@@ -346,7 +346,7 @@ TEST_CASE("equation() — worked formula with inlined values", "[quantity][equat
     CHECK(lines[2] == "    = 1.36");
 }
 
-TEST_CASE("equation() — reused value earns one placeholder", "[quantity][equation]") {
+TEST_CASE("equation() - reused value earns one placeholder", "[quantity][equation]") {
     auto a = KilowattHour::fromDouble(6.0).named("a");
     auto b = KilowattHour::fromDouble(1.8).named("b");
     auto diff = a - b;                  // unnamed, computed, used twice
@@ -360,7 +360,7 @@ TEST_CASE("equation() — reused value earns one placeholder", "[quantity][equat
     CHECK(lines[3] == R"(where c1 = "a" - "b" = 6 - 1.8 = 4.2)");
 }
 
-TEST_CASE("equation() — reused raw leaf earns one placeholder", "[quantity][equation]") {
+TEST_CASE("equation() - reused raw leaf earns one placeholder", "[quantity][equation]") {
     auto x = KilowattHour::fromDouble(4.0);  // unnamed leaf, used twice
     auto result = x + x;
     auto const lines = result.equation();
@@ -371,7 +371,7 @@ TEST_CASE("equation() — reused raw leaf earns one placeholder", "[quantity][eq
     CHECK(lines[3] == "where c1 = 4");
 }
 
-TEST_CASE("equation() — associativity-driven parentheses", "[quantity][equation]") {
+TEST_CASE("equation() - associativity-driven parentheses", "[quantity][equation]") {
     auto a = KilowattHour::fromDouble(6.0).named("a");
     auto b = KilowattHour::fromDouble(2.0).named("b");
     auto c = KilowattHour::fromDouble(1.0).named("c");
@@ -384,7 +384,7 @@ TEST_CASE("equation() — associativity-driven parentheses", "[quantity][equatio
     CHECK(((a - b) + c).equation()[0] == R"("a" - "b" + "c")");
 }
 
-TEST_CASE("equation() — unary negation and scalar scaling", "[quantity][equation]") {
+TEST_CASE("equation() - unary negation and scalar scaling", "[quantity][equation]") {
     auto energy = KilowattHour::fromDouble(3.0).named("e");
     CHECK((-energy).equation()[0] == R"(-"e")");
 
@@ -394,7 +394,7 @@ TEST_CASE("equation() — unary negation and scalar scaling", "[quantity][equati
     CHECK(lines[2] == "    = 6");
 }
 
-TEST_CASE("equation() — unnamed conversion inlined in a formula", "[quantity][equation]") {
+TEST_CASE("equation() - unnamed conversion inlined in a formula", "[quantity][equation]") {
     // Leaving the converted heater unnamed writes its converted value into the
     // formula (the conversion node renders as its result, both symbolically and
     // when substituted).
