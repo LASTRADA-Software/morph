@@ -50,23 +50,16 @@ struct morph::units::UnitTraits<lab::Unit> {
         return {"?", "?", 3};
     }
 
-    /// @brief Convertible entry units: mass may be typed in g/t, volume in L.
-    ///        The exact ratio maps the alternative to the canonical unit.
-    static constexpr std::array<morph::units::UnitAlternative<lab::Unit>, 2> kMassAlternatives{
-        {{.unit = lab::Unit::g, .num = 1, .den = 1000}, {.unit = lab::Unit::t, .num = 1000, .den = 1}}};
-    static constexpr std::array<morph::units::UnitAlternative<lab::Unit>, 1> kVolumeAlternatives{
-        {{.unit = lab::Unit::l, .num = 1, .den = 1000}}};
-
-    /// @brief The alternatives per canonical unit (empty for the rest).
-    /// @param unit The canonical unit.
-    /// @return Exact-ratio alternatives for @p unit.
-    static constexpr std::span<const morph::units::UnitAlternative<lab::Unit>> alternatives(lab::Unit unit) noexcept {
-        switch (unit) {
-            case lab::Unit::kg: return kMassAlternatives;
-            case lab::Unit::m3: return kVolumeAlternatives;
-            default:            return {};
-        }
-    }
+    /// @brief Within-dimension conversion ratios (mass g/t ↔ kg, volume L ↔ m³).
+    ///        These drive `convert`, chaining, and the display-unit selector.
+    static constexpr std::array<morph::units::UnitRelation<lab::Unit>, 3> relations{{
+        {lab::Unit::g, lab::Unit::kg,
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
+        {lab::Unit::t, lab::Unit::kg,
+         morph::math::Rational{morph::math::Numerator{1000}, morph::math::Denominator{1}, morph::math::DecimalPlaces{3}}},
+        {lab::Unit::l, lab::Unit::m3,
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
+    }};
 };
 
 namespace lab {

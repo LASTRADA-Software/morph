@@ -34,6 +34,7 @@ add_executable(morph_tests
     test_action_log.cpp
     test_action_log_phase2.cpp
     test_rational.cpp
+    test_quantity.cpp
     test_quantity_forms.cpp
     test_datetime.cpp
 )
