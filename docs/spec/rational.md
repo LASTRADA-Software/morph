@@ -1,0 +1,370 @@
+# `Rational`, `DecimalPlaces`, `RationalError` — design
+
+`morph::math::Rational` is a small, value-semantic, trivially-copyable struct
+representing the exact rational number `numerator/denominator` with
+`std::int64_t` components. It carries a runtime decimal-precision tag as a
+strong type (`DecimalPlaces`). Arithmetic is exact — sums, differences,
+products, and quotients are reduced to canonical form with no floating-point
+rounding error. The precision tag affects only decimal scaling
+(`Rational::fromFloat`) and rounding (`Rational::toDouble`, formatting); it
+never changes a stored value.
+
+Adapted from LASTRADA `JPMath/Rational.hpp`, with the `boxed` strong-type
+dependency replaced by a self-contained `DecimalPlaces` and a Glaze wire codec
+so the type round-trips through the morph JSON wire with its invariants restored
+on read.
+
+## Contents
+
+- [Invariants](#invariants)
+- [Support types](#support-types)
+- [Construction](#construction)
+- [Arithmetic](#arithmetic)
+- [Overflow & value-range envelope](#overflow--value-range-envelope)
+- [Mixed-type expressions (expected propagation)](#mixed-type-expressions-expected-propagation)
+- [Conversion helpers](#conversion-helpers)
+- [Rounding helpers (free functions)](#rounding-helpers-free-functions)
+- [Comparison](#comparison)
+- [Formatting](#formatting)
+- [Wire and schema](#wire-and-schema)
+- [API reference](#api-reference)
+- [Design decisions](#design-decisions)
+- [Cross-references](#cross-references)
+- [Limitations](#limitations)
+
+## Invariants
+
+Every public operation that produces a `Rational` restores:
+
+- `denominator > 0` (strictly positive — never zero, never negative)
+- `gcd(|numerator|, denominator) == 1`
+- canonical zero is `0/1`
+- `1 <= decimalPlaces.value <= kMaxDecimalPlaces`
+
+All sign lives in the numerator.
+
+**No default precision.** Every call site states the precision it intends, e.g.
+`Rational{1, 3, DecimalPlaces{9}}`. Precision is capped at `kMaxDecimalPlaces`
+(18, the largest `k` for which `10^k` fits in `int64_t`); out-of-range values
+assert in debug and clamp into `[1, kMaxDecimalPlaces]` in release.
+
+The struct never throws. Operations that may fail (zero divisor, non-finite
+floating-point input, overflow during decimal scaling) return
+`std::expected<Rational, RationalError>`.
+
+## Support types
+
+| Type | Role |
+|---|---|
+| `DecimalPlaces` | Strong type for a decimal-precision count. Prevents the precision from being confused with a numerator or denominator at a call site. Explicit construction; default-constructed `value` is `0`. |
+| `Numerator` | Strong type for a Rational numerator. Prevents numerator/denominator argument swapping at construction sites. Explicit construction. |
+| `Denominator` | Strong type for a Rational denominator. Explicit construction; must never be zero after canonicalisation. |
+| `RationalError` | `enum class : std::uint8_t` with three values: `DivisionByZero`, `NotFinite` (non-finite float input), `Overflow` (scaled magnitude exceeds `int64_t`). |
+| `kMaxDecimalPlaces` | `constexpr std::uint32_t = 18` — largest decimal precision supported. |
+
+## Construction
+
+| Path | Signature / example | Notes |
+|---|---|---|
+| Default | `Rational() noexcept` | Canonical zero (`0/1`) at precision 1. |
+| Whole integer | `Rational(int64_t, DecimalPlaces) noexcept` | Stores `whole/1` at the given precision; clamped. |
+| Full | `Rational(Numerator, Denominator, DecimalPlaces) noexcept` | Canonicalises: flips sign, reduces by gcd, clamps zero denominator to 1. |
+| `from` | `static expected<Rational, RationalError> from(Numerator, Denominator, DecimalPlaces) noexcept` | Validating factory — rejects `denominator == 0` with `DivisionByZero` instead of clamping. |
+| `fromFloat` | `static expected<Rational, RationalError> fromFloat(double/float/long double, DecimalPlaces) noexcept` | Lifts a floating-point value to a rational scaled to the requested precision. Returns `NotFinite` for NaN/Inf, `Overflow` when scaled magnitude exceeds `int64_t`. Not `constexpr`. Uses `llround` internally. |
+| `zero(p)` | `static constexpr Rational zero(DecimalPlaces) noexcept` | `0/1` at the given precision. |
+| `one(p)` | `static constexpr Rational one(DecimalPlaces) noexcept` | `1/1` at the given precision. |
+
+**Wire path.** The Glaze deserialisation path (`setWire`) rebuilds through the
+canonicalising constructor, silently clamping hostile input (`den == 0`,
+out-of-range `dp`, `INT64_MIN` components whose negation would overflow) instead
+of asserting.
+
+## Arithmetic
+
+**Binary arithmetic propagates `std::max` of the two operands' `decimalPlaces`**
+— the wider precision wins. Comparison (`<=>`, `==`) is purely value-based on
+the canonical `(numerator, denominator)` pair and ignores `decimalPlaces`.
+
+| Operation | Returns | Notes |
+|---|---|---|
+| `operator+`, `operator-`, `operator*` (plain `Rational` × `Rational`) | `Rational` | `noexcept`, return a bare `Rational` — no error channel. This means *representable* results never fail; it does **not** mean the operation cannot go wrong. Reduced int64 cross-terms exceeding ~2^63 are **undefined behaviour**, not a reported error (see [Overflow & value-range envelope](#overflow--value-range-envelope)). Reduce-before-multiply (Knuth 4.5.1) to extend safe int64 range. Cross-cancellation before multiplication. |
+| `operator/`, `dividedBy` (plain `Rational` ÷ `Rational`) | `expected<Rational, RationalError>` | `DivisionByZero` when divisor is zero. Implemented via reciprocal and multiplication. |
+| `operator-` (unary) | `Rational` | Negates numerator. **Negating `INT64_MIN` overflows.** |
+| `reciprocal` | `expected<Rational, RationalError>` | Multiplicative inverse. `DivisionByZero` when value is zero. |
+| `operator+=`, `-=`, `*=` (in-place) | `Rational&` | Mutate `*this`, widen precision to `max`, canonicalise. |
+
+## Overflow & value-range envelope
+
+`Rational` is **fixed-width `int64` arithmetic, not a bignum.** Both the
+numerator and denominator are `std::int64_t`, and the additive/multiplicative
+operators do their intermediate math in that same 64-bit type. This gives the
+type a hard value-range envelope that the `noexcept` signatures do not advertise.
+
+**`operator+` / `operator-` / `operator*` are `noexcept` and return a bare
+`Rational` — but they can still be wrong.** The reduce-before-multiply and
+cross-cancellation steps (Knuth 4.5.1) push the point at which the intermediate
+products overflow, but they do not eliminate it. When a reduced cross-term
+exceeds ~2^63 the signed multiplication/addition is **undefined behaviour**, not
+a trapped or reported error:
+
+- `operator+=` / `operator-=` compute `numerator * rightDenominatorScaled ±
+  rhs.numerator * leftDenominatorScaled` and `denominator *
+  rightDenominatorScaled`. Adding two fractions over large *coprime*
+  denominators (nothing to cancel) grows the common denominator toward
+  `d1 * d2`; both the scaled numerator and the product denominator can pass 2^63.
+- `operator*=` cross-cancels first, but a genuinely large coprime product
+  (`reducedLeftNumerator * reducedRightNumerator`, likewise the denominators)
+  still overflows.
+
+Because these operators have no error channel, an overflow here is **silent** —
+the result is a garbage `Rational` (or a sanitizer trap under UBSan), never a
+`RationalError`. Contrast the *only* fallible plain operator, `operator/`
+(division), whose sole failure mode is a trivial divisor-is-zero check yet which
+returns `std::expected`. The fallibility is inverted: the operation that almost
+cannot fail is the one that reports, and the ones that carry real UB do not (see
+[Limitations](#limitations)).
+
+**`dp` → approximate maximum representable magnitude.** A value scaled to
+precision `dp` (as `fromFloat` builds it) has denominator `10^dp`, so the
+largest magnitude whose scaled numerator still fits `int64` is roughly
+`INT64_MAX / 10^dp ≈ 9.22e18 / 10^dp`:
+
+| `dp` | denominator `10^dp` | approx. max magnitude |
+|---|---|---|
+| 1 | 10 | ~9.2e17 |
+| 2 | 100 | ~9.2e16 |
+| 4 | 10^4 | ~9.2e14 |
+| 6 | 10^6 | ~9.2e12 |
+| 9 | 10^9 | ~9.2e9 (≈ 9.2 billion) |
+| 12 | 10^12 | ~9.2e6 (≈ 9.2 million) |
+| 15 | 10^15 | ~9223 |
+| 18 | 10^18 | **≈ 9.2** |
+
+At the maximum precision `dp = 18` the representable magnitude is only about
+**±9.2** — a value tagged with 18 decimal places has essentially spent its whole
+`int64` budget on the fractional part. `fromFloat` guards this edge explicitly
+(it returns `RationalError::Overflow` when the scaled magnitude reaches 2^63),
+but the arithmetic operators downstream do **not** re-check it, so intermediate
+results that leave the envelope are UB regardless of the entry guard.
+
+**`INT64_MIN` negation hazards.** `INT64_MIN` (`-2^63`) has no positive
+counterpart in `int64`, so every place that negates a component is a latent UB
+site when that exact value reaches it:
+
+- **unary `operator-`** — `Rational{Numerator{-numerator}, ...}`: negating an
+  `INT64_MIN` numerator overflows.
+- **`from`** — guards **only** `denominator == 0`; it does not screen
+  `INT64_MIN` components, so a hostile-but-nonzero `(INT64_MIN, …)` pair flows
+  straight into the canonicalising constructor.
+- **`reciprocal`** — negates the numerator in the `numerator < 0` branch;
+  `INT64_MIN` there overflows.
+- **`canonicalise`** — flips sign for a negative denominator (`numerator =
+  -numerator`) and takes `absoluteNumerator = numerator < 0 ? -numerator :
+  numerator`; both negate `INT64_MIN`. This is the shared sink for every
+  constructor and operator, so any path that lets `INT64_MIN` reach
+  canonicalisation is unsafe.
+
+Only the wire codec (`setWire`) defends against this: it maps an `INT64_MIN`
+`num`/`den` to `-INT64_MAX` *before* constructing, so untrusted input never
+negates the trap value. In-code call sites get no such guard — keep operands
+well inside the envelope above.
+
+## Mixed-type expressions (expected propagation)
+
+Whenever an arithmetic expression contains an
+`std::expected<Rational, RationalError>` sub-expression or a floating-point
+operand, the whole expression evaluates to
+`std::expected<Rational, RationalError>`. The float operand is lifted via
+`Rational::fromFloat` — its precision is taken from the Rational operand's
+`getDecimalPlaces()`. Errors short-circuit left to right.
+
+```
+auto const a = Rational{7, 2, DecimalPlaces{9}};
+auto const b = Rational{2, DecimalPlaces{9}};
+auto const c = Rational{1, 2, DecimalPlaces{9}};
+auto result = a / b + c * 3.5;
+// decltype(result) == std::expected<Rational, RationalError>
+```
+
+Implemented through constrained templates with `RationalLike`, `LiftableOperand`,
+and `NeedsLifting` concepts. Valid operand combinations: Rational × Rational,
+Rational × ExpectedRational, ExpectedRational × (anything liftable),
+float × Rational/ExpectedRational. Two floats are not accepted (at least one
+Rational-family operand must be present).
+
+## Conversion helpers
+
+| Member | Signature | Notes |
+|---|---|---|
+| `toDouble()` | `double toDouble() const noexcept` | Converts to `double`, rounded to this value's `decimalPlaces`. |
+| `toDouble(n)` | `double toDouble(uint32_t) const noexcept` | Converts to `double`, rounded to `n` decimal places. Falls back to unrounded conversion when `n > 18`. |
+
+**`toDouble` is a display/interop reading, never an exact path.** The
+implementation computes `double(numerator) / double(denominator)` *first*, then
+rounds the quotient to `n` decimal places (`std::round(raw * 10^n) / 10^n`).
+The division happens in IEEE-754 `double`, whose mantissa holds only 53 bits:
+any numerator or denominator beyond 2^53 (~9.0e15) is already rounded to the
+nearest representable `double` **before** the decimal rounding runs, so the
+result can differ from the exact rational even at magnitudes the `int64`
+components represent perfectly. Treat `toDouble` as the way to *show* or hand a
+`Rational` to a floating-point consumer — never as a lossless round-trip. The
+exact value lives only in the `(numerator, denominator)` pair; the empty-spec
+`"{}"` format (`"n/d"`) and the wire codec are the exactness-preserving
+readings.
+
+## Rounding helpers (free functions)
+
+Free functions in `morph::math`, found by ADL:
+
+| Function | Signature | Notes |
+|---|---|---|
+| `abs` | `constexpr Rational abs(Rational) noexcept` | Absolute value. Precision preserved. |
+| `ceil` | `constexpr int64_t ceil(Rational) noexcept` | Rounds toward positive infinity. |
+| `floor` | `constexpr int64_t floor(Rational) noexcept` | Rounds toward negative infinity. |
+| `trunc` | `constexpr int64_t trunc(Rational) noexcept` | Truncates toward zero. |
+
+## Comparison
+
+| Operation | Notes |
+|---|---|
+| `operator<=>` | Three-way comparison. **Value-only: ignores `decimalPlaces`.** Exact for the full int64 range: cross-products computed in 128 bits (via `detail::mulU64`, a 64×64→128-bit product using `unsigned __int128` on GCC/Clang, portable 32-bit limbs on MSVC). Sign-checked first; zero short-circuits. |
+| `operator==` | **Value-only: ignores `decimalPlaces`.** Returns `true` when canonical pairs are identical. |
+
+## Formatting
+
+`std::format` support is split by the supplied spec:
+
+| Spec | Output | Example |
+|---|---|---|
+| empty `"{}"` | Exact rational form — `"n/d"`, or `"n"` when integer | `"7/2"`, `"3"` |
+| non-empty `"{:.3f}"` | Delegated to `std::formatter<double>` on `toDouble()` | `"3.500"` |
+
+Implemented as a `std::formatter<Rational>` specialisation with a
+`delegateToDouble` flag set during `parse`.
+
+## Wire and schema
+
+Over the morph JSON wire a `Rational` travels as the object
+`{"num":617,"den":50,"dp":2}`. Reading goes through the canonicalising
+constructor, so a non-canonical payload (`1234/100`) or a hostile one
+(`den == 0`, out-of-range `dp`) always lands as a valid, reduced value.
+
+The Glaze codec (`glz::meta<Rational>`) uses `glz::custom<setWire, getWire>` to
+route serialisation through the `Wire` struct. A `to_json_schema<Rational>`
+specialisation preserves schema shape by delegating to `Wire`'s schema.
+
+## API reference
+
+### `Rational` — data members
+
+| Member | Type | Invariant |
+|---|---|---|
+| `numerator` | `int64_t` | Carries the sign of the rational value. |
+| `denominator` | `int64_t` | Strictly positive. Never zero, never negative. |
+| `decimalPlaces` | `DecimalPlaces` | `1 <= value <= kMaxDecimalPlaces`. |
+
+### `Rational` — accessors
+
+| Member | Returns |
+|---|---|
+| `getDecimalPlaces()` | `DecimalPlaces` — the current precision tag. |
+| `isZero()` | `bool` — `numerator == 0`. |
+| `isInteger()` | `bool` — `denominator == 1`. |
+| `isNegative()` | `bool` — `numerator < 0`. |
+
+### `Rational` — wire helpers
+
+| Member | Signature |
+|---|---|
+| `setWire(Wire)` | `void noexcept` — rebuilds through canonicalising constructor, clamping hostile input. |
+| `getWire()` | `Wire noexcept` — canonical members ready for JSON encoding. |
+| `struct Wire` | `{ int64_t num; int64_t den; uint32_t dp; }` — flat JSON representation. |
+
+### `Rational` — `constexpr` non-member operators
+
+```
+Rational operator+(Rational, Rational) noexcept;
+Rational operator-(Rational, Rational) noexcept;
+Rational operator*(Rational, Rational) noexcept;
+expected<Rational, RationalError> operator/(Rational, Rational) noexcept;
+```
+
+### `Rational` — mixed-type operator templates (namespace `morph::math`)
+
+```
+// At least one operand must be Rational-family; at least one must be
+// ExpectedRational or float; both operands must be liftable. Two plain
+// Rationals fail the NeedsLifting clause and take the non-template path.
+template <typename Left, typename Right>
+  requires (RationalLike<Left> || RationalLike<Right>)
+        && (NeedsLifting<Left> || NeedsLifting<Right>)
+        && (LiftableOperand<Left> && LiftableOperand<Right>)
+expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
+// Same for -, *, /
+```
+
+## Design decisions
+
+| Decision | Choice | Why |
+|---|---|---|
+| Precision | **Runtime tag (`DecimalPlaces`), not compile-time** | Precision is a property of the *value*, not the *type* — it is set by the data source and propagates through arithmetic dynamically. A compile-time tag would make every precision a distinct type, breaking cross-precision arithmetic without explicit conversion. |
+| No default precision | **Caller must supply `DecimalPlaces` at every construction** | Prevents accidental use of a wrong or unknown precision. Every call site states what it intends. |
+| Strong types for numerator/denominator | **`Numerator` / `Denominator` / `DecimalPlaces`** | Prevents argument-order mistakes (`Rational{3, 5, dp}` vs `Rational{5, 3, dp}`). `Numerator` / `Denominator` are explicit so the type must be spelled out. |
+| Error handling | **`std::expected<Rational, RationalError>`** | The struct never throws. Fallible operations return an expected type; the caller decides how to handle errors. Short-circuit via mixed-type expression templates propagates failures. |
+| Canonicalisation on `setWire` | **Silently clamps hostile input** | Untrusted wire data (den==0, out-of-range dp, INT64_MIN) always produces a valid reduced value rather than asserting or propagating UB. |
+| Comparison ignores precision | **Value-only `<=>` and `==`** | Two values equal in magnitude should compare equal regardless of how many decimals they claim. Precision is a display/rounding concern, not a value property. |
+| Max-precision propagation | **Result precision = max of operands** | A computation is never less precise than its most precise input. There is no in-place retag helper; a caller needing a different tag constructs a fresh `Rational` with the desired `DecimalPlaces`. |
+| 128-bit cross-product comparison | **`detail::mulU64`** | Exact ordering over the full int64 range without overflow. Uses `unsigned __int128` when available (GCC/Clang), portable 32-bit limb decomposition on MSVC. |
+| Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
+| `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
+
+## Cross-references
+
+| Spec | Relationship |
+|---|---|
+| [`quantity_type.md`](quantity_type.md) | `Rational` is the **runtime substrate** for `Quantity`. A `Quantity`'s declared precision and the forms layer's `x-decimalPlaces` schema annotation both resolve, at runtime, to a `Rational`'s `DecimalPlaces` tag — the `dp` value carried on the wire and propagated through arithmetic here is exactly the precision a `Quantity` declares. The overflow envelope and `INT64_MIN` hazards documented above therefore bound `Quantity` too. |
+| [`forms.md`](forms.md) | The form generator reads `x-decimalPlaces` (and the `Rational` wire shape `{"num","den","dp"}`) to build precision-aware numeric inputs; a form value is a `Rational` under the hood, so its display uses `toDouble`/formatting and its exact value uses the wire codec. |
+| [`security.md`](security.md) | `setWire` performs the untrusted-wire **clamping** (`den == 0 → 1`, out-of-range `dp` → `[1, 18]`, `INT64_MIN` → `-INT64_MAX`). This is the boundary defence that keeps a hostile payload from reaching the UB-prone negation/overflow sites; see the clamping semantics discussion there. |
+| [`datetime.md`](datetime.md) | Contrast case for wire-decode policy: the `DateTime` codec is **strict** (rejects malformed input) whereas `Rational::setWire` is **lenient/clamping** (silently repairs it). See [Limitations](#limitations) for why the difference matters. |
+
+## Limitations
+
+- **Fixed-width `int64`, not a bignum — with silent overflow UB in the
+  "safe-looking" operators.** `+`, `-`, and `*` are `noexcept` and hand back a
+  bare `Rational`, which reads as "infallible" but means the opposite for
+  out-of-envelope inputs: a reduced cross-term past ~2^63 is undefined
+  behaviour, produced *silently*. The fallibility is inverted — `operator/`,
+  whose only failure is a trivial divisor-is-zero check, returns
+  `std::expected`, while the genuinely dangerous `+`/`-`/`*` do not. See
+  [Overflow & value-range envelope](#overflow--value-range-envelope) for the
+  `dp` → magnitude table.
+- **`setWire` clamps hostile input rather than rejecting it.** `den == 0`
+  becomes `1`, an `INT64_MIN` component becomes `-INT64_MAX`, an out-of-range
+  `dp` is pulled into `[1, 18]`. The invariants are always restored, but a
+  *corrupt amount silently becomes a specific wrong number* — e.g. a payload
+  meant to carry `x/0` lands as `x/1`, a completely different value, with no
+  error surfaced. This is deliberate (a `Rational` never propagates UB from the
+  wire) but it trades detectability for robustness. It is the opposite policy
+  from the strict `DateTime` codec, which rejects malformed input outright
+  (cross-ref [`datetime.md`](datetime.md)); a caller that needs "reject, don't
+  guess" semantics for amounts must validate before decode.
+- **`DecimalPlaces` has a floor of 1.** The invariant is `1 <= value <= 18`, so
+  precision **0 is unrepresentable**. This excludes zero-decimal currencies
+  (JPY, KRW) and plain integer counts from being tagged with their true
+  precision — they must borrow `dp = 1` and carry a spurious fractional digit.
+- **`==` and `<=>` ignore precision, so equality is not substitutability.**
+  Comparison is purely value-based on the canonical `(numerator, denominator)`
+  pair. Two `Rational`s can therefore satisfy `a == b` while
+  `a.toDouble() != b.toDouble()`, because `toDouble()` rounds to each value's
+  *own* `decimalPlaces`: e.g. `7/8` tagged `dp = 1` reads `0.9` while the same
+  `7/8` tagged `dp = 2` reads `0.88`, yet the two compare equal. Equal values
+  are not freely interchangeable in a floating-point context — precision is a
+  display property the comparison does not see.
+- **Float operands in mixed expressions are lifted at the Rational operand's
+  `dp`.** In a mixed expression (`someRational * 3.5`) the float is converted
+  via `fromFloat` using the precision of the Rational-family operand
+  (`liftPrecision`), which **snaps the literal onto that decimal grid before the
+  operation**. A coarse `dp` silently quantises the float: with a `dp = 1`
+  Rational, `3.57` is lifted to `36/10` (i.e. `3.6`) before multiplying, so the
+  literal you wrote is not the value used. The grid is chosen by the Rational,
+  not the float.
