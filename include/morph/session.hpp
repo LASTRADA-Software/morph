@@ -2,6 +2,7 @@
 
 #pragma once
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -20,8 +21,22 @@ namespace morph::session {
 /// the server-side `RemoteServer` sees the same values the GUI sent. On the
 /// local backend it travels in-memory via the `ActionCall`.
 struct Context {
-    /// @brief Auth principal (user id, JWT, session token — application-defined).
+    /// @brief Auth principal (user id).
+    ///
+    /// On the client this is whatever the caller sets and is **not** trustworthy
+    /// on its own — it is untrusted wire input. When a verifying authorizer (e.g.
+    /// `SigningAuthorizer`, `session_auth.hpp`) is installed, `RemoteServer`
+    /// **overwrites** this field with the principal extracted from a valid
+    /// `token` before dispatch, so `session::current()->principal` read inside a
+    /// model is the authenticated identity, not the client's claim.
     std::string principal;
+
+    /// @brief Bearer credential verified server-side (empty if unauthenticated).
+    ///
+    /// Typically a signed token minted by a login action via
+    /// `session::TokenIssuer` and attached to every call (see `session_auth.hpp`
+    /// and `docs/spec/security.md`). Travels in the wire envelope's `session`.
+    std::string token;
 
     /// @brief Stable id used for distributed tracing / log correlation. Empty if unused.
     std::string requestId;
@@ -56,6 +71,20 @@ struct IAuthorizer {
                                          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
                                          std::string_view modelType,
                                           std::string_view actionType) const = 0;
+
+    /// @brief Returns the authenticated principal for @p ctx, or `nullopt`.
+    ///
+    /// Called by `RemoteServer` after `authorize` succeeds. If it returns a
+    /// value, the server overwrites `Context::principal` with it before dispatch,
+    /// making the identity authoritative for model code that reads
+    /// `session::current()`. The default returns `nullopt` — authorizers that do
+    /// not authenticate (e.g. `AllowAllAuthorizer`) leave the client's principal
+    /// untouched. A verifying authorizer (`SigningAuthorizer`) overrides this.
+    /// @param ctx Per-call session attached by the client.
+    /// @return The verified principal to make authoritative, or `nullopt`.
+    [[nodiscard]] virtual std::optional<std::string> authenticate([[maybe_unused]] const Context& ctx) const {
+        return std::nullopt;
+    }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -87,8 +116,11 @@ namespace detail {
 
 /// @brief Thread-local pointer to the `Context` for the currently dispatched action.
 ///
-/// Set by `ActionDispatcher::dispatch` while the model's `execute()` runs, then
-/// cleared. Models that opt in to session-aware logic call `current()` to read it.
+/// Installed by the backend around the model call — `LocalBackend::execute` on the
+/// local path and `RemoteServer::dispatchExecute` on the remote path — via a
+/// `ScopedContext` that clears it again on scope exit. `ActionDispatcher::dispatch`
+/// itself does not touch this pointer. Models that opt in to session-aware logic
+/// call `current()` to read it.
 inline const Context*& tlsCurrent() {
     thread_local const Context* tls = nullptr;
     return tls;
