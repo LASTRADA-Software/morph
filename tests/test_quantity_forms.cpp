@@ -48,15 +48,8 @@ struct morph::units::UnitTraits<QFUnit> {
         return {.id = "?", .display = "?", .defaultDecimals = 3};
     }
 
-    static constexpr std::array<morph::units::UnitAlternative<QFUnit>, 1> kMassAlternatives{
-        {{.unit = QFUnit::g, .num = 1, .den = 1000}}};
-
-    static constexpr std::span<const morph::units::UnitAlternative<QFUnit>> alternatives(QFUnit unit) noexcept {
-        if (unit == QFUnit::kg) {
-            return kMassAlternatives;
-        }
-        return {};
-    }
+    static constexpr std::array<morph::units::UnitRelation<QFUnit>, 1> relations{
+        {{QFUnit::g, QFUnit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}}};
 };
 
 consteval QFUnit operator*(QFUnit lhs, QFUnit rhs) {
@@ -240,7 +233,8 @@ TEST_CASE("Quantity::Arithmetic::DivisionByZeroYieldsEmpty", "[quantity]") {
 }
 
 TEST_CASE("Quantity::Comparison", "[quantity]") {
-    CHECK(Q<QFUnit::kg>{} < kilograms(0));  // empty sorts before engaged
+    // Relational ordering has an engaged precondition (empty is a contract
+    // violation, not a sortable value); equality stays total. See test_quantity.
     CHECK(kilograms(1) < kilograms(2));
     CHECK(kilograms(2, 4) == kilograms(1, 2));  // exact value equality
     CHECK(Q<QFUnit::kg>{} == Q<QFUnit::kg>{});
@@ -535,7 +529,7 @@ TEST_CASE("Forms::DispatchChoiceActionThroughRegistry", "[forms]") {
 
 namespace {
 
-static_assert(morph::units::HasUnitAlternatives<QFUnit>);
+static_assert(morph::units::HasUnitRelations<QFUnit>);
 static_assert(Q<QFUnit::kg>::unitAlternatives().size() == 1);
 static_assert(Q<QFUnit::kg>::unitAlternatives()[0].unit == QFUnit::g);
 static_assert(Q<QFUnit::kg>::unitAlternatives()[0].num == 1);
