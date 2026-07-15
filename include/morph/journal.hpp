@@ -36,6 +36,11 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
     ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
     ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
     auto holder = registry.create(modelTypeId);
+    // `registry.create` (via `ModelFactory::create`) auto-attaches the process
+    // default action log. Detach it before replaying: reconstruction re-runs the
+    // recorded actions, and without this each replayed dispatch would re-record
+    // into the live sink, corrupting the very audit trail we are reading from.
+    holder->attachActionLog(nullptr, {});
     for (const auto& entry : entries) {
         dispatcher.dispatch(entry.modelType, entry.actionType, *holder, entry.payload);
     }

@@ -61,7 +61,11 @@ struct CompletionState {
                 auto savedFn = std::move(onErr);
                 auto savedErr = error;
                 callback = [savedFn = std::move(savedFn), savedErr]() mutable { savedFn(savedErr); };
-                onErrAttached = true;
+                // Only mark the error handled (suppressing the destructor's orphan
+                // log) if we actually have an executor to deliver on. With a null
+                // executor the callback below is never posted, so the error must
+                // still reach the orphan logger rather than vanish silently.
+                onErrAttached = (cbExec != nullptr);
             }
         }
         if (callback != nullptr && cbExec != nullptr) {
@@ -87,7 +91,10 @@ struct CompletionState {
         std::function<void()> fireNow;
         {
             std::scoped_lock const lock{mtx};
-            onErrAttached = true;
+            // See setException: only suppress orphan logging when an executor
+            // exists to actually deliver the handler; a null executor otherwise
+            // drops the error and silences the orphan logger both at once.
+            onErrAttached = (cbExec != nullptr);
             if (ready && error) {
                 auto savedErr = error;
                 fireNow = [handler = std::move(handler), savedErr]() mutable { handler(savedErr); };
@@ -148,7 +155,9 @@ public:
 
     /// @brief Constructs a completion backed by @p statePtr, delivering callbacks via @p execPtr.
     /// @param statePtr Shared state produced by the backend.
-    /// @param execPtr  Executor on which callbacks are posted. May be `nullptr` (direct call).
+    /// @param execPtr  Executor on which callbacks are posted. If `nullptr`, callbacks are
+    ///                 never delivered — they are silently dropped (see `setValue`/`setException`,
+    ///                 which post only when `cbExec != nullptr`).
     Completion(std::shared_ptr<detail::CompletionState<T>> statePtr, ::morph::exec::IExecutor* execPtr)
         : _state{std::move(statePtr)} {
         if (_state != nullptr) {

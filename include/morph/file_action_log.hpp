@@ -2,6 +2,7 @@
 
 #pragma once
 #include "action_log.hpp"
+#include "logger.hpp"
 
 #include <cstdio>
 #include <filesystem>
@@ -99,13 +100,30 @@ public:
     [[nodiscard]] std::vector<LogEntry> entries(std::string_view entityKey = {}) const override {
         std::scoped_lock const lock{_mtx};
         std::ifstream in{_path};
-        std::vector<LogEntry> out;
+        std::vector<std::string> lines;
         std::string line;
         while (std::getline(in, line)) {
-            if (line.empty()) {
-                continue;
+            if (!line.empty()) {
+                lines.push_back(line);
             }
-            auto entry = fromJson(line);
+        }
+        std::vector<LogEntry> out;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            LogEntry entry;
+            try {
+                entry = fromJson(lines[i]);
+            } catch (const std::exception& exc) {
+                // A crash between `append`'s `fwrite` and the next flush can leave
+                // a truncated final line. Tolerate exactly that — skip a malformed
+                // *trailing* line so the rest of the log stays readable — but a
+                // malformed line mid-file is genuine corruption and is re-thrown.
+                if (i + 1 == lines.size()) {
+                    ::morph::log::logWarn("FileActionLog: skipping malformed trailing line in " +
+                                          _path.string() + ": " + std::string{exc.what()});
+                    break;
+                }
+                throw;
+            }
             if (entityKey.empty() || entry.entityKey == entityKey) {
                 out.push_back(std::move(entry));
             }
