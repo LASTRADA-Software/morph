@@ -75,25 +75,22 @@ struct EquationRenderer {
     /// @brief Reused-node placeholders, in first-appearance order.
     std::vector<const ASTNode*> placeholderOrder;
 
-    /// @brief Whether a node is referenced more than once in the formula.
-    /// @param node The node.
-    /// @return `true` when reused.
-    [[nodiscard]] bool isReused(const ASTNode* node) const {
-        auto const found = refCount.find(node);
-        return found != refCount.end() && found->second >= 2;
-    }
-
-    /// @brief Whether a node earns a placeholder (unnamed and reused).
-    /// @param node The node.
+    /// @brief Whether a node earns a placeholder (reused). Only ever called on
+    ///        unnamed nodes recorded by `countRefs` (callers return early on
+    ///        named nodes), so the lookup is total.
+    /// @param node The node (never null, never named at any call site).
     /// @return `true` when it is a placeholder.
-    [[nodiscard]] bool isPlaceholder(const ASTNode* node) const {
-        return node != nullptr && !node->name.has_value() && isReused(node);
-    }
+    [[nodiscard]] bool isPlaceholder(const ASTNode* node) const { return refCount.at(node) >= 2; }
 
     /// @brief Counts in-edges through displayed paths (stops at opaque nodes).
-    /// @param node The current node.
+    ///        Recurses into children unconditionally; the null guard handles the
+    ///        absent operands of leaf/unary/scalar steps.
+    /// @param node The current node (may be null).
     void countRefs(const ASTNode* node) {
-        if (node == nullptr || seen.contains(node)) {
+        if (node == nullptr) {
+            return;
+        }
+        if (seen.contains(node)) {
             return;
         }
         seen.insert(node);
@@ -102,12 +99,12 @@ struct EquationRenderer {
         }
         if (node->left) {
             ++refCount[node->left.get()];
-            countRefs(node->left.get());
         }
         if (node->right) {
             ++refCount[node->right.get()];
-            countRefs(node->right.get());
         }
+        countRefs(node->left.get());
+        countRefs(node->right.get());
     }
 
     /// @brief Assigns placeholder labels in first-appearance order.

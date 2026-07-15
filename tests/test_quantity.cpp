@@ -223,6 +223,31 @@ TEST_CASE("Quantity::arithmetic and empty propagation", "[quantity]") {
     CHECK_FALSE((b / Rational{Numerator{0}, Denominator{1}, DecimalPlaces{3}}).hasValue());
 }
 
+TEST_CASE("Quantity::empty in every operand position", "[quantity]") {
+    auto engaged = KilowattHour::fromDouble(6.0);
+    auto time = Hours::fromDouble(2.0);
+    KilowattHour emptyEnergy;
+    Hours emptyTime;
+    auto const two = Rational{Numerator{2}, Denominator{1}, DecimalPlaces{3}};
+
+    // Same-unit +/- with the empty operand on the right (left engaged).
+    CHECK_FALSE((engaged + emptyEnergy).hasValue());
+    CHECK_FALSE((engaged - emptyEnergy).hasValue());
+
+    // Cross-unit * and / with the empty operand in each position.
+    CHECK_FALSE((emptyEnergy / time).hasValue());   // lhs empty
+    CHECK_FALSE((engaged / emptyTime).hasValue());  // rhs empty
+    auto power = Kilowatt::fromDouble(2.0);
+    Kilowatt emptyPower;
+    CHECK_FALSE((emptyPower * time).hasValue());  // lhs empty
+    CHECK_FALSE((power * emptyTime).hasValue());  // rhs empty
+
+    // Scalar * / with an empty quantity.
+    CHECK_FALSE((emptyEnergy * two).hasValue());
+    CHECK_FALSE((emptyEnergy / two).hasValue());
+    CHECK_FALSE((-emptyEnergy).hasValue());
+}
+
 TEST_CASE("Quantity::comparison", "[quantity]") {
     auto one = Kilowatt::fromDouble(1.0);
     auto two = Kilowatt::fromDouble(2.0);
@@ -242,6 +267,11 @@ TEST_CASE("Quantity::comparison", "[quantity]") {
     CHECK(one < two);
     CHECK(one <= Kilowatt::fromDouble(1.0));
     CHECK(two >= one);
+
+    // Ordering with an empty operand (in either position) throws.
+    CHECK_THROWS_AS((void)(empty < one), std::logic_error);
+    CHECK_THROWS_AS((void)(one < empty), std::logic_error);
+    CHECK_THROWS_AS((void)(empty <=> empty), std::logic_error);
 }
 
 TEST_CASE("Quantity::formatting", "[quantity]") {
@@ -382,6 +412,42 @@ TEST_CASE("equation() - associativity-driven parentheses", "[quantity][equation]
     CHECK(((a - b) - c).equation()[0] == R"("a" - "b" - "c")");
     // a - b + c: mixed left-associative, no parens.
     CHECK(((a - b) + c).equation()[0] == R"("a" - "b" + "c")");
+    // a + (b - c): equal precedence under '+' (associative) needs no parens.
+    CHECK((a + (b - c)).equation()[0] == R"("a" + "b" - "c")");
+
+    // Parentheses around a lower-precedence operand of '*' (using a valid
+    // product, kW * h -> kWh): left operand and right operand cases.
+    auto p = Kilowatt::fromDouble(2.0).named("p");
+    auto q = Kilowatt::fromDouble(3.0).named("q");
+    auto t = Hours::fromDouble(4.0).named("t");
+    CHECK(((p + q) * t).equation()[0] == R"(("p" + "q") * "t")");
+    CHECK((t * (p + q)).equation()[0] == R"("t" * ("p" + "q"))");
+
+    // e / (p * t): right operand of '/' is itself a product (equal precedence),
+    // so it is parenthesised (kW*h -> kWh, then kWh / kWh -> scalar).
+    auto e = KilowattHour::fromDouble(6.0).named("e");
+    CHECK((e / (p * t)).equation()[0] == R"("e" / ("p" * "t"))");
+}
+
+TEST_CASE("equation() - unary negation of a sub-expression parenthesises", "[quantity][equation]") {
+    auto a = KilowattHour::fromDouble(6.0).named("a");
+    auto b = KilowattHour::fromDouble(2.0).named("b");
+    // Negating a sum parenthesises it; negating an atom does not.
+    CHECK((-(a + b)).equation()[0] == R"(-("a" + "b"))");
+    CHECK((-a).equation()[0] == R"(-"a")");
+}
+
+TEST_CASE("equation() - two reused values produce a two-line legend", "[quantity][equation]") {
+    auto a = KilowattHour::fromDouble(6.0).named("a");
+    auto b = KilowattHour::fromDouble(2.0).named("b");
+    auto p = a - b;  // reused twice
+    auto q = a + b;  // reused twice
+    auto result = p - q + p - q;
+    auto const lines = result.equation();
+    REQUIRE(lines.size() == 5);
+    CHECK(lines[0] == "c1 - c2 + c1 - c2");
+    CHECK(lines[3] == R"(where c1 = "a" - "b" = 6 - 2 = 4)");
+    CHECK(lines[4] == R"(      c2 = "a" + "b" = 6 + 2 = 8)");
 }
 
 TEST_CASE("equation() - unary negation and scalar scaling", "[quantity][equation]") {

@@ -42,12 +42,12 @@
 #include <glaze/glaze.hpp>
 
 #include <array>
-#include <cassert>
 #include <compare>
 #include <cstdint>
 #include <format>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -71,15 +71,15 @@ namespace detail {
 /// @param value The rational to render.
 /// @return The decimal string (`"2"`, `"0.3"`, `"1.36"`, `"-4.2"`).
 [[nodiscard]] inline std::string formatRationalDecimal(const morph::math::Rational& value) {
+    // `{:.Nf}` with N >= 1 (DecimalPlaces is clamped to [1, ...]) always emits a
+    // decimal point, so `dot` is always found.
     std::string text = std::format("{:.{}f}", value, static_cast<std::size_t>(value.decimalPlaces.value));
     auto const dot = text.find('.');
-    if (dot != std::string::npos) {
-        std::size_t last = text.find_last_not_of('0');
-        if (last == dot) {
-            --last;
-        }
-        text.erase(last + 1);
+    std::size_t last = text.find_last_not_of('0');
+    if (last == dot) {
+        --last;
     }
+    text.erase(last + 1);
     return text;
 }
 
@@ -400,7 +400,7 @@ struct Context {
 #if MORPH_QUANTITY_PROVENANCE
 #define MORPH_Q_NODE(quantity) (quantity)._ctx.node
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode)         \
-    do {                                                                                     \
+    {                                                                                        \
         auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();            \
         morphProvNode->current.operation = (op);                                             \
         morphProvNode->current.lhs = (lhsValue);                                             \
@@ -409,14 +409,13 @@ struct Context {
         morphProvNode->left = (leftNode);                                                    \
         morphProvNode->right = (rightNode);                                                  \
         (out)._ctx.node = std::move(morphProvNode);                                          \
-    } while (false)
+    }
 
 #else
 
 #define MORPH_Q_NODE(quantity) nullptr
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
-    do {                                                                             \
-    } while (false)
+    {}
 
 #endif
 /// @endcond
@@ -654,15 +653,19 @@ template <auto U, std::uint32_t DecA, std::uint32_t DecB>
     return lhs.payload == rhs.payload;
 }
 
-/// @brief Ordering across same-unit quantities. Precondition: both engaged
-///        (checked); comparing an empty operand is a contract violation.
+/// @brief Ordering across same-unit quantities. Precondition: both operands are
+///        engaged; comparing an empty operand throws `std::logic_error` (a
+///        defined diagnostic — ordering an absent value is a programming error).
 /// @param lhs Left operand.
 /// @param rhs Right operand.
 /// @return The ordering of the two exact values.
+/// @throws std::logic_error when either operand is empty.
 template <auto U, std::uint32_t DecA, std::uint32_t DecB>
 [[nodiscard]] constexpr std::strong_ordering operator<=>(const Quantity<U, DecA>& lhs,
-                                                         const Quantity<U, DecB>& rhs) noexcept {
-    assert(lhs.payload && rhs.payload && "relational comparison requires engaged operands");
+                                                         const Quantity<U, DecB>& rhs) {
+    if (!lhs.payload || !rhs.payload) {
+        throw std::logic_error{"morph::units::Quantity: relational comparison requires engaged operands"};
+    }
     return *lhs.payload <=> *rhs.payload;
 }
 

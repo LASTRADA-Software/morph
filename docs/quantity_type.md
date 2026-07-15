@@ -148,9 +148,9 @@ Relational ordering is **not** total. Emptiness is a *runtime* property of the
 value, so whether an operand is engaged cannot be known when the code is
 compiled — `operator<=>` and the four relational operators (`<`, `<=`, `>`,
 `>=`) therefore carry a **precondition that both operands are engaged**.
-Violating it is a checked contract failure (a debug assertion / defined
-diagnostic at run time), never a silent wrong answer and never undefined
-behaviour. Callers must `hasValue()`-check before ordering. (Ordering is a
+Violating it **throws `std::logic_error`** — a defined diagnostic, never a
+silent wrong answer and never undefined behaviour. Callers must
+`hasValue()`-check before ordering. (Ordering is a
 precondition rather than a compile-time deletion precisely because the type
 *does* need to be ordered whenever its values are present — sorting a column of
 engaged quantities, say.)
@@ -579,7 +579,7 @@ readability).
 | `operator*`, `operator/` (cross-unit) | `Quantity<A*B> / Quantity<A/B>` | Result unit from the `consteval` algebra; SFINAE'd out when the algebra rejects the pair. |
 | `operator*`, `operator/` (scalar) | `Quantity<U, Dec> op(Quantity<U, Dec>, Rational)` | Scale/divide by a dimensionless `Rational`; unit and declared precision unchanged. |
 | `operator==` | `bool operator==(Quantity<U>, Quantity<U>)` | **Total**; empty==empty is `true`. |
-| `operator<=>` (`<`,`<=`,`>`,`>=`) | `std::strong_ordering operator<=>(Quantity<U>, Quantity<U>)` | Ordering; **precondition: both engaged** (checked at run time). |
+| `operator<=>` (`<`,`<=`,`>`,`>=`) | `std::strong_ordering operator<=>(Quantity<U>, Quantity<U>)` | Ordering; **throws `std::logic_error`** if either operand is empty. |
 
 All arithmetic and conversion **propagate empty**; division by a non-empty zero
 yields empty.
@@ -609,7 +609,7 @@ On the wire (`glz::meta` / `to_json_schema`) a quantity is its nullable
 | Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reset). |
 | Formatting | **`std::formatter` only, delegating to the `Rational` formatter** | Single formatting path; no `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
 | Wire | **Payload only** | Units and history never travel; the wire stays a nullable `Rational`. |
-| Empty ordering | **Runtime precondition, not compile error** | Emptiness is a runtime `optional` state, so ordering carries a checked "both engaged" precondition; `==` stays total. |
+| Empty ordering | **Throws, not a compile error** | Emptiness is a runtime `optional` state, so ordering an empty operand throws `std::logic_error` (a testable defined diagnostic); `==` stays total. |
 | Conversion | **`UnitRelation` entries + auto-generated constrained-template `convert`; `UnitTraits::convert` static override** | Application declares exact peer-to-peer ratios in `UnitTraits::relations`; framework auto-generates a constrained `convert(From, To&)` template and records the provenance step. A `UnitTraits<E>::convert` static wins (`if constexpr`) for non-ratio conversions (C↔F, currency) — a static, not an ADL free function, because the unit is a non-type template arg so ADL can't reach the enum's namespace. Chaining composes ratio edges over the relation graph. |
 
 ## Usage example
