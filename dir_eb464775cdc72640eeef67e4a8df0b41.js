@@ -1,5 +1,6 @@
 var dir_eb464775cdc72640eeef67e4a8df0b41 =
 [
+    [ "detail", "dir_9c0da41caaffffc8847239098d349f93.html", "dir_9c0da41caaffffc8847239098d349f93" ],
     [ "qt", "dir_24b31c4691f70f951d289a2995ea210c.html", "dir_24b31c4691f70f951d289a2995ea210c" ],
     [ "action_log.hpp", "da/d78/action__log_8hpp_source.html", null ],
     [ "backend.hpp", "d6/d5e/backend_8hpp_source.html", null ],

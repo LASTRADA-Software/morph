@@ -95,19 +95,19 @@ $(document).ready(function(){initNavTree('de/d93/structmorph_1_1units_1_1UnitTra
 </div><!--header-->
 <div class="contents">
 
-<p>Customisation point: the application specialises this for its unit enum and returns a <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> per enumerator.  
+<p>Customisation point: the application specialises this for its unit enum, returning a <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> per enumerator and (optionally) a <code>relations</code> array of <code><a class="el" href="../../da/d8f/structmorph_1_1units_1_1UnitRelation.html" title="One exact within-dimension conversion ratio between two peer units.">UnitRelation</a></code> entries.  
  <a href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html#details">More...</a></p>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename E&gt;<br />
-struct morph::units::UnitTraits&lt; E &gt;</div><p>Customisation point: the application specialises this for its unit enum and returns a <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> per enumerator. </p>
-<p>Optionally, a specialisation may also provide <code>static constexpr std::span&lt;const <a class="el" href="../../d5/d23/structmorph_1_1units_1_1UnitAlternative.html" title="One convertible display/entry unit for a canonical unit.">UnitAlternative</a>&lt;E&gt;&gt; alternatives(E)</code> — the convertible display/entry units per canonical unit. Renderers then offer a unit selector on such fields and recalculate entered values exactly on switch; the wire and the model always stay in the canonical unit. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+struct morph::units::UnitTraits&lt; E &gt;</div><p>Customisation point: the application specialises this for its unit enum, returning a <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> per enumerator and (optionally) a <code>relations</code> array of <code><a class="el" href="../../da/d8f/structmorph_1_1units_1_1UnitRelation.html" title="One exact within-dimension conversion ratio between two peer units.">UnitRelation</a></code> entries. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">E</td><td>The application's unit enum type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/<a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a></li>
 </ul>

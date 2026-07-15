@@ -55,8 +55,12 @@ var hierarchy =
     [ "morph::units::Quantity< U, DeclaredDecimals >", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],
     [ "morph::units::UnitAlternative< E >", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", null ],
     [ "morph::units::UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", null ],
+    [ "morph::units::UnitRelation< E >", "da/d8f/structmorph_1_1units_1_1UnitRelation.html", null ],
     [ "morph::units::UnitTraits< E >", "de/d93/structmorph_1_1units_1_1UnitTraits.html", null ],
     [ "morph::wire::Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", null ],
+    [ "morph::units::Quantity< U >", "d5/dda/structmorph_1_1units_1_1Quantity.html", [
+      [ "morph::units::NamedQuantity< Name, U >", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", null ]
+    ] ],
     [ "std::exception", null, [
       [ "std::runtime_error", null, [
         [ "morph::backend::BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", null ],

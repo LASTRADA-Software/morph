@@ -101,7 +101,7 @@ $(document).ready(function(){initNavTree('d5/dda/structmorph_1_1units_1_1Quantit
 </div><!--header-->
 <div class="contents">
 
-<p>A unit-tagged, optionally-empty exact value with a <em>declared</em> precision in its type.  
+<p>A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a recorded derivation.  
  <a href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>&gt;</code></p>
@@ -110,31 +110,48 @@ $(document).ready(function(){initNavTree('d5/dda/structmorph_1_1units_1_1Quantit
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a5acf452c24051557d3b28eabbc6bfd5b" id="r_a5acf452c24051557d3b28eabbc6bfd5b"><td class="memItemLeft" align="right" valign="top"><a id="a5acf452c24051557d3b28eabbc6bfd5b" name="a5acf452c24051557d3b28eabbc6bfd5b"></a>
 constexpr&#160;</td><td class="memItemRight" valign="bottom"><b>Quantity</b> () noexcept=default</td></tr>
-<tr class="memdesc:a5acf452c24051557d3b28eabbc6bfd5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the empty state. <br /></td></tr>
+<tr class="memdesc:a5acf452c24051557d3b28eabbc6bfd5b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the empty state (no recorded derivation). <br /></td></tr>
 <tr class="separator:a5acf452c24051557d3b28eabbc6bfd5b"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a0903cdb20a7e4da6bdcce754ec59776e" id="r_a0903cdb20a7e4da6bdcce754ec59776e"><td class="memItemLeft" align="right" valign="top">constexpr&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a0903cdb20a7e4da6bdcce754ec59776e">Quantity</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> engaged) noexcept</td></tr>
-<tr class="memdesc:a0903cdb20a7e4da6bdcce754ec59776e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Engages with <code>engaged</code> (which keeps its own runtime precision).  <br /></td></tr>
-<tr class="separator:a0903cdb20a7e4da6bdcce754ec59776e"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:af4a74427270b04fc4e84931db14069e2" id="r_af4a74427270b04fc4e84931db14069e2"><td class="memItemLeft" align="right" valign="top">constexpr&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#af4a74427270b04fc4e84931db14069e2">Quantity</a> (std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; payload) noexcept</td></tr>
-<tr class="memdesc:af4a74427270b04fc4e84931db14069e2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adopts an optional payload as-is.  <br /></td></tr>
-<tr class="separator:af4a74427270b04fc4e84931db14069e2"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:ab132597c897e07a668377d65dfc76bab" id="r_ab132597c897e07a668377d65dfc76bab"><td class="memTemplParams" colspan="2">template&lt;std::uint32_t OtherDecimals&gt; <br />
+<tr class="memitem:aea78e51ec8a09cd171380657543455ff" id="r_aea78e51ec8a09cd171380657543455ff"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#aea78e51ec8a09cd171380657543455ff">Quantity</a> (<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> engaged)</td></tr>
+<tr class="memdesc:aea78e51ec8a09cd171380657543455ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Engages with <code>engaged</code> (which keeps its own runtime precision).  <br /></td></tr>
+<tr class="separator:aea78e51ec8a09cd171380657543455ff"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a13518e1c2e0b9437066fb8670ee88832" id="r_a13518e1c2e0b9437066fb8670ee88832"><td class="memItemLeft" align="right" valign="top">&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a13518e1c2e0b9437066fb8670ee88832">Quantity</a> (std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; adopted)</td></tr>
+<tr class="memdesc:a13518e1c2e0b9437066fb8670ee88832"><td class="mdescLeft">&#160;</td><td class="mdescRight">Adopts an optional payload as-is.  <br /></td></tr>
+<tr class="separator:a13518e1c2e0b9437066fb8670ee88832"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a79fb7b381de1399ff0fe3ffba0bba7bd" id="r_a79fb7b381de1399ff0fe3ffba0bba7bd"><td class="memTemplParams" colspan="2">template&lt;std::uint32_t OtherDecimals&gt; <br />
 requires (OtherDecimals != DeclaredDecimals)</td></tr>
-<tr class="memitem:ab132597c897e07a668377d65dfc76bab"><td class="memTemplItemLeft" align="right" valign="top">constexpr&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ab132597c897e07a668377d65dfc76bab">Quantity</a> (const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, OtherDecimals &gt; &amp;other) noexcept</td></tr>
-<tr class="memdesc:ab132597c897e07a668377d65dfc76bab"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts from the same unit at another declared precision; the value and its runtime precision tag carry over unchanged.  <br /></td></tr>
-<tr class="separator:ab132597c897e07a668377d65dfc76bab"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a79fb7b381de1399ff0fe3ffba0bba7bd"><td class="memTemplItemLeft" align="right" valign="top">&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a79fb7b381de1399ff0fe3ffba0bba7bd">Quantity</a> (const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, OtherDecimals &gt; &amp;other)</td></tr>
+<tr class="memdesc:a79fb7b381de1399ff0fe3ffba0bba7bd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts from the same unit at another declared precision; the value, its runtime tag, and its derivation carry over unchanged.  <br /></td></tr>
+<tr class="separator:a79fb7b381de1399ff0fe3ffba0bba7bd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afa91555763dd9e3d0dc557a4c45ac348" id="r_afa91555763dd9e3d0dc557a4c45ac348"><td class="memItemLeft" align="right" valign="top">constexpr bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#afa91555763dd9e3d0dc557a4c45ac348">hasValue</a> () const noexcept</td></tr>
 <tr class="memdesc:afa91555763dd9e3d0dc557a4c45ac348"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a value has been entered/measured.  <br /></td></tr>
 <tr class="separator:afa91555763dd9e3d0dc557a4c45ac348"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac9ca2c6ed3aa728d47967c4b02135fee" id="r_ac9ca2c6ed3aa728d47967c4b02135fee"><td class="memItemLeft" align="right" valign="top">constexpr const std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee">value</a> () const noexcept</td></tr>
+<tr class="memdesc:ac9ca2c6ed3aa728d47967c4b02135fee"><td class="mdescLeft">&#160;</td><td class="mdescRight">The payload, for pattern-matching / <code>-&gt;</code> access.  <br /></td></tr>
+<tr class="separator:ac9ca2c6ed3aa728d47967c4b02135fee"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a30ae1b871898af3e6ff7c204c9cd2834" id="r_a30ae1b871898af3e6ff7c204c9cd2834"><td class="memItemLeft" align="right" valign="top">constexpr <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834">value_or</a> (const <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &amp;fallback) const noexcept</td></tr>
+<tr class="memdesc:a30ae1b871898af3e6ff7c204c9cd2834"><td class="mdescLeft">&#160;</td><td class="mdescRight">The payload if engaged, otherwise a caller-supplied fallback.  <br /></td></tr>
+<tr class="separator:a30ae1b871898af3e6ff7c204c9cd2834"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afe4db91f7aa2e40274ba8f34b7680845" id="r_afe4db91f7aa2e40274ba8f34b7680845"><td class="memItemLeft" align="right" valign="top">constexpr const <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &amp;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#afe4db91f7aa2e40274ba8f34b7680845">operator*</a> () const noexcept</td></tr>
-<tr class="memdesc:afe4db91f7aa2e40274ba8f34b7680845"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unchecked access to the engaged value (UB when empty, exactly like <code>std::optional</code> — the unchecked contract is the point).  <br /></td></tr>
+<tr class="memdesc:afe4db91f7aa2e40274ba8f34b7680845"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unchecked access to the engaged value (UB when empty, exactly like <code>std::optional::operator*</code>).  <br /></td></tr>
 <tr class="separator:afe4db91f7aa2e40274ba8f34b7680845"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:a3559a9e86709d0cc0df04f44c8f70c6f" id="r_a3559a9e86709d0cc0df04f44c8f70c6f"><td class="memItemLeft" align="right" valign="top">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a3559a9e86709d0cc0df04f44c8f70c6f">withDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision) const noexcept</td></tr>
-<tr class="memdesc:a3559a9e86709d0cc0df04f44c8f70c6f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's <em>runtime</em> precision (the exact value itself is unchanged — precision only affects rounding and formatting).  <br /></td></tr>
-<tr class="separator:a3559a9e86709d0cc0df04f44c8f70c6f"><td class="memSeparator" colspan="2">&#160;</td></tr>
-<tr class="memitem:afb30f337a06f7f73564741cf8b4df047" id="r_afb30f337a06f7f73564741cf8b4df047"><td class="memItemLeft" align="right" valign="top">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#afb30f337a06f7f73564741cf8b4df047">atDeclaredPrecision</a> () const noexcept</td></tr>
-<tr class="memdesc:afb30f337a06f7f73564741cf8b4df047"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's runtime precision to the declared one — e.g. before display, after arithmetic widened it.  <br /></td></tr>
-<tr class="separator:afb30f337a06f7f73564741cf8b4df047"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ad7d272b726f815feba425a6c56ecafea" id="r_ad7d272b726f815feba425a6c56ecafea"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea">withDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision) const</td></tr>
+<tr class="memdesc:ad7d272b726f815feba425a6c56ecafea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's <em>runtime</em> precision (the exact value itself is unchanged — precision only affects rounding and formatting).  <br /></td></tr>
+<tr class="separator:ad7d272b726f815feba425a6c56ecafea"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a71c5b40c2b3ee9b1dea894405b837ff6" id="r_a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6">atDeclaredPrecision</a> () const</td></tr>
+<tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's runtime precision to the declared one.  <br /></td></tr>
+<tr class="separator:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a161651d7fca578b928901cdac557051a" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
+<tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
+<tr class="separator:a161651d7fca578b928901cdac557051a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft" align="right" valign="top">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
+<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <code>docs/quantity_type.md</code>).  <br /></td></tr>
+<tr class="separator:ac4899dbe76c9b39a724a0e8073257c73"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a5252c3cebbc4708d242bcee514b55869" id="r_a5252c3cebbc4708d242bcee514b55869"><td class="memTemplParams" colspan="2">template&lt;auto To&gt; <br />
+requires Convertible&lt;U, To&gt;</td></tr>
+<tr class="memitem:a5252c3cebbc4708d242bcee514b55869"><td class="memTemplItemLeft" align="right" valign="top">&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5252c3cebbc4708d242bcee514b55869">operator Quantity&lt; To &gt;</a> () const</td></tr>
+<tr class="memdesc:a5252c3cebbc4708d242bcee514b55869"><td class="mdescLeft">&#160;</td><td class="mdescRight">Implicit within-dimension conversion to another unit; delegates to <code>convert</code>, propagates empty, and records a provenance step.  <br /></td></tr>
+<tr class="separator:a5252c3cebbc4708d242bcee514b55869"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
 Static Public Member Functions</h2></td></tr>
@@ -145,17 +162,23 @@ Static Public Member Functions</h2></td></tr>
 <tr class="memdesc:a81e187a447c222155501d7fd66b57e91"><td class="mdescLeft">&#160;</td><td class="mdescRight">The declared precision as a <code>DecimalPlaces</code> strong type.  <br /></td></tr>
 <tr class="separator:a81e187a447c222155501d7fd66b57e91"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a98aad53730bc9d5da2a7d921c0d10374" id="r_a98aad53730bc9d5da2a7d921c0d10374"><td class="memItemLeft" align="right" valign="top">static constexpr std::span&lt; const <a class="el" href="../../d5/d23/structmorph_1_1units_1_1UnitAlternative.html">UnitAlternative</a>&lt; decltype(U)&gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374">unitAlternatives</a> () noexcept</td></tr>
-<tr class="memdesc:a98aad53730bc9d5da2a7d921c0d10374"><td class="mdescLeft">&#160;</td><td class="mdescRight">The convertible display/entry units declared for this field's unit (empty when the unit system declares none).  <br /></td></tr>
+<tr class="memdesc:a98aad53730bc9d5da2a7d921c0d10374"><td class="mdescLeft">&#160;</td><td class="mdescRight">The convertible display/entry units for this field's unit, derived from <code>UnitTraits::relations</code>.  <br /></td></tr>
 <tr class="separator:a98aad53730bc9d5da2a7d921c0d10374"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af93658f52b9727462984d692b756bc0c" id="r_af93658f52b9727462984d692b756bc0c"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#af93658f52b9727462984d692b756bc0c">fromDouble</a> (double raw) noexcept</td></tr>
 <tr class="memdesc:af93658f52b9727462984d692b756bc0c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a floating-point reading at the declared precision.  <br /></td></tr>
 <tr class="separator:af93658f52b9727462984d692b756bc0c"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a78819aecf83db1a10e7c8ee91f9fc67e" id="r_a78819aecf83db1a10e7c8ee91f9fc67e"><td class="memItemLeft" align="right" valign="top">static <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a78819aecf83db1a10e7c8ee91f9fc67e">fromOptional</a> (std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; adopted)</td></tr>
+<tr class="memdesc:a78819aecf83db1a10e7c8ee91f9fc67e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Wraps an optional payload, preserving the declared precision.  <br /></td></tr>
+<tr class="separator:a78819aecf83db1a10e7c8ee91f9fc67e"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
-<tr class="memitem:aad087b7f0605abb61394282ef7a0a972" id="r_aad087b7f0605abb61394282ef7a0a972"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#aad087b7f0605abb61394282ef7a0a972">value</a></td></tr>
-<tr class="memdesc:aad087b7f0605abb61394282ef7a0a972"><td class="mdescLeft">&#160;</td><td class="mdescRight">The payload; <code>std::nullopt</code> means "not entered / not measured".  <br /></td></tr>
-<tr class="separator:aad087b7f0605abb61394282ef7a0a972"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7a80d984d0cc6760a677a2c4f802d58f" id="r_a7a80d984d0cc6760a677a2c4f802d58f"><td class="memItemLeft" align="right" valign="top">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f">payload</a></td></tr>
+<tr class="memdesc:a7a80d984d0cc6760a677a2c4f802d58f"><td class="mdescLeft">&#160;</td><td class="mdescRight">The payload; <code>std::nullopt</code> means "not entered / not measured".  <br /></td></tr>
+<tr class="separator:a7a80d984d0cc6760a677a2c4f802d58f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a9f35cf343d134f71160e664bd7e95cf2" id="r_a9f35cf343d134f71160e664bd7e95cf2"><td class="memItemLeft" align="right" valign="top">detail::Context&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a9f35cf343d134f71160e664bd7e95cf2">_ctx</a></td></tr>
+<tr class="memdesc:a9f35cf343d134f71160e664bd7e95cf2"><td class="mdescLeft">&#160;</td><td class="mdescRight">Handle onto this value's derivation (internal).  <br /></td></tr>
+<tr class="separator:a9f35cf343d134f71160e664bd7e95cf2"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
 Static Public Attributes</h2></td></tr>
@@ -167,15 +190,9 @@ Static Public Attributes</h2></td></tr>
 <tr class="separator:a6d6488fb98a7ce62fe51d68f7bda45fb"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt;<br />
+<div class="textblock"><div class="compoundTemplParams">template&lt;auto U, std::uint32_t DeclaredDecimals&gt;<br />
 requires UnitEnum&lt;decltype(U)&gt;<br />
-struct morph::units::Quantity&lt; U, DeclaredDecimals &gt;</div><p>A unit-tagged, optionally-empty exact value with a <em>declared</em> precision in its type. </p>
-<p>Two precisions exist by design and must not be conflated:</p>
-<ul>
-<li><b>Declared precision</b> (<code>DeclaredDecimals</code>, a template argument): a property of the <em>field</em> — how many decimals this slot is specified to hold. It defaults from the unit's <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum and returns a UnitMeta per en...">UnitTraits</a></code> metadata and can be overridden per field (<code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html" title="A unit-tagged, optionally-empty exact value with a declared precision in its type.">Quantity</a>&lt;Unit::m3, 4&gt;</code>). It feeds the generated schema (<code>x-decimalPlaces</code>), <code>fromDouble</code>, and <code>atDeclaredPrecision</code>.</li>
-<li><b>Actual precision</b>: a property of the <em>value</em> — the runtime <code>DecimalPlaces</code> tag inside the <code>Rational</code> payload. It propagates through arithmetic (max rule) and can be changed at run time (<code>withDecimalPlaces</code>).</li>
-</ul>
-<p>Default state is <em>empty</em> — a form draft starts blank while the unit and the declared precision are already known from the type. Same-unit quantities convert freely across declared precisions (the value, including its runtime tag, carries over unchanged).</p>
+struct morph::units::Quantity&lt; U, DeclaredDecimals &gt;</div><p>A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a recorded derivation. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">U</td><td>An enumerator of an application unit enum satisfying <code>UnitEnum</code>. </td></tr>
@@ -184,21 +201,21 @@ struct morph::units::Quantity&lt; U, DeclaredDecimals &gt;</div><p>A unit-tagged
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a0903cdb20a7e4da6bdcce754ec59776e" name="a0903cdb20a7e4da6bdcce754ec59776e"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0903cdb20a7e4da6bdcce754ec59776e">&#9670;&#160;</a></span>Quantity() <span class="overload">[1/3]</span></h2>
+<a id="aea78e51ec8a09cd171380657543455ff" name="aea78e51ec8a09cd171380657543455ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aea78e51ec8a09cd171380657543455ff">&#9670;&#160;</a></span>Quantity() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>&#160;</td>
           <td class="paramname"><em>engaged</em></td><td>)</td>
@@ -207,7 +224,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -220,32 +237,32 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00186">186</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00448">448</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<a id="af4a74427270b04fc4e84931db14069e2" name="af4a74427270b04fc4e84931db14069e2"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af4a74427270b04fc4e84931db14069e2">&#9670;&#160;</a></span>Quantity() <span class="overload">[2/3]</span></h2>
+<a id="a13518e1c2e0b9437066fb8670ee88832" name="a13518e1c2e0b9437066fb8670ee88832"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a13518e1c2e0b9437066fb8670ee88832">&#9670;&#160;</a></span>Quantity() <span class="overload">[2/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
           <td>(</td>
           <td class="paramtype">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td>
-          <td class="paramname"><em>payload</em></td><td>)</td>
+          <td class="paramname"><em>adopted</em></td><td>)</td>
           <td></td>
         </tr>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -253,22 +270,22 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <p>Adopts an optional payload as-is. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">payload</td><td>Engaged or empty payload. </td></tr>
+    <tr><td class="paramname">adopted</td><td>Engaged or empty payload. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00452">452</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ab132597c897e07a668377d65dfc76bab" name="ab132597c897e07a668377d65dfc76bab"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ab132597c897e07a668377d65dfc76bab">&#9670;&#160;</a></span>Quantity() <span class="overload">[3/3]</span></h2>
+<a id="a79fb7b381de1399ff0fe3ffba0bba7bd" name="a79fb7b381de1399ff0fe3ffba0bba7bd"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a79fb7b381de1399ff0fe3ffba0bba7bd">&#9670;&#160;</a></span>Quantity() <span class="overload">[3/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <div class="memtemplate">
 template&lt;std::uint32_t OtherDecimals&gt; <br />
 requires (OtherDecimals != DeclaredDecimals)</div>
@@ -277,7 +294,7 @@ requires (OtherDecimals != DeclaredDecimals)</div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::Quantity </td>
           <td>(</td>
           <td class="paramtype">const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, OtherDecimals &gt; &amp;&#160;</td>
           <td class="paramname"><em>other</em></td><td>)</td>
@@ -286,12 +303,12 @@ requires (OtherDecimals != DeclaredDecimals)</div>
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>Converts from the same unit at another declared precision; the value and its runtime precision tag carry over unchanged. </p>
+<p>Converts from the same unit at another declared precision; the value, its runtime tag, and its derivation carry over unchanged. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">other</td><td>Same-unit quantity with a different declared precision. </td></tr>
@@ -299,7 +316,7 @@ requires (OtherDecimals != DeclaredDecimals)</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00459">459</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -310,7 +327,7 @@ requires (OtherDecimals != DeclaredDecimals)</div>
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -330,9 +347,9 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 </div><div class="memdoc">
 
 <p>The unit's static metadata (id, display text, default decimals). </p>
-<dl class="section return"><dt>Returns</dt><dd>The <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> from the application's <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum and returns a UnitMeta per en...">UnitTraits</a></code> specialisation. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The <code><a class="el" href="../../d8/dab/structmorph_1_1units_1_1UnitMeta.html" title="Static description of one unit, supplied by UnitTraits.">UnitMeta</a></code> from the application's <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum, returning a UnitMeta per enu...">UnitTraits</a></code> specialisation. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00207">207</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00473">473</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -342,7 +359,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -364,7 +381,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <p>The declared precision as a <code>DecimalPlaces</code> strong type. </p>
 <dl class="section return"><dt>Returns</dt><dd><code>DecimalPlaces{declaredDecimals}</code>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00211">211</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00477">477</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -374,7 +391,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -393,10 +410,10 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 </table>
 </div><div class="memdoc">
 
-<p>The convertible display/entry units declared for this field's unit (empty when the unit system declares none). </p>
-<dl class="section return"><dt>Returns</dt><dd>Exact-ratio alternatives from <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum and returns a UnitMeta per en...">UnitTraits</a>&lt;E&gt;::alternatives</code>. </dd></dl>
+<p>The convertible display/entry units for this field's unit, derived from <code>UnitTraits::relations</code>. </p>
+<dl class="section return"><dt>Returns</dt><dd>Exact-ratio alternatives (empty when the unit system declares none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00218">218</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00484">484</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -406,7 +423,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -433,9 +450,48 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>The engaged quantity, or empty when <code>raw</code> is not finite or does not fit (empty-propagation philosophy: no error channel). </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>The engaged quantity, or empty when <code>raw</code> is not finite or does not fit <code>int64</code> (empty-propagation philosophy: no error channel). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00492">492</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a78819aecf83db1a10e7c8ee91f9fc67e" name="a78819aecf83db1a10e7c8ee91f9fc67e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a78819aecf83db1a10e7c8ee91f9fc67e">&#9670;&#160;</a></span>fromOptional()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">static <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::fromOptional </td>
+          <td>(</td>
+          <td class="paramtype">std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt;&#160;</td>
+          <td class="paramname"><em>adopted</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Wraps an optional payload, preserving the declared precision. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">adopted</td><td>Engaged or empty payload. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The quantity (empty in → empty out). </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00502">502</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -445,7 +501,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -467,7 +523,78 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <p>Whether a value has been entered/measured. </p>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> if the payload is engaged. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac9ca2c6ed3aa728d47967c4b02135fee" name="ac9ca2c6ed3aa728d47967c4b02135fee"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac9ca2c6ed3aa728d47967c4b02135fee">&#9670;&#160;</a></span>value()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr const std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; &amp; <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::value </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The payload, for pattern-matching / <code>-&gt;</code> access. </p>
+<dl class="section return"><dt>Returns</dt><dd>Const reference to the optional payload. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00512">512</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a30ae1b871898af3e6ff7c204c9cd2834" name="a30ae1b871898af3e6ff7c204c9cd2834"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a30ae1b871898af3e6ff7c204c9cd2834">&#9670;&#160;</a></span>value_or()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::value_or </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &amp;&#160;</td>
+          <td class="paramname"><em>fallback</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>The payload if engaged, otherwise a caller-supplied fallback. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">fallback</td><td>Value to return when empty. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The engaged value or <code>fallback</code>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00517">517</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -477,7 +604,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -496,26 +623,26 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 </table>
 </div><div class="memdoc">
 
-<p>Unchecked access to the engaged value (UB when empty, exactly like <code>std::optional</code> — the unchecked contract is the point). </p>
+<p>Unchecked access to the engaged value (UB when empty, exactly like <code>std::optional::operator*</code>). </p>
 <dl class="section return"><dt>Returns</dt><dd>The engaged exact value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a3559a9e86709d0cc0df04f44c8f70c6f" name="a3559a9e86709d0cc0df04f44c8f70c6f"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3559a9e86709d0cc0df04f44c8f70c6f">&#9670;&#160;</a></span>withDecimalPlaces()</h2>
+<a id="ad7d272b726f815feba425a6c56ecafea" name="ad7d272b726f815feba425a6c56ecafea"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad7d272b726f815feba425a6c56ecafea">&#9670;&#160;</a></span>withDecimalPlaces()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::withDecimalPlaces </td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::withDecimalPlaces </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a>&#160;</td>
           <td class="paramname"><em>newPrecision</em></td><td>)</td>
@@ -524,7 +651,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
@@ -538,23 +665,23 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The retagged quantity, or empty if this is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00251">251</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00531">531</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<a id="afb30f337a06f7f73564741cf8b4df047" name="afb30f337a06f7f73564741cf8b4df047"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#afb30f337a06f7f73564741cf8b4df047">&#9670;&#160;</a></span>atDeclaredPrecision()</h2>
+<a id="a71c5b40c2b3ee9b1dea894405b837ff6" name="a71c5b40c2b3ee9b1dea894405b837ff6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a71c5b40c2b3ee9b1dea894405b837ff6">&#9670;&#160;</a></span>atDeclaredPrecision()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">constexpr <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::atDeclaredPrecision </td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::atDeclaredPrecision </td>
           <td>(</td>
           <td class="paramname"></td><td>)</td>
           <td> const</td>
@@ -562,36 +689,161 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
       </table>
   </td>
   <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span><span class="mlabel">noexcept</span></span>  </td>
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
   </tr>
 </table>
 </div><div class="memdoc">
 
-<p>Retags the value's runtime precision to the declared one — e.g. before display, after arithmetic widened it. </p>
+<p>Retags the value's runtime precision to the declared one. </p>
 <dl class="section return"><dt>Returns</dt><dd>The retagged quantity, or empty if this is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00547">547</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<h2 class="groupheader">Member Data Documentation</h2>
-<a id="aad087b7f0605abb61394282ef7a0a972" name="aad087b7f0605abb61394282ef7a0a972"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aad087b7f0605abb61394282ef7a0a972">&#9670;&#160;</a></span>value</h2>
+<a id="a161651d7fca578b928901cdac557051a" name="a161651d7fca578b928901cdac557051a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a161651d7fca578b928901cdac557051a">&#9670;&#160;</a></span>named()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>&gt; <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::value</td>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::named </td>
+          <td>(</td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>label</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">label</td><td>The symbol name. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A same-unit quantity carrying the name. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00554">554</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="ac4899dbe76c9b39a724a0e8073257c73" name="ac4899dbe76c9b39a724a0e8073257c73"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac4899dbe76c9b39a724a0e8073257c73">&#9670;&#160;</a></span>equation()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; <br />
+requires UnitEnum&lt;decltype(U)&gt;</div>
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::equation </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>The worked derivation as print-ready lines (see <code>docs/quantity_type.md</code>). </p>
+<dl class="section return"><dt>Returns</dt><dd><code>[0]</code> formula, <code>[1]</code> substitution, <code>[2]</code> result, <code>[3..]</code> <code>where</code> legend; a single formatted-value element for a degenerate root (empty, named root, bare leaf, or tracing off). </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html">quantity_equation.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5252c3cebbc4708d242bcee514b55869" name="a5252c3cebbc4708d242bcee514b55869"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5252c3cebbc4708d242bcee514b55869">&#9670;&#160;</a></span>operator Quantity&lt; To &gt;()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<div class="memtemplate">
+template&lt;auto To&gt; <br />
+requires Convertible&lt;U, To&gt;</div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::operator <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; To &gt; </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Implicit within-dimension conversion to another unit; delegates to <code>convert</code>, propagates empty, and records a provenance step. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">To</td><td>Target unit enumerator (same enum, different value, convertible). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The converted quantity in unit <code>To</code>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00589">589</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<h2 class="groupheader">Member Data Documentation</h2>
+<a id="a7a80d984d0cc6760a677a2c4f802d58f" name="a7a80d984d0cc6760a677a2c4f802d58f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7a80d984d0cc6760a677a2c4f802d58f">&#9670;&#160;</a></span>payload</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>&gt; <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::payload</td>
         </tr>
       </table>
 </div><div class="memdoc">
 
 <p>The payload; <code>std::nullopt</code> means "not entered / not measured". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00436">436</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9f35cf343d134f71160e664bd7e95cf2" name="a9f35cf343d134f71160e664bd7e95cf2"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9f35cf343d134f71160e664bd7e95cf2">&#9670;&#160;</a></span>_ctx</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">detail::Context <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::_ctx</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Handle onto this value's derivation (internal). </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00440">440</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -601,7 +853,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -619,7 +871,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 
 <p>The unit this quantity is denominated in (compile-time). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00466">466</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -629,7 +881,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&gt;::meta(U).defaultDecimals&gt; </div>
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -647,12 +899,13 @@ template&lt;auto U, std::uint32_t DeclaredDecimals = UnitTraits&lt;decltype(U)&g
 
 <p>Declared decimal places of this field (compile-time). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
-<hr/>The documentation for this struct was generated from the following file:<ul>
+<hr/>The documentation for this struct was generated from the following files:<ul>
 <li>morph/<a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a></li>
+<li>morph/detail/<a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html">quantity_equation.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->

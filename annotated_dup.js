@@ -78,9 +78,11 @@ var annotated_dup =
         [ "Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", "db/dec/structmorph_1_1time_1_1Timestamp" ]
       ] ],
       [ "units", null, [
+        [ "NamedQuantity", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", "d1/d58/structmorph_1_1units_1_1NamedQuantity" ],
         [ "Quantity", "d5/dda/structmorph_1_1units_1_1Quantity.html", "d5/dda/structmorph_1_1units_1_1Quantity" ],
         [ "UnitAlternative", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", "d5/d23/structmorph_1_1units_1_1UnitAlternative" ],
         [ "UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", "d8/dab/structmorph_1_1units_1_1UnitMeta" ],
+        [ "UnitRelation", "da/d8f/structmorph_1_1units_1_1UnitRelation.html", "da/d8f/structmorph_1_1units_1_1UnitRelation" ],
         [ "UnitTraits", "de/d93/structmorph_1_1units_1_1UnitTraits.html", null ]
       ] ],
       [ "wire", null, [

@@ -1,6 +1,6 @@
 var searchData=
 [
-  ['callid_0',['callId',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a81aeb13f8b173ffce931e8f117e9ef59',1,'morph::wire::Envelope']]],
-  ['coalesce_1',['coalesce',['../da/dba/structmorph_1_1model_1_1ActionLogPolicy.html#a2da3306697c2b77909bef7eea39ee668',1,'morph::model::ActionLogPolicy']]],
-  ['contextkey_2',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]]
+  ['backoffmultiplier_0',['backoffMultiplier',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a3eb7d1ba338774ed582fe26de164a4b9',1,'morph::qt::QtWebSocketBackendConfig']]],
+  ['bindcontext_1',['bindContext',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a82801c7aca391405f55114206d4956ab',1,'morph::offline::ReconnectCoordinator::Deps']]],
+  ['body_2',['body',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aa4880619c9deb3551acbbfdd78299326',1,'morph::wire::Envelope']]]
 ];

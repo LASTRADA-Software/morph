@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['probefunction_0',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]]
+  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127',1,'morph::backend::RemoteServer']]]
 ];

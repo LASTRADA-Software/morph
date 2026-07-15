@@ -1,7 +1,7 @@
 var searchData=
 [
-  ['id_0',['id',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84',1,'morph::offline::QueueItem::id'],['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0',1,'morph::units::UnitMeta::id']]],
-  ['initialreconnectdelay_1',['initialReconnectDelay',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a23e1bd7102b2c1093814de5be2b97bfe',1,'morph::qt::QtWebSocketBackendConfig']]],
-  ['ischoice_2',['isChoice',['../d1/d8b/choice_8hpp.html#af575a12a456b913fe1574808369d48d4',1,'morph::forms']]],
-  ['isquantity_3',['isQuantity',['../d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69',1,'morph::units']]]
+  ['failed_0',['failed',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33',1,'morph::offline::SyncResult']]],
+  ['failurethreshold_1',['failureThreshold',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a54e62e0648c6987bc5acc7b8daef9e24',1,'morph::offline::NetworkMonitorConfig']]],
+  ['from_2',['from',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html#a7dfd5b9623481bfa36fd8266ab9028e9',1,'morph::units::UnitRelation']]],
+  ['fromto_3',['fromTo',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html#ae92fac417b2e8892b03fe97d11fd7b91',1,'morph::units::UnitRelation']]]
 ];

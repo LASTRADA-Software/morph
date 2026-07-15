@@ -98,7 +98,7 @@ $(document).ready(function(){initNavTree('d5/d23/structmorph_1_1units_1_1UnitAlt
 </div><!--header-->
 <div class="contents">
 
-<p>One convertible display/entry unit for a canonical unit.  
+<p>A derived per-unit view of one convertible display/entry unit.  
  <a href="../../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>&gt;</code></p>
@@ -106,7 +106,7 @@ $(document).ready(function(){initNavTree('d5/d23/structmorph_1_1units_1_1UnitAlt
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:ac3cde474578b6470296685e2a3381062" id="r_ac3cde474578b6470296685e2a3381062"><td class="memItemLeft" align="right" valign="top">E&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062">unit</a> {}</td></tr>
-<tr class="memdesc:ac3cde474578b6470296685e2a3381062"><td class="mdescLeft">&#160;</td><td class="mdescRight">The alternative unit (must have <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum and returns a UnitMeta per en...">UnitTraits</a></code> metadata).  <br /></td></tr>
+<tr class="memdesc:ac3cde474578b6470296685e2a3381062"><td class="mdescLeft">&#160;</td><td class="mdescRight">The alternative (convertible) unit.  <br /></td></tr>
 <tr class="separator:ac3cde474578b6470296685e2a3381062"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a359f98d03a24ee27e54edb19eb586f54" id="r_a359f98d03a24ee27e54edb19eb586f54"><td class="memItemLeft" align="right" valign="top">std::int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a359f98d03a24ee27e54edb19eb586f54">num</a> {1}</td></tr>
 <tr class="memdesc:a359f98d03a24ee27e54edb19eb586f54"><td class="mdescLeft">&#160;</td><td class="mdescRight">Numerator of the exact alternative-to-canonical ratio.  <br /></td></tr>
@@ -117,15 +117,15 @@ Public Attributes</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename E&gt;<br />
-struct morph::units::UnitAlternative&lt; E &gt;</div><p>One convertible display/entry unit for a canonical unit. </p>
-<p>The ratio is exact: <code>value_in_canonical = value_in_alternative * num/den</code> (e.g. grams -&gt; kilograms is <code>{Unit::g, 1, 1000}</code>). Both components must be positive. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+struct morph::units::UnitAlternative&lt; E &gt;</div><p>A derived per-unit view of one convertible display/entry unit. </p>
+<p>Not declared by the application — computed from <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum, returning a UnitMeta per enu...">UnitTraits</a>&lt;E&gt;::relations</code> by <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374" title="The convertible display/entry units for this field&#39;s unit, derived from UnitTraits::relations.">Quantity::unitAlternatives()</a></code>. <code>value_in_canonical = value_in_unit * num/den</code>, where the canonical unit is the field's own unit. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">E</td><td>The application's unit enum type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="ac3cde474578b6470296685e2a3381062" name="ac3cde474578b6470296685e2a3381062"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac3cde474578b6470296685e2a3381062">&#9670;&#160;</a></span>unit</h2>
@@ -141,9 +141,9 @@ template&lt;typename E &gt; </div>
       </table>
 </div><div class="memdoc">
 
-<p>The alternative unit (must have <code><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum and returns a UnitMeta per en...">UnitTraits</a></code> metadata). </p>
+<p>The alternative (convertible) unit. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -163,7 +163,7 @@ template&lt;typename E &gt; </div>
 
 <p>Numerator of the exact alternative-to-canonical ratio. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00139">139</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -183,7 +183,7 @@ template&lt;typename E &gt; </div>
 
 <p>Denominator of the exact alternative-to-canonical ratio. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

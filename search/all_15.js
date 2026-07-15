@@ -1,8 +1,13 @@
 var searchData=
 [
-  ['validators_20do_20not_20run_20server_20side_0',['Validators do not run server-side',['../index.html#validators-do-not-run-server-side',1,'']]],
-  ['value_1',['value',['../df/d65/structmorph_1_1forms_1_1Choice.html#afb556b725efaad7ac78291c9cbb4735e',1,'morph::forms::Choice::value'],['../d5/d44/structmorph_1_1time_1_1DateTime.html#add64c35863e6b9769a0f8482f695ffaf',1,'morph::time::DateTime::value'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a079027c7f4bae303dcb0bbba8b40542d',1,'morph::time::Timestamp::value'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#aad087b7f0605abb61394282ef7a0a972',1,'morph::units::Quantity::value'],['../da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa6d381d9d51f4aa69e33411b0f162edb',1,'morph::math::DecimalPlaces::value'],['../d7/d45/structmorph_1_1math_1_1Numerator.html#a5353d4a46c133873f2bc79822619eeab',1,'morph::math::Numerator::value'],['../de/d17/structmorph_1_1math_1_1Denominator.html#aa95960a7f35dfaf4ac56315dd2e6bd0d',1,'morph::math::Denominator::value']]],
-  ['valuefield_2',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a7ee9bd530727b58937656503574eb1a0',1,'morph::forms::Choice']]],
-  ['values_20units_20and_20schema_20driven_20forms_3',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['view_4',['view',['../df/d5e/structmorph_1_1forms_1_1FixedString.html#af1a5e7a3bb5175ca88d37c606d081026',1,'morph::forms::FixedString']]]
+  ['u_20tt_20—_20one_20kind_20of_20empty_20units_20as_20types_0',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
+  ['undolast_1',['undoLast',['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333',1,'morph::journal::SessionLog']]],
+  ['unit_2',['unit',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#ac3cde474578b6470296685e2a3381062',1,'morph::units::UnitAlternative::unit'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a99b9778c1b6f0552253eafaf105717fb',1,'morph::units::Quantity::unit']]],
+  ['unitalternative_3',['UnitAlternative',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html',1,'morph::units']]],
+  ['unitalternatives_4',['unitAlternatives',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374',1,'morph::units::Quantity']]],
+  ['unitmeta_5',['unitmeta',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html',1,'morph::units::UnitMeta'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a974c58708720c7c1ab9041d4f903d8df',1,'morph::units::Quantity::unitMeta()']]],
+  ['unitrelation_6',['UnitRelation',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html',1,'morph::units']]],
+  ['units_20and_20schema_20driven_20forms_7',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
+  ['units_20as_20types_8',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
+  ['unittraits_9',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]]
 ];
