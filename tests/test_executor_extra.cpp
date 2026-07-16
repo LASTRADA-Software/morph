@@ -63,3 +63,18 @@ TEST_CASE("morph::exec::ThreadPoolExecutor: exception in one task does not kill 
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     REQUIRE(afterCount.load() == afterTasks);
 }
+
+TEST_CASE("morph::exec::ThreadPoolExecutor: non-std::exception throw in one task does not kill worker",
+          "[executor]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    std::atomic<int> afterCount{0};
+    constexpr int afterTasks = 5;
+
+    pool.post([] { throw 42; });  // NOLINT(hicpp-exception-baseclass) — exercises the catch(...) arm
+    for (int i = 0; i < afterTasks; ++i) {
+        pool.post([&] { afterCount.fetch_add(1); });
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    REQUIRE(afterCount.load() == afterTasks);
+}

@@ -25,6 +25,23 @@ TEST_CASE("morph::exec::detail::StrandExecutor: exception in task is swallowed a
     REQUIRE(afterRan.load());
 }
 
+TEST_CASE("morph::exec::detail::StrandExecutor: non-std::exception throw is swallowed and next task still runs",
+          "[strand]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::detail::StrandExecutor strand{pool};
+    morph::exec::detail::ModelId key{43};
+
+    std::atomic<bool> afterRan{false};
+
+    strand.post(key, [] { throw 7; });  // NOLINT(hicpp-exception-baseclass) — exercises the catch(...) arm
+    strand.post(key, [&] { afterRan.store(true); });
+
+    for (int i = 0; i < 50 && !afterRan.load(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(afterRan.load());
+}
+
 TEST_CASE("morph::exec::detail::StrandExecutor: rapid post to running strand queues correctly", "[strand]") {
     // Post many tasks to same key without waiting — exercises the "already running" branch
     morph::exec::ThreadPoolExecutor pool{4};

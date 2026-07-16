@@ -114,6 +114,28 @@ TEST_CASE("verification rejects a malformed token", "[session_auth]") {
     REQUIRE(TokenVerifier{"top-secret"}.verify("notatoken", kNow).error() == AuthError::Malformed);
 }
 
+TEST_CASE("verification rejects a token with more than one '.'", "[session_auth]") {
+    REQUIRE(TokenVerifier{"top-secret"}.verify("a.b.c", kNow).error() == AuthError::Malformed);
+}
+
+TEST_CASE("verification rejects a signature segment with invalid base64url characters", "[session_auth]") {
+    const std::string token = TokenIssuer{"top-secret"}.issue(sampleClaims("bob"));
+    const auto dot = token.find('.');
+    const std::string corrupted = token.substr(0, dot + 1) + "has space";
+    REQUIRE(TokenVerifier{"top-secret"}.verify(corrupted, kNow).error() == AuthError::Malformed);
+}
+
+TEST_CASE("verification rejects a payload segment with invalid base64url characters", "[session_auth]") {
+    // The MAC is computed over the raw (still-encoded) payload substring, so a
+    // hand-crafted payload needs its MAC recomputed to reach past BadSignature
+    // and into the payload-decode Malformed branch.
+    const std::string secret = "top-secret";
+    const std::string payload = "has space";
+    const std::string sig = morph::session::detail::base64UrlEncode(hmacSha256(secret, payload));
+    const std::string token = payload + "." + sig;
+    REQUIRE(TokenVerifier{secret}.verify(token, kNow).error() == AuthError::Malformed);
+}
+
 TEST_CASE("SigningAuthorizer authorizes a valid token and exposes its principal", "[session_auth]") {
     const std::string secret = "hmac-key";
     const SigningAuthorizer authz{secret, hmacSha256, fixedClock};
@@ -145,4 +167,23 @@ TEST_CASE("SigningAuthorizer applies a role policy over a valid token", "[sessio
     morph::session::Context admin;
     admin.token = TokenIssuer{secret}.issue(sampleClaims("dave", {"admin"}));
     REQUIRE(authz.authorize(admin, "AccountModel", "Deposit"));
+}
+
+TEST_CASE("SigningAuthorizer with a policy still denies an invalid token before the policy runs", "[session_auth]") {
+    const std::string secret = "hmac-key";
+    bool policyCalled = false;
+    const auto alwaysAllow = [&](const SessionToken&, std::string_view, std::string_view) {
+        policyCalled = true;
+        return true;
+    };
+    const SigningAuthorizer authz{secret, hmacSha256, fixedClock, alwaysAllow};
+
+    morph::session::Context noToken;
+    REQUIRE_FALSE(authz.authorize(noToken, "AccountModel", "Deposit"));
+    REQUIRE_FALSE(policyCalled);
+
+    morph::session::Context wrongSecret;
+    wrongSecret.token = TokenIssuer{"other-secret"}.issue(sampleClaims("eve"));
+    REQUIRE_FALSE(authz.authorize(wrongSecret, "AccountModel", "Deposit"));
+    REQUIRE_FALSE(policyCalled);
 }
