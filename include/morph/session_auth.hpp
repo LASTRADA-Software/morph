@@ -412,10 +412,3 @@ private:
 };
 
 }  // namespace morph::session
-
-template <>
-struct glz::meta<morph::session::SessionToken> {
-    using T = morph::session::SessionToken;
-    static constexpr auto value = object("principal", &T::principal, "issuedAtMs", &T::issuedAtMs, "expiresAtMs",
-                                         &T::expiresAtMs, "roles", &T::roles);
-};

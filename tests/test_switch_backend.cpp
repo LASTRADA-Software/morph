@@ -273,7 +273,7 @@ public:
     }
 
     void deregisterModel(morph::exec::detail::ModelId mid) override {
-        ++_deregisterCalls;
+        ++(*_deregisterCalls);
         if (_deregisterThrows) {
             throw std::runtime_error("simulated deregister failure");
         }
@@ -289,14 +289,20 @@ public:
     void notifyBackendChanged() override { _inner.notifyBackendChanged(); }
     void cancelPending(const std::exception_ptr& exc) override { _inner.cancelPending(exc); }
 
-    [[nodiscard]] int deregisterCallCount() const { return _deregisterCalls; }
+    /// @brief Shared handle to the deregister-call counter.
+    ///
+    /// `Bridge::switchBackend` takes ownership of the backend and destroys it
+    /// when a partial-registration failure unwinds, so a raw `this` pointer is
+    /// dangling by the time the test inspects the rollback. The counter lives in
+    /// a `shared_ptr` the test can hold independently, outliving the backend.
+    [[nodiscard]] std::shared_ptr<const int> deregisterCallCounter() const { return _deregisterCalls; }
 
 private:
     morph::backend::LocalBackend _inner;
     int _failOnCallNumber;
     bool _deregisterThrows;
     int _calls{0};
-    int _deregisterCalls{0};
+    std::shared_ptr<int> _deregisterCalls{std::make_shared<int>(0)};
     std::vector<morph::exec::detail::ModelId> _registered;
 };
 
@@ -317,10 +323,10 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback on partial failure 
     // Two live handlers means two registerModelWithContext calls; fail on the 2nd
     // so the 1st is already staged when the rollback runs.
     auto flaky = std::make_unique<FlakyBackend>(pool2, /*failOnCallNumber=*/2);
-    auto* flakyPtr = flaky.get();
+    auto deregisterCalls = flaky->deregisterCallCounter();  // outlives the backend
 
     REQUIRE_THROWS_AS(bridge.switchBackend(std::move(flaky)), std::runtime_error);
-    REQUIRE(flakyPtr->deregisterCallCount() == 1);  // the 1 staged registration was rolled back
+    REQUIRE(*deregisterCalls == 1);  // the 1 staged registration was rolled back
 
     // currentId values are untouched — the switch is a no-op on failure.
     REQUIRE(handler1.binding()->currentId.load() == idBefore1);
@@ -344,10 +350,10 @@ TEST_CASE(
 
     morph::exec::ThreadPoolExecutor pool2{2};
     auto flaky = std::make_unique<FlakyBackend>(pool2, /*failOnCallNumber=*/2, /*deregisterThrows=*/true);
-    auto* flakyPtr = flaky.get();
+    auto deregisterCalls = flaky->deregisterCallCounter();  // outlives the backend
 
     REQUIRE_THROWS_AS(bridge.switchBackend(std::move(flaky)), std::runtime_error);
-    REQUIRE(flakyPtr->deregisterCallCount() == 1);  // rollback attempted despite itself throwing
+    REQUIRE(*deregisterCalls == 1);  // rollback attempted despite itself throwing
 }
 
 // ── BridgeHandler destructor: bridge destroyed first (dead-liveness-token branch) ─────────────
