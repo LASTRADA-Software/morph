@@ -629,7 +629,7 @@ public:
             }
             std::any_cast<A&>(entry.draft).*FieldPtr = std::move(value);
         }
-        tryFireImpl<A>(std::weak_ptr<SubscriberState>(_subs), ::morph::model::ActionTraits<A>::typeId());
+        tryFireImpl<A>(_subs, ::morph::model::ActionTraits<A>::typeId());
     }
 
     /// @brief Discards the in-progress draft for action @p Action.
@@ -699,11 +699,12 @@ private:
     }
 
     template <typename Action>
-    static void tryFireImpl(const std::weak_ptr<SubscriberState>& weak, std::string_view typeId) {
-        auto state = weak.lock();
-        if (!state) {
-            return;  // handler (and its subscriber state) already gone
-        }
+    static void tryFireImpl(const std::shared_ptr<SubscriberState>& state, std::string_view typeId) {
+        // Every caller holds the `SubscriberState` alive for the duration of this
+        // call, so no liveness check is needed on entry. The async continuations
+        // below may outlive the subscription, so they each re-check through this
+        // weak_ptr instead.
+        const std::weak_ptr<SubscriberState> weak{state};
         using R = ::morph::model::ActionTraits<Action>::Result;
 
         Action snapshot;
@@ -739,7 +740,7 @@ private:
                     outcome.sink(boxed);
                 }
                 if (outcome.refire) {
-                    tryFireImpl<Action>(weak, typeId);
+                    tryFireImpl<Action>(inner, typeId);
                 }
             })
             .onError([weak, typeId](const std::exception_ptr& err) {
@@ -754,7 +755,7 @@ private:
                     logUnhandledError(typeId, err);
                 }
                 if (outcome.refire) {
-                    tryFireImpl<Action>(weak, typeId);
+                    tryFireImpl<Action>(inner, typeId);
                 }
             });
     }

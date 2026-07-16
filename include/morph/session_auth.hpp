@@ -286,12 +286,12 @@ public:
 
     /// @brief Serialises @p claims and returns a signed token string.
     /// @param claims Claims to embed and sign.
-    /// @return The `payload.sig` token, or an empty string if serialisation fails.
+    /// @return The signed `payload.sig` token.
     [[nodiscard]] std::string issue(const SessionToken& claims) const {
         std::string json;
-        if (glz::write_json(claims, json)) {
-            return {};
-        }
+        // `SessionToken` is a flat aggregate, so writing it into a `std::string`
+        // cannot fail — the result is unconditional.
+        (void)glz::write_json(claims, json);
         const std::string payload = detail::base64UrlEncode(json);
         const std::string sig = detail::base64UrlEncode(_mac(_secret, payload));
         return payload + "." + sig;

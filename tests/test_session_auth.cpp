@@ -136,6 +136,33 @@ TEST_CASE("verification rejects a payload segment with invalid base64url charact
     REQUIRE(TokenVerifier{secret}.verify(token, kNow).error() == AuthError::Malformed);
 }
 
+TEST_CASE("hmacSha256 hashes an over-long key down to the block size (RFC 4231 case 6)", "[session_auth][crypto]") {
+    // A key longer than the 64-byte HMAC block is first reduced with SHA-256.
+    const std::string longKey(131, '\xaa');
+    REQUIRE(toHex(hmacSha256(longKey, "Test Using Larger Than Block-Size Key - Hash Key First")) ==
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
+}
+
+TEST_CASE("verification rejects a signature of the wrong length", "[session_auth]") {
+    // A signature that base64url-decodes cleanly but is not 32 bytes must fail on
+    // the constant-time length check rather than the byte comparison.
+    const std::string secret = "top-secret";
+    const std::string payload = morph::session::detail::base64UrlEncode(std::string_view{"claims"});
+    const std::string shortSig = morph::session::detail::base64UrlEncode(std::string_view{"short"});
+    const std::string token = payload + "." + shortSig;
+    REQUIRE(TokenVerifier{secret}.verify(token, kNow).error() == AuthError::BadSignature);
+}
+
+TEST_CASE("verification rejects a correctly-signed payload that is not valid JSON", "[session_auth]") {
+    // Reaches past the MAC check (authentic) and the base64url decode (valid
+    // bytes) into the claims-parse branch: the decoded payload is not JSON.
+    const std::string secret = "top-secret";
+    const std::string payload = morph::session::detail::base64UrlEncode(std::string_view{"not-json"});
+    const std::string sig = morph::session::detail::base64UrlEncode(hmacSha256(secret, payload));
+    const std::string token = payload + "." + sig;
+    REQUIRE(TokenVerifier{secret}.verify(token, kNow).error() == AuthError::Malformed);
+}
+
 TEST_CASE("SigningAuthorizer authorizes a valid token and exposes its principal", "[session_auth]") {
     const std::string secret = "hmac-key";
     const SigningAuthorizer authz{secret, hmacSha256, fixedClock};
