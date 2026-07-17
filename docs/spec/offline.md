@@ -30,6 +30,7 @@ All types live in `morph::offline`.
 - [Offline queue](#offline-queue)
 - [Ownership: who enqueues](#ownership-who-enqueues)
 - [SyncWorker](#syncworker)
+- [Conflict resolution on replay](#conflict-resolution-on-replay)
 - [ReconnectCoordinator](#reconnectcoordinator)
 - [End-to-end integration](#end-to-end-integration)
 - [Failure modes](#failure-modes)
@@ -112,10 +113,52 @@ notification callbacks marshal work off the thread that raised them.
 
 | Field | Type | Purpose |
 |---|---|---|
-| `id` | `uint64_t` | Stable identifier assigned at enqueue time. |
+| `id` | `uint64_t` | Stable identifier assigned at enqueue time. **Queue-local** — not a cross-subsystem key. |
 | `payload` | `std::string` | Opaque serialised representation of the queued action. |
+| `idempotencyKey` | `std::string` | Optional caller-supplied dedup token, stable across subsystems and restarts for one logical op. Empty by default. |
 
 The payload format is the caller's choice — JSON, binary-hex, plain text, etc.
+
+#### `idempotencyKey`: deduping against the journal
+
+`QueueItem::id` is **queue-local** — a durable queue re-presents the same logical
+op with a fresh `id` after a restart, and the journal's `seq` is journal-local,
+so the two subsystems share no identity. That is exactly the seam where an op can
+be **double-applied**: the offline queue and the journal can each replay the same
+logical operation with nothing to recognise it as already-applied.
+
+`idempotencyKey` is the shared dedup token that closes it. It is a caller-minted
+value — a stable content hash or a client-generated operation id (e.g. a UUID),
+reused if the *same* op is re-enqueued — that stays constant for one logical
+operation across the queue, the journal, and process restarts. A replay consumer
+that has applied an op records its key and skips any later item (from either
+path) carrying the same key.
+
+Set it by enqueuing through the two-argument overload:
+
+```cpp
+queue.enqueue(serialise(action), operationId(action));  // payload + idempotency key
+```
+
+The queue **stores the key verbatim and never interprets, requires, or enforces
+uniqueness on it** — enforcement is the replay consumer's job. The key is opaque
+to `morph::offline`, just like the payload.
+
+**The dedup contract.** The offline queue replay and the journal replay must be
+wired so a logical op is applied **at most once**. There are two ways to satisfy
+it, and a host must pick one:
+
+1. **Mutually exclusive replay** — drive replay through exactly one path (the
+   `SyncWorker` queue path *or* the journal replay), never both over the same
+   ops. This is the existing guidance (see
+   [Conflict resolution on replay](#conflict-resolution-on-replay) and the
+   journal cross-reference) and needs no key.
+2. **Shared idempotency key** — if both paths can replay the same ops, every
+   enqueued item and its corresponding journal entry must carry the *same*
+   `idempotencyKey`, and the replay consumer must dedup on it (apply a key once,
+   skip repeats). The framework provides the *field*; wiring the check into the
+   replay/flush path is the host's responsibility (that logic lives in
+   `sync_worker.hpp` and the app's journal-replay code, not in the queue).
 
 ### `IOfflineQueue`
 
@@ -124,9 +167,11 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 
 | Member | Signature | Notes |
 |---|---|---|
-| `enqueue` | `uint64_t enqueue(std::string payload)` | Appends payload. Returns a stable id. |
+| `enqueue` | `uint64_t enqueue(std::string payload)` | Appends payload with no idempotency key. Returns a stable (queue-local) id. |
+| `enqueue` | `uint64_t enqueue(std::string payload, std::string idempotencyKey)` | Appends payload carrying the dedup key (stored on `QueueItem::idempotencyKey`). Virtual with a default that delegates to the one-arg `enqueue` then stamps the key via the protected `setIdempotencyKey`, so existing implementations keep working; the key is dropped by an implementation with no per-item storage that overrides neither. |
 | `drain` | `std::vector<QueueItem> drain()` | Returns all pending items in enqueue order, without removing them. Safe to call multiple times — items survive between `drain()` and the corresponding `markDone()`. |
 | `markDone` | `void markDone(uint64_t itemId)` | Removes the item identified by `itemId`. No-op if not found. |
+| `setIdempotencyKey` (protected) | `void setIdempotencyKey(uint64_t itemId, std::string key)` | Hook the default two-arg `enqueue` uses to stamp the key onto an already-enqueued item. Default no-op; `InMemoryOfflineQueue` records the key directly instead. |
 
 ### `InMemoryOfflineQueue`
 
@@ -207,6 +252,64 @@ and calls a caller-supplied `ReplayFunction` for each item.
 
 The per-item attempt counter lives in a `std::unordered_map<uint64_t, int>`
 keyed by `QueueItem::id`.
+
+## Conflict resolution on replay
+
+`morph::offline` has **no conflict-resolution machinery of its own.** Neither
+`SyncWorker` nor `ReconnectCoordinator` knows what a payload means, so neither
+can detect that a queued write was superseded by a change the backend accepted
+while the client was offline. `SyncWorker`'s `ReplayFunction` sees only a
+`const std::string&` and returns a `bool` — it has no channel to say "delivered,
+but the server had a newer version" or "discarded as stale." **Conflict
+detection and merge/discard are the model's responsibility**, and the seam the
+framework provides for them is `Model::onBackendChanged()`, not `SyncWorker`.
+
+There are therefore two distinct replay paths over the same `IOfflineQueue`,
+and a host picks one:
+
+- **`SyncWorker` path** — the framework replays each payload through an opaque
+  `ReplayFunction` with the built-in retry/dead-letter policy above. Fits a
+  fire-and-forget queue of writes that either land or are retried; the replay
+  function returns only success/failure.
+- **Model `onBackendChanged()` path** — when the backend switches, `Bridge`
+  reconstructs each model on the new backend and fires `onBackendChanged()` on
+  that fresh instance (see `bridge.md`). A model that holds a reference to the
+  shared `IOfflineQueue` can `drain()` it inside `onBackendChanged()`, classify
+  each item against the now-reachable backend, and `markDone()` it. This is the
+  path that supports **clean-replay / merge / discard** outcomes, because the
+  model — not an opaque `bool` callback — decides what each item becomes.
+
+A model on the `onBackendChanged()` path typically drives each drained item
+through two caller-supplied hooks (as the conflict-resolution tests do):
+
+1. A **conflict checker** `bool(const std::string& payload)` — `true` means the
+   backend already holds a newer version that supersedes this queued write.
+2. A **resolver** `std::string(const std::string& payload)`, consulted only for
+   conflicting items — a non-empty result is a **merge** (apply the reconciled
+   value), an empty result is a **discard** (drop the stale write). Non-
+   conflicting items are a **clean replay**.
+
+**Every drained item is `markDone()`d regardless of outcome** — clean replay,
+merge, and discard all remove the item from the queue. Unlike the `SyncWorker`
+path there is no retry or dead-letter here: the model handles each item exactly
+once per backend switch, so it must not leave an item in a state that needs a
+later attempt. This path also inherits `onBackendChanged`'s threading contract:
+`Bridge::switchBackend` does not run `onBackendChanged()` inline on the caller's
+thread — `LocalBackend::notifyBackendChanged` **posts** it onto the model's own
+strand (the same per-`ModelId` serial queue `execute` uses). It therefore runs
+single-threaded per model, never overlapping an `execute()` on that model, so a
+model draining the queue and mutating its own counters there needs **no locking**
+of its own state. Because the drain is posted (asynchronous), it completes some
+time *after* `switchBackend` returns; a test or host that must observe the
+drained result waits for it (the conflict-resolution tests poll a model counter)
+rather than assuming it finished synchronously. See
+[bridge.md](bridge.md)'s `switchBackend` for the exact posting mechanism.
+
+The two paths are mutually exclusive per queue — a queue drained inside
+`onBackendChanged()` and also handed to a `SyncWorker.replay()` would be
+double-processed. Choose the model path when replay outcomes are richer than
+success/failure (conflicts, merges); choose `SyncWorker` when they are not and
+you want the built-in retry budget.
 
 ## ReconnectCoordinator
 
@@ -444,13 +547,17 @@ Honest boundaries of what ships today:
   queue stores an opaque blob and hands an opaque blob to the replay function.
   Serialisation, versioning, and type-safety across the enqueue→replay boundary
   are entirely on the caller — the compiler will not catch a format mismatch.
-- **No idempotency contract, but replay must be idempotent anyway.** `drain()`
-  is non-destructive and `markDone` runs only *after* a successful replay, so a
-  crash (or a `false` return) *after* the side effect has committed re-invokes
-  `replay` on the same payload on the next `run()`. Retries and post-commit
-  failures both re-run the payload. The framework provides no dedup or
-  "exactly-once" guarantee — **the replay function MUST be idempotent** and the
-  spec cannot enforce it.
+- **Replay must be idempotent; the queue supplies a key but not enforcement.**
+  `drain()` is non-destructive and `markDone` runs only *after* a successful
+  replay, so a crash (or a `false` return) *after* the side effect has committed
+  re-invokes `replay` on the same payload on the next `run()`. Retries and
+  post-commit failures both re-run the payload. `QueueItem::idempotencyKey` gives
+  a replay consumer a stable token to dedup on (including against journal
+  replay — see [`idempotencyKey`: deduping against the journal](#idempotencykey-deduping-against-the-journal)),
+  but the queue only *stores* it: it performs no dedup and gives no
+  "exactly-once" guarantee itself. **The replay function MUST still be
+  idempotent** — either intrinsically, or by checking the key — and the spec
+  cannot enforce it.
 - **Only an in-memory queue ships.** `InMemoryOfflineQueue` loses everything on
   exit. A durable/SQL-backed `IOfflineQueue` is the caller's to write (the
   interface is designed for it, but no implementation is provided here).
@@ -480,6 +587,7 @@ Honest boundaries of what ships today:
 | `onOnline()` / `onOffline()` serialised | **Same internal mutex** | Prevents a race where a concurrent `onOffline()` replays into a local backend during an in-progress `onOnline()`. |
 | `shouldContinue` re-checked before replay | **Second poll after bind** | The backend may have gone away during `activatePrimary()` / `bindContext()` — never replay into a backend that just became unreachable. |
 | No sleep after final attempt | **`retryDelay` skipped on last iteration** | Wasting 2s after we already know we're giving up serves no purpose. |
+| Conflict resolution lives in the model | **`SyncWorker` has no conflict hook; models reconcile in `onBackendChanged()`** | The framework cannot know whether a payload was superseded — only the domain model can. Keeping `SyncWorker`'s contract a plain `bool` avoids baking a conflict model into the framework; hosts that need merge/discard drain the queue inside `onBackendChanged()` instead (see [Conflict resolution on replay](#conflict-resolution-on-replay)). |
 
 ## Cross-references
 
@@ -488,6 +596,10 @@ Honest boundaries of what ships today:
   handlers on the new backend, fires `onBackendChanged`). ARCHITECTURE.md's
   minimal wiring calls `switchBackend` straight from the monitor callback; see
   [Reconciling with ARCHITECTURE.md's direct wiring](#reconciling-with-architecturemds-direct-wiring).
+  `onBackendChanged` on the freshly-reconstructed model is also the seam for the
+  model-driven replay path in [Conflict resolution on replay](#conflict-resolution-on-replay)
+  — a model can `drain()` the shared `IOfflineQueue` there and reconcile each
+  item, instead of (not in addition to) using `SyncWorker`.
 - **`journal.md`** — the action log is a permanent, append-only audit/replay
   trail; `IOfflineQueue` is transient (holds pending writes, deletes them on
   delivery). The two are distinct: the journal's ordering is authoritative and
