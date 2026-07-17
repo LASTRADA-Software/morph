@@ -78,9 +78,12 @@ struct IAuthorizer {
     /// Called by `RemoteServer` after `authorize` succeeds. If it returns a
     /// value, the server overwrites `Context::principal` with it before dispatch,
     /// making the identity authoritative for model code that reads
-    /// `session::current()`. The default returns `nullopt` — authorizers that do
-    /// not authenticate (e.g. `AllowAllAuthorizer`) leave the client's principal
-    /// untouched. A verifying authorizer (`SigningAuthorizer`) overrides this.
+    /// `session::current()`. The default returns `nullopt` — for authorizers that
+    /// do not authenticate (e.g. `AllowAllAuthorizer`), `RemoteServer` **clears**
+    /// `Context::principal` to the empty string before dispatch rather than
+    /// passing the client's unverified claim through, so model code never sees an
+    /// unauthenticated principal presented as authoritative. A verifying authorizer
+    /// (`SigningAuthorizer`) overrides this to supply the token-derived identity.
     /// @param ctx Per-call session attached by the client.
     /// @return The verified principal to make authoritative, or `nullopt`.
     [[nodiscard]] virtual std::optional<std::string> authenticate([[maybe_unused]] const Context& ctx) const {

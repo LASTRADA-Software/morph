@@ -39,8 +39,16 @@ if(WIN32)
         HINTS "${QT6_INSTALL_PREFIX}/bin" "${Qt6_DIR}/../../../bin"
     )
     if(MORPH_WINDEPLOYQT_EXECUTABLE)
+        # --no-compiler-runtime: do NOT deploy the MSVC redistributable. Recent
+        # windeployqt otherwise tries to fetch/refresh vc_redist.x64.exe on the
+        # first run, a network/elevation-sensitive step that fails
+        # intermittently (and, mid-build, can abort the whole link/deploy with a
+        # spurious manifest/vs_link error under Ninja). The MSVC runtime is
+        # already present in any dev/CI toolchain, so skipping it makes the
+        # deploy deterministic without losing anything needed to run locally.
         add_custom_command(TARGET morph_forms_qml POST_BUILD
             COMMAND "${MORPH_WINDEPLOYQT_EXECUTABLE}"
+                    --no-compiler-runtime
                     --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
                     $<TARGET_FILE:morph_forms_qml>
             COMMENT "Deploying Qt runtime DLLs next to morph_forms_qml.exe"
@@ -67,6 +75,7 @@ if(MORPH_BUILD_TESTS)
     if(WIN32 AND MORPH_WINDEPLOYQT_EXECUTABLE)
         add_custom_command(TARGET morph_forms_qml_tests POST_BUILD
             COMMAND "${MORPH_WINDEPLOYQT_EXECUTABLE}"
+                    --no-compiler-runtime
                     --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
                     --include-plugins qoffscreen
                     $<TARGET_FILE:morph_forms_qml_tests>

@@ -204,14 +204,16 @@ When `coalesce` is `true`, a checkpoint keeps only the most recent entry per
 ### `IModelHolder`
 
 Type-erased wrapper that owns a single model instance. Used by backends to store
-heterogeneous models in a single map.
+heterogeneous models in a single map. Declared in `morph::model::detail` (an
+implementation type — backends hold it, application code never names it).
 
 ```cpp
+// namespace morph::model::detail
 struct IModelHolder {
     virtual ~IModelHolder() = default;
     [[nodiscard]] virtual std::type_index type() const noexcept = 0;
     template <typename Model> Model& into();
-    void attachActionLog(std::shared_ptr<IActionLog>, std::string contextKey);
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog>, std::string contextKey);
     bool hasActionLog() const noexcept;
     void recordIfAttached(LogEntry entry);
 };
@@ -483,7 +485,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | `actionLoggable<A>()` | Returns `ActionTraits<A>::loggable` if present, else `Loggable::Yes`. |
 | `ParseError` | `std::runtime_error` subclass thrown on JSON codec failure. |
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
-| `registerActionOnce<M, A>(id)` | Static-init helper; returns `true`. |
+| `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
 | `registerActionExecutorOnce<M, A>(id)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
 
 ## Design decisions

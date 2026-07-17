@@ -134,14 +134,18 @@ processes to append to the same path concurrently.
 `entries()` re-reads the file from disk and decodes every line. Reads whatever
 is currently on disk, including anything written but not yet `flush()`ed if the
 platform's stdio buffering has already handed it to the OS. `flush()` first for
-a guaranteed-durable view. Blank lines are skipped before decoding.
+a guaranteed-durable view. Strictly-empty lines are skipped before decoding
+(the check is `line.empty()`; a whitespace-only line is *not* treated as blank
+and is handed to `fromJson`).
 
 **Torn-write tolerance.** A crash between `append()`'s `fwrite` and the next
 `flush()` can leave a truncated final line (bytes written, never completed).
-`entries()` tolerates exactly that case: if decoding fails on the **last**
-non-empty line, it skips that line, logs a warning via `morph::log::logWarn`
-(naming the path and the parse error), and returns everything before it. A
-decode failure on any line **mid-file** is treated as genuine corruption and
+`entries()` tolerates it by position, not by cause: if decoding fails on the
+**last** non-empty line *for any reason* (truncation is the expected one, but the
+catch is over `std::exception` generally), it skips that line, logs a warning via
+`morph::log::logWarn` (naming the path and the parse error), and returns
+everything before it. A decode failure on any line **mid-file** is treated as
+genuine corruption and
 the `fromJson` exception is re-thrown — the log is not silently truncated at an
 interior tear. So a single trailing torn record is recoverable; interior
 damage is fatal and surfaced to the caller.

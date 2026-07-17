@@ -130,11 +130,14 @@ public:
         _cv.notify_all();
     }
 
-    /// @brief Drains the task queue for up to @p timeout.
+    /// @brief Pumps the task queue for up to @p timeout.
     ///
-    /// Runs queued tasks one by one until the deadline is reached or the queue
-    /// is empty. Exceptions thrown by tasks are logged and execution continues
-    /// with the next task.
+    /// Runs queued tasks one by one. It does **not** return early when the queue
+    /// drains: while time remains before the deadline it blocks waiting for
+    /// newly posted tasks, and only returns once the deadline is reached (with
+    /// any still-queued tasks left for a subsequent call — this is a pump, not a
+    /// flush). Exceptions thrown by tasks are logged and execution continues with
+    /// the next task.
     ///
     /// Must be called from the thread that "owns" this executor.
     /// @param timeout Maximum wall-clock time to spend draining.

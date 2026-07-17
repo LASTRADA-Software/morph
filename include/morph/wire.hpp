@@ -154,7 +154,12 @@ inline Envelope decode(std::string_view json) {
                                  std::to_string(kMaxEnvelopeBytes) + " bytes)");
     }
     Envelope env{};
-    if (auto errCode = glz::read_json(env, json)) {
+    // Ignore unknown keys so the envelope is forward-compatible: a newer peer may
+    // add fields a older peer does not know, and vice versa, without a hard parse
+    // failure. Duplicate keys are still accepted last-wins (glaze offers no reject
+    // option) — see docs/spec/wire.md "Parsing guarantees and hardening".
+    static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+    if (auto errCode = glz::read<kLenient>(env, json)) {
         throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }
     return env;

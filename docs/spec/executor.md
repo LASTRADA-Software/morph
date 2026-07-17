@@ -131,6 +131,21 @@ Internally `StrandExecutor` maintains a map of `ModelId → shared_ptr<Strand>`
 mutex, a pending queue, and a `running` flag. The executor also tracks an
 `_inFlight` counter (guarded by the map mutex) that the destructor waits on.
 
+**`_inFlight` is incremented with the *decision* to dispatch, not lazily.**
+`post()` increments `_inFlight` in the same `_mapMtx` critical section that flips
+`running` true and decides to schedule, before releasing the lock; the re-arm
+step in the strand task likewise increments under the `_mapMtx` it already holds,
+before the current run's own decrement. This closes an internal window that would
+otherwise exist if the increment were deferred to a later `_mapMtx` acquisition
+in `scheduleNext`: between releasing `_mapMtx` in `post()` and re-taking it to
+count the dispatch, `~StrandExecutor` could acquire `_mapMtx`, observe
+`_inFlight == 0`, and destroy the map before the dispatched lambda touched it.
+Because "decided to schedule" and "counted as in-flight" are now atomic under one
+lock, and the re-arm's increment precedes the prior run's decrement, `_inFlight`
+never dips to a spurious 0 across a scheduling hand-off. (This is distinct from
+the caller-discipline rule below, which concerns a `post()` that genuinely
+arrives after teardown has begun.)
+
 **The per-key serialisation invariant:** at most one live `Strand` exists per
 `ModelId`, and any strand that is (or becomes) `running` is the strand currently
 stored in the map for that key. This is what guarantees a key's tasks never

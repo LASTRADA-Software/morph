@@ -29,9 +29,18 @@ which action to call and which result fields to use without hardcoding anything.
 
 ## FixedString — an NTTP compile-time string
 
-`FixedString<N>` is a structural type that can appear as a non-type template
-parameter. It stores `N` characters (including the terminating null) in a
-`std::array<char, N>` and is constructed `consteval` from a string literal.
+`morph::forms::FixedString<N>` is a structural type that can appear as a
+non-type template parameter. It stores `N` characters (including the terminating
+null) in a `std::array<char, N>` and is constructed `consteval` from a string
+literal.
+
+It is an **alias** for the single shared definition `morph::detail::FixedString`
+(`include/morph/detail/fixed_string.hpp`). The units layer's `NamedQuantity`
+(see [quantity_type.md](quantity_type.md)) uses the *same* underlying type via
+its own `morph::units::detail::FixedString` alias, so there is exactly one
+`FixedString` definition in the codebase, not two look-alikes. `morph::forms::`
+and `morph::units::detail::` are kept as names for source compatibility and
+layer-local readability.
 
 | Member | Signature | Notes |
 |---|---|---|

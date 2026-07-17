@@ -286,9 +286,10 @@ state; the log is emitted only when the state itself is finally destroyed with a
 - [`executor.md`](executor.md) — `IExecutor` and its implementations; `cbExec`
   is the executor on which every callback is posted.
 - [`logger.md`](logger.md) — `morph::log::logError`, the error-handling sink
-  used by orphan detection when an error is abandoned. (There is no dedicated
-  `error_handling.md` spec; the orphan-logging contract lives in this file and
-  the logging sink in `logger.md`.)
+  used by orphan detection when an error is abandoned.
+- [`error_handling.md`](error_handling.md) — the framework-wide error-propagation
+  story; the orphan-logging contract detailed in this file is summarised there
+  alongside the executor and backend error paths.
 - [`bridge.md`](bridge.md) — `BridgeHandler<M>` produces `Completion<T>` from
   `execute()` and posts callbacks on the GUI executor.
 - [`backend.md`](backend.md) — backends resolve the pending `Completion` when a

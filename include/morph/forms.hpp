@@ -79,9 +79,15 @@ namespace morph::forms {
 
 /// @brief Concept: a field type with an internal empty state (`Quantity`,
 ///        `Choice`, `Timestamp`, or any user type exposing `hasValue()`).
+///
+/// `hasValue()` must be `noexcept`: `allRequiredEngaged` is `noexcept` and calls
+/// it on every member, so a throwing `hasValue()` would cross a `noexcept`
+/// boundary and call `std::terminate`. Requiring it here turns that into a
+/// compile-time rejection instead — a user field with a throwing `hasValue()`
+/// simply does not satisfy the concept.
 template <typename T>
 concept EmptyCapableField = requires(const T& field) {
-    { field.hasValue() } -> std::convertible_to<bool>;
+    { field.hasValue() } noexcept -> std::convertible_to<bool>;
 };
 
 namespace detail {

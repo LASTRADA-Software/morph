@@ -59,6 +59,7 @@
 #include <unordered_map>
 #endif
 
+#include "detail/fixed_string.hpp"
 #include "rational.hpp"
 
 namespace morph::units {
@@ -946,24 +947,13 @@ template <auto U, std::uint32_t Dec>
 namespace detail {
 
 /// @brief Fixed-capacity string usable as a non-type template parameter.
+///
+/// An alias for the shared `morph::detail::FixedString` — the same underlying
+/// type the forms layer's `Choice` uses (`morph::forms::FixedString`), so there
+/// is one definition, not two look-alikes.
 /// @tparam N Buffer length including the terminating null.
 template <std::size_t N>
-struct FixedString {
-    /// @brief Character storage (structural — enables NTTP use).
-    char data[N]{};
-
-    /// @brief Builds from a string literal.
-    /// @param source The source literal.
-    consteval FixedString(const char (&source)[N]) {
-        for (std::size_t i = 0; i < N; ++i) {
-            data[i] = source[i];
-        }
-    }
-
-    /// @brief The stored text (without the terminating null).
-    /// @return A view of the characters.
-    [[nodiscard]] constexpr std::string_view view() const { return std::string_view{data, N - 1}; }
-};
+using FixedString = ::morph::detail::FixedString<N>;
 
 }  // namespace detail
 
@@ -988,9 +978,14 @@ struct NamedQuantity : Quantity<U> {
     NamedQuantity(Base quantity) : Base{quantity.named(std::string{Name.view()})} {}
 
     /// @brief Names a floating-point reading.
+    ///
+    /// Not `noexcept`: unlike `Base::fromDouble`, this wraps the result in a
+    /// `NamedQuantity`, whose construction calls `named()` — and with
+    /// `MORPH_QUANTITY_PROVENANCE` enabled `named()` allocates an `ASTNode`
+    /// (`std::make_shared`), which can throw `std::bad_alloc`.
     /// @param raw The value to convert.
     /// @return The named quantity.
-    [[nodiscard]] static NamedQuantity fromDouble(double raw) noexcept { return NamedQuantity{Base::fromDouble(raw)}; }
+    [[nodiscard]] static NamedQuantity fromDouble(double raw) { return NamedQuantity{Base::fromDouble(raw)}; }
 };
 
 }  // namespace morph::units

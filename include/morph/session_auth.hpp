@@ -377,7 +377,11 @@ public:
             return std::unexpected(AuthError::Malformed);
         }
         SessionToken claims;
-        if (glz::read_json(claims, *json)) {
+        // Ignore unknown claims so a token minted by a newer issuer (with extra
+        // application claims) still verifies against an older verifier — the
+        // forward-compatibility the SessionToken doc promises. See security.md.
+        static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+        if (glz::read<kLenient>(claims, *json)) {
             return std::unexpected(AuthError::Malformed);
         }
         // A token MUST carry a strictly-positive expiry. A missing/zero (or

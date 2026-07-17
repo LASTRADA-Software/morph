@@ -104,6 +104,16 @@ public:
             if (!strand->running) {
                 strand->running = true;
                 schedule = true;
+                // Account for the strand lambda we are about to dispatch *while
+                // still holding _mapMtx*, before releasing it. If we deferred the
+                // ++_inFlight into scheduleNext (which re-takes _mapMtx), a window
+                // opened between releasing _mapMtx here and re-acquiring it there
+                // in which ~StrandExecutor could observe _inFlight == 0, destroy
+                // _strands, and let scheduleNext touch freed state. Incrementing
+                // under this lock makes "decided to schedule" and "counted as
+                // in-flight" atomic, so the destructor never sees a zero it should
+                // not.
+                ++_inFlight;
             }
         }
         if (schedule) {
@@ -119,11 +129,16 @@ private:
         bool running = false;
     };
 
+    /// @brief Dispatches one strand lambda onto the base executor.
+    ///
+    /// **Precondition:** the caller must have already incremented `_inFlight`
+    /// (under `_mapMtx`) to account for this dispatch. `post()` does so in the
+    /// same critical section that decides to schedule, and the re-entrant call
+    /// below does so under the `_mapMtx` it already holds. Keeping the increment
+    /// with the *decision* (rather than here) closes the window where
+    /// `~StrandExecutor` could observe `_inFlight == 0` between the decision and
+    /// this dispatch and destroy `_strands` out from under us.
     void scheduleNext(const std::shared_ptr<Strand>& strand, ModelId key) {
-        {
-            std::scoped_lock const lock{_mapMtx};
-            ++_inFlight;
-        }
         strand->base->post([this, strand, key] {
             std::function<void()> task;
             {
@@ -169,6 +184,14 @@ private:
                     if (iter != _strands.end() && iter->second == strand) {
                         _strands.erase(iter);
                     }
+                } else {
+                    // Account for the re-armed dispatch *before* releasing
+                    // _mapMtx (scheduleNext's precondition). Because this run's
+                    // own decrement below has not happened yet, _inFlight is
+                    // briefly 2 here and never dips to 0 across the handoff, so
+                    // ~StrandExecutor cannot slip in and destroy _strands between
+                    // the two runs.
+                    ++_inFlight;
                 }
             }
             if (more) {

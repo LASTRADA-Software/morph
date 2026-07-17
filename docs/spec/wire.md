@@ -1,7 +1,7 @@
 # The `wire` types — design
 
 `morph::wire` provides the JSON wire envelope and associated helpers used
-between any client and `morph::net::RemoteServer`. A single `Envelope` struct
+between any client and `morph::backend::RemoteServer`. A single `Envelope` struct
 carries all request and reply variants, discriminated by a `kind` string field.
 
 ## Contents
@@ -67,18 +67,20 @@ it internally.
 | Function | Signature | Notes |
 |---|---|---|
 | `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json`. Throws `std::runtime_error` on failure (should never happen for valid input). |
-| `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read_json`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or malformed envelope. **Does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
+| `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
 the C++ field names (`kind`, `callId`, `typeId`, `contextKey`, `modelId`,
 `modelType`, `actionType`, `body`, `message`, `session`). `decode` starts from a
 default-constructed `Envelope`, so any key absent from the input JSON keeps its
 default value — omitting fields a given `kind` does not use is expected and does
-not throw. glaze runs with its default options (`error_on_unknown_keys = true`),
-so an **unknown/extra** key, or syntactically malformed JSON, is a hard parse
-error that throws. Servers catch that thrown exception and turn it into an
-`"err"` reply rather than propagating it (see `RemoteServer::handle` /
-`handleInline`).
+not throw. `decode` reads with `error_on_unknown_keys = false`, so an
+**unknown/extra** key is **ignored** rather than rejected: a newer peer may add a
+field an older peer does not know (and vice versa) without breaking the parse —
+this is the wire's forward-compatibility contract. Syntactically malformed JSON
+is still a hard parse error that throws. Servers catch that thrown exception and
+turn it into an `"err"` reply rather than propagating it (see
+`RemoteServer::handle` / `handleInline`).
 
 ## Parsing guarantees and hardening
 
@@ -158,7 +160,7 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 | Symbol | Signature | Throws |
 |---|---|---|
 | `encode` | `std::string encode(const Envelope&)` | `std::runtime_error` on serialisation failure |
-| `decode` | `Envelope decode(std::string_view)` | `std::runtime_error` if the input exceeds `kMaxEnvelopeBytes` or is a syntactically malformed / unknown-key envelope. Duplicate keys do **not** throw (last-wins) — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
+| `decode` | `Envelope decode(std::string_view)` | `std::runtime_error` if the input exceeds `kMaxEnvelopeBytes` or is a syntactically malformed envelope. Unknown/extra keys are **ignored** (`error_on_unknown_keys = false`); duplicate keys do **not** throw (last-wins) — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 ### Constants
 

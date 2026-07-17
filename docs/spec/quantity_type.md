@@ -449,7 +449,11 @@ value on construction and slices losslessly back to a plain `Quantity` wherever
 one is expected — the name lives in the shared history, not as extra data on the
 value. The compile-time symbol is a `detail::FixedString` non-type template
 argument (a structural fixed-capacity buffer built from a string literal), which
-is what lets the name live in the type. `NamedQuantity` publicly derives from
+is what lets the name live in the type. `morph::units::detail::FixedString` is an
+alias for the single shared `morph::detail::FixedString`
+(`include/morph/detail/fixed_string.hpp`) — the *same* type the forms layer
+exposes as `morph::forms::FixedString` for `Choice` (see [choice.md](choice.md));
+there is one definition, not two. `NamedQuantity` publicly derives from
 `Quantity<U>` (declared-precision default) and offers four ways in — a **default
 constructor** (empty, then named), an **`optional<Rational>` constructor**, a
 **`Quantity<U>` (`Base`) constructor**, and a **`static fromDouble(double)`** —
@@ -984,8 +988,18 @@ the placeholder exists precisely to avoid writing shared work twice.
 - **[`choice.md`](choice.md)** and **[`datetime.md`](datetime.md)** —
   one-kind-of-empty siblings. `Choice<T>` and `Timestamp` share `Quantity`'s
   `std::optional`-backed single empty state and total `==` (empty == empty).
-  `Timestamp` differs on ordering — its `operator<=>` is total (empty sorts
-  before any engaged value) where `Quantity`'s *throws* on an empty operand.
+  **The family is deliberately *not* uniform on ordering — do not assume one
+  behaviour across all three:**
+
+  | Type | Ordering behaviour |
+  |---|---|
+  | `Quantity<U>` | `operator<=>` is defined but **throws `std::logic_error`** if either operand is empty (an empty quantity has no position on the number line). |
+  | `Timestamp` | `operator<=>` is **total** — defaulted over the underlying `std::optional`, so empty sorts *before* any engaged instant; never throws. |
+  | `Choice<T>` | **No `operator<=>` at all** — only `==`. A `Choice` is a selected option, not an orderable scalar, so relational comparison is intentionally absent (using `<` on one is a compile error). |
+
+  Equality (`==`) *is* uniform across the three; ordering is not. Code that
+  templates over "empty-capable field" types must therefore rely only on `==`
+  and `hasValue()`, never on a common `<`/`<=>`.
 
 ## Limitations
 

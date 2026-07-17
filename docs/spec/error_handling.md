@@ -95,7 +95,9 @@ most one handler:
 | `onError` registered before ready | Stored in `onErr`, fired when `setException` lands |
 | `onError` on an already-**error** state | Fired immediately (posted to `cbExec`) |
 | `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then`/`onError` after ready | Overwrites the stored slot; but if already fired, the slot is empty so nothing re-fires |
+| Second `then` after a value settled | Re-fires immediately with a **copy** of the value (the fire-now path posts to `cbExec` again — it does not overwrite an already-emptied slot) |
+| Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path) |
+| Second `then`/`onError` registered **before** ready | Overwrites the stored `onOk`/`onErr` slot; the last handler registered before the state settles is the one that fires |
 
 **Orphan logging.** If a `Completion` is destroyed while its state holds an
 unhandled error, `~CompletionState` logs it through `morph::log::logError`:
@@ -265,7 +267,7 @@ surface layers three separate policies:
 | `std::runtime_error("unknown action: <model>/<action>")` | `ActionDispatcher::dispatch` (`registry.hpp`) | `(modelType, actionType)` pair was never registered |
 | `std::runtime_error("unknown model type: <id>")` | `ModelRegistryFactory::create` (`registry.hpp`) | Model type-id was never registered — also surfaces as the `register` wire `err` |
 | `std::runtime_error` from `journal::replay` | `journal.hpp` | Replay hits an unregistered model type-id or an entry with an unregistered action type (it delegates to `dispatch`/`create`) |
-| `session::AuthError` (`enum { Malformed, BadSignature, Expired }`) | `TokenVerifier::verify` returns `std::expected<SessionToken, AuthError>` (`session_auth.hpp`) | `Malformed`: not `payload.sig`, bad base64url, or unparseable claims. `BadSignature`: MAC mismatch (forged/tampered). `Expired`: `expiresAtMs` in the past |
+| `session::AuthError` (`enum { Malformed, BadSignature, Expired, NotYetValid }`) | `TokenVerifier::verify` returns `std::expected<SessionToken, AuthError>` (`session_auth.hpp`) | `Malformed`: not `payload.sig`, bad/non-canonical base64url, or unparseable claims. `BadSignature`: MAC mismatch (forged/tampered). `Expired`: `expiresAtMs` missing/non-positive (`<= 0`) or in the past relative to the clock. `NotYetValid`: `issuedAtMs` is set and more than `kClockSkewMs` (60s) in the future |
 
 Note the auth asymmetry with the wire layer: `AuthError` is a **typed value**
 returned to the server's authorizer, never a thrown exception and never sent

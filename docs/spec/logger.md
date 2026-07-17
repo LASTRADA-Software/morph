@@ -249,8 +249,8 @@ during static teardown.
 
 | Member | Signature | Notes |
 |---|---|---|
-| default ctor | `ScopedLoggerOverride()` | Snapshots current sink + level; does not change them. Thread-safe: the snapshot reads are taken under the global mutex. |
-| explicit ctor | `ScopedLoggerOverride(std::function<void(LogLevel, std::string_view)>, LogLevel = debug)` | Installs the given sink and level; saves previous values. Thread-safe: snapshot-then-install is done under the global mutex. |
+| default ctor | `ScopedLoggerOverride()` | Snapshots current sink + level; does not change them. The **sink** snapshot/restore is serialised under the global mutex against `setLogger` and `detail::log`. The **level** is the lock-free atomic `minLevel`: it is read/written inside the same critical section but that does **not** serialise it against `setLogLevel`/`getLogLevel` (which never take the mutex), so a concurrent `setLogLevel` racing an override's save/restore is a last-writer-wins atomic race, not a mutually-exclusive one. Keep level changes on one thread while an override is live. |
+| explicit ctor | `ScopedLoggerOverride(std::function<void(LogLevel, std::string_view)>, LogLevel = debug)` | Installs the given sink and level; saves previous values. Same guarantee as above: the sink swap is mutex-serialised; the level swap is an atomic store not serialised against lock-free `setLogLevel`. |
 | dtor | `~ScopedLoggerOverride()` | Restores saved sink and level. Thread-safe. |
 | copy/move | deleted | Not copyable or movable. |
 
