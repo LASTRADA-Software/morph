@@ -151,22 +151,54 @@ on glaze to stamp** (`format`, `ExtUnits`). A renderer that ignores an `x-*` key
 still produces a usable form — it just loses the affordance that key carries
 (unit selector, field order, combo box, decimal step).
 
+### Where the keys physically land — `$ref` resolution is mandatory
+
+A `Quantity` (or any aggregate) member is **not** inlined into its property.
+glaze emits the member's type once into top-level `$defs` and the property node
+carries only a `$ref` pointing at it, e.g.:
+
+```json
+"$defs": {
+  "quantity_kg_per_m3": { "type": "object", "ExtUnits": { "unitAscii": "kg_per_m3", "unitUnicode": "kg/m³" }, ... }
+},
+"properties": {
+  "density": { "$ref": "#/$defs/quantity_kg_per_m3", "x-order": 2, "x-decimalPlaces": 1, "x-unitAlternatives": [ ... ] }
+}
+```
+
+The two kinds of annotation therefore live in **different nodes**, and a renderer
+must resolve the `$ref` to see both:
+
+- **`ExtUnits` lives in the `$def` of the unit type** — glaze stamps it onto the
+  `Quantity`'s type definition, not onto the property. Many properties of the
+  same unit type share one `$def` and therefore one `ExtUnits`.
+- **`x-order`, `x-decimalPlaces`, `x-unitAlternatives`, `x-optionsAction` /
+  `x-optionValue` / `x-optionLabel` are siblings of the `$ref` on the property**
+  — `mergeSchemaExtras` patches `dom["properties"][name]`, which is the property
+  node holding the `$ref`, never the referenced `$def`.
+
+The **"Where"** column below names the node each key is written to. A renderer
+resolves the `$ref` into `$defs`, then merges: per-property `x-*` keys (from the
+property node) win, and `ExtUnits` (plus glaze's `type`/bounds/`description`) come
+from the resolved def. The `examples/forms` QML renderer's `resolveProp` does
+exactly this dual read.
+
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
 | `required` | top-level (object) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>` or appears in `A::optionalFields`. Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
-| `x-order` | every property | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
-| `x-decimalPlaces` | `Quantity` property | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. |
-| `x-unitAlternatives` | `Quantity` property | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
+| `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
+| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path retags each submitted `Quantity` to this precision before storing it (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
+| `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
 | ↳ `id` | alternative entry | string | Stable ascii id of the alternative unit (`UnitMeta::id`). |
 | ↳ `display` | alternative entry | string | Human display text of the alternative unit (`UnitMeta::display`). |
 | ↳ `decimals` | alternative entry | non-negative integer | The alternative unit's own default decimals (`UnitMeta::defaultDecimals`) — the input step to use while that unit is selected. |
 | ↳ `num` | alternative entry | signed integer | Numerator of the exact **alternative→canonical** ratio. |
 | ↳ `den` | alternative entry | signed integer | Denominator of that ratio. `value_in_canonical = value_in_alternative · num / den`; `num`/`den` are the `Rational` numerator/denominator of the composed relation, so the recompute is exact (no floating-point drift). |
-| `x-optionsAction` | `Choice` property | string | Type id of the registered action whose result rows populate this field's combo box (executed with an empty body). |
-| `x-optionValue` | `Choice` property | string | Which result-row field carries the value submitted on the wire (default `"id"`). |
-| `x-optionLabel` | `Choice` property | string | Which result-row field carries the display label (default `"name"`). |
-| `format` | `Timestamp` property | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
-| `ExtUnits` | `Quantity` property | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer needs `ExtUnits.unitAscii`/`unitUnicode` to label the field and to anchor the unit selector. |
+| `x-optionsAction` | property node (sibling of `$ref`) | string | Type id of the registered action whose result rows populate this field's combo box (executed with an empty body). |
+| `x-optionValue` | property node (sibling of `$ref`) | string | Which result-row field carries the value submitted on the wire (default `"id"`). |
+| `x-optionLabel` | property node (sibling of `$ref`) | string | Which result-row field carries the display label (default `"name"`). |
+| `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
+| `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
 
 ### Versioning stance
 
@@ -193,6 +225,20 @@ are skipped — they cannot express "not filled in". Intended as the body of the
 action's `validate()` (the `ActionValidator` machinery picks it up
 automatically).
 
+The two exclusions are enforced by **different mechanisms**, and only one is an
+explicit test. A member is inspected at all only when it satisfies
+`EmptyCapableField` (`.hasValue()` exists); the sole explicit check inside the
+loop is `!declaredOptional<A>(name)` against `A::optionalFields`. A
+`std::optional<...>` member is *not* excluded by an `isStdOptional` test here —
+it is skipped because `std::optional` exposes `has_value()`, not `hasValue()`,
+so it never satisfies `EmptyCapableField` in the first place. (This differs from
+the `required`-array derivation in `mergeSchemaExtras`, which checks
+`isStdOptional` **explicitly** — see [Required-ness rule](#required-ness-rule).)
+The predicate is `noexcept` and `constexpr`, and it inspects only the action's
+**own top-level members** — the same flat-actions-only scope as schema
+generation ([Scope: flat actions only](#scope-flat-actions-only)); it does not
+recurse into nested aggregates.
+
 ## Support traits and helpers
 
 | Symbol | Kind | Purpose |
@@ -202,7 +248,8 @@ automatically).
 | `detail::HasOptionalFields<A>` | concept | `true` when `A` has a `static constexpr` iterable `optionalFields`. |
 | `detail::declaredOptional<A>(name)` | constexpr function | `true` when `name` appears in `A::optionalFields`. |
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
-| `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction` etc. Called by `schemaJson<A>()`. |
+| `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction` etc. onto the property nodes. Called by `schemaJson<A>()`. |
+| `reconcileDeclaredPrecision<A>(action)` | function | Retags every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`), so a decoded wire value matches the schema's advertised `x-decimalPlaces`. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on the `executeJson` dispatch path (`bridge.hpp`). |
 
 ## API reference
 
@@ -292,19 +339,47 @@ caller receives.
 
 ### Security / trust boundary
 
-`required`-ness and `allRequiredEngaged` gate the **client only**. The morph
-dispatcher runs **no server-side validators** before invoking a handler — it
-does not consult the schema's `required` array and does not call `validate()`.
-Consequently a hand-crafted wire payload that omits or blanks a "required" field
-is accepted by the wire/dispatch layer and reaches the handler unmodified: the
-`required` array and `allRequiredEngaged` are **UX affordances, not a security or
-integrity boundary**. Model authors must therefore **re-check required
+Validation is enforced on the **client bridge dispatch path** but **not** on the
+**server-side wire dispatcher**. Two distinct code paths carry an action to a
+handler:
+
+- **`BridgeHandler::executeJson` → `ActionExecuteRegistry`** (the local /
+  client-side path a schema-driven GUI uses). This path **now enforces**
+  `ActionValidator<Action>::ready` after decoding and before invoking the handler
+  (see [bridge.md](bridge.md)): an action that fails `validate()` is rejected with
+  an error, never executed. It also retags `Quantity` fields to their declared
+  precision (below). So on this path the schema's `required` array and the
+  handler agree by construction.
+- **`RemoteServer` / `ActionDispatcher`** (the server-side wire path, remote
+  mode). This dispatcher runs **no** validators — it does not consult the
+  schema's `required` array and does not call `validate()`. A hand-crafted wire
+  payload that omits or blanks a "required" field reaches the handler unmodified.
+
+So `required`-ness and `allRequiredEngaged` are a **UX affordance and a
+client-bridge gate, not a wire-level security boundary**. A model that may be
+reached over the remote wire path must therefore still **re-check required
 quantities inside the handler**. The `examples/forms` model does exactly this —
 its `execute(RecordMeasurement)` calls `action.validate()` (the same
-`allRequiredEngaged` predicate the client gates on) and throws
-`std::invalid_argument` if it fails, so schema, form, and server agree by
-construction rather than by trust. See [security.md](security.md) for the
-dispatcher's validation stance.
+`allRequiredEngaged` predicate) and throws `std::invalid_argument` if it fails,
+so schema, form, and server agree regardless of which dispatch path was used. See
+[security.md](security.md) for the wire dispatcher's validation stance.
+
+### Advertised precision is enforced on dispatch
+
+`x-decimalPlaces` advertises a field's **declared** precision
+(`Quantity<U, Dec>::declaredDecimals`), but a `Quantity` on the wire carries its
+own runtime `dp`, which a client may set to anything. On the client bridge
+dispatch path (`executeJson` → `ActionExecuteRegistry`) these are **reconciled**:
+after decoding and before dispatch, `morph::forms::reconcileDeclaredPrecision`
+retags every `Quantity` member of the action to `declaredPrecision()` (an exact
+`Rational` re-rounding — an empty `Quantity` stays empty), so the value the
+handler stores is at the precision the schema advertised, not at the client's
+submitted `dp`. This makes `x-decimalPlaces` an enforced contract on that path
+rather than an advisory hint. The reconciliation is a no-op for actions with no
+`Quantity` members and for action types glaze cannot reflect. As with validation,
+this covers the client bridge path only — the server-side wire dispatcher
+(`ActionDispatcher`) does not reconcile precision, so a model reached over the
+remote wire must not assume the incoming `dp` equals its declared precision.
 
 ### One cached schema per type — no localisation
 
