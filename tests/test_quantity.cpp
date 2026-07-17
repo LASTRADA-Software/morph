@@ -282,6 +282,42 @@ TEST_CASE("Quantity::formatting", "[quantity]") {
     CHECK(std::format("{}", Tariff::fromDouble(0.3)) == "0.3EUR/kWh");
 }
 
+TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[quantity][format]") {
+    using morph::units::detail::formatRationalDecimal;
+
+    // Terminating decimals render exactly regardless of precision.
+    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{8}, DecimalPlaces{3}}) == "0.125");
+    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{4}, DecimalPlaces{4}}) == "0.25");
+    CHECK(formatRationalDecimal(Rational{Numerator{2}, Denominator{1}, DecimalPlaces{3}}) == "2");
+    CHECK(formatRationalDecimal(Rational{Numerator{136}, Denominator{100}, DecimalPlaces{2}}) == "1.36");
+
+    // Non-terminating decimals: round-half-away-from-zero at DecimalPlaces.
+    // 1/3 at 18 places is eighteen 3s (no trailing 5 leaking in from a double).
+    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{3}, DecimalPlaces{18}}) ==
+          "0.333333333333333333");
+    // 2/3 at 4 places rounds up: 0.66666.. -> 0.6667.
+    CHECK(formatRationalDecimal(Rational{Numerator{2}, Denominator{3}, DecimalPlaces{4}}) == "0.6667");
+    // 1/6 = 0.16666.. at 3 places rounds to 0.167.
+    CHECK(formatRationalDecimal(Rational{Numerator{1}, Denominator{6}, DecimalPlaces{3}}) == "0.167");
+
+    // Exact half rounds away from zero.
+    CHECK(formatRationalDecimal(Rational{Numerator{5}, Denominator{1000}, DecimalPlaces{2}}) == "0.01");
+
+    // Large exact integers survive without the 2^53 double-mantissa error.
+    // 9007199254740993 == 2^53 + 1 (the classic non-representable double).
+    CHECK(formatRationalDecimal(
+              Rational{Numerator{9007199254740993}, Denominator{1}, DecimalPlaces{3}}) == "9007199254740993");
+
+    // Negatives: rounding is symmetric (away from zero) and the sign is kept.
+    CHECK(formatRationalDecimal(Rational{Numerator{-1}, Denominator{3}, DecimalPlaces{18}}) ==
+          "-0.333333333333333333");
+    CHECK(formatRationalDecimal(Rational{Numerator{-2}, Denominator{3}, DecimalPlaces{4}}) == "-0.6667");
+    CHECK(formatRationalDecimal(Rational{Numerator{-42}, Denominator{10}, DecimalPlaces{3}}) == "-4.2");
+
+    // Rounding can carry into a larger integer part.
+    CHECK(formatRationalDecimal(Rational{Numerator{9999}, Denominator{10000}, DecimalPlaces{3}}) == "1");
+}
+
 TEST_CASE("Quantity::conversion - ratio, chaining, reverse", "[quantity]") {
     // Direct ratio (W -> kW) and reverse (kW -> W).
     CHECK((*static_cast<Kilowatt>(Watt::fromDouble(2000.0))).toDouble() == 2.0);

@@ -68,18 +68,110 @@ namespace detail {
 /// @brief Renders a `Rational` as a shortest exact decimal at its own
 ///        `DecimalPlaces` (trailing zeros and a bare point trimmed) — the form
 ///        `Quantity` formatting and `equation()` use everywhere.
+///
+/// The decimal is produced by **exact integer long division** of the canonical
+/// `numerator/denominator` to `decimalPlaces` digits — the value never passes
+/// through `double`, so both large exact integers (beyond the 2^53 double
+/// mantissa) and non-terminating quotients render without floating-point drift.
+/// Non-terminating quotients are rounded **half away from zero** at
+/// `decimalPlaces` (matching `Rational::toDouble`'s `std::round`), and the
+/// rounding carry is allowed to propagate into the integer part. Trailing zeros
+/// and a bare decimal point are then trimmed to the shortest form.
+///
+/// The division is a **digit-at-a-time** long division: the integer part comes
+/// from `|numerator| / denominator` in 64-bit, and each fractional digit from
+/// `remainder * 10 / denominator`, carrying the exact integer remainder forward.
+/// `remainder * 10` can exceed 64 bits when the denominator is near `INT64_MAX`,
+/// so each fractional step is computed with `mulTenDivMod` — a portable helper
+/// that never forms `remainder * 10` at all: since the quotient digit is in
+/// 0..9, it accumulates `remainder` ten times, reducing modulo the denominator
+/// as it goes, so every step stays within 64 bits (no 128-bit type, no
+/// `__udivti3` runtime dependency) and behaves identically under MSVC and clang-cl.
 /// @param value The rational to render.
 /// @return The decimal string (`"2"`, `"0.3"`, `"1.36"`, `"-4.2"`).
 [[nodiscard]] inline std::string formatRationalDecimal(const morph::math::Rational& value) {
-    // `{:.Nf}` with N >= 1 (DecimalPlaces is clamped to [1, ...]) always emits a
-    // decimal point, so `dot` is always found.
-    std::string text = std::format("{:.{}f}", value, static_cast<std::size_t>(value.decimalPlaces.value));
-    auto const dot = text.find('.');
-    std::size_t last = text.find_last_not_of('0');
-    if (last == dot) {
-        --last;
+    // Work on magnitudes; the sign is reattached at the end. The canonical
+    // invariant guarantees denominator > 0, so only the numerator carries sign.
+    bool const negative = value.numerator < 0;
+    // Negating INT64_MIN would overflow int64; widen before taking the absolute
+    // value so the magnitude is always representable.
+    auto const num = negative ? static_cast<std::uint64_t>(-static_cast<std::int64_t>(
+                                    static_cast<std::uint64_t>(value.numerator)))
+                              : static_cast<std::uint64_t>(value.numerator);
+    auto const den = static_cast<std::uint64_t>(value.denominator);
+    auto const places = static_cast<std::uint32_t>(value.decimalPlaces.value);
+
+    // Integer part and the exact running remainder (both < den, so 64-bit safe).
+    std::uint64_t const integerPart = num / den;
+    std::uint64_t remainder = num % den;
+
+    // floor(rem*10 / den) and (rem*10 % den) with `rem < den`. `rem*10` can need
+    // up to 67 bits, but we never form it: the digit q = floor(rem*10/den) is in
+    // 0..9 (because rem < den), so we compute it by adding `rem` ten times and
+    // reducing modulo `den` as we go. The running accumulator stays below `den`
+    // before each add and below `2*den <= 2^64` after, so every step is exact in
+    // 64-bit with no overflow and no 128-bit type — identical under MSVC and
+    // clang-cl (whose MSVC runtime lacks the `__udivti3` 128-bit divide helper).
+    auto const mulTenDivMod = [den](std::uint64_t rem, std::uint64_t& quotientDigit) -> std::uint64_t {
+        std::uint64_t acc = 0;
+        std::uint64_t q = 0;
+        for (int k = 0; k < 10; ++k) {
+            acc += rem;  // acc < den before the add (rem < den), so acc < 2*den <= 2^64 after
+            while (acc >= den) {
+                acc -= den;
+                ++q;
+            }
+        }
+        quotientDigit = q;
+        return acc;
+    };
+
+    std::string frac;
+    frac.reserve(places);
+    for (std::uint32_t i = 0; i < places; ++i) {
+        std::uint64_t digit = 0;
+        remainder = mulTenDivMod(remainder, digit);
+        frac.push_back(static_cast<char>('0' + static_cast<int>(digit)));
     }
-    text.erase(last + 1);
+
+    // Round half away from zero at `places`: if twice the leftover remainder is
+    // >= den, the truncated result rounds up. Propagate the carry through the
+    // fractional digits and, if it reaches the top, into the integer part.
+    std::uint64_t roundedInteger = integerPart;
+    if (remainder * 2 >= den) {
+        bool carry = true;
+        for (std::size_t i = frac.size(); i-- > 0 && carry;) {
+            if (frac[i] == '9') {
+                frac[i] = '0';
+            } else {
+                ++frac[i];
+                carry = false;
+            }
+        }
+        if (carry) {
+            ++roundedInteger;
+        }
+    }
+
+    std::string text = std::to_string(roundedInteger);
+    if (places > 0) {
+        text.push_back('.');
+        text += frac;
+    }
+
+    // Trim trailing zeros and a now-bare decimal point (shortest form).
+    if (auto const dot = text.find('.'); dot != std::string::npos) {
+        std::size_t last = text.find_last_not_of('0');
+        if (last == dot) {
+            --last;
+        }
+        text.erase(last + 1);
+    }
+
+    // A rounded-to-zero magnitude must not print as "-0".
+    if (negative && text != "0") {
+        text.insert(text.begin(), '-');
+    }
     return text;
 }
 
@@ -176,11 +268,45 @@ struct RatioResult {
     morph::math::Rational ratio{};
 };
 
+/// @brief Compile-time guard that a `UnitRelation::fromTo` ratio is strictly
+///        positive (both numerator and denominator > 0).
+///
+/// A `UnitRelation` declares `1 from == fromTo · to`; a zero or negative ratio
+/// is physically meaningless and, worse, silently corrupts conversions: a zero
+/// numerator makes the reverse edge's denominator `0`, which `Rational` clamps
+/// to `1` (see rational.hpp), and a negative ratio inverts the direction of the
+/// conversion — either way `den:0`/garbage leaks into `x-unitAlternatives`.
+///
+/// This is invoked from the `consteval` `conversionRatio` search for every
+/// relation edge it touches, so a bad ratio is a **compile error** (the
+/// `throw` in a constant-evaluation context is ill-formed) rather than silent
+/// runtime corruption. `fromTo` is a canonicalised `Rational` whose denominator
+/// is already `> 0` by the type invariant, so the failing case in practice is a
+/// numerator `<= 0` (a `0`/negative ratio the application declared).
+/// @param ratio The declared `fromTo` ratio to validate.
+/// @return `true` when @p ratio is strictly positive; otherwise the call is
+///         ill-formed in a constant-evaluation context (a compile error).
+[[nodiscard]] consteval bool requirePositiveRatio(const morph::math::Rational& ratio) {
+    // Rational canonicalises so denominator > 0 always; the numerator carries
+    // the sign and can be zero/negative if the application declared a bad ratio.
+    if (ratio.numerator <= 0 || ratio.denominator <= 0) {
+        throw "UnitRelation::fromTo must be strictly positive (numerator > 0 and denominator > 0)";
+    }
+    return true;
+}
+
 /// @brief Reciprocal of a strictly-positive rational (swaps numerator and
 ///        denominator), keeping its precision tag.
+///
+/// Guards, at compile time, that @p value is strictly positive: a zero or
+/// negative input would otherwise produce a degenerate reciprocal (a `0`
+/// denominator that `Rational` clamps to `1`, or a sign-flipped ratio). Because
+/// this is `consteval`, a non-positive @p value is a **compile error** at the
+/// relation-consuming call site rather than silent corruption.
 /// @param value A strictly-positive rational.
 /// @return `1 / value`.
-[[nodiscard]] consteval morph::math::Rational reciprocal(const morph::math::Rational& value) noexcept {
+[[nodiscard]] consteval morph::math::Rational reciprocal(const morph::math::Rational& value) {
+    requirePositiveRatio(value);
     return morph::math::Rational{morph::math::Numerator{value.denominator},
                                  morph::math::Denominator{value.numerator}, value.decimalPlaces};
 }
@@ -219,11 +345,12 @@ template <typename E>
             bool touches = false;
             if (relation.from == current) {
                 neighbour = relation.to;
+                requirePositiveRatio(relation.fromTo);  // compile error on a bad ratio
                 edge = relation.fromTo;
                 touches = true;
             } else if (relation.to == current) {
                 neighbour = relation.from;
-                edge = reciprocal(relation.fromTo);
+                edge = reciprocal(relation.fromTo);  // reciprocal also guards positivity
                 touches = true;
             }
             if (!touches) {

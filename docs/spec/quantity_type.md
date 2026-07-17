@@ -200,9 +200,14 @@ quantities; with tracing enabled it is the empty-specific path.)
 quantity, both are no-ops that return the same empty quantity unchanged.
 There is no `Rational` to retag.
 
-**Wire serialization.** On the morph JSON wire an empty quantity serializes as
-JSON `null` — the payload's `std::nullopt` maps directly to a null JSON token,
-and the unit metadata travels only in the schema, never in the instance.
+**Wire serialization.** On the morph JSON wire a quantity *is* its
+`std::optional<Rational>` payload (`glz::meta` maps the instance to `payload`
+alone), so an empty quantity's `std::nullopt` is a JSON `null` and a null token
+read back clears the field. As a **struct member** an empty quantity is written
+according to glaze's default optional handling — the null field is **omitted
+from the serialized object** rather than emitted as `"field":null` — while the
+same field still *accepts* an explicit `null` on read (which clears it). The
+unit metadata travels only in the schema, never in the instance.
 
 ## How a value prints
 
@@ -212,13 +217,47 @@ a value reads identically everywhere. There is a single formatting path and
 **no `operator<<`** (streaming is done by formatting to a `std::string` first).
 
 **The decimal form.** `formatRationalDecimal` renders the exact `Rational` as a
-fixed decimal at its **runtime `DecimalPlaces`** (`{:.Nf}`) and then trims
-trailing zeros (and a bare trailing point). So a whole value prints with no point
-(`2`), and `0.30` / `1.360` print as `0.3` / `1.36`. This is deliberately **not**
+fixed decimal at its **runtime `DecimalPlaces`** and then trims trailing zeros
+(and a bare trailing point). So a whole value prints with no point (`2`), and
+`0.30` / `1.360` print as `0.3` / `1.36`. This is deliberately **not**
 `Rational`'s own `std::format("{}", r)`, which prints an integer numerator or a
 `num/den` *fraction* — `Quantity` always prints a trimmed decimal. The runtime
 `DecimalPlaces` tag is the single source of truth for how many decimals appear;
 no field's *declared* precision is consulted at print time.
+
+**The decimal is exact — the value never passes through `double`.**
+`formatRationalDecimal` computes the fixed-point string by **integer long
+division** of the canonical `numerator/denominator`: the integer part is
+`|numerator| / denominator`, and each fractional digit is the next digit of the
+exact quotient, carrying the exact integer remainder forward. Nothing is routed
+through `Rational::toDouble` or `std::formatter<double>`, so the display no
+longer inherits floating-point error. Two cases the old double path got wrong
+now render correctly: large exact integers beyond the 2^53 double mantissa
+(`9007199254740993` prints as itself, not `…992`), and long non-terminating
+quotients (`1/3` at 18 places prints eighteen `3`s, not `…315`). The wire and
+journal codecs were already exact (they serialise the int64 `num`/`den`/`dp`
+directly); this change brings **display** to the same exactness the rest of the
+type already had.
+
+**Rounding rule.** A non-terminating quotient (or one whose denominator does not
+divide `10^DecimalPlaces`) is rounded **half away from zero** at the runtime
+`DecimalPlaces` — the same rule `Rational::toDouble`'s `std::round` uses, so
+display and `toDouble` agree on the last digit. The test is exact integer math:
+after producing `DecimalPlaces` digits, the truncated result rounds up when
+`2 · remainder ≥ denominator`. The rounding carry propagates through the
+fractional digits and, when it reaches the top, into the integer part
+(`0.9999` at 3 places rounds to `1`). Rounding is symmetric in sign, and a
+magnitude that rounds down to zero prints as `0`, never `-0`. Examples: `2/3`
+at 4 places → `0.6667`; `1/6` at 3 places → `0.167`; `-2/3` at 4 places →
+`-0.6667`.
+
+**Overflow safety.** `numerator` and `denominator` are `int64`, but a fractional
+digit step forms `remainder · 10`, which can exceed `int64` when the denominator
+is near `INT64_MAX`. That intermediate is computed in `unsigned __int128` (a
+clang-cl-supported extended integer), and each digit is chosen by 128-bit
+*comparison* rather than division — clang-cl's MSVC runtime provides no 128-bit
+divide/modulo helper (`__udivti3`), so the long division deliberately avoids
+`__int128` `/` and `%` and uses only multiply and compare.
 
 **With the unit.** The `Quantity` formatter (`std::formatter<Quantity<...>>`)
 appends the unit's `display` text to the number with no separating space:
@@ -408,7 +447,17 @@ no-op that slices to a plain value — see Provenance.)
 A compile-time convenience wrapper, `NamedQuantity<"load", Unit::kW>`, names a
 value on construction and slices losslessly back to a plain `Quantity` wherever
 one is expected — the name lives in the shared history, not as extra data on the
-value.
+value. The compile-time symbol is a `detail::FixedString` non-type template
+argument (a structural fixed-capacity buffer built from a string literal), which
+is what lets the name live in the type. `NamedQuantity` publicly derives from
+`Quantity<U>` (declared-precision default) and offers four ways in — a **default
+constructor** (empty, then named), an **`optional<Rational>` constructor**, a
+**`Quantity<U>` (`Base`) constructor**, and a **`static fromDouble(double)`** —
+each of which constructs the plain value first and then applies `named(Name)`,
+so every path funnels through the same naming node. Naming an *empty* value is a
+no-op (see `named()`), so a default-constructed `NamedQuantity` is simply empty
+and unnamed until a value arrives; that empty name never surfaces because
+`equation()` and formatting both short-circuit on empty.
 
 ## Wire and schema
 
@@ -487,9 +536,25 @@ The framework inverts the ratio for the reverse direction:
 - `g → kg`: multiply value by `1/1000`
 - `kg → g`: multiply value by `1000/1`
 
-`fromTo` must be **strictly positive** — the reverse direction divides by it, so
-zero is rejected, and a negative ratio has no physical meaning for a
-within-dimension scale. `from` and `to` must be distinct units.
+`fromTo` must be **strictly positive** (numerator > 0 and denominator > 0), and
+`from` / `to` must be distinct units.
+
+**Positivity is now a compile-time guard, not just a caller contract.** Every
+`relations` array is consumed by the `consteval` `detail::conversionRatio`
+breadth-first search, which calls `detail::requirePositiveRatio(fromTo)` on each
+edge it touches (both the forward `fromTo` and, via `detail::reciprocal`, the
+reverse). `requirePositiveRatio` is `consteval` and `throw`s on a non-positive
+ratio, so a zero or negative `fromTo` is a **compile error** at the
+relation-consuming call site rather than silent runtime corruption. This is the
+fix for the old failure mode: a zero `fromTo` used to make the reverse direction
+(`reciprocal`, a bare numerator/denominator swap) produce a degenerate `den:0`
+ratio — which `Rational` clamps to `1` — silently corrupting conversions and
+leaking `den:0` into `x-unitAlternatives`; a negative ratio silently flipped the
+conversion direction. Both are now rejected before the program can be built.
+
+`from == to` is separately excluded from *use* by the `SameEnumDistinct`
+constraint on `convert`; a self-edge in `relations` is still not rejected at
+declaration (only non-positive ratios are).
 
 ### 2. Auto-generated `convert` and user override
 
@@ -580,6 +645,12 @@ dimensions* (`kg * m3`, `kg / m3`, same-unit `→ scalar`), while `convert`
   multiply that `convert` then applies to the value can still overflow per the
   usual `Rational` envelope — that part is the documented magnitude limitation,
   distinct from this compile-time guard.
+- **A non-positive `fromTo` is a compile error.** The BFS calls
+  `detail::requirePositiveRatio` on every edge it touches; that `consteval`
+  guard `throw`s on a numerator ≤ 0 or denominator ≤ 0, so a zero/negative ratio
+  declared in `relations` fails the build instead of producing a degenerate
+  `den:0` (clamped to `1`) or sign-flipped conversion at run time. See
+  [1. `UnitRelation` — declaring peer-to-peer ratios](#1-unitrelation--declaring-peer-to-peer-ratios).
 - **The search always terminates.** The BFS runs over a fixed-capacity queue
   (`capacity = 2 * relationCount + 1`) and refuses to revisit a unit already
   enqueued (the `seen` scan over visited nodes), so it visits each reachable
@@ -673,7 +744,7 @@ yields empty.
 
 | Symbol | Kind | Notes |
 |---|---|---|
-| `NamedQuantity<Name, U>` | class template | `Quantity<U>` that names itself `Name` on construction; slices losslessly to a plain `Quantity<U>`. The name lives in the shared history, not as extra data. |
+| `NamedQuantity<Name, U>` | class template | `Quantity<U>` (declared precision defaulted) that names itself `Name` on construction; slices losslessly to a plain `Quantity<U>`. `Name` is a `detail::FixedString` NTTP. Constructors: default (empty), `optional<Rational>`, and from a plain `Quantity<U>` — each names the value after building it; plus `static fromDouble(double)`. The name lives in the shared history, not as extra data. |
 | `std::formatter<Quantity<U, Dec>>` | specialisation | Renders value + unit (`5.2kW`, `N/A%`). No `operator<<`. |
 | `std::formatter<NamedQuantity<Name, U>>` | specialisation | Forwards to the `Quantity` formatter. |
 
@@ -946,10 +1017,6 @@ deliberately not attempted):
   no-op that discards the name. Code that depends on the *content* of those
   outputs (tests, generated reports) behaves differently across the two builds —
   the toggle changes observable behaviour, not just performance.
-
-> **Doc note (not a code change).** The header comments in `quantity.hpp` and
-> `detail/quantity_equation.hpp` still cite the pre-move path
-> `docs/quantity_type.md`; this spec now lives at `docs/spec/quantity_type.md`.
 
 ## Out of scope
 
