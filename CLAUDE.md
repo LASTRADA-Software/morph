@@ -1,5 +1,15 @@
 # CLAUDE.md
 
+## Design specs (`docs/spec/`)
+
+One file per public type or subsystem. There is **no size limit** on spec
+files — a spec should be as long as precision requires. These are the
+**authoritative design reference** — before making any change to a public type
+or subsystem, read its spec file first. The spec captures the reasoning,
+invariants, API surface, and design decisions that the code alone doesn't
+document. If a change invalidates any part of a spec, update the spec (not
+the other way around).
+
 ## Feature documentation (`docs/superpowers/`)
 
 One file per feature, compressed reference documentation:

@@ -4,6 +4,8 @@
 #include <morph/executor.hpp>
 #include <morph/registry.hpp>
 #include <morph/remote.hpp>
+#include <morph/session.hpp>
+#include <morph/session_auth.hpp>
 #include <morph/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -239,4 +241,99 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: register failure raises excep
     auto decoded = morph::wire::decode(reply);
     REQUIRE(decoded.kind == "err");
     REQUIRE(decoded.message == "no models allowed");
+}
+
+// ── morph::backend::RemoteServer::handleInline: execute is rejected up front ────────────────
+
+TEST_CASE("morph::backend::RemoteServer::handleInline: execute envelope replies with err, not silently dropped",
+          "[remote][handleInline]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 5;
+    req.modelId = 1;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":3})";
+
+    auto reply = morph::wire::decode(server->handleInline(morph::wire::encode(req)));
+    REQUIRE(reply.kind == "err");
+    REQUIRE(reply.callId == 5U);
+    REQUIRE(reply.message.find("execute") != std::string::npos);
+}
+
+TEST_CASE("morph::backend::RemoteServer::handleInline: malformed input falls through to the decode-error reply",
+          "[remote][handleInline]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto reply = morph::wire::decode(server->handleInline("not json"));
+    REQUIRE(reply.kind == "err");
+}
+
+// ── morph::backend::RemoteServer::dispatchExecute: authenticate() overrides principal ───────
+
+struct WhoAmI {};
+struct PrincipalEchoModel {
+    std::string execute(const WhoAmI&) const {
+        const auto* ctx = morph::session::current();
+        return (ctx != nullptr) ? ctx->principal : std::string{};
+    }
+};
+
+template <>
+struct morph::model::ModelTraits<PrincipalEchoModel> {
+    static constexpr std::string_view typeId() { return "RX_PrincipalEchoModel"; }
+};
+template <>
+struct morph::model::ActionTraits<WhoAmI> {
+    using Result = std::string;
+    static constexpr std::string_view typeId() { return "RX_WhoAmI"; }
+    static std::string toJson(const WhoAmI&) { return "{}"; }
+    static WhoAmI fromJson(std::string_view) { return {}; }
+    static std::string resultToJson(const std::string& res) { return "\"" + res + "\""; }
+    static std::string resultFromJson(std::string_view json) {
+        std::string out;
+        (void)glz::read_json(out, json);
+        return out;
+    }
+};
+
+TEST_CASE(
+    "morph::backend::RemoteServer::dispatchExecute: a verifying authorizer overrides the client-asserted principal",
+    "[remote][auth]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::model::detail::ModelRegistryFactory registry;
+    morph::model::detail::ActionDispatcher dispatcher;
+    registry.registerModel<PrincipalEchoModel>("RX_PrincipalEchoModel");
+    dispatcher.registerAction<PrincipalEchoModel, WhoAmI>("RX_PrincipalEchoModel", "RX_WhoAmI");
+
+    const std::string secret = "hmac-key";
+    auto authz = std::make_shared<morph::session::SigningAuthorizer>(secret);
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, dispatcher, registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_PrincipalEchoModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_PrincipalEchoModel";
+    req.actionType = "RX_WhoAmI";
+    req.body = "{}";
+    req.session.principal = "spoofed-client-claim";
+    req.session.token =
+        morph::session::TokenIssuer{secret}.issue(morph::session::SessionToken{.principal = "real-verified-user"});
+
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "ok");
+    REQUIRE(waiter.env.body == "\"real-verified-user\"");
 }

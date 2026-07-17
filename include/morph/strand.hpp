@@ -3,13 +3,16 @@
 #pragma once
 #include <condition_variable>
 #include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <unordered_map>
 
 #include "executor.hpp"
+#include "logger.hpp"
 
 namespace morph::exec::detail {
 
@@ -110,8 +113,13 @@ private:
             }
             try {
                 task();
-            // NOLINTNEXTLINE(bugprone-empty-catch) — task exceptions are intentionally discarded
+            } catch (const std::exception& exc) {
+                // The strand is where Model::execute() actually runs; a throw
+                // here must not stall the strand or vanish — log and continue so
+                // the next queued task for this model still runs.
+                ::morph::log::logError("[strand] task threw: " + std::string{exc.what()});
             } catch (...) {
+                ::morph::log::logError("[strand] task threw unknown exception");
             }
             // Decide "keep running vs. drain-and-erase" atomically across the
             // map slot and the strand's pending queue. Doing it in two steps

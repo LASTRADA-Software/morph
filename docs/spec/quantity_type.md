@@ -12,26 +12,42 @@ itself:
 3. **How it was computed** — its *derivation*. A computed quantity can render
    itself as an equation with named variables, shown symbolically and evaluated.
 
-The third point is the reason the type exists rather than a plain `double`. In
-a domain application (financial, engineering, metering) the answer alone is not
-enough — you have to be able to show the working: *why* is the density
-`0.83 kg/m³`, *which* inputs fed the surplus, *what* was 3 % of what. A
+The first two points — an exact value, in a known unit, that may be empty — are
+the **core contract** and the reason `Quantity` exists rather than a plain
+`double`: domain math must be exact, units must not mix by accident, and "not
+entered" must be a first-class state rather than a sentinel. That core is always
+present, whatever the build.
+
+The third point — **provenance** — is an *opt-in feature layered on top of the
+core*. It is on by default but compiled out entirely by
+`MORPH_QUANTITY_PROVENANCE=0` (see *Provenance*), and it is what makes a domain
+application reach for `Quantity` over a bare exact number: the answer alone is
+often not enough — you have to show the working: *why* is the density
+`0.83 kg/m³`, *which* inputs fed the surplus, *what* was 3 % of what. A traced
 `Quantity` carries that explanation with the value instead of reconstructing it
 after the fact.
+
+> **Reading this spec.** Much of this document describes provenance — the larger
+> surface, but the optional layer. If you only need the core, read *Units are
+> types*, *Exact value and precision*, *How a value prints*, and *Wire and
+> schema*; everything under *Provenance*, *Named symbols*, and the `equation()`
+> rules is skippable when tracing is off.
 
 ## Contents
 
 - [Units are types](#units-are-types)
 - [Exact value and precision](#exact-value-and-precision)
   ([Empty state](#empty-state--stdnullopt-behavior))
+- [How a value prints](#how-a-value-prints)
 - [Provenance — a build-time toggle](#provenance--a-build-time-toggle-on-by-default)
 - [Named symbols](#named-symbols)
-- [Formatting](#formatting--stdformatter-only)
 - [Wire and schema](#wire-and-schema)
 - [Unit conversion — `UnitRelation` and `convert`](#unit-conversion--unitrelation-and-convert)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Usage example](#usage-example)
+- [Cross-references](#cross-references)
+- [Limitations](#limitations)
 - [Out of scope](#out-of-scope)
 
 ## Units are types
@@ -43,7 +59,7 @@ mixed accidentally. The application supplies:
   places, and a flat list of **peer-to-peer `UnitRelation` entries** that
   declare exact conversion ratios between same-dimension units with a
   `morph::math::Rational`. Each entry `{Unit::g, Unit::kg, Rational{1, 1000}}`
-  generate a `convert` in both directions; a `UnitTraits<E>::convert` static
+  generates a `convert` in both directions; a `UnitTraits<E>::convert` static
   takes precedence when the conversion is not a simple ratio (e.g. Celsius ↔
   Fahrenheit).
 - a `consteval` unit algebra (`operator*` / `operator/` on the enum) so
@@ -162,9 +178,13 @@ side first if you mean to compare across units. Comparison is on the exact value
 alone and **ignores the runtime `DecimalPlaces` tag** — two engaged quantities
 with equal value but different precision compare equal.
 
-**Formatting.** `std::format("{}", emptyQ)` renders the unit's `N/A` text
-(defined in `UnitTraits`) alone — `"N/A"`, `"N/A kW"`, etc. The formatting
-path never attempts to access the absent `Rational`.
+**Formatting.** `std::format("{}", emptyQ)` renders `N/A` suffixed with the
+unit's display text — `"N/A"` (scalar, empty display), `"N/AkW"`, `"N/A%"`.
+The `"N/A"` marker is a **fixed literal in the formatter**, *not* a field of
+`UnitTraits` (`UnitMeta` carries only `id`, `display`, `defaultDecimals`); the
+unit contributes only the trailing `display` string, appended with no
+separating space. The formatting path never attempts to access the absent
+`Rational`.
 
 **`equation()`.** An empty quantity has no derivation. `equation()` returns a
 single-element vector containing the same `N/A` text that `std::format` would
@@ -183,6 +203,51 @@ There is no `Rational` to retag.
 **Wire serialization.** On the morph JSON wire an empty quantity serializes as
 JSON `null` — the payload's `std::nullopt` maps directly to a null JSON token,
 and the unit metadata travels only in the schema, never in the instance.
+
+## How a value prints
+
+Every printed form of a `Quantity` — `std::format`, and every number inside
+`equation()` — goes through **one** helper, `detail::formatRationalDecimal`, so
+a value reads identically everywhere. There is a single formatting path and
+**no `operator<<`** (streaming is done by formatting to a `std::string` first).
+
+**The decimal form.** `formatRationalDecimal` renders the exact `Rational` as a
+fixed decimal at its **runtime `DecimalPlaces`** (`{:.Nf}`) and then trims
+trailing zeros (and a bare trailing point). So a whole value prints with no point
+(`2`), and `0.30` / `1.360` print as `0.3` / `1.36`. This is deliberately **not**
+`Rational`'s own `std::format("{}", r)`, which prints an integer numerator or a
+`num/den` *fraction* — `Quantity` always prints a trimmed decimal. The runtime
+`DecimalPlaces` tag is the single source of truth for how many decimals appear;
+no field's *declared* precision is consulted at print time.
+
+**With the unit.** The `Quantity` formatter (`std::formatter<Quantity<...>>`)
+appends the unit's `display` text to the number with no separating space:
+`5.2kW`, `6kWh`, `0.3` (empty display for a scalar). `NamedQuantity`'s formatter
+forwards to it.
+
+**Empty prints `N/A`.** An empty quantity renders as the fixed literal `"N/A"`
+suffixed with the unit's `display` — `"N/A"`, `"N/AkW"`, `"N/A%"`. The `"N/A"`
+marker lives in the formatter, **not** in `UnitMeta` (which carries only `id`,
+`display`, `defaultDecimals`); the format path never touches the absent
+`Rational`.
+
+**The `DecimalPlaces` flow, end to end.** The runtime tag that fixes the printed
+form flows through a calculation deterministically:
+
+1. **Origin.** `fromDouble(d)` stamps the new leaf's `Rational` with the field's
+   *declared* precision — the one moment declared precision touches a value. A
+   `Rational` built directly carries whatever tag it was given.
+2. **Arithmetic.** `+`, `-`, `*`, `/` set the result's tag to the **maximum** of
+   the engaged operands' tags (max-propagation — see *Exact value and
+   precision*).
+3. **Conversion.** A `convert` step multiplies by the exact ratio and carries the
+   operand's tag through unchanged — scaling a value does not change how many
+   decimals it is specified to.
+4. **Formatting.** `formatRationalDecimal` renders at that tag, as above; nothing
+   else in `Quantity` re-implements number formatting.
+
+`atDeclaredPrecision()` / `withDecimalPlaces()` retag a value between steps if a
+caller wants a specific width; they change only the tag, never the exact value.
 
 ## Provenance — a build-time toggle, on by default
 
@@ -222,8 +287,10 @@ types:
 - **`ASTNode`** — a node in the DAG: its own `ASTUnit current` step, an optional
   symbol `name` (set by `named()` / `NamedQuantity`, which makes the node opaque
   and stops `equation()` expanding it), and `shared_ptr<ASTNode> left` / `right`
-  handles onto the nodes that fed this one. An `ASTNode` is **move-only**: sharing
-  is done through the `shared_ptr`, never by copying the node.
+  handles onto the nodes that fed this one. The struct is a plain aggregate, but
+  nodes are **never copied** in practice: sharing is done through the `shared_ptr`,
+  never by duplicating a node — every operation allocates a fresh `ASTNode` and
+  links the (shared) prior ones.
 - **`Context`** — the per-`Quantity` handle: a single `shared_ptr<ASTNode> node`
   pointing at the root of that value's derivation. Copying a `Quantity` copies its
   `Context`, which just bumps the node's refcount — the tree itself is never
@@ -269,14 +336,10 @@ so a caller emits them verbatim), in this fixed order:
 3. **Result** — element `[2]` — the overall result value — `1.36` — in the same
    indented `= ` continuation form.
 4. **`where` legend** — elements `[3]…`, one per placeholder, in order of first
-   appearance; the first begins `where `, any further lines align under it. A
-   placeholder exists only for a reused value, and its legend form depends on
-   what that value is:
-   - a **reused unnamed leaf** (a raw input used more than once): `c1 = <value>` —
-     e.g. `where c1 = 3`;
-   - a **reused unnamed computed value**: its work written once, as
-     `c1 = <symbolic> = <substituted> = <value>`.
-   A value used exactly once never reaches the legend — it is inlined at its one
+   appearance; the first line begins `where `, later lines align under it. A
+   placeholder exists only for a **reused** value; its exact legend form
+   (leaf/conversion vs computed) is given in *How each node renders* below. A
+   value used exactly once never reaches the legend — it is inlined at its one
    point of use instead.
 
 **Degenerate roots return a single element.** When the value has no expandable
@@ -286,6 +349,12 @@ substitution/result/legend lines):
 - an **empty** quantity, or any quantity with tracing compiled out → the
   formatted value alone (the `N/A` text when empty);
 - a **bare unnamed leaf** (a raw input never operated on) → its formatted value;
+- an **engaged value with no recorded derivation node** — one materialised
+  directly (aggregate init or the wire codec writing `payload`), bypassing the
+  value constructors that call `recordLeaf()` → its formatted value;
+- a value whose **root is a bare unit conversion** (a `static_cast` / implicit
+  conversion never further operated on, and left unnamed) → its formatted
+  (converted) value — a lone `convert` node is treated as an atom;
 - a value whose **root is named** (e.g. a `NamedQuantity`, or the result of
   `.named(...)`) → just `"the name"`, since a name is opaque and its derivation
   is deliberately not expanded. Introspect the *unnamed* computed value if you
@@ -295,54 +364,35 @@ So the symbols (the shape you'd write on paper) and the numbers (the audit of
 what was actually computed) live in one coherent artifact rather than in two
 methods that echo each other.
 
-**How the numbers are rendered.** `equation()` carries no precision of its own
-and never consults any field's *declared* precision. Every number it prints —
-each substituted value, the result, and each `where` value — is produced by
-running that node's stored `Rational` through the ordinary `Rational` formatter.
-The decimals therefore come from the value itself: the `Rational`'s own runtime
-`DecimalPlaces` tag, the single source of truth for how a value prints, exactly
-as `std::format("{}", someRational)` would render it elsewhere. The unit is not
-shown (the tree is unit-erased); pair the lines with `std::format("{}", q)` for
-the united answer.
+**Numbers print exactly as `std::format` prints them.** `equation()` carries no
+precision of its own and never consults any field's *declared* precision: each
+substituted value, the result, and each `where` value runs through the same
+`detail::formatRationalDecimal` helper described in *How a value prints*, at the
+node's own runtime `DecimalPlaces`. So a value reads identically in `equation()`
+and in `std::format("{}", q)`. The unit is **not** shown (the tree is
+unit-erased); pair the lines with `std::format("{}", q)` for the united answer.
 
-**The `DecimalPlaces` flow, end to end.** How a number prints is fixed entirely
-by the runtime `DecimalPlaces` tag it carries, and that tag flows through the
-calculation deterministically:
+**How each node renders.** Two properties of a sub-value decide its appearance:
+whether it is **named**, and whether it is **reused** (appears more than once
+along the displayed paths). These compose into one rule for leaves, conversions,
+and computed values alike — **reuse, not leaf-vs-computed, is what mints a
+placeholder**:
 
-1. **Origin.** `fromDouble(d)` stamps the new leaf's `Rational` with the field's
-   *declared* precision — the one moment declared precision touches a value. A
-   `Rational` built directly carries whatever tag it was given.
-2. **Arithmetic.** `+`, `-`, `*`, `/` set the result's tag to the **maximum** of
-   the operands' tags (max-propagation, above).
-3. **Conversion.** A `convert` step multiplies by the (exact) ratio and carries
-   the operand's tag through unchanged — scaling a value does not change how many
-   decimals it is specified to.
-4. **Formatting.** `std::format` and `equation()` both defer to the `Rational`
-   formatter, which is the single authority on the printed form: the default
-   (no format spec) prints an exact integer when the denominator is `1`
-   (so `2/1` → `2`) and otherwise renders at the value's `DecimalPlaces`. Nothing
-   in `Quantity` re-implements number formatting.
+| Node | Formula (`[0]`) | Substitution (`[1]`) | `where` legend (`[3…]`) |
+|---|---|---|---|
+| **Named** (any kind) | its name `"x"`, not expanded | its value | never — a name is opaque and is not counted for reuse |
+| **Unnamed leaf**, used once | its number (`3`) | its number | — (inlined) |
+| **Unnamed leaf**, reused | placeholder `cN` | its value | `cN = <value>` |
+| **Unnamed conversion**, used once | its converted value (an atom) | its value | — (inlined) |
+| **Unnamed conversion**, reused | placeholder `cN` | its value | `cN = <value>` |
+| **Unnamed computed**, used once | its inlined expression (`"a" - "b"`) | the substituted expression | — (inlined) |
+| **Unnamed computed**, reused | placeholder `cN` | its value | `cN = <symbolic> = <substituted> = <value>` |
 
-`atDeclaredPrecision()` / `withDecimalPlaces()` retag a value between steps if a
-caller wants a specific width; they change only the tag, never the exact value.
-
-Two things decide how any sub-value reads: whether it is **named**, and whether
-it is **reused**. These compose into one uniform rule that applies to leaves and
-computed values alike:
-
-- **Named** → appears as its name and is not expanded; the name summarises its
-  own sub-derivation (a conversion behind `"heater"`, say, folds into the name).
-- **Unnamed, used once** → *inlined* at its point of use: a computed value as its
-  arithmetic (`"a" - "b"`), a leaf as its own number (`3`). Leave a value unnamed
-  precisely when you *do* want its arithmetic shown.
-- **Unnamed, reused** (appears more than once) → earns a single placeholder
-  (`c1`, `c2`, …) so the shared work is written once, in the `where` legend,
-  rather than duplicated at each use — whether the reused value is a computed
-  expression or a raw leaf.
-
-The distinction between a leaf and a computed value is therefore *not* what
-triggers a placeholder — reuse is. A once-used leaf is just its number in the
-formula; a placeholder appears only to avoid repeating a shared value.
+A value used exactly once is inlined at its one point of use and never reaches
+the legend; only a *reused* value earns a `cN` placeholder, so shared work is
+written once instead of duplicated at each use. Naming stops both expansion and
+reuse-counting at that node — a conversion behind `"heater"` folds into the name.
+Leave a value unnamed precisely when you *do* want its arithmetic written out.
 
 ## Named symbols
 
@@ -360,13 +410,6 @@ value on construction and slices losslessly back to a plain `Quantity` wherever
 one is expected — the name lives in the shared history, not as extra data on the
 value.
 
-## Formatting — `std::formatter` only
-
-A `std::formatter<Quantity<...>>` renders value + unit (`5.2kW`, `N/A%`),
-driving off the `UnitTraits` display text and the `Rational` formatter.
-`NamedQuantity` forwards to it. **No `operator<<` is provided** — formatting
-goes through `std::format` exclusively.
-
 ## Wire and schema
 
 On the morph JSON wire a quantity is just its nullable `Rational` payload —
@@ -378,11 +421,19 @@ cannot send a mismatched unit, and provenance stays a local, in-process concern.
 **Display units come from `relations`, not a second list.** `UnitRelation` is
 the *single* source of within-dimension conversion. A renderer's display/entry
 unit selector — surfaced in the schema as `x-unitAlternatives` — is **derived
-from the same `relations`**: the alternatives for a field's unit are the units
-it can convert to (directly or by chaining), each with the exact ratio the
-conversion uses. There is no separate `alternatives` declaration to keep in
-sync; declaring a `UnitRelation` both enables `convert` and offers the unit in
-the selector.
+from the same `relations`**: the alternatives for a field's unit are its
+**direct relation neighbours** — every `UnitRelation` edge that touches the
+unit, in either direction — each with the exact ratio that edge declares. There
+is no separate `alternatives` declaration to keep in sync; declaring a
+`UnitRelation` both enables `convert` and offers the unit in the selector.
+
+Note the scope difference: the alternatives list is the **direct edges only**,
+*not* the full transitive closure. `convert` itself chains through intermediate
+units (see *Unit conversion*), so a value can convert to more units than the
+selector lists; the selector deliberately offers only the one-hop neighbours the
+`relations` array names directly. (In the lab system `kg` lists both `g` and `t`
+as alternatives, but `g` lists only `kg` — even though `g → t` converts by
+chaining through `kg`.)
 
 ## Unit conversion — `UnitRelation` and `convert`
 
@@ -500,8 +551,12 @@ The search is a **compile-time breadth-first search** over `relations`, so it
 finds a path with the **fewest hops**; ties are broken by the entries'
 declaration order in the array. The conversion factor is the **product of the
 edge ratios** along the chosen path (`g → t` via `kg` composes `g→kg` and
-`kg→t`). Provenance records **each hop as its own step**, so the derivation shows
-the units it passed through, not just the endpoints.
+`kg→t`), composed inside `convert` before a single scaling multiply. Provenance
+records the conversion as **one endpoint-to-endpoint step** — a single
+`convert <fromId> -> <toId>` node whose operation names only the source and
+target ids (e.g. `convert g -> t`). The intermediate units the search passed
+through are **not** recorded as separate hops; the composed ratio is applied in
+one multiplication and one node.
 
 Only ratio-based `UnitRelation` edges take part in composition. A user-provided
 `convert` (a non-ratio conversion such as °C ↔ °F) is a **direct edge only** — it
@@ -513,6 +568,32 @@ does not cross-check that two different paths agree.
 This coexists with the `consteval` unit algebra: the algebra combines *different
 dimensions* (`kg * m3`, `kg / m3`, same-unit `→ scalar`), while `convert`
 *scales within one dimension*.
+
+### 5. Conversion edge cases (failure modes)
+
+- **Chained composition overflows at *compile* time, not run time.**
+  `conversionRatio` is `consteval` and multiplies the edge ratios *during
+  constant evaluation*, so composing a path whose product exceeds the `int64`
+  numerator/denominator range is a **hard compile error** at the call site that
+  requested the conversion — never a silent runtime overflow. (A *direct*
+  single-edge ratio is likewise composed at compile time.) The runtime scaling
+  multiply that `convert` then applies to the value can still overflow per the
+  usual `Rational` envelope — that part is the documented magnitude limitation,
+  distinct from this compile-time guard.
+- **The search always terminates.** The BFS runs over a fixed-capacity queue
+  (`capacity = 2 * relationCount + 1`) and refuses to revisit a unit already
+  enqueued (the `seen` scan over visited nodes), so it visits each reachable
+  unit at most once and cannot loop, whatever the shape of the `relations`
+  graph.
+- **Ties resolve by declaration order, and paths are *not* cross-checked.**
+  When two equal-length paths reach the target, the BFS takes whichever edge
+  appears **first in the `relations` array**. The framework composes that one
+  path and does **not** verify that a different path would yield the same
+  factor. If an application's declared ratios are mutually inconsistent (a
+  redundant edge that disagrees with the rest of the graph), **reordering
+  `relations` can silently change a chained conversion factor**. Keeping the
+  declared ratios mutually consistent is the application's responsibility (the
+  framework composes whatever shortest path it finds).
 
 ## API reference
 
@@ -528,10 +609,11 @@ readability).
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `UnitMeta { id, display, defaultDecimals }` | struct | Static per-unit description returned by `UnitTraits::meta`. `id` is wire/schema vocabulary, `display` is human text, `defaultDecimals` seeds declared precision. |
-| `UnitTraits<E>` | class template | **Customisation point.** The application specialises it for its unit enum `E`: `static constexpr UnitMeta meta(E)` and `static constexpr std::array<UnitRelation<E>, N> relations`. |
+| `UnitTraits<E>` | class template | **Customisation point.** The application specialises it for its unit enum `E`: a required `static constexpr UnitMeta meta(E)` (satisfies `UnitEnum`) and an *optional* `static constexpr std::array<UnitRelation<E>, N> relations` (detected by `HasUnitRelations`; a unit system without it simply offers no `convert`/alternatives). |
 | `UnitRelation<E> { from, to, fromTo }` | struct | One exact peer-to-peer ratio (`1 from == fromTo·to`, a positive `Rational`). Entries drive the auto-generated `convert`, conversion chaining, **and** the display-unit selector. |
-| `UnitAlternative<E> { unit, num, den }` | struct | A *derived* per-unit view (computed from `relations`, not declared): one convertible display/entry unit and its exact ratio. Returned by `Quantity::unitAlternatives()`; feeds `x-unitAlternatives`. |
+| `UnitAlternative<E> { unit, num, den }` | struct | A *derived* per-unit view (computed from `relations`, not declared): one direct-neighbour display/entry unit and its exact alternative-to-canonical ratio (`num`/`den`, `std::int64_t`). Returned by `Quantity::unitAlternatives()`; feeds `x-unitAlternatives`. |
 | `UnitEnum<E>` | concept | Satisfied by an enum with a `UnitTraits<E>::meta`. Constrains `Quantity`. |
+| `isQuantity<T>` | `inline constexpr bool` variable template | Compile-time test: `true` when `T` is a `Quantity<...>`. |
 | `operator*`, `operator/` (on `E`) | `consteval` | Application-supplied unit algebra deducing cross-dimension result units; an unsupported combination fails to compile. |
 
 ### `Quantity<U, Dec>` — compile-time members
@@ -542,18 +624,21 @@ readability).
 | `declaredDecimals` | `static constexpr std::uint32_t` | The field's declared decimal count. |
 | `declaredPrecision()` | `static constexpr DecimalPlaces` | `declaredDecimals` as the strong type. |
 | `unitMeta()` | `static constexpr UnitMeta` | The unit's `UnitMeta`. |
-| `unitAlternatives()` | `static constexpr std::span<const UnitAlternative<E>>` | The convertible display/entry units for this field's unit, **derived from `UnitTraits::relations`** (empty when none). Drives the schema's `x-unitAlternatives`. |
+| `unitAlternatives()` | `static constexpr std::span<const UnitAlternative<E>>` | The **direct-neighbour** display/entry units for this field's unit — every `UnitRelation` edge touching the unit, **derived from `UnitTraits::relations`** (empty when none; not the transitive closure). Drives the schema's `x-unitAlternatives`. |
 
 ### `Quantity<U, Dec>` — construction
 
 | Member | Signature | Notes |
 |---|---|---|
 | default ctor | `constexpr Quantity() noexcept` | The **empty** state. |
-| value ctor | `constexpr Quantity(Rational engaged) noexcept` | Engages, keeping the value's own runtime precision. |
-| optional ctor | `constexpr Quantity(std::optional<Rational>) noexcept` | Adopts a payload as-is. |
-| cross-precision ctor | `constexpr Quantity(Quantity<U, Other>) noexcept` | Same unit, different declared precision; value carries over unchanged. |
-| `fromDouble` | `static Quantity fromDouble(double raw) noexcept` | Tags the leaf at `declaredPrecision()`; **never empty from a finite value** (empty only when `raw` is non-finite / doesn't fit). |
-| `fromOptional` | `static Quantity fromOptional(std::optional<Rational>) noexcept` | Empty in → empty out, preserving the declared-precision arg. |
+| value ctor | `Quantity(Rational engaged)` | Engages, keeping the value's own runtime precision. |
+| optional ctor | `Quantity(std::optional<Rational>)` | Adopts a payload as-is. |
+| cross-precision ctor | `Quantity(Quantity<U, Other>)` | Same unit, different declared precision; value carries over unchanged. |
+| `fromDouble` | `static Quantity fromDouble(double raw)` | Tags the leaf at `declaredPrecision()`; **never empty from a finite value** (empty only when `raw` is non-finite / doesn't fit). |
+| `fromOptional` | `static Quantity fromOptional(std::optional<Rational>)` | Empty in → empty out, preserving the declared-precision arg. |
+
+> The declared-decimals template argument `Dec` is constrained to `[1, kMaxDecimalPlaces]` (18).
+> Values outside that range cause a `static_assert` failure at compile time.
 
 ### `Quantity<U, Dec>` — access, precision, provenance
 
@@ -563,8 +648,8 @@ readability).
 | `value()` | `const std::optional<Rational>& value() const noexcept` | The payload; pattern-match or `->` it. |
 | `value_or(fallback)` | `Rational value_or(Rational const&) const` | Payload if engaged, else the fallback. |
 | `operator*` | `const Rational& operator*() const` | Unchecked access to the engaged value (UB when empty, like `std::optional`). |
-| `withDecimalPlaces(p)` | `constexpr Quantity withDecimalPlaces(DecimalPlaces) const noexcept` | Retags actual precision; no-op on empty. Value unchanged. |
-| `atDeclaredPrecision()` | `constexpr Quantity atDeclaredPrecision() const noexcept` | Retags actual precision to the declared one; no-op on empty. |
+| `withDecimalPlaces(p)` | `Quantity withDecimalPlaces(DecimalPlaces) const` | Retags actual precision (silently clamped to `[1, kMaxDecimalPlaces]`); no-op on empty. Value unchanged. |
+| `atDeclaredPrecision()` | `Quantity atDeclaredPrecision() const` | Retags actual precision to the declared one; no-op on empty. |
 | `named(label)` | `Quantity named(std::string label) const` | Returns a same-unit quantity marked as the symbol `label`; builds a fresh history node (no-op returning empty on empty, or with tracing off). |
 | `equation()` | `std::vector<std::string> equation() const` | The worked formula as print-ready lines (see *Provenance*). Single-element (the formatted value) when empty or tracing off. |
 | `operator Quantity<To>()` | `operator Quantity<To>() const` | Implicit same-dimension conversion; delegates to `convert`, propagates empty, records a provenance step. |
@@ -592,9 +677,14 @@ yields empty.
 | `std::formatter<Quantity<U, Dec>>` | specialisation | Renders value + unit (`5.2kW`, `N/A%`). No `operator<<`. |
 | `std::formatter<NamedQuantity<Name, U>>` | specialisation | Forwards to the `Quantity` formatter. |
 
-On the wire (`glz::meta` / `to_json_schema`) a quantity is its nullable
-`Rational` payload; the unit surfaces only in the generated JSON Schema
-(`ExtUnits`) and the declared precision as `x-decimalPlaces`.
+On the wire, `glz::meta<Quantity>` reduces the instance to its nullable
+`Rational` `payload`. `to_json_schema<Quantity>` stamps the unit onto the
+schema as `ExtUnits{ unitAscii = meta.id, unitUnicode = meta.display }` — that
+is the *only* thing the quantity's own schema hook adds. The precision and
+alternatives keys (`x-decimalPlaces`, `x-unitAlternatives`) are **not** emitted
+by `to_json_schema`; the forms schema-merge layer (`morph::forms`'
+`mergeSchemaExtras`) adds them per `Quantity` member from `declaredDecimals`
+and `unitAlternatives()`.
 
 ## Design decisions
 
@@ -804,6 +894,62 @@ share = 0.7
 parentheses appear only because `/` over a sum requires them. Had `diff` been
 used once, it would have inlined as `"a" - "b"` in place, with no `c1` at all —
 the placeholder exists precisely to avoid writing shared work twice.
+
+## Cross-references
+
+- **[`rational.md`](rational.md)** — the payload type, and the one to read
+  first for anything about values, precision, or overflow. `Quantity` inherits
+  *all* of its numeric behaviour from `Rational`: the `int64` overflow envelope
+  (silent UB in the no-error-channel operators), the `DecimalPlaces` precision
+  tag and its `std::max` propagation, the half-away-from-zero rounding of
+  `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on, and the
+  shared decimal formatter (`formatRationalDecimal` builds on `Rational`'s
+  `{:.Nf}` output). This spec does not restate those rules.
+- **[`forms.md`](forms.md)** — how a `Quantity` field reaches a generated form:
+  `ExtUnits` (unit id/display, emitted by `to_json_schema`) plus the
+  schema-merge keys `x-decimalPlaces` (from `declaredDecimals`) and
+  `x-unitAlternatives` (from `unitAlternatives()`), added per member by
+  `morph::forms`' `mergeSchemaExtras`.
+- **[`choice.md`](choice.md)** and **[`datetime.md`](datetime.md)** —
+  one-kind-of-empty siblings. `Choice<T>` and `Timestamp` share `Quantity`'s
+  `std::optional`-backed single empty state and total `==` (empty == empty).
+  `Timestamp` differs on ordering — its `operator<=>` is total (empty sorts
+  before any engaged value) where `Quantity`'s *throws* on an empty operand.
+
+## Limitations
+
+Honest constraints of the current design, distinct from *Out of scope* (things
+deliberately not attempted):
+
+- **The unit algebra does not scale.** `operator*` / `operator/` on the unit
+  enum are hand-written, O(pairs) `consteval` tables the application maintains
+  by listing every supported combination. There is **no dimensional-analysis
+  engine**: past roughly a dozen units the table grows unwieldy, and a
+  *missing* rule surfaces as a compile error at a **distant call site** (the
+  arithmetic expression that attempted the combination), not at the trait
+  declaration. The type system catches the mistake, but the diagnostic points
+  away from the fix.
+- **Provenance is on by default and allocates eagerly.** With
+  `MORPH_QUANTITY_PROVENANCE=1` (the default), **every** construction,
+  arithmetic op, conversion, and `named()` heap-allocates a fresh `ASTNode`
+  (`recordLeaf` and the `MORPH_Q_BUILD` macro) — even though the derivation
+  never crosses the wire and has a **single consumer**, `equation()`. For hot
+  paths that never call `equation()`, build with `MORPH_QUANTITY_PROVENANCE=0`:
+  the API stays callable and no nodes are allocated.
+- **`int64` ratio overflow for wide-range unit systems.** Conversion ratios are
+  exact `Rational`s of 64-bit integers. A unit system spanning many orders of
+  magnitude (pico- to tera-, say) risks overflowing a composed chained ratio —
+  which, per *Conversion edge cases*, is a compile error — or the runtime
+  scaling multiply. Keep within-dimension ratios inside the `int64` envelope.
+- **`named()` / `equation()` output differs materially between build flags.**
+  With tracing off, `equation()` collapses to the bare value and `named()` is a
+  no-op that discards the name. Code that depends on the *content* of those
+  outputs (tests, generated reports) behaves differently across the two builds —
+  the toggle changes observable behaviour, not just performance.
+
+> **Doc note (not a code change).** The header comments in `quantity.hpp` and
+> `detail/quantity_equation.hpp` still cite the pre-move path
+> `docs/quantity_type.md`; this spec now lives at `docs/spec/quantity_type.md`.
 
 ## Out of scope
 

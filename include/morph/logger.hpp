@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <atomic>
 #include <format>
 #include <functional>
 #include <mutex>
@@ -47,8 +48,10 @@ using Logger = std::function<void(LogLevel, std::string_view)>;
 
 struct LogState {
     Logger sink = [](LogLevel lvl, std::string_view msg) { std::println(stderr, "[{}] {}", levelName(lvl), msg); };
-    LogLevel minLevel = LogLevel::debug;
-    std::mutex mtx;
+    // Atomic so the level check is a lock-free fast path: `logFormat` and `log`
+    // can reject a suppressed message without touching `mtx` or formatting it.
+    std::atomic<LogLevel> minLevel{LogLevel::debug};
+    std::mutex mtx;  // guards `sink` (and serialises sink invocation)
 };
 
 inline LogState& logState() {
@@ -57,10 +60,18 @@ inline LogState& logState() {
 }
 
 /// @brief Internal emit entry point used by the public level helpers.
+///
+/// The sink is invoked while `mtx` is held, so sink calls are serialised. A sink
+/// must therefore not call back into `morph::log` (log, `setLogger`, or
+/// construct a `ScopedLoggerOverride`) — `std::mutex` is non-recursive and that
+/// would self-deadlock — and should not block for long.
 inline void log(LogLevel level, std::string_view msg) {
-    std::scoped_lock const lock{logState().mtx};
     auto& state = logState();
-    if (state.sink && level >= state.minLevel) {
+    if (level < state.minLevel.load(std::memory_order_relaxed)) {
+        return;  // lock-free reject of suppressed messages
+    }
+    std::scoped_lock const lock{state.mtx};
+    if (state.sink) {
         state.sink(level, msg);
     }
 }
@@ -84,15 +95,13 @@ inline void setLogger(std::function<void(LogLevel, std::string_view)> logger) {
 /// Messages below this level are silently dropped. Thread-safe.
 /// @param level Minimum level to emit.
 inline void setLogLevel(LogLevel level) {
-    std::scoped_lock const lock{detail::logState().mtx};
-    detail::logState().minLevel = level;
+    detail::logState().minLevel.store(level, std::memory_order_relaxed);
 }
 
 /// @brief Returns the current minimum log level. Thread-safe.
 /// @return The active minimum level.
 inline LogLevel getLogLevel() {
-    std::scoped_lock const lock{detail::logState().mtx};
-    return detail::logState().minLevel;
+    return detail::logState().minLevel.load(std::memory_order_relaxed);
 }
 
 // ── Level helpers ─────────────────────────────────────────────────────────────
@@ -100,8 +109,14 @@ inline LogLevel getLogLevel() {
 namespace detail {
 
 /// @brief Formats @p fmt with @p args and forwards to `log()`.
+///
+/// The level is checked *before* formatting, so a suppressed call pays no
+/// `std::format` / allocation cost.
 template <typename... Args>
 void logFormat(LogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+    if (level < logState().minLevel.load(std::memory_order_relaxed)) {
+        return;
+    }
     log(level, std::format(fmt, std::forward<Args>(args)...));
 }
 
@@ -163,10 +178,14 @@ public:
     ///
     /// Use this when test code will install its own sink mid-test via
     /// `setLogger()` / `setLogLevel()` and just wants automatic restoration.
-    ScopedLoggerOverride() : _savedSink(detail::logState().sink), _savedLevel(detail::logState().minLevel) {
+    ScopedLoggerOverride() {
+        // NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — these must be
+        // read while holding the lock; a member-initializer list would read the
+        // global state before the mutex is acquired (a data race).
         std::scoped_lock const lock{detail::logState().mtx};
-        
-        
+        _savedSink = detail::logState().sink;
+        _savedLevel = detail::logState().minLevel;
+        // NOLINTEND(cppcoreguidelines-prefer-member-initializer)
     }
 
     /// @brief Installs @p sink and @p level; saves whatever was there before.
@@ -174,12 +193,16 @@ public:
     /// @param sink  New logger sink. Pass a no-op lambda to suppress output entirely.
     /// @param level New minimum level. Defaults to `debug` so every message reaches @p sink.
     explicit ScopedLoggerOverride(std::function<void(LogLevel, std::string_view)> sink,
-                                  LogLevel level = LogLevel::debug) : _savedSink(std::move(detail::logState().sink)), _savedLevel(detail::logState().minLevel) {
+                                  LogLevel level = LogLevel::debug) {
+        // NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — snapshot and
+        // install happen under one lock; a member-initializer list would read the
+        // previous state outside the mutex, racing a concurrent setLogger.
         std::scoped_lock const lock{detail::logState().mtx};
-        
-        
+        _savedSink = std::move(detail::logState().sink);
+        _savedLevel = detail::logState().minLevel;
         detail::logState().sink = std::move(sink);
         detail::logState().minLevel = level;
+        // NOLINTEND(cppcoreguidelines-prefer-member-initializer)
     }
 
     /// @brief Restores the saved sink and level.

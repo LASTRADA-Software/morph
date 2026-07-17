@@ -168,6 +168,45 @@ TEST_CASE("FileActionLog: entries() skips blank lines", "[action_log][phase2][fi
     }
 }
 
+TEST_CASE("FileActionLog: entries() tolerates a malformed trailing line (crash-truncated write)",
+          "[action_log][phase2][file]") {
+    TempFile tmp{"file_truncated_tail"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
+        log.flush();
+    }
+    // Simulate a crash between fwrite() and the next flush: a syntactically
+    // invalid, non-empty final line with no closing brace.
+    {
+        std::ofstream raw{tmp.path, std::ios::app};
+        raw << R"({"seq":2,"entityKey":"acct-2","actionType":"P2_Deposit)";
+    }
+
+    FileActionLog log{tmp.path};
+    auto all = log.entries();
+    REQUIRE(all.size() == 1);
+    REQUIRE(all[0].entityKey == "acct-1");
+}
+
+TEST_CASE("FileActionLog: entries() rethrows on a malformed line that is NOT the last (genuine corruption)",
+          "[action_log][phase2][file]") {
+    TempFile tmp{"file_corrupt_mid"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "1"));
+        log.flush();
+    }
+    {
+        std::ofstream raw{tmp.path, std::ios::app};
+        raw << "not json at all\n";
+        raw << morph::journal::toJson(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "2")) << "\n";
+    }
+
+    FileActionLog log{tmp.path};
+    REQUIRE_THROWS_AS(log.entries(), morph::journal::SerializationError);
+}
+
 // ── Save action end-to-end: SessionLog + FileActionLog, the pattern the design
 // doc asked for ("wire sessionLog.checkpoint(sink) into a real Save action's
 // completion handler") ──────────────────────────────────────────────────────

@@ -92,13 +92,25 @@ public:
     /// to call from a thread that *is* the worker pool — for example, from a
     /// `BridgeHandler` constructor invoked from inside an action handler.
     ///
-    /// Only safe for control messages (`register`, `deregister`) — `execute`
-    /// messages still post to the strand and would return before the result is
-    /// produced. The implementation rejects `execute` to make this explicit.
+    /// Only safe for control messages (`register`, `deregister`). An `execute`
+    /// envelope posts to the strand and produces its reply asynchronously, after
+    /// this synchronous call has already returned and destroyed the local reply
+    /// buffer the deferred callback would write into. To keep that from becoming a
+    /// dangling write, `execute` is rejected up front with an `err` reply.
     ///
     /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @return JSON-encoded reply envelope.
     std::string handleInline(const std::string& msg) {
+        try {
+            auto env = ::morph::wire::decode(msg);
+            if (env.kind == "execute") {
+                return ::morph::wire::encode(::morph::wire::makeErr(
+                    "handleInline does not support execute (reply is asynchronous)", env.callId));
+            }
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+            // Malformed input: fall through so dispatchMessage produces the
+            // canonical decode-error reply (avoids duplicating that path here).
+        }
         std::string reply;
         std::function<void(std::string)> capture = [&reply](std::string out) { reply = std::move(out); };
         dispatchMessage(msg, capture);
@@ -181,6 +193,13 @@ private:
         if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
             reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
             return;
+        }
+        // Make the identity authoritative: a verifying authorizer replaces the
+        // client-asserted principal with the one it extracted from a valid token,
+        // so model code reading session::current()->principal can trust it. A
+        // non-authenticating authorizer returns nullopt and leaves it unchanged.
+        if (auto verified = _authorizer->authenticate(env.session)) {
+            env.session.principal = std::move(*verified);
         }
         ::morph::exec::detail::ModelId const mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;

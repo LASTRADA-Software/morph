@@ -163,8 +163,9 @@ TEST_CASE("morph::bridge::detail::HandlerBinding: shared_ptr keeps binding alive
     }
 
     // Object is still alive and readable  -  no use-after-free.
-    // currentId retains the value it had when the model was registered;
-    // deregisterHandler does not reset it to 0.
+    // deregisterHandler resets currentId to the "0 = unbound" sentinel, so a
+    // late executeVia on this binding fails fast on the not-bound guard instead
+    // of sending a now-destroyed ModelId to the backend.
     REQUIRE(captured != nullptr);
-    REQUIRE(captured->currentId.load() != 0);
+    REQUIRE(captured->currentId.load() == 0);
 }

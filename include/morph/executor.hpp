@@ -7,6 +7,7 @@
 #include <functional>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -35,7 +36,8 @@ struct IExecutor {
 /// @brief Multi-threaded executor backed by a fixed-size thread pool.
 ///
 /// Tasks are placed in a FIFO queue and consumed by worker threads.
-/// Exceptions thrown by tasks are silently caught and discarded.
+/// Exceptions thrown by tasks are caught and logged via `morph::log` (they do
+/// not propagate out of the worker or abort sibling tasks).
 /// The destructor blocks until all worker threads have exited.
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class ThreadPoolExecutor : public IExecutor {
@@ -87,8 +89,12 @@ private:
             }
             try {
                 task();
-            // NOLINTNEXTLINE(bugprone-empty-catch) — task exceptions are intentionally discarded
+            } catch (const std::exception& exc) {
+                // A task failure must not kill the worker or unrelated tasks, but
+                // it must not vanish either — log and carry on.
+                ::morph::log::logError("[thread-pool] task threw: " + std::string{exc.what()});
             } catch (...) {
+                ::morph::log::logError("[thread-pool] task threw unknown exception");
             }
         }
     }

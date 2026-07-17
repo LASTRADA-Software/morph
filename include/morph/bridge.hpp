@@ -219,8 +219,11 @@ public:
         _handlers.push_back(binding);
     }
 
-    /// @brief Installs a default session context applied to every call that does
-    ///        not provide one explicitly via `BridgeHandler::executeWith(...)`.
+    /// @brief Installs a default session context that `executeVia` stamps onto the
+    ///        `ActionCall` of every subsequent call.
+    ///
+    /// There is no per-call session override — this default is applied to all calls
+    /// until replaced or cleared.
     ///
     /// Typical pattern: call this once after login to bind the user's principal
     /// and locale, then every subsequent `handler.execute(action)` carries the
@@ -258,15 +261,41 @@ public:
         {
             std::scoped_lock const lock{_mtx};
 
+            // Phase 1 — register every live binding on the new backend WITHOUT
+            // mutating any `currentId` yet, staging (binding, newId) pairs. If a
+            // registration throws partway (a plausible remote/transport failure),
+            // roll back the ones already registered and rethrow, leaving the old
+            // backend and every `currentId` untouched — so the switch is atomic:
+            // it either fully succeeds or is a no-op.
             std::vector<std::weak_ptr<detail::HandlerBinding>> live;
-            for (auto& weak : _handlers) {
-                auto binding = weak.lock();
-                if (!binding) {
-                    continue;
+            std::vector<std::pair<std::shared_ptr<detail::HandlerBinding>, uint64_t>> staged;
+            try {
+                for (auto& weak : _handlers) {
+                    auto binding = weak.lock();
+                    if (!binding) {
+                        continue;
+                    }
+                    auto newId = newShared->registerModelWithContext(binding->typeId, binding->modelFactory,
+                                                                     binding->contextKey);
+                    staged.emplace_back(binding, newId.v);
+                    live.push_back(weak);
                 }
-                auto newId = newShared->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
-                binding->currentId.store(newId.v);
-                live.push_back(weak);
+            } catch (...) {
+                for (const auto& [binding, newId] : staged) {
+                    try {
+                        newShared->deregisterModel(::morph::exec::detail::ModelId{newId});
+                    } catch (const std::exception& exc) {
+                        ::morph::log::logError(std::string{"[switchBackend] rollback deregister failed: "} +
+                                               exc.what());
+                    }
+                }
+                throw;
+            }
+
+            // Phase 2 — commit. Every registration succeeded, so it is now safe to
+            // publish the new ids and swap the backend in.
+            for (const auto& [binding, newId] : staged) {
+                binding->currentId.store(newId);
             }
             _handlers = std::move(live);
 
@@ -296,6 +325,10 @@ public:
         if (raw != 0U) {
             loadBackend()->deregisterModel(::morph::exec::detail::ModelId{raw});
         }
+        // Reset to the "0 = unbound" sentinel so a late/concurrent executeVia on
+        // this binding fails fast on the documented guard rather than sending a
+        // now-destroyed ModelId to the backend.
+        binding->currentId.store(0);
         auto iter = std::ranges::find_if(_handlers, [&](auto& weak) {
             auto sptr = weak.lock();
             return sptr && sptr.get() == binding.get();
@@ -378,6 +411,18 @@ public:
     }
 
 private:
+    template <typename>
+    friend class BridgeHandler;
+
+    /// @brief Weak observer of this bridge's lifetime, handed to each handler.
+    ///
+    /// A `BridgeHandler` checks this in its destructor: if the token has expired
+    /// the `Bridge` is already gone, so it skips deregistration instead of
+    /// dereferencing a dangling `Bridge&`. The bridge must still outlive its
+    /// handlers for normal `execute`/`set` calls; this only makes the *teardown*
+    /// order-independent so a mis-ordered destruction is defined behaviour.
+    [[nodiscard]] std::weak_ptr<const void> liveness() const { return _liveness; }
+
     std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
         std::scoped_lock const lock{_backendMtx};
         return _backend;
@@ -422,6 +467,8 @@ private:
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;
+    // Destroyed with the Bridge; handlers hold weak_ptrs to it (see liveness()).
+    std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };
 
 /// @brief RAII wrapper that binds a single model type to a `Bridge`.
@@ -450,6 +497,7 @@ public:
     /// @param guiExec  Executor used to deliver `Completion` callbacks (e.g. the GUI thread).
     BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec)
         : _bridge{bridge},
+          _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
           _binding{bridge.template registerHandler<Model>()},
           _subs{std::make_shared<SubscriberState>()} {
@@ -466,6 +514,7 @@ public:
     BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec,
                   std::shared_ptr<detail::HandlerBinding> binding)
         : _bridge{bridge},
+          _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
           _binding{std::move(binding)},
           _subs{std::make_shared<SubscriberState>()} {
@@ -476,7 +525,17 @@ public:
     }
 
     /// @brief Deregisters the binding from the bridge.
-    ~BridgeHandler() { _bridge.deregisterHandler(_binding); }
+    ///
+    /// If the `Bridge` has already been destroyed (liveness token expired), this
+    /// is a no-op: there is nothing to deregister from and dereferencing the
+    /// dangling `Bridge&` would be undefined behaviour. Destroying the bridge
+    /// before its handlers is still discouraged, but is now safe rather than a
+    /// use-after-free.
+    ~BridgeHandler() {
+        if (auto alive = _bridgeAlive.lock()) {
+            _bridge.deregisterHandler(_binding);
+        }
+    }
 
     BridgeHandler(const BridgeHandler&) = delete;
     BridgeHandler& operator=(const BridgeHandler&) = delete;
@@ -570,7 +629,7 @@ public:
             }
             std::any_cast<A&>(entry.draft).*FieldPtr = std::move(value);
         }
-        tryFireImpl<A>(std::weak_ptr<SubscriberState>(_subs), ::morph::model::ActionTraits<A>::typeId());
+        tryFireImpl<A>(_subs, ::morph::model::ActionTraits<A>::typeId());
     }
 
     /// @brief Discards the in-progress draft for action @p Action.
@@ -640,8 +699,12 @@ private:
     }
 
     template <typename Action>
-    static void tryFireImpl(const std::weak_ptr<SubscriberState>& weak, std::string_view typeId) {
-        auto state = weak.lock();
+    static void tryFireImpl(const std::shared_ptr<SubscriberState>& state, std::string_view typeId) {
+        // Every caller holds the `SubscriberState` alive for the duration of this
+        // call, so no liveness check is needed on entry. The async continuations
+        // below may outlive the subscription, so they each re-check through this
+        // weak_ptr instead.
+        const std::weak_ptr<SubscriberState> weak{state};
         using R = ::morph::model::ActionTraits<Action>::Result;
 
         Action snapshot;
@@ -677,7 +740,7 @@ private:
                     outcome.sink(boxed);
                 }
                 if (outcome.refire) {
-                    tryFireImpl<Action>(weak, typeId);
+                    tryFireImpl<Action>(inner, typeId);
                 }
             })
             .onError([weak, typeId](const std::exception_ptr& err) {
@@ -692,12 +755,13 @@ private:
                     logUnhandledError(typeId, err);
                 }
                 if (outcome.refire) {
-                    tryFireImpl<Action>(weak, typeId);
+                    tryFireImpl<Action>(inner, typeId);
                 }
             });
     }
 
     Bridge& _bridge;
+    std::weak_ptr<const void> _bridgeAlive;  // expires when _bridge is destroyed
     ::morph::exec::IExecutor* _guiExec;
     std::shared_ptr<detail::HandlerBinding> _binding;
     std::shared_ptr<SubscriberState> _subs;

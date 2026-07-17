@@ -8,7 +8,7 @@
 /// Included by `morph/quantity.hpp` when `MORPH_QUANTITY_PROVENANCE` is on.
 /// Walks the shared derivation DAG and produces the print-ready `equation()`
 /// lines: formula, substitution, result, and a `where` legend for reused
-/// values. See `docs/quantity_type.md` for the output contract.
+/// values. See `docs/spec/quantity_type.md` for the output contract.
 
 #include <format>
 #include <optional>
