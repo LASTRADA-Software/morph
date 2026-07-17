@@ -12,6 +12,7 @@ threading, and serialisation semantics differ per implementation.
 - [`IExecutor` — the abstract interface](#iexecutor--the-abstract-interface)
 - [`ThreadPoolExecutor`](#threadpoolexecutor)
 - [`MainThreadExecutor`](#mainthreadexecutor)
+- [`QtExecutor`](#qtexecutor)
 - [`StrandExecutor` and `ModelId`](#strandexecutor-and-modelid)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Thread safety](#thread-safety)
@@ -23,20 +24,24 @@ threading, and serialisation semantics differ per implementation.
 
 ## Type overview
 
-There are six types, split across `morph::exec` (in `executor.hpp`) and
-`morph::exec::detail` (in `strand.hpp`):
+There are seven types, split across `morph::exec` (in `executor.hpp`),
+`morph::exec::detail` (in `strand.hpp`), and `morph::qt` (in
+`qt/qt_executor.hpp`):
 
 | Type | Namespace | Purpose |
 |---|---|---|
 | `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`. |
 | `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
+| `QtExecutor` | `morph::qt` | Posts tasks to the Qt event loop; they run on the `QCoreApplication` (GUI) thread. |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
 | `StrandExecutor` | `morph::exec::detail` | Per-key serialising wrapper — tasks with the same `ModelId` never overlap. |
 
-`IExecutor` and the two concrete executors live in the public `morph::exec`
-namespace. `StrandExecutor`, `ModelId`, and `ModelIdHash` live in
+`IExecutor` and the two thread-based concrete executors live in the public
+`morph::exec` namespace. `QtExecutor` lives in `morph::qt` (in the separate
+`qt/qt_executor.hpp` header) because it depends on Qt; only the GUI/bridge layer
+pulls it in. `StrandExecutor`, `ModelId`, and `ModelIdHash` live in
 `morph::exec::detail` because they are implementation details of the morph model
 framework, not general-purpose utilities.
 
@@ -45,16 +50,23 @@ framework, not general-purpose utilities.
 A pure-virtual `post(std::function<void()>)` that schedules a callable for
 asynchronous execution. Thread-safe. How a task's exception is handled is left
 to the implementation; the header's default wording says an exception "is
-silently swallowed unless the implementation documents otherwise", and both
-concrete executors here *do* document otherwise — see
-[Failure modes](#failure-modes). No implementation lets a task exception escape
-`post()` (the task has not run yet when `post()` returns).
+silently swallowed unless the implementation documents otherwise", and every
+concrete executor here *does* document otherwise — the two thread-based ones
+catch and log, `QtExecutor` defers to Qt (see [Failure modes](#failure-modes)).
+No implementation lets a task exception escape `post()` (the task has not run
+yet when `post()` returns).
 
 ## `ThreadPoolExecutor`
 
 A fixed-size thread pool. The constructor spawns `n` worker threads; each worker
 loops, waiting for tasks on a shared condition variable. Tasks are dispatched in
 FIFO order from a single mutex-protected queue.
+
+`n` is **clamped to a minimum of 1**. A pool with zero workers would accept
+posted tasks that no thread could ever run, so every `post()` would hang forever
+and any `StrandExecutor` built on it would deadlock in its destructor waiting on
+`_inFlight`. Passing `0` therefore yields a usable single-worker pool rather than
+a silently dead one; values `≥ 1` spawn exactly that many workers.
 
 The destructor signals stop, notifies all workers, and joins every thread.
 Remaining queued tasks that have not started are dropped — there is no drain
@@ -78,6 +90,30 @@ prefixed `"[main-thread] callback threw: "`) and execution continues with the
 next task. Note that only `std::exception`-derived exceptions are caught; any
 other thrown type propagates out of `runFor()`.
 
+## `QtExecutor`
+
+An `IExecutor` implementation that marshals tasks onto the Qt event loop. Lives
+in `morph::qt` (header `morph/qt/qt_executor.hpp`) and is compiled only when Qt
+is available; it is the GUI leg of the executor family and the counterpart the
+[bridge](bridge.md) hands to backends as their main-thread executor.
+
+`post()` forwards the callable to
+`QMetaObject::invokeMethod(QCoreApplication::instance(), fn, Qt::QueuedConnection)`.
+Because the connection is queued and the target object is the application
+instance, the task always runs on the thread that owns `QCoreApplication`
+(typically the GUI thread), regardless of which thread called `post()`.
+`post()` is therefore thread-safe and returns immediately; the task runs later,
+once the event loop processes the queued event. The caller does **not** need to
+be (or supply) a `QObject`.
+
+Unlike `MainThreadExecutor`, `QtExecutor` needs no explicit `runFor()` drain —
+the running Qt event loop *is* the dispatcher. It is stateless: it owns no
+queue, spawns no thread, and holds no members, so it has no lifetime or shutdown
+concerns of its own. Tasks whose captured `QObject` target has been destroyed
+follow Qt's own queued-invocation semantics (Qt drops the invocation when the
+receiver is gone); this is the one place in the framework with any implicit
+cancellation, and it covers only the GUI leg (see [Limitations](#limitations)).
+
 ## `StrandExecutor` and `ModelId`
 
 A per-key serialising executor built on top of any `IExecutor`. Tasks posted
@@ -93,10 +129,34 @@ lifetime of the model. It supports three-way comparison and can be used as an
 Internally `StrandExecutor` maintains a map of `ModelId → shared_ptr<Strand>`
 (shared state per key). A `Strand` holds a pointer to the base `IExecutor`, a
 mutex, a pending queue, and a `running` flag. The executor also tracks an
-`_inFlight` counter (guarded by the map mutex) that the destructor waits on. The
-drain-and-erase logic in `scheduleNext` acquires both the map lock and the
-strand lock together in a single scoped lock to close a race window where a
-concurrent `post()` could re-arm a strand being erased.
+`_inFlight` counter (guarded by the map mutex) that the destructor waits on.
+
+**The per-key serialisation invariant:** at most one live `Strand` exists per
+`ModelId`, and any strand that is (or becomes) `running` is the strand currently
+stored in the map for that key. This is what guarantees a key's tasks never
+overlap — a single strand runs them one at a time.
+
+Two operations can violate that invariant if they interleave: `post()` pushing a
+task and flipping `running` true, and `scheduleNext`'s drain step clearing
+`running` and *erasing* the map entry when the queue empties. Holding the
+combined `{_mapMtx, strand->mtx}` lock only inside the drain step is **not**
+enough: the earlier design took `_mapMtx` in `post()` only long enough to look
+the strand up, released it, and then re-armed the strand under `strand->mtx`
+alone. A concurrent drain could erase the strand in that gap, orphaning a live
+strand — and the next `post(key)` would then create a *second* strand for the
+same key, so two strands ran the key's tasks concurrently.
+
+The fix makes **both** sides hold `_mapMtx` across their whole decision. `post()`
+takes `_mapMtx`, does the slot lookup/create, and then — *still holding
+`_mapMtx`* — takes `strand->mtx` to push the task and set `running`. The drain
+step takes the same two locks in the same order. Because the map lookup, the
+re-arm, and the erase are all serialised by `_mapMtx`, a strand that becomes
+`running` in `post()` is guaranteed to still be the map entry, and the drain
+never erases a strand whose `pending` queue is non-empty. The orphaning window is
+gone. Lock order is always `_mapMtx` → `strand->mtx`; both sites acquire them as
+two sequential `scoped_lock`s in that order (rather than one `scoped_lock` over
+the pair, whose `std::lock` back-off can grab them in address order), so a single
+consistent order holds everywhere and there is no lock-ordering deadlock.
 
 Each strand task is the point where the model's own code actually runs, so the
 task wrapper catches exceptions and logs them via `morph::log::logError` (see
@@ -156,7 +216,7 @@ refills, rather than keeping one long-lived strand per key.
 
 ## Thread safety
 
-All three executors' `post()` methods are safe to call from any thread
+All four executors' `post()` methods are safe to call from any thread
 concurrently.
 
 - `ThreadPoolExecutor` guards its queue and `_stop` flag with a single mutex
@@ -168,13 +228,23 @@ concurrently.
   ("main") thread; concurrent `runFor()` calls are not supported.
 - `StrandExecutor` uses two lock levels: `_mapMtx` protects the `_strands` map
   and the `_inFlight` counter, and each `Strand::mtx` protects that strand's
-  `pending` queue and `running` flag. The drain-and-erase step in `scheduleNext`
-  acquires both `{_mapMtx, strand->mtx}` in one `scoped_lock` (deadlock-free via
-  `std::lock`'s ordering) to close the race where a concurrent `post()` re-arms a
-  strand between clearing `running` and erasing the map entry — which would
-  otherwise orphan a live strand and let two strands for one key run
-  concurrently. The net guarantee: tasks with the same `ModelId` never overlap;
-  tasks with different keys may run in parallel on the base pool.
+  `pending` queue and `running` flag. Both operations that can break the
+  per-key invariant hold `_mapMtx` across their whole decision: `post()` takes
+  `_mapMtx`, does the slot lookup/create, and then — still holding `_mapMtx` —
+  takes `strand->mtx` to push and re-arm; the drain-and-erase step in
+  `scheduleNext` takes the same two locks in the same order. This serialises the
+  lookup, the re-arm, and the erase, so a concurrent `post()` can no longer
+  re-arm a strand *after* a drain has erased it (which would orphan a live
+  strand and let two strands for one key run concurrently). Lock order is always
+  `_mapMtx` → `strand->mtx`, acquired as two sequential `scoped_lock`s (not one
+  `scoped_lock` over the pair) so a single consistent order holds at every site
+  and there is no lock-ordering deadlock. The net guarantee: tasks with the same
+  `ModelId` never overlap; tasks with different keys may run in parallel on the
+  base pool.
+- `QtExecutor` holds no state; its thread safety is entirely Qt's.
+  `QMetaObject::invokeMethod` with `Qt::QueuedConnection` is documented as safe
+  to call from any thread, and the queued event is dispatched serially by the
+  single event loop that owns `QCoreApplication`.
 
 ## Failure modes
 
@@ -183,6 +253,7 @@ concurrently.
 | `ThreadPoolExecutor` | The worker `loop` catches it. `std::exception` is logged as `"[thread-pool] task threw: " + what()`; any other type is logged as `"[thread-pool] task threw unknown exception"`. The worker keeps looping. |
 | `StrandExecutor` | The strand task wrapper catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The strand's drain/erase bookkeeping and `_inFlight` decrement still run, so the next task for the key proceeds. |
 | `MainThreadExecutor` | `runFor` catches **only** `std::exception`, logged as `"[main-thread] callback threw: " + what()`, then continues with the next task. **Any non-`std::exception` type propagates out of `runFor()`** and is the caller's problem. |
+| `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the Qt event loop (`QCoreApplication::exec`); Qt's default behaviour is to `std::terminate`. Tasks posted to the GUI leg must not let exceptions escape. |
 
 All logging goes through `morph::log::logError`. The design principle: a task
 failure must never kill a worker/strand or abort sibling tasks, but it must also
@@ -205,7 +276,7 @@ rather than being hidden).
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `n` worker threads. `n` must be > 0. |
+| ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). |
 | dtor | `~ThreadPoolExecutor() override` | Signals stop, joins all workers. Remaining queued tasks are dropped. |
 | `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Task exceptions caught and logged in the worker loop. |
 
@@ -215,6 +286,12 @@ rather than being hidden).
 |---|---|---|
 | `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`. |
 | `runFor` | `void runFor(std::chrono::milliseconds timeout)` | Runs tasks until the `timeout` deadline (blocks for new tasks while time remains; does not return early on an empty queue). Must be called from the owning thread. `std::exception`s logged and skipped; other exception types propagate. |
+
+### `QtExecutor : IExecutor` (`morph::qt`)
+
+| Member | Signature | Notes |
+|---|---|---|
+| `post` | `void post(std::function<void()> fn) override` | Posts `fn` to the Qt event loop via `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`; runs on the `QCoreApplication` thread. Thread-safe; returns immediately. |
 
 ### `ModelId` (`morph::exec::detail`)
 
@@ -248,9 +325,11 @@ rather than being hidden).
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
 | StrandExecutor in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
 | StrandExecutor destructor | **Waits for in-flight tasks** | Without this, a pool thread running `scheduleNext` can access `_strands` after it has been destroyed (TSan: data race on destructor vs erase). |
-| Strand drain-and-erase | **Locks `_mapMtx` and `strand->mtx` atomically** | Prevents a race: a concurrent `post()` re-arms a strand after `running` is cleared but before the map entry is erased, then the erase orphans a live strand, causing two strands for the same key to run concurrently. |
+| Strand per-key invariant | **`post()` *and* drain-and-erase both hold `_mapMtx` across their whole decision** | Serialises lookup, re-arm, and erase so at most one live strand exists per key and any `running` strand is the map's current entry. Holding the combined lock only in the drain step was insufficient — `post()` re-armed under `strand->mtx` alone after releasing `_mapMtx`, so a drain could erase the strand in that gap, orphan it, and let a second strand for the same key run concurrently. |
 | No `std::future` / return value | **Fire-and-forget only** | Executors schedule side-effect tasks. Callers that need results use shared state or futures externally. |
 | No `std::executor` conformance | **Custom interface, not `std::executor`** | C++26 `std::executor` is not yet widely available. This is a minimal in-house abstraction. |
+| `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Stateless free-standing `IExecutor`** | Uses `QMetaObject::invokeMethod(QCoreApplication::instance(), fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot. Keeps the GUI leg a drop-in `IExecutor` with zero owned state and lets Qt's event loop be the sole dispatcher. |
+| `QtExecutor` in a separate `morph::qt` header | **Isolate the Qt dependency** | The core executor family (`executor.hpp`, `strand.hpp`) stays Qt-free; only the GUI/bridge layer includes `qt/qt_executor.hpp`. Backends depend on `IExecutor`, never on Qt. |
 
 ## Limitations
 

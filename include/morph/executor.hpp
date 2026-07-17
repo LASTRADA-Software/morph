@@ -43,9 +43,15 @@ struct IExecutor {
 class ThreadPoolExecutor : public IExecutor {
 public:
     /// @brief Constructs the pool with @p n worker threads.
-    /// @param n Number of threads to spawn. Must be > 0.
+    ///
+    /// @p n is clamped to a minimum of 1: a pool with zero workers would accept
+    /// posted tasks that could never run (every `post()` would hang forever), so
+    /// `ThreadPoolExecutor(0)` yields a usable single-worker pool rather than a
+    /// silently dead one.
+    /// @param n Number of threads to spawn. Values below 1 are clamped to 1.
     explicit ThreadPoolExecutor(std::size_t n) {
-        for (std::size_t i = 0; i < n; ++i) {
+        std::size_t const workers = n == 0 ? 1 : n;
+        for (std::size_t i = 0; i < workers; ++i) {
             _workers.emplace_back([this] { loop(); });
         }
     }

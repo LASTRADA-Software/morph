@@ -46,6 +46,7 @@ GUI, and the GUI thread never runs model work — the executors enforce the spli
 | Work | Runs on | Scheduled by |
 |---|---|---|
 | `Model::execute(action)` (local mode) | Worker pool, inside a per-`ModelId` strand | `LocalBackend::execute` → `StrandExecutor::post` |
+| `Model::onBackendChanged()` (local mode) | Worker pool, inside the model's per-`ModelId` strand (serialised with its `execute`) | `LocalBackend::notifyBackendChanged` → `StrandExecutor::post` |
 | `ActionDispatcher::dispatch` → `Model::execute` (remote mode) | `RemoteServer`'s worker pool, inside a per-`ModelId` strand | `RemoteServer::dispatchExecute` → `StrandExecutor::post` |
 | Remote message decode / envelope handling | `RemoteServer`'s worker pool | `RemoteServer::handle` → `_pool.post` |
 | `Completion::then` / `onError` callbacks | The `cbExec` executor supplied at dispatch (the GUI executor for `BridgeHandler`) | `CompletionState::setValue`/`setException` → `cbExec->post` |
@@ -77,12 +78,23 @@ turns it into a set of per-key serial queues:
   may run concurrently on different pool threads. This is what removes the need
   for per-model mutexes.
 - Each strand is a `shared_ptr<Strand>` in a map guarded by `_mapMtx`. When a
-  strand's queue drains, the map entry is erased — but the "keep-running vs.
-  drain-and-erase" decision is made atomically under **both** `_mapMtx` and the
-  strand's own `mtx`. Doing it in two steps once opened a window where a
-  concurrent `post()` re-armed a strand between the unlock and the erase,
-  orphaning a live strand and letting two strands run the same model's tasks
-  concurrently (a data race). The combined lock closes that window.
+  strand's queue drains, the map entry is erased. The invariant is: **at most one
+  live strand per `ModelId`, and any `running` strand is the one currently in the
+  map** — that is what keeps a key's tasks from overlapping. Both sides that can
+  break it hold `_mapMtx` across their *whole* decision: `post()` takes `_mapMtx`,
+  looks up (or creates) the strand, and — still under `_mapMtx` — takes
+  `strand->mtx` to push the task and set `running`; the drain step takes the same
+  two locks in the same order to decide "keep running vs. erase". An earlier
+  design held the combined lock only inside the drain step while `post()` re-armed
+  the strand under `strand->mtx` alone (after releasing `_mapMtx`); a concurrent
+  drain could then erase the strand in that gap, orphaning a live strand, and the
+  next `post(key)` created a *second* strand for the same key — two strands
+  running the model's tasks concurrently (a data race). Serialising the lookup,
+  the re-arm, and the erase under `_mapMtx` closes that window: the drain never
+  erases a strand whose `pending` queue is non-empty, and a strand that becomes
+  `running` in `post()` is guaranteed to still be the map entry. Lock order is
+  always `_mapMtx` → `strand->mtx`, acquired as two sequential `scoped_lock`s at
+  both sites, so no lock-ordering deadlock.
 - `_inFlight` counts strand lambdas currently dispatched to the base executor.
   The destructor waits on `_cv` until `_inFlight == 0` before destroying the
   map, so no pool thread can touch `_strands` after the executor is gone.
@@ -99,8 +111,12 @@ supplied at construction, never invoked directly on the producing thread.** So a
 callback attached from the GUI runs back on the GUI thread even though the value
 was produced on a pool thread.
 
-If `cbExec` is `nullptr`, callbacks are never delivered (silently dropped); a
-failed-but-unhandled state logs an orphan error from `~CompletionState`.
+If `cbExec` is `nullptr`, callbacks are never delivered (silently dropped) — and
+because delivery is the only thing that discharges an error, a **null `cbExec`
+forces orphan logging even when an `onError` handler *was* attached.** Both
+`setException` and `attachOnError` set `onErrAttached = (cbExec != nullptr)`, so
+with no executor the error still reaches the orphan logger in `~CompletionState`
+rather than vanishing into a handler that can never run.
 
 See [`Completion` / `CompletionState` thread-safety](#completion--completionstate-thread-safety)
 for the internal locking and the one non-mutex-guarded field.
@@ -163,9 +179,24 @@ bridge first is still discouraged, but it is no longer unsafe.
 
 `RemoteServer` derives from `enable_shared_from_this` and **must** be created via
 `std::make_shared`. `handle()` captures `shared_from_this()` into the pool task,
-so the server object survives until every dispatched message completes, even if
-the owning `shared_ptr` is dropped while work is in flight — this is why the
-worker pool can safely outlive the server *reference*.
+so the server object survives until that task completes.
+
+**The self-capture must be re-established for the execute strand hop.** An
+`execute` envelope does not finish inside the pool task: `dispatchExecute` posts
+a *second* task onto the model's strand and returns, at which point `handle()`'s
+pool task completes and releases its `shared_from_this()`. If the strand task
+did not itself co-own the server, the last external `shared_ptr` dropping right
+after `handle()` returned would free the server — and with it the
+`_dispatcher`/`_registry` *reference members* the strand task reads — before the
+task runs (a use-after-free), or the reply callback would be destroyed with the
+server and the client's `Completion` would hang forever. So the `dispatchExecute`
+strand task **also** captures `shared_from_this()` (`self = shared_from_this()`)
+and reaches the dispatcher through `self->_dispatcher`, never a bare reference
+capture. The server is thus kept alive across the pool→strand hop until the
+reply fires; only then does the strand task release its self-reference and the
+server may be destroyed. This holds even when the owning `shared_ptr` is dropped
+while work is in flight — which is why the worker pool can safely outlive the
+server *reference*.
 
 `SimulatedRemoteBackend` (and any real transport) stores a bare `RemoteServer&`.
 That reference must remain valid for the backend's whole life: the
@@ -178,9 +209,34 @@ a `shared_ptr` copy of the `IModelHolder` (`holder = std::move(holder)` in the
 `post` lambda), so a concurrent `deregisterModel` that erases the map entry
 cannot free the model out from under a running action.
 
+### Synchronous re-entry into a backend from a pool thread
+
+A `BridgeHandler` can be constructed *from inside* a running action (e.g. a
+model that registers a sub-model), which means the constructor's
+`registerModelWithContext` call may run on the very worker-pool thread that is
+executing the action. On the remote path this reaches `RemoteServer` on a pool
+thread. That is why control messages (`register` / `deregister`) go through the
+**synchronous** `handleInline`, which runs `dispatchMessage` inline instead of
+posting to the pool — posting would deadlock if the pool were saturated by the
+in-flight action. `handleInline` **rejects `execute`**: an `execute` reply is
+produced asynchronously on the model strand, *after* `handleInline` has returned
+and destroyed the local reply buffer the deferred callback would write into — a
+dangling-write hazard. See [backend.md](backend.md) for the exact wiring.
+
+### `cancelPending` — snapshot-then-deliver, weak-ptr tracked
+
+Both backends track their in-flight completions as `weak_ptr<CompletionState>`
+in a `_pending` vector guarded by `_pendingMtx`. `cancelPending(exc)` **swaps the
+vector out under the lock and delivers `exc` outside it**, so no completion
+callback runs while `_pendingMtx` is held — otherwise a callback that re-enters
+the backend would deadlock. The `weak_ptr` tracking is what lets an already
+resolved-and-destroyed completion be skipped (its state is gone) rather than
+resurrected, and `setException` on a still-live-but-already-`ready` state is the
+idempotent no-op described below.
+
 ## Synchronisation specifics per subsystem
 
-### `Bridge::switchBackend` — atomic, exception-safe, self-deadlock-prone
+### `Bridge::switchBackend` — atomic, exception-safe; `onBackendChanged` is posted to the model strand
 
 `switchBackend` holds `Bridge::_mtx` for its **entire** duration. Within that
 lock it uses a **stage-all-then-commit** protocol (recent fix):
@@ -199,18 +255,83 @@ Cancellation of the outgoing backend's pending completions
 delivers callbacks through the caller's GUI executor and the bridge must never
 hold `_mtx` while user code runs.
 
-Two hard rules:
+**`notifyBackendChanged()` runs under `_mtx`, but only posts — it does not run
+model code under the lock.** `LocalBackend::notifyBackendChanged` dispatches each
+model's `onBackendChanged()` onto that model's own strand (the per-`ModelId`
+serial queue) rather than invoking it inline. The cheap `post()` happens under
+`_mtx`; the callback body runs later on a pool thread with `_mtx` free. This is
+what makes the model-side contract both true and safe:
 
-- **Do not call `switchBackend`, `registerHandler`, or `deregisterHandler` from
-  inside `onBackendChanged()`.** `notifyBackendChanged()` runs while `_mtx` is
-  held, and those methods re-acquire `_mtx` → **self-deadlock**. Lock ordering is
-  `Bridge::_mtx` before `LocalBackend::_regMtx`.
+- **Strand-serialised, no model locking.** `onBackendChanged()` runs on the same
+  strand as `execute()` for that model, so the two never overlap — a model
+  draining a queue and mutating its own counters there needs no locking. This is
+  the guarantee `offline.md`'s conflict-resolution path relies on. (Earlier the
+  callback ran inline on the switch caller's thread, which contradicted that
+  claim; the conflict-resolution tests only passed because they slept.)
+- **`registerHandler` / `deregisterHandler` are safe from `onBackendChanged()`.**
+  They re-acquire `_mtx`, but on a *different* thread (the strand) with the lock
+  already released by the switch caller — no self-deadlock. This was the
+  reentrant-deadlock fix: the old inline-under-`_mtx` design hung here.
+- **`switchBackend` from `onBackendChanged()` is still unsupported.** Not because
+  of `_mtx` (that is free now) but because the callback runs on the *outgoing*
+  backend's strand; a nested switch drops the last reference to that backend when
+  it returns, and `~StrandExecutor` blocks until in-flight strand tasks finish —
+  including the one calling it — a self-join hang. Re-register or reconcile from
+  the callback; do not swap the backend again inside it.
 - **`executeVia` IS safe from `onBackendChanged()`.** It never takes `_mtx`; it
   reads a **lock-free snapshot** of the backend `shared_ptr` (via `_backendMtx`,
   a short separate lock) and the binding's `std::atomic currentId`. A concurrent
   switch cannot free the old backend out from under the call because its
   `shared_ptr` refcount is still > 0; the call either succeeds or fails with
   "model not found", both safe.
+
+Lock ordering remains `Bridge::_mtx` before `LocalBackend::_regMtx`.
+
+### Reconnect handler — fires on the transport thread, guarded against a dead `Bridge`
+
+The reconnect handler a `Bridge` installs on its backend
+(`installReconnectHandler`) runs on the **backend's transport thread**, not the
+GUI or pool thread, and it captures the bare `Bridge* this` (it needs `_mtx`,
+`_handlers`, and `loadBackend()`). A backend can be co-owned or otherwise outlive
+its `Bridge`, so a reconnect firing after the `Bridge` is destroyed would
+dereference freed memory. Two layers prevent this:
+
+- **`~Bridge` clears the active backend's handler** (`setReconnectHandler(nullptr)`)
+  before cancelling pending work, and `switchBackend` clears the *outgoing*
+  backend's handler after the swap. This removes the callback from the common
+  path. The clear is done **outside `Bridge::_mtx`** — `setReconnectHandler` only
+  stores a callback and never re-enters the bridge, so there is no lock-ordering
+  hazard with the handler body (which does take `_mtx`).
+- **The handler guards on the `_liveness` token.** It captures a
+  `weak_ptr<const void>` to the bridge's `_liveness` (the same token
+  `BridgeHandler` uses) and, on invocation, locks it *before* touching `this`. If
+  the token has expired the `Bridge` is gone and the handler returns immediately.
+  This covers the race the clear alone cannot: a reconnect already latched on the
+  transport thread at the moment `~Bridge` runs. After the liveness check it also
+  re-checks `pinned == loadBackend()` to ignore a reconnect for a backend the
+  bridge has since switched away from.
+
+### `QtWebSocketBackend::sendSync` — a disconnect must not freeze the Qt thread
+
+`registerModel` is synchronous: `sendSync` sends the envelope and pumps a
+**nested `QEventLoop`** on the Qt thread until the reply arrives. Everything runs
+on the single Qt thread, so the parked loop is unblocked only by a slot on that
+same thread. The rules that keep it from hanging:
+
+- **The `disconnected` slot quits a parked sync loop.** If `_syncLoop` is
+  non-null when the socket drops, the slot clears `_pendingReply` and calls
+  `_syncLoop->quit()`. Without this, a disconnect while a register reply is
+  outstanding would leave the nested loop running forever — freezing the Qt
+  thread. On return `sendSync` sees an empty `_pendingReply` and throws
+  `"disconnected"`, which `registerModel` reports as
+  `"register failed: disconnected"`.
+- **`sendSync` fails fast if already disconnected** — it checks `_connected`
+  before parking and throws rather than waiting for a reply that will never come.
+- **`sendSync` is non-reentrant.** `_syncLoop` is a single pointer; a second sync
+  send while one is parked would clobber it and cross the two replies. Register
+  calls run on the Qt thread and never re-enter `sendSync` from within a parked
+  loop, but the guard throws on reentry rather than corrupting state if that
+  assumption is ever violated.
 
 ### `NetworkMonitor` — probe-thread callbacks must not block
 
@@ -321,8 +442,9 @@ One-liners to remember:
 
 - Never destroy the pool before the strand/backend → `~StrandExecutor` deadlocks.
 - Never `post()` to a `StrandExecutor` whose destructor has begun.
-- Never call `switchBackend`/`registerHandler`/`deregisterHandler` from
-  `onBackendChanged()`; `executeVia` is fine there.
+- `onBackendChanged()` runs posted on the model's strand (not inline under
+  `_mtx`): `registerHandler`/`deregisterHandler`/`executeVia` are safe from it,
+  but never call `switchBackend` there (it self-joins the strand it runs on).
 - Never block or re-enter from a `NetworkMonitor` callback (probe thread).
 - Never log from inside a log sink (non-recursive mutex).
 - Never read `session::current()` off the dispatch thread or after `execute()`
