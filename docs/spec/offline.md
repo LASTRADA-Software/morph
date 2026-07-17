@@ -306,7 +306,7 @@ rather than assuming it finished synchronously. See
 [bridge.md](bridge.md)'s `switchBackend` for the exact posting mechanism.
 
 The two paths are mutually exclusive per queue — a queue drained inside
-`onBackendChanged()` and also handed to a `SyncWorker.replay()` would be
+`onBackendChanged()` and also handed to a `SyncWorker::run()` would be
 double-processed. Choose the model path when replay outcomes are richer than
 success/failure (conflicts, merges); choose `SyncWorker` when they are not and
 you want the built-in retry budget.
@@ -340,7 +340,7 @@ calling thread.
 |---|---|---|
 | `Config` | `ReconnectCoordinatorConfig` | Alias. |
 | `Deps` | struct | Injected side-effect callbacks (see below). |
-| ctor | `explicit ReconnectCoordinator(Deps, Config = {})` | Non-copyable, non-movable. Null `Deps` members are logged in debug builds. |
+| ctor | `explicit ReconnectCoordinator(Deps, Config = {})` | Non-copyable, non-movable. Null `Deps` members are logged via `morph::log::logError` in all builds; construction still succeeds. |
 
 #### `Deps` struct
 
@@ -495,7 +495,8 @@ It is lost when the process exits. A queue that survives restarts (a SQL-backed
 `IOfflineQueue`) will therefore re-present a poison item with its counter back
 at zero after every restart, so it can never actually dead-letter across
 restarts. **Durable dead-lettering requires storing the attempt count in the
-queue**, which the current `QueueItem` (id + payload only) does not carry.
+queue**, which the current `QueueItem` (id, payload, idempotencyKey — no attempt
+count) does not carry.
 
 ### `Reconnected` can be returned without replaying
 
@@ -521,11 +522,11 @@ online→online edge. Startup activation is the host's job (call `onOnline()` /
 
 ### Null `Deps` construct successfully then crash
 
-`ReconnectCoordinator`'s constructor only *logs* null `Deps` members (in debug
-builds, via `assertDepsNonNull`); it does not throw. A coordinator built with a
-null `tryReconnect`/`replay`/etc. constructs fine and later crashes when
-`onOnline()`/`onOffline()` invokes the null `std::function`. Treat the debug log
-line as the only warning you get.
+`ReconnectCoordinator`'s constructor only *logs* null `Deps` members (in all
+builds, via `assertDepsNonNull` calling `morph::log::logError`); it does not
+throw. A coordinator built with a null `tryReconnect`/`replay`/etc. constructs
+fine and later crashes when `onOnline()`/`onOffline()` invokes the null
+`std::function`. Treat the logged error line as the only warning you get.
 
 ### `onOnline()` holds the mutex for the entire retry loop
 
@@ -603,9 +604,12 @@ Honest boundaries of what ships today:
 - **`journal.md`** — the action log is a permanent, append-only audit/replay
   trail; `IOfflineQueue` is transient (holds pending writes, deletes them on
   delivery). The two are distinct: the journal's ordering is authoritative and
-  never dropped by the framework, whereas offline replay ordering only holds
-  when every item succeeds (see [Failure modes](#failure-modes)). Do not conflate
-  the offline queue's replay with journal replay.
+  entries already in a sink are never removed by the framework (append-only),
+  though a durable sink that throws during `checkpoint()` can permanently lose
+  that batch (watermark-advances-first — see journal.md's failure modes). Offline
+  replay ordering only holds when every item succeeds (see
+  [Failure modes](#failure-modes)). Do not conflate the offline queue's replay
+  with journal replay.
 - **`concurrency_and_lifetimes.md`** — the framework-wide rule that notification
   callbacks marshal work off the raising thread (the reason
   [NetworkMonitor callbacks must only post](#networkmonitor-callback-constraint)),

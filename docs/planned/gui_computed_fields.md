@@ -211,7 +211,9 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   [gui_cross_field_rules.md](gui_cross_field_rules.md), evaluated after
   `recomputeAll`.
 - **No localisation.** `x-computed`/`x-readonly` carry structure, not display
-  text, for the same reason the schema is un-localised ([forms.md](../spec/forms.md)).
+  text, for the same reason the schema is un-localised ([forms.md](../spec/forms.md));
+  a computed field's caption is translated like any other field's, via
+  [gui_i18n.md](gui_i18n.md)'s catalog.
 
 ## Testing (planned)
 

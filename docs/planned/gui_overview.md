@@ -51,7 +51,9 @@ override + direct-schema-consumption buys flexible.
 ### Tier 1 — richer forms (polish a single action's form until it looks bespoke)
 
 Purely additive metadata and logic on top of the existing single-action form.
-Each emits new `x-*` keys that a renderer ignores harmlessly if unsupported.
+Each emits new additive schema keys — `x-*` extensions or standard JSON-Schema
+annotations (`title`, `description`) — that a renderer ignores harmlessly if
+unsupported.
 
 | Spec | Adds |
 |---|---|
@@ -61,6 +63,7 @@ Each emits new `x-*` keys that a renderer ignores harmlessly if unsupported.
 | [gui_cross_field_rules.md](gui_cross_field_rules.md) | A typed rule vocabulary (required-when, comparisons, one-of) evaluated on **both** client and server. |
 | [gui_computed_fields.md](gui_computed_fields.md) | Derived read-only fields recomputed live client-side and authoritatively server-side. |
 | [gui_dependent_choices.md](gui_dependent_choices.md) | `Choice` options parameterised by sibling field values (cascading picklists). |
+| [gui_i18n.md](gui_i18n.md) | Localised display text — stable message keys derived from the schema, a renderer-side catalog seam, and locale formatting duties. Cross-cutting: fixes the key scheme the other Tier-1 declarations translate through. |
 
 ### Tier 2 — app generation (climb from "form" to "screens")
 
@@ -83,9 +86,10 @@ from Tier-1 action-forms.
 ## Versioning stance (unchanged, deliberately)
 
 Per [forms.md](../spec/forms.md), the emitted schema is **unversioned**, and the
-program keeps it that way: **every new key each `gui_*.md` spec introduces is an
-additive, optional `x-*` (or a new top-level view-schema document) that an older
-renderer can safely ignore.** Adding such a key is explicitly *not* a breaking
+program keeps it that way: **every new key each `gui_*.md` spec introduces is
+additive and optional — an `x-*` extension, a standard JSON-Schema annotation
+(`title`, `description`), or a new top-level view-schema document — and an older
+renderer can safely ignore it.** Adding such a key is explicitly *not* a breaking
 change. Renaming, retyping, or changing the meaning of an existing key remains a
 breaking change reserved for a major release. Each spec must state, in its
 design, that its keys are additive and name the fallback a renderer that ignores

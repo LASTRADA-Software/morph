@@ -12,8 +12,8 @@ The API is still being corrected. This work sits on `fix/spec-audit-remediation`
 and [todo.md](../todo.md) is explicit: "The API is still being corrected ...
 Before production adoption at scale, declare a supported version, a deprecation
 policy, and ABI/source-compat expectations (header-only eases ABI but not
-source)." Every planned item is deliberately opt-in and backward compatible so it
-"can land independently and in any order" ([todo.md](../todo.md)), which is the
+source)." Every planned item is deliberately "opt-in or backward compatible by default"
+so the items "can largely land independently" ([todo.md](../todo.md)), which is the
 right posture *pre*-1.0 — but there is no *declared commitment* a consumer can
 depend on. A production adopter today has no statement of what may change under
 them, or on what notice.

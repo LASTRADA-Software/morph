@@ -24,8 +24,9 @@ fields out top-to-bottom in declaration order ([forms.md](../spec/forms.md),
 Grouping is a compile-time property of the action — which fields belong together
 is known when the struct is written — so, per [gui_overview.md](gui_overview.md),
 it belongs in a `static constexpr` declaration surfaced through `x-*` keys, the
-same shape as the `optionalFields` / `fieldMetadata` conventions the generator
-already reads (verified in `forms.hpp`).
+same shape as the existing `optionalFields` convention the generator already
+reads (verified in `forms.hpp`) and the planned `fieldMetadata` descriptor
+([gui_field_metadata.md](gui_field_metadata.md)).
 
 ## Goal
 
@@ -53,7 +54,8 @@ enum class GroupKind { Section, Tab, Accordion };
 struct FieldGroup {
     std::string_view title;                     // section / tab / panel heading
     GroupKind kind{GroupKind::Section};
-    std::span<const std::string_view> fields;   // member wire keys, in order
+    std::span<const std::string_view> fields;   // member wire keys (membership;
+                                                // intra-group order is x-order)
 };
 
 struct FieldSpan {
@@ -83,16 +85,18 @@ struct RecordMeasurement {
 };
 ```
 
-`kind` on the **first** group decides the container: if any group is `Tab` the
-renderer builds a tab bar; if `Accordion`, collapsible panels; the default
-`Section` is a titled fieldset stacked vertically. Mixing kinds is allowed but a
-renderer may downgrade an unsupported kind to a plain section (the fallback).
+Each group carries its own `kind`: the default `Section` renders as a titled
+fieldset stacked vertically, consecutive `Tab` groups render as panes of one
+shared tab bar, and an `Accordion` group renders as a collapsible panel. Mixing
+kinds is allowed (as above: two sections plus an accordion) but a renderer may
+downgrade an unsupported kind to a plain section (the fallback).
 
 ### Interaction with `x-order`
 
 `x-order` is unchanged and remains the authority on **intra-group** ordering. A
-group's `fields` list gives the *membership and cross-group order*; within a
-group the renderer still lays fields out by ascending `x-order`. A field not
+group's `fields` list gives the *membership* only, and the `formLayout` array
+order gives the *cross-group order*; within a group the renderer still lays
+fields out by ascending `x-order`. A field not
 named in any group falls into an implicit trailing "ungrouped" section in
 `x-order` order — so adding a group for *some* fields never hides the rest. This
 keeps the flat default a special case: no `formLayout` ⇒ one implicit group
@@ -108,9 +112,9 @@ container kind without reconstructing them from per-field tags:
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
-| `x-layout` | top-level (object) | object | The form's group structure: `{ "kind": "section"\|"tab"\|"accordion", "groups": [ { "title": string, "fields": [wire-key,…] }, … ] }`. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
+| `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }` — each group carries its own `kind`, mirroring `FieldGroup::kind`. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
 | `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to (redundant with `x-layout` for renderers that prefer a per-field lookup; both describe the same membership). Omitted for a field in the implicit default group. |
-| `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups` — a stable numeric handle a renderer can sort/switch on without string comparison. Omitted when `x-layout` is absent. |
+| `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups` — a stable numeric handle a renderer can sort/switch on without string comparison. Omitted when `x-layout` is absent, and (like `x-group`) for a field in the implicit default group. |
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when > 1. A renderer laying fields in a grid widens the control; a single-column renderer ignores it (field still shows full width). |
 
 All four keys are **additive and non-breaking**: they extend the
@@ -167,8 +171,9 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
   group for some fields never drops the ungrouped ones.
 - Intra-group order follows `x-order`, not the order of the group's `fields`
   list, when the two disagree.
-- `Tab` / `Accordion` on the first group sets `x-layout.kind` accordingly; a
-  `FieldSpan{colspan>1}` emits `x-colspan`, and `colspan == 1` emits nothing.
+- `Tab` / `Accordion` on a group sets that group's `kind` in `x-layout.groups`
+  accordingly (other groups keep their own kinds); a `FieldSpan{colspan>1}`
+  emits `x-colspan`, and `colspan == 1` emits nothing.
 - A group naming a nonexistent field is ignored without crashing (schema
   generation never throws).
 

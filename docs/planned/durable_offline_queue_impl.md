@@ -2,8 +2,9 @@
 
 > **Status: planned — not yet implemented.** This spec builds directly on
 > [durable_queue.md](durable_queue.md) — it provides the concrete SQLite/file
-> store that implements the `QueueItem::attempts` / `setAttempts` /
-> `DeadLetterSink` contract that spec defines — and extends
+> store that implements the `QueueItem::attempts` / `setAttempts` persistence
+> contract that spec defines (and thereby makes its `SyncWorker`-side
+> `DeadLetterSink` fire across restarts) — and extends
 > [offline.md](../spec/offline.md). See [todo.md](../todo.md).
 
 ## The gap
@@ -22,8 +23,10 @@ ships. This spec adds the *fields and hooks* a SQL/file-backed queue needs
 
 So today every host that wants offline durability re-writes the same SQLite/file
 `IOfflineQueue` from scratch, and gets the crash-safety and attempt-persistence
-subtleties wrong in slightly different ways. B1/B2 ([durable_queue.md](durable_queue.md),
-[outbox.md](outbox.md)) are unusable out of the box without it.
+subtleties wrong in slightly different ways. B1 ([durable_queue.md](durable_queue.md))
+is unusable out of the box without it. (The transactional outbox,
+[outbox.md](outbox.md), is unaffected — it relays from the model's own store,
+not from an `IOfflineQueue`.)
 
 ## Goal
 
@@ -71,15 +74,22 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
     ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';
 ```
 
-- `id` is `AUTOINCREMENT` so it is **queue-local and may change across restarts**
-  — exactly the [offline.md](../spec/offline.md) contract ("Queue-local — not a
-  cross-subsystem key"). Cross-restart identity is carried by `idempotency_key`,
-  not `id`.
-- The partial unique index on a non-empty `idempotency_key` gives the "UNIQUE
-  constraint on the payload/key" that [ARCHITECTURE.md](../ARCHITECTURE.md)
-  anticipates for a SQL-backed queue — a re-enqueue of the *same* logical op (same
-  key) is deduplicated at insert. Empty keys (the default) are exempt, so
-  keyless items behave exactly as the in-memory queue does.
+- `id` is `AUTOINCREMENT`, so ids are never reused and a re-opened queue
+  re-presents each row under its **stored** `id` (stable across restarts in this
+  implementation). It remains **queue-local** — the
+  [offline.md](../spec/offline.md) contract ("Queue-local — not a
+  cross-subsystem key") allows but never promises stability, so callers must not
+  rely on it. Cross-restart identity is carried by `idempotency_key`, not `id`.
+- The partial unique index on a non-empty `idempotency_key` gives the insert-time
+  dedup that [ARCHITECTURE.md](../ARCHITECTURE.md) anticipates for a SQL-backed
+  queue (its sketch says "UNIQUE constraint on the payload"; keying on
+  `idempotency_key` dedups the same *logical op* even when payloads differ) — a
+  re-enqueue of the same key is a no-op (`INSERT ... ON CONFLICT DO NOTHING`)
+  that returns the existing row's id. This is a deliberate, implementation-
+  specific strengthening: the base `IOfflineQueue` contract only *stores* the
+  key and never enforces uniqueness ([offline.md](../spec/offline.md)). Empty
+  keys (the default) are exempt, so keyless items behave exactly as the
+  in-memory queue does.
 
 ### Proposed types (NEW)
 
@@ -120,10 +130,13 @@ For hosts that do not want a SQLite dependency, a second reference implementatio
 over an append-only NDJSON file (mirroring `FileActionLog`'s shape,
 [ARCHITECTURE.md](../ARCHITECTURE.md)) is provided in the same opt-in spirit:
 
-- `enqueue` appends a JSON line `{id, payload, idempotencyKey, attempts}`.
+- `enqueue` appends a JSON line `{id, payload, idempotencyKey, attempts}`. New
+  ids resume from the highest id seen in the file (unlike `FileActionLog`'s
+  process-local `seq`), so a fresh item can never collide with an old tombstone.
 - `markDone` and `setAttempts` are recorded as tombstone/update lines and
   compacted on open (last-write-wins per id), so the file is self-healing across
-  restarts and tolerates a torn trailing line the same way `FileActionLog` does.
+  restarts and tolerates a torn trailing line the same way `FileActionLog` does
+  ([journal.md](../spec/journal.md), "Torn-write tolerance").
 - Same `IOfflineQueue` surface; the choice between SQLite and file is a host
   decision, not a contract difference.
 
@@ -134,8 +147,8 @@ With this queue installed as the `IOfflineQueue` behind `SyncWorker`
 
 1. An item fails a replay → `SyncWorker` increments `item.attempts` and calls
    `setAttempts(id, attempts)` → the count is persisted.
-2. The process restarts; `drain()` re-presents the item with a **fresh `id`** but
-   the **persisted `attempts`**.
+2. The process restarts; `drain()` re-presents the item (under its stored,
+   queue-local `id`) with the **persisted `attempts`**.
 3. `SyncWorker` resumes from the stored count, so the 5-attempt budget is
    cumulative across restarts and the item genuinely dead-letters (invoking the
    `DeadLetterSink`) instead of retrying forever — closing the exact failure mode
@@ -179,9 +192,10 @@ With this queue installed as the `IOfflineQueue` behind `SyncWorker`
 
 ## Cross-references
 
-- [durable_queue.md](durable_queue.md) — the `QueueItem::attempts`, `setAttempts`
-  write-back hook, and `DeadLetterSink` this queue concretely implements; the
-  cross-restart dead-lettering it makes real.
+- [durable_queue.md](durable_queue.md) — the `QueueItem::attempts` field and
+  `setAttempts` write-back hook this queue concretely implements, and the
+  `SyncWorker`-side `DeadLetterSink` whose cross-restart dead-lettering it
+  makes real.
 - [offline.md](../spec/offline.md) — `IOfflineQueue`, `QueueItem`,
   `InMemoryOfflineQueue`, `enqueue`/`drain`/`markDone`/`setIdempotencyKey`, the
   non-destructive-`drain` crash-safety contract, `idempotencyKey` dedup, and the

@@ -134,8 +134,9 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
 }
 
 void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
-    // Fire-and-forget — server cleans up remaining models when connection closes.
-    // Avoids a nested QEventLoop during destructor which can trigger Qt asserts.
+    // Fire-and-forget — avoids a nested QEventLoop during destructor which can
+    // trigger Qt asserts. The server does no connection-scoped cleanup, so an
+    // undelivered deregister leaves the model registered there indefinitely.
     if (_connected) {
         _socket.sendTextMessage(QString::fromStdString(
             ::morph::wire::encode(::morph::wire::makeDeregister(mid.v))));

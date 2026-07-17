@@ -67,14 +67,18 @@ problem, and produces no diagnostic.
 
 ### One macro invocation per translation unit
 
-Each `BRIDGE_REGISTER_*` macro emits two things at namespace scope:
+`BRIDGE_REGISTER_MODEL` and `BRIDGE_REGISTER_ACTION` each emit two things at
+namespace scope:
 
-1. an **explicit template specialisation** — `ModelTraits<M>`, `ActionTraits<A>`,
-   or `ActionValidator<A>` — which has external visibility to the type system;
-   and
+1. an **explicit template specialisation** — `ModelTraits<M>` or `ActionTraits<A>`
+   — which has external visibility to the type system; and
 2. one or more **file-scope initialiser objects** (`[[maybe_unused]] const bool`
    in an anonymous namespace) whose initialisation runs
    `registerModelOnce` / `registerActionOnce` / `registerActionExecutorOnce`.
+
+`BRIDGE_REGISTER_VALIDATOR` emits **only** item 1 — an `ActionValidator<A>`
+specialisation. It performs no static-init registration (there is no singleton
+of validators; `ActionValidator` is consulted purely by template lookup).
 
 Because of (1), a macro must be invoked in **exactly one translation unit**.
 Placing a `BRIDGE_REGISTER_*` invocation in a header that is included by more
@@ -486,7 +490,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | `ParseError` | `std::runtime_error` subclass thrown on JSON codec failure. |
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
 | `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
-| `registerActionExecutorOnce<M, A>(id)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
+| `registerActionExecutorOnce<M, A>(modelId, actionId)` | Static-init helper; only declared in `registry.hpp`, defined in `bridge.hpp`. |
 
 ## Design decisions
 
@@ -532,7 +536,7 @@ quiesced with respect to dispatch, before exposing them.
 |---|---|---|
 | Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` does `_runners[key] = ...` and `_coalesce[key] = ...`; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
 | Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
-| `dispatch` / `execute` with an unknown `(modelId, actionId)` | Throws `std::runtime_error` **at runtime** (`"unknown action: …"`). The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
+| `dispatch` / `execute` with an unknown `(modelId, actionId)` | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
 | Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. | `registry.hpp` |

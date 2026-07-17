@@ -92,7 +92,7 @@ A long-running test (opt-in target, minutes-to-hours, not in the fast suite) tha
 cycles the backend and connectivity machinery under continuous execute load:
 
 - Repeatedly `switchBackend` between a `LocalBackend` and a
-  `SimulatedRemoteBackend`/`SocketBackend` while executes are in flight, asserting
+  `SimulatedRemoteBackend`/`QtWebSocketBackend` while executes are in flight, asserting
   every in-flight `Completion` resolves (via result or `BackendChangedError`) and
   none leak — exercising the stage-all-then-commit atomicity and `cancelPending`
   ([backend.md](../spec/backend.md), [ARCHITECTURE.md](../ARCHITECTURE.md)).

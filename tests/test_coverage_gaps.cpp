@@ -72,7 +72,7 @@ TEST_CASE("morph::model::ActionTraits (macro-expanded): toJson/resultToJson roun
     REQUIRE(morph::model::ActionTraits<CovParseAction>::resultFromJson(resJson) == 42);
 }
 
-// ── remote.hpp: 6-part execute err reply with callId (lines 138-139)
+// ── remote.hpp: execute err reply envelope echoes the callId
 //
 // These types must have external linkage so glaze's reflection can resolve
 // their mangled names — keep them at file scope, not in an anonymous namespace.

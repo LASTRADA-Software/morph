@@ -37,10 +37,11 @@ Model::execute(action) throws
                  └─ fn receives exception_ptr; caller rethrows to inspect
 ```
 
-The exact code (`LocalBackend::execute`) is:
+The strand task (`LocalBackend::execute`) is:
 
 ```cpp
-_strand.post(mid, [localOp, holder, compState, session]() mutable {
+_strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder),
+                   compState, session = std::move(session)]() mutable {
     try {
         ::morph::session::detail::ScopedContext const scoped{session};
         compState->setValue(localOp(*holder));   // happy path
@@ -73,16 +74,20 @@ handler.execute(action)
 
 The remote path (`SimulatedRemoteBackend::execute`, and real WebSocket
 backends) is identical from the caller's side: the reply-handling lambda calls
-`state->setValue(deser(reply.body))` on an `"ok"` reply, or throws a
-`std::runtime_error(reply.message)` (caught into `setException`) on an `"err"`
-reply. See [Remote wire errors](#remote-wire-errors) for how the server side
-produces those `err` messages.
+`state->setValue(deser(reply.body))` on an `"ok"` reply, or throws
+`std::runtime_error(reply.message)` (caught into `setException`) for **any**
+non-`ok` reply — substituting `"malformed reply"` when `reply.message` is empty.
+See [Remote wire errors](#remote-wire-errors) for how the server side produces
+those `err` messages.
 
 ## Orphan logging and single-shot callbacks
 
 `CompletionState<T>` (see `completion.hpp`) protects a value slot, an
-`std::exception_ptr error` slot, two callback slots (`onOk` / `onErr`), an
-`onErrAttached` flag, and a `cbExec` pointer, all under one mutex.
+`std::exception_ptr error` slot, two callback slots (`onOk` / `onErr`), and an
+`onErrAttached` flag, all under one mutex. The `cbExec` pointer is *not* mutex-
+guarded: it is set once in the `Completion` constructor, before any concurrency,
+and read unlocked thereafter (as `callback != nullptr && cbExec != nullptr`
+outside the critical section).
 
 **Single-shot, last-writer-wins.** `then()` and `onError()` each register at
 most one handler:
@@ -95,7 +100,7 @@ most one handler:
 | `onError` registered before ready | Stored in `onErr`, fired when `setException` lands |
 | `onError` on an already-**error** state | Fired immediately (posted to `cbExec`) |
 | `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then` after a value settled | Re-fires immediately with a **copy** of the value (the fire-now path posts to `cbExec` again — it does not overwrite an already-emptied slot) |
+| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again). **What it delivers depends on how the value was first consumed:** if a `then` was attached *before* the state settled, `setValue` moved the value out of the still-engaged slot, so the re-fire copies a **moved-from** value (e.g. an empty `shared_ptr` on the backend path); only when every `then` was attached *after* settling does each receive a copy of the original value |
 | Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path) |
 | Second `then`/`onError` registered **before** ready | Overwrites the stored `onOk`/`onErr` slot; the last handler registered before the state settles is the one that fires |
 
@@ -183,7 +188,7 @@ produces them:
 
 | Error `message` | Raised in | Cause |
 |---|---|---|
-| `"unauthorized"` | `dispatchExecute` | `IAuthorizer::authorize` returned `false` (bad/expired/absent token, or policy denial) |
+| `"unauthorized"` | `dispatchExecute` (type-level `authorize` and instance-level `authorizeInstance`) and `dispatchMessage`'s deregister branch (`authorizeInstance` against the recorded owner) | An authorizer hook returned `false` — `authorize` (bad/expired/absent token, or type/action policy denial) or `authorizeInstance` (the caller's principal does not own the target instance) |
 | `"register requires a typeId"` | `dispatchMessage` (`register`) | `register` envelope with empty `typeId` |
 | `"unknown model type: <id>"` | `ModelRegistryFactory::create` | `register` for a type-id with no registered factory |
 | `"model not found"` | `dispatchExecute` | `execute` for a `modelId` the server doesn't hold |
@@ -294,8 +299,10 @@ accordingly.
    - orphan errors (`[orphan] ...`) — a failed `Completion` destroyed with no
      `.onError`, or with an `.onError` but a null callback executor.
 
-   The default logger is a no-op sink; without `setLogger` these are invisible.
-   Point it at spdlog, Qt logging, or a test spy at startup.
+   The default sink writes `[LEVEL] sanitizeLogLine(msg)` to `stderr`, so these
+   are visible out of the box wherever stderr is. Call `setLogger` early to route
+   them to spdlog, Qt logging, or a test spy (or to capture them at all in
+   environments where stderr is discarded).
 
 3. **The log is the only signal for exceptions on worker threads.** A throw on
    a pool or strand thread never propagates to the main thread (the sole
@@ -318,4 +325,3 @@ accordingly.
 - [`session.md`](session.md) / [`security.md`](security.md) — `Context`, `IAuthorizer`, `AuthError`, `SigningAuthorizer`.
 - [`logger.md`](logger.md) — `morph::log`, `setLogger`, log levels.
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md#error-propagation) — the "Error propagation" overview this spec expands.
-```

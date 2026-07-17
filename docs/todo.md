@@ -65,6 +65,17 @@ across client/server versions. *Work:* a version field + negotiation on connect,
 and a documented action-evolution policy (additive-only, deprecation window).
 *Touches:* `wire.md`, `security.md`, new spec.
 
+### A7 — Connection-scoped model cleanup · P0 · [spec: `planned/connection_scoped_cleanup.md`]
+Models registered over a connection outlive it: the server performs no
+connection-scoped cleanup, so every client crash or network drop strands its
+instances until process exit — and once A3's `maxLiveModels` lands, dead
+connections consume the budget until new registers are denied. Add an opt-in
+`ConnectionId` scope to `RemoteServer` (`openConnection`/`closeConnection` + a
+scoped `handle` overload) and have `QtWebSocketServer` clean up on disconnect.
+Cleanup is server housekeeping, not a synthesized wire `deregister` (which
+A2's ownership enforcement would rightly reject).
+*Touches:* `remote.hpp`, `qt/qt_websocket_server.hpp`.
+
 ---
 
 ## B. Durability & data-integrity (both modes, if you persist)
@@ -88,6 +99,15 @@ Only `InMemoryOfflineQueue` ships (loses everything on exit). A reference
 SQLite/file-backed queue that persists payload + `idempotencyKey` + `attempts`
 across restarts would make B1/B2 usable without every host re-writing it.
 *Touches:* new header/example.
+
+### B4 — Journal format versioning & retention · P2 · [spec: `planned/journal_evolution.md`]
+Persisted NDJSON lines carry no format version, `journal::fromJson` is strict
+where the wire is lenient (any new key is a reader flag-day), and the log file
+grows without bound. Land reader leniency first, then a `v` line-format stamp;
+document the data-at-rest contract (additive-only for as long as journals are
+retained — stronger than A6's deployment window); give `FileActionLog` a
+`rotate()` seam for host-driven retention. *Touches:* `action_log.hpp`,
+`file_action_log.hpp`.
 
 ---
 
@@ -117,6 +137,15 @@ and a throughput/latency benchmark. Gates confidence in A1–A3.
 registry lock (RTTI dependency, O(all models)). Capture backend-change-awareness
 at registration and drive from a maintained set. Pure internal refactor,
 behavior-preserving. *Touches:* `model.hpp`, `backend.hpp`.
+
+### C5 — Graceful shutdown & drain · P1 · [spec: `planned/graceful_shutdown.md`]
+Stopping a server is abrupt at every layer: `QtWebSocketServer::close()`
+aborts sockets, nothing refuses new work while in-flight executes finish, and
+readiness (C1) never flips for a deploy. Add `RemoteServer::beginShutdown()` +
+`drainedWithin(deadline)` (reject new `register`/`execute` with a canonical
+error, drain the shared in-flight counter) and
+`QtWebSocketServer::closeGracefully(deadline)` (close frames, then hard stop).
+*Touches:* `remote.hpp`, `qt/qt_websocket_server.hpp`.
 
 ---
 
@@ -160,6 +189,11 @@ reference renderer, the schema contract stays renderer-agnostic).
   derived read-only fields, recomputed live client-side, authoritative server-side.
 - **E-G6 — Dependent choices** · P2 · [spec: `planned/gui_dependent_choices.md`] —
   `Choice` options parameterised by sibling field values (cascading picklists).
+- **E-G10 — Localisation (i18n)** · P1 · [spec: `planned/gui_i18n.md`] —
+  translated labels/help/rule messages via schema-derived stable message keys
+  and a renderer-side catalog seam; locale formatting duties pinned by the
+  conformance kit. Cross-cutting: fix its key scheme alongside E-G1 (both
+  shape `FieldMeta`).
 
 ### Tier 2 — app generation (a view/app schema layer above the action schema)
 
@@ -182,7 +216,7 @@ wave are independent and can be done in parallel.
 | Wave | Items | Rationale |
 |---|---|---|
 | **0 — Foundation** | A1 (server-side validation) | E-G4's rules reuse the server-side validator; land it first so rules have a server evaluator to plug into. Not a GUI item, but the GUI program's prerequisite. |
-| **1 — Presentation** | E-G1, E-G2, E-G3 | Pure additive `x-*` metadata; biggest "looks bespoke" ROI, lowest risk, no new logic. Do first and in parallel. |
+| **1 — Presentation** | E-G1, E-G2, E-G3, E-G10 | Pure additive `x-*` metadata; biggest "looks bespoke" ROI, lowest risk, no new logic. Do first and in parallel. E-G10 rides along because its key derivation shapes `FieldMeta` — fixing it before labels proliferate is cheap; retrofitting it after is a migration. |
 | **2 — Renderer toolkit (start)** | E-G9 (reference renderer + conformance kit) | Stand up the reusable QML renderer + conformance corpus against Wave-1 keys, so every later key has a renderer that proves it and a test that pins it. Theming/slots can trail. |
 | **3 — Form logic** | E-G4, then E-G5, E-G6 | E-G4 first (single rule source → schema + client + server, on top of Wave-0). E-G5 and E-G6 build on the reactive path and can follow in parallel once E-G4's rule/annotation plumbing exists. |
 | **4 — App generation** | E-G7, then E-G8 | The view/app-schema layer. E-G7 (lists/master-detail) first — E-G8's wizards/navigation compose G7 screens and Tier-1 forms, so it comes last. |
@@ -195,8 +229,8 @@ stop after Wave 2 and still have a dramatically better form-building story.
 
 - **Local, trusted, in-process:** ship now + C1 (observability) + C3 (soak) for
   confidence. Consider B1/B2 if you persist.
-- **Remote, internal/trusted network:** A1 + A2 + A3 + A4 at minimum; B1/B2 if you
-  persist; C1 + C3.
+- **Remote, internal/trusted network:** A1 + A2 + A3 + A4 + A7 at minimum; B1/B2
+  if you persist; C1 + C3.
 - **Remote, public / multi-tenant:** all of §A, all of §B if persisting, all of
   §C, D1. Treat everything in §A as P0.
 

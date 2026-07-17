@@ -93,9 +93,10 @@ public:
 
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
-    /// The server reclaims any models left registered when the connection closes,
-    /// so no acknowledgement is awaited; this also avoids a nested `QEventLoop`
-    /// during destruction, which can trip Qt asserts.
+    /// No acknowledgement is awaited, which avoids a nested `QEventLoop` during
+    /// destruction (that can trip Qt asserts). Note the server performs no
+    /// connection-scoped cleanup: an undelivered or lost `deregister` leaves the
+    /// model registered on the server indefinitely.
     ///
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override;

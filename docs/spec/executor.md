@@ -68,9 +68,15 @@ and any `StrandExecutor` built on it would deadlock in its destructor waiting on
 `_inFlight`. Passing `0` therefore yields a usable single-worker pool rather than
 a silently dead one; values `≥ 1` spawn exactly that many workers.
 
-The destructor signals stop, notifies all workers, and joins every thread.
-Remaining queued tasks that have not started are dropped — there is no drain
-phase. Exceptions from tasks are caught in the worker `loop` and logged via
+The destructor signals stop, notifies all workers, and joins every thread. The
+workers **drain** the queue before exiting: once `_stop` is set the loop exits
+only when `_stop && _q.empty()`, so workers keep popping and running
+already-queued tasks (including strand lambdas re-posted from within a running
+task) until the queue is empty. The join therefore blocks until every task
+queued before destruction has run. The one thing not covered is a task
+`post()`ed concurrently with or after destruction: it races the last worker's
+exit and may be silently lost. Exceptions from tasks are caught in the worker
+`loop` and logged via
 `morph::log::logError` (see [Failure modes](#failure-modes)); they never
 propagate out of a worker, so one failing task neither kills its thread nor
 aborts sibling tasks.
@@ -109,10 +115,14 @@ be (or supply) a `QObject`.
 Unlike `MainThreadExecutor`, `QtExecutor` needs no explicit `runFor()` drain —
 the running Qt event loop *is* the dispatcher. It is stateless: it owns no
 queue, spawns no thread, and holds no members, so it has no lifetime or shutdown
-concerns of its own. Tasks whose captured `QObject` target has been destroyed
-follow Qt's own queued-invocation semantics (Qt drops the invocation when the
-receiver is gone); this is the one place in the framework with any implicit
-cancellation, and it covers only the GUI leg (see [Limitations](#limitations)).
+concerns of its own. The context object passed to `invokeMethod` is always
+`QCoreApplication::instance()`, so Qt drops the queued invocation only if the
+**application object itself** is destroyed before the event is processed (i.e. at
+shutdown). Qt has no visibility into `QObject`s *captured inside* the opaque
+`std::function`: a task whose captured widget was deleted still runs and will
+dereference the dangling pointer. There is **no** per-task implicit cancellation
+— callers that capture a `QObject` must guard it themselves (e.g. `QPointer` or a
+liveness token) (see [Limitations](#limitations)).
 
 ## `StrandExecutor` and `ModelId`
 
@@ -194,24 +204,32 @@ latent bug:
    the last of those dispatched lambdas has run. So the base must still be alive
    for the whole life of the strand, *including* the destructor's wait.
 
-2. **The base must actually run — not drop — every task the strand posts.**
+2. **The base must actually run — not lose — every task the strand posts.**
    `~StrandExecutor` only returns once `_inFlight` reaches 0, and `_inFlight` is
-   decremented *inside* the dispatched lambda, after the task runs. If the base
-   silently discards a queued lambda instead of running it, that decrement never
-   happens and the strand destructor waits forever.
+   decremented *inside* the dispatched lambda, after the task runs. `_inFlight`
+   is incremented on the strand thread *before* the lambda is handed to
+   `base->post()`. If a posted lambda never runs — because it was handed to a
+   pool that is already being destroyed or has already joined its workers — that
+   decrement never happens and the strand destructor waits forever.
 
 These two combine into the framework's most important ordering rule for these
-types. `~ThreadPoolExecutor` **drops** queued-but-unstarted tasks (no drain),
-whereas `~StrandExecutor` **blocks** until `_inFlight == 0`. Therefore:
+types. `~ThreadPoolExecutor` **drains** its queue (workers run every
+already-queued task before joining), whereas `~StrandExecutor` **blocks** until
+`_inFlight == 0`. Draining is not enough to make arbitrary teardown order safe,
+because the strand can still be *dispatching* while the pool tears down.
+Therefore:
 
 > **Always destroy the `StrandExecutor` before the base pool it wraps.**
 
-Destroying the base `ThreadPoolExecutor` first drops any strand lambdas still
-sitting in the pool queue; their `--_inFlight` never runs, and the subsequent
-`~StrandExecutor` deadlocks on its condition variable forever. With member
-declaration order this means the pool must be declared *before* the strand
-(members destroy in reverse order), or the two must be torn down explicitly in
-that order.
+If the base `ThreadPoolExecutor` is destroyed first, two things go wrong. A
+strand lambda still in flight may call `base->post()` on a pool whose destructor
+has run — undefined behaviour (use-after-free on the pool's queue/mutex). Even
+absent UB, a lambda posted after the pool's workers have already observed
+`_stop && _q.empty()` and exited is never run, so its `--_inFlight` never
+happens and the subsequent `~StrandExecutor` deadlocks on its condition variable
+forever. With member declaration order this means the pool must be declared
+*before* the strand (members destroy in reverse order), or the two must be torn
+down explicitly in that order.
 
 A second rule follows from the same wait: **no `post()` may race with or follow
 `~StrandExecutor`.** The destructor takes `_mapMtx` and waits for
@@ -292,7 +310,7 @@ rather than being hidden).
 | Member | Signature | Notes |
 |---|---|---|
 | ctor | `explicit ThreadPoolExecutor(std::size_t n)` | Spawns `max(n, 1)` worker threads. `n == 0` is clamped to 1 (a zero-worker pool would hang every task). |
-| dtor | `~ThreadPoolExecutor() override` | Signals stop, joins all workers. Remaining queued tasks are dropped. |
+| dtor | `~ThreadPoolExecutor() override` | Signals stop, then joins all workers, which drain the queue (run every already-queued task) before exiting. Tasks posted concurrently with or after destruction may be lost. |
 | `post` | `void post(std::function<void()> task) override` | Enqueues to FIFO; notifies one worker. Thread-safe. Task exceptions caught and logged in the worker loop. |
 
 ### `MainThreadExecutor : IExecutor`
@@ -335,7 +353,7 @@ rather than being hidden).
 |---|---|---|
 | Task signature | `std::function<void()>` | Simple, universal. Every executor accepts the same callable type. No return value, no cancellation. |
 | Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor` and `StrandExecutor` catch `(...)` and log via `morph::log::logError`; `MainThreadExecutor` narrows its catch to `std::exception` so a non-standard throw surfaces on the synchronous drain thread. See [Failure modes](#failure-modes). |
-| ThreadPoolExecutor drain-on-dtor | **Drop remaining, don't drain** | No way to know which tasks are safe to run during shutdown. The caller must synchronise externally if in-flight tasks matter. |
+| ThreadPoolExecutor drain-on-dtor | **Drain the queue, then join** | Workers run every already-queued task before exiting, so a `StrandExecutor`'s in-flight lambdas complete and decrement `_inFlight` as long as the pool outlives the strand. There is no public `waitIdle`/graceful-shutdown API; tasks posted after destruction begins may be lost, so the caller must still synchronise teardown order externally. |
 | MainThreadExecutor's `runFor` | **Wall-clock deadline, not a `runOnce()`** | Lets the caller batch-process tasks without spinning. The condition-variable wait avoids busy-waiting. |
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
 | StrandExecutor in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
@@ -357,15 +375,18 @@ These are honest, known gaps — accepted trade-offs, not bugs:
   caller to learn the queue is backing up.
 - **No cancellation.** Once posted, a task cannot be cancelled or removed. The
   signature is fire-and-forget `std::function<void()>` with no token, handle, or
-  future. The only mitigation anywhere is `QtExecutor`, which drops a callable if
-  its target `QObject` has been deleted — that covers only the GUI leg, not the
-  thread pool or strands.
-- **No graceful drain / `waitIdle` on `ThreadPoolExecutor`.** The destructor drops
-  queued-but-unstarted tasks, and there is no method to wait until the queue is
-  empty or to flush pending work before shutdown. Callers who need in-flight work
-  to finish must synchronise externally. (`StrandExecutor` waits for `_inFlight`,
-  but that is a lifetime-safety wait, not a general drain API, and it relies on the
-  base pool still running the strand's dispatched lambdas.)
+  future. There is no implicit cancellation either: `QtExecutor` posts against
+  `QCoreApplication::instance()`, so Qt drops a queued invocation only at
+  application shutdown, never because a `QObject` captured inside the callable was
+  deleted — such a task still runs against the dangling capture. Callers must
+  guard their own captures.
+- **No graceful drain / `waitIdle` on `ThreadPoolExecutor`.** The destructor
+  drains already-queued tasks but there is no method to wait until the queue is
+  empty, to flush pending work before shutdown, or to reject work posted during
+  shutdown (such a task may be lost). Callers who need to coordinate around
+  in-flight work must synchronise externally. (`StrandExecutor` waits for
+  `_inFlight`, but that is a lifetime-safety wait, not a general drain API, and it
+  relies on the base pool still running the strand's dispatched lambdas.)
 - **Strand allocation churn.** The self-cleaning map (see
   [Lifetime & ownership](#lifetime--ownership)) is good for memory — live entries
   track active models — but a bursty model re-allocates a `Strand` every time its

@@ -99,8 +99,9 @@ public:
     /// @param deps Side-effect callbacks (all required, none null).
     /// @param cfg  Retry tuning.
     ///
-    /// In a debug build, a null `Deps` member is logged via `morph::log::logError`.
-    /// Invoking the coordinator with any null member is undefined behaviour.
+    /// A null `Deps` member is logged via `morph::log::logError` in all builds;
+    /// construction still succeeds. Invoking the coordinator with any null member
+    /// is undefined behaviour.
     explicit ReconnectCoordinator(Deps deps, Config cfg = Config{}) : _deps{std::move(deps)}, _cfg{cfg} {
         assertDepsNonNull(_deps);
     }
@@ -157,7 +158,8 @@ public:
     }
 
 private:
-    /// @brief Logs each null `Deps` member at error level (debug-time aid only).
+    /// @brief Logs each null `Deps` member at error level (in all builds; does
+    ///        not throw — construction still succeeds).
     static void assertDepsNonNull(const Deps& deps) {
         auto check = [](const char* name, bool present) {
             if (!present) {

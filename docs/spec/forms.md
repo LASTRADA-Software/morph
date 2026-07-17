@@ -33,9 +33,15 @@ module needs to know about a field to decide whether it counts as "engaged".
 ```cpp
 template <typename T>
 concept EmptyCapableField = requires(const T& field) {
-    { field.hasValue() } -> std::convertible_to<bool>;
+    { field.hasValue() } noexcept -> std::convertible_to<bool>;
 };
 ```
+
+The `noexcept` requirement is load-bearing: `allRequiredEngaged` is itself
+`noexcept`, so a `hasValue()` that can throw must not cross that boundary. A type
+whose `hasValue()` is *not* `noexcept` silently fails the concept and is treated
+as a non-empty-capable field (always engaged), so it never gates submission —
+the `noexcept` clause is what surfaces that mistake at compile time.
 
 Satisfied by:
 - `morph::units::Quantity<U, Dec>` — `hasValue()` returns `true` when the
@@ -44,7 +50,7 @@ Satisfied by:
   `std::optional<T>` is engaged.
 - `morph::time::Timestamp` — `hasValue()` returns `true` when its `DateTime`
   payload is present.
-- Any user type that exposes `bool hasValue() const`.
+- Any user type that exposes `bool hasValue() const noexcept`.
 
 A **non**-empty-capable field (plain `int64_t`, `std::string`, …) is always
 considered engaged — forms cannot know whether it has been "filled in" without
@@ -269,7 +275,7 @@ recurse into nested aggregates.
 
 | Signature | Checks |
 |---|---|
-| `template <typename T> concept EmptyCapableField` | `const T&` has `.hasValue()` returning convertible-to-`bool`. |
+| `template <typename T> concept EmptyCapableField` | `const T&` has a `noexcept` `.hasValue()` returning convertible-to-`bool`. |
 
 ### `Choice<T, OptionsAction, ValueField, LabelField>` and `FixedString<N>`
 

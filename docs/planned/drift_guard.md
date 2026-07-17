@@ -61,15 +61,17 @@ Two complementary mechanisms, kept deliberately simple to avoid a brittle parser
 1. **A compiled assertion TU (NEW test).** For anything expressible as a
    compile-time or run-time equality — enum cardinality, constant values, error
    `what()` strings — a small test translation unit `#include`s the real headers
-   and `static_assert`s / `EXPECT_EQ`s the value against the manifest constant.
-   This is the authoritative check because it uses the *actual* symbols, not a
-   text scan: e.g.
+   and `static_assert`s / `EXPECT_EQ`s the value against the manifest constant
+   (the manifest is rendered into a generated header of expected values at
+   configure time, so the TU never hand-copies a value the manifest already
+   states). This is the authoritative check because it uses the *actual*
+   symbols, not a text scan — expected values shown inline for clarity: e.g.
 
    ```cpp
    // tests/test_pinned_facts.cpp — NEW.
    static_assert(morph::wire::kMaxEnvelopeBytes == 8 * 1024 * 1024);
    static_assert(static_cast<int>(morph::session::AuthError::NotYetValid) == 3);  // last member
-   EXPECT_EQ(std::string{morph::backend::detail::DisconnectedError{}.what()},
+   EXPECT_EQ(std::string{morph::backend::DisconnectedError{}.what()},
              "transport disconnected before completion resolved");
    ```
 
@@ -81,7 +83,13 @@ Two complementary mechanisms, kept deliberately simple to avoid a brittle parser
    "8 MiB" / "`kMaxEnvelopeBytes`" and "error_on_unknown_keys = false"), so a spec
    cannot silently stop mentioning a fact the manifest still tracks. This catches
    the "doc quietly went stale" direction the audit found, where the code was
-   right and the prose lagged.
+   right and the prose lagged. The same script carries a small
+   **banned-terminology list** for phrasing that superseded designs left
+   behind — the first entry is the pipe-delimited-era "*N*-part protocol"
+   wording (the audit found three stale instances in `ARCHITECTURE.md` after
+   the JSON `Envelope` superseded that protocol); a doc or comment
+   reintroducing a banned term fails the lint the same way a missing citation
+   does.
 
 The compiled TU is the hard gate; the prose lint is the advisory nudge that keeps
 the *documentation* honest, not just the manifest.
@@ -117,6 +125,8 @@ as the Doxygen `FAIL_ON_WARNINGS` gate `CLAUDE.md` already documents.
   alter a canonical error string) makes the pinned-facts TU fail to compile or
   fail at run time — proving the guard catches each audit-class regression.
 - Removing a pinned value's mention from its spec markdown fails the prose lint.
+- Reintroducing a banned term (e.g. "6-part protocol") anywhere in `docs/` or a
+  source comment fails the prose lint.
 - A legitimate coordinated change (code + manifest + prose in one commit) passes
   cleanly — no false positive.
 - The job runs per-commit within the CI time budget and adds nothing to the

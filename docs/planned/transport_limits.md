@@ -18,7 +18,7 @@ the transport's job and, in the shipped Qt transport, **absent**:
   let them resolve.
 - **No per-connection rate limit.** A client can send unbounded messages as fast
   as it likes; each sub-cap message still costs a decode + dispatch.
-- **No cap on models per connection.** `register` is unauthenticated
+- **No cap on models per connection.** `register` is unauthorized
   ([instance_authorization.md](instance_authorization.md)) *and* unbounded — one
   connection can register models until memory is exhausted.
 - **No connection count / accept cap.** `QtWebSocketServer` accepts every client.
@@ -50,8 +50,8 @@ lives:
 ```cpp
 // namespace morph::backend
 struct LimitPolicy {
-    /// Max wall-clock a single execute may take before its Completion is
-    /// resolved with a TimeoutError and the strand result (if it later arrives)
+    /// Max wall-clock a single execute may take before the server sends an
+    /// err "timeout" reply and the strand result (if it later arrives)
     /// is dropped. 0 = no timeout (today's behavior).
     std::chrono::milliseconds executeTimeout{0};
 
@@ -70,10 +70,13 @@ struct LimitPolicy {
   `setLogProvider`). Defaults to all-zero → **today's unbounded behavior**, so
   existing servers are unaffected.
 - **`executeTimeout`** is enforced by arming a timer when `dispatchExecute` posts
-  the strand task; if the timer fires first, the pending `Completion` is resolved
-  with a new `TimeoutError` (a `std::runtime_error` sibling of
-  `DisconnectedError`/`BackendChangedError`) and the eventual strand result is
-  discarded via the existing idempotent `setValue`/`setException` no-op. The
+  the strand task; if the timer fires first, the server sends `err "timeout"` —
+  which the client backend surfaces through the pending `Completion`'s error
+  path — and the eventual strand result is discarded via a shared once-flag on
+  the reply callback, preserving `handle()`'s reply-exactly-once contract. (A
+  typed exception cannot cross the wire; the client sees the `err` message, and
+  the client-side `Completion`'s idempotent `setValue`/`setException` makes even
+  a stray duplicate resolution harmless.) The
   model still runs to completion on its strand (morph never interrupts a running
   `Model::execute` — see the non-goal below); the timeout bounds *the client's
   wait*, not the model.
@@ -94,7 +97,7 @@ socket:
 | `maxConnections` | `0` (unbounded) | Reject/close new accepts beyond this many live clients. |
 | `maxMessageBytes` | `wire::kMaxEnvelopeBytes` | Per-frame cap enforced *before* handing to `RemoteServer::handle` (tighter than the 8 MiB wire cap if set lower). |
 | `messagesPerSecond` | `0` (unbounded) | Token-bucket rate limit per connection; excess frames are dropped or the connection is closed. |
-| `handshakeTimeout` | `10s` | Close a socket that connects but does not complete TLS / send a first frame in time. |
+| `handshakeTimeout` | `0` (disabled) | Close a socket that connects but does not complete TLS / send a first frame in time. |
 | `idleTimeout` | `0` (disabled) | Close a connection with no traffic for this long. |
 
 These are pure `QWebSocket`/`QWebSocketServer`-level controls; they never reach
@@ -107,7 +110,7 @@ limit) so enabling them is opt-in.
 |---|---|---|
 | Message size (coarse) | wire | `kMaxEnvelopeBytes`, always on |
 | Message size (tight) | transport | `QtWebSocketServerConfig::maxMessageBytes` before `handle()` |
-| Per-request timeout | server | `LimitPolicy::executeTimeout` timer on the pending `Completion` |
+| Per-request timeout | server | `LimitPolicy::executeTimeout` timer on the pending reply |
 | In-flight executes | server | `LimitPolicy::maxInFlightExecutes` atomic gate |
 | Live models | server | `LimitPolicy::maxLiveModels` check in `register` |
 | Connection count | transport | `QtWebSocketServerConfig::maxConnections` |
@@ -138,8 +141,8 @@ that actually owns sockets.
 ## Testing (planned)
 
 - With `executeTimeout` set, a deliberately slow model action resolves the
-  client `Completion` with `TimeoutError` at the deadline; a later strand result
-  is a no-op (idempotent completion).
+  client `Completion` with an error (`err "timeout"`) at the deadline; a later
+  strand result produces no second reply (once-only reply guard).
 - With `maxLiveModels`/`maxInFlightExecutes` set, registers/executes past the cap
   get `err "too many models"` / `err "server busy"` and do not dispatch; under
   the cap they behave normally.
@@ -158,10 +161,10 @@ that actually owns sockets.
   `body` double-parse and duplicate-key caveats a front proxy still handles.
 - [backend.md](../spec/backend.md) — `RemoteServer` register/execute paths where the
   server-side `LimitPolicy` checks live; `QtWebSocketServer` where the
-  connection-level config applies; the `TimeoutError` joins the existing typed
-  error hierarchy.
+  connection-level config applies; the `handle()` reply-exactly-once contract
+  the timeout path must preserve.
 - [instance_authorization.md](instance_authorization.md) — `maxLiveModels`
-  complements `authorizeRegister`: one bounds *how many* a caller may create, the
-  other bounds *who* may create.
+  complements `authorizeRegister`: one bounds *how many* instances the server
+  will hold, the other bounds *who* may create them.
 - [completion.md](../spec/completion.md) — the idempotent `setValue`/`setException` that
-  makes a timeout-then-late-result safe.
+  makes a late or duplicate resolution harmless on the client side.

@@ -38,7 +38,7 @@ wrapper family morph already has (`Quantity`, `Choice`), and fall back to an
 explicit `x-widget` override only where the type cannot say. Concretely:
 
 1. **New typed wrappers** carry the control intent so it is inferred, not
-   declared — e.g. `Multiline<>` for a text area, `Ranged<...>` for a slider.
+   declared — e.g. `Multiline` for a text area, `Ranged<...>` for a slider.
 2. **`x-widget` override** for the residual ambiguous cases (radio-vs-combo,
    forcing a specific control on a plain type) via the
    [gui_field_metadata.md](gui_field_metadata.md) descriptor, so a plain type
@@ -54,9 +54,9 @@ In the spirit of `Choice`/`Quantity` — a thin wrapper whose *wire form is its
 payload* and whose rendering intent lives in the C++ type — the following NEW
 wrappers are proposed. Each serialises through glaze `meta` as its bare payload
 (the `Choice` pattern, [choice.md](../spec/choice.md)) so the wire is unchanged;
-each carries `hasValue()` where it can be empty so it participates in
-`EmptyCapableField` / `required` derivation (verified in `forms.hpp`) exactly
-like `Choice`:
+each carries a `noexcept` `hasValue()` where it can be empty so it satisfies
+`EmptyCapableField` and gates `allRequiredEngaged` (verified in `forms.hpp`)
+exactly like `Choice`:
 
 ```cpp
 // namespace morph::forms — NEW.
@@ -68,7 +68,8 @@ struct Multiline {
     // glz::meta reflects `value`; serialises as a plain JSON string.
 };
 
-// A bounded numeric edited as a slider. Wire form: plain number.
+// A bounded numeric edited as a slider. Wire form: nullable number
+// (`T | null`, the `Choice` pattern).
 template <auto Min, auto Max, auto Step = 1>
 struct Ranged {
     std::optional<decltype(Min)> value;
@@ -150,7 +151,7 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 
 - **No new wire types.** Every wrapper serialises as its bare payload (string /
   number), so `x-widget` never changes what travels — a `Multiline` is a
-  `string` on the wire, a `Ranged` a number. The wire and dispatch semantics are
+  `string` on the wire, a `Ranged` a nullable number. The wire and dispatch semantics are
   untouched ([gui_overview.md](gui_overview.md)).
 - **`x-widget` is not validation.** A slider's `x-min` / `x-max` are a *control
   track*, not an enforced range. Value validation stays with glaze's `minimum` /
@@ -177,12 +178,14 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 - A `Multiline` field emits `x-widget = "textarea"` and serialises as a plain
   JSON string on the wire (wire-unchanged guard).
 - A `Ranged<0, 100, 5>` field emits `x-widget = "slider"` with `x-min = 0`,
-  `x-max = 100`, `x-step = 5`, and serialises as a plain number.
+  `x-max = 100`, `x-step = 5`, and serialises as a plain number (`null` when
+  empty).
 - A `FieldMeta::widget` override wins over a wrapper's derived `widget()` for the
   same field; a `FieldMeta::widget` on a plain type emits `x-widget` with no
   wrapper present.
-- A `Ranged` participates in `required` derivation and `allRequiredEngaged` via
-  `hasValue()` exactly like `Choice` (engaged/empty behaviour).
+- A `Ranged` is listed in `required` (it is not itself a `std::optional`) and
+  gates `allRequiredEngaged` via `hasValue()` exactly like `Choice`
+  (engaged/empty behaviour).
 - A renderer ignoring `x-widget` produces a usable form for every field (no
   control id is load-bearing).
 

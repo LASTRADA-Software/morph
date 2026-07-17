@@ -17,9 +17,11 @@ std::unordered_map<uint64_t, int> _attempts;   // SyncWorker, keyed by QueueItem
 Two consequences, both documented in `offline.md`'s Failure modes:
 
 1. **The counter is lost on restart.** A durable (SQL-backed) `IOfflineQueue`
-   re-presents a poison item after a restart with a **fresh** `QueueItem::id` and
-   the counter back at zero — so it can never actually dead-letter across
-   restarts. It retries forever, 5 attempts per process lifetime.
+   re-presents a poison item after a restart with the counter back at zero —
+   the `_attempts` map died with the process (and the item may even carry a
+   fresh `QueueItem::id`, since `id` is only queue-local) — so it can never
+   actually dead-letter across restarts. It retries forever, 5 attempts per
+   process lifetime.
 2. **Dead-lettering is log-only.** A poisoned item is `markDone`-d (dropped) and
    written to `morph::log` at error level. There is no dead-letter queue, no
    callback, no way to inspect or requeue it. If the log sink drops it, it is
@@ -50,28 +52,34 @@ struct QueueItem {
 };
 ```
 
-- **`attempts` is authoritative when the queue persists it.** `SyncWorker` reads
-  `item.attempts` as the starting count instead of consulting its in-memory
-  `_attempts` map, increments it on a failed replay, and **writes it back through
-  the queue** so the next `drain()` (this run or after a restart) sees the
-  updated value.
+- **`attempts` is authoritative when the queue persists it.** `SyncWorker` seeds
+  its count from the drained item: the effective count for an item is the
+  **larger** of `item.attempts` and its in-memory `_attempts` entry. It
+  increments that on a failed replay, keeps it in `_attempts`, and **writes it
+  back through the queue** (`setAttempts`) so a persisting queue's next
+  `drain()` (this run or after a restart) sees the updated value.
 - The write-back is a new optional `IOfflineQueue` hook, mirroring the
-  `setIdempotencyKey` pattern already used for the two-arg `enqueue`:
+  default-no-op `setIdempotencyKey` pattern already used for the two-arg
+  `enqueue` — but **public**, unlike the protected `setIdempotencyKey`, because
+  it is called by `SyncWorker` from outside the queue:
 
 ```cpp
 /// @brief Persists an updated attempt count for an item. Default: no-op.
 ///
 /// A durable queue overrides this to store the count so the retry budget
-/// survives a restart. `InMemoryOfflineQueue` overrides it to update the
+/// survives a restart. `InMemoryOfflineQueue` may override it to update the
 /// in-deque item. A queue that does not override it keeps the pre-existing
 /// process-local retry behavior (SyncWorker's own map).
 virtual void setAttempts(std::uint64_t itemId, std::uint32_t attempts) {}
 ```
 
-- **Backward compatibility.** If a queue does not override `setAttempts`,
-  `SyncWorker` falls back to its existing in-memory `_attempts` map — today's
-  behavior exactly. `InMemoryOfflineQueue` may override it (updating the deque)
-  or leave the fallback; either way non-durable queues behave as before.
+- **Backward compatibility.** If a queue does not override `setAttempts` (the
+  write-back is a no-op), every drained item still carries `attempts == 0`, so
+  the effective count is always `SyncWorker`'s in-memory `_attempts` entry —
+  today's behavior exactly, with no need for `SyncWorker` to detect whether the
+  queue persists the count. `InMemoryOfflineQueue` may override it (updating the
+  in-deque item) or leave the no-op; either way non-durable queues behave as
+  before.
   `QueueItem::attempts` defaults to `0`, so an item enqueued by old code decodes
   with a zero count.
 

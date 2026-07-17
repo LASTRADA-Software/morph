@@ -58,7 +58,11 @@ public:
 
     /// @brief Signals all workers to stop and joins them.
     ///
-    /// Remaining queued tasks that have not started are dropped.
+    /// Workers drain the queue before exiting: after `_stop` is set they keep
+    /// popping and running already-queued tasks and only return once the queue is
+    /// empty, so the join blocks until every task queued before destruction has
+    /// run. Tasks `post()`ed concurrently with or after destruction race this and
+    /// may be silently lost.
     ~ThreadPoolExecutor() override {
         {
             std::scoped_lock const lock{_m};

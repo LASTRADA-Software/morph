@@ -22,7 +22,7 @@ Two gaps remain, both called out in `security.md`'s threat model:
    can create model instances. `authorizeInstance` cannot help — there is no
    instance yet at register time.
 2. **Model ids are guessable.** `RemoteServer` assigns ids from a sequential
-   counter (`_nextId.fetch_add(1) + 1`, `backend.hpp`). Even with
+   counter (`_nextId.fetch_add(1) + 1`, `remote.hpp`). Even with
    `authorizeInstance` enforcing ownership, an attacker can enumerate live ids;
    the ownership check is the only thing stopping cross-tenant access, so a bug
    or misconfiguration there is immediately exploitable across a dense id space.
@@ -66,8 +66,10 @@ instance:
 
 1. Decode the `register` envelope (`typeId`, optional `contextKey`, `session`).
 2. **Authenticate** the caller (`authenticate(env.session)`) — the same call that
-   already records the owner principal — so the register decision keys on the
-   *verified* identity, not the client's claim.
+   already records the owner principal — and stamp the verified principal onto
+   `env.session.principal` (clearing it when `authenticate` returns `nullopt`),
+   exactly as `dispatchExecute` already does, so the register decision keys on
+   the *verified* identity, not the client's claim.
 3. Call `authorizeRegister(session, typeId)`. A `false` return replies
    `err "unauthorized"` (with the request's `callId`) and **no instance is
    created**.
@@ -97,23 +99,27 @@ today. `register` over the local path is unaffected (there is no authorizer on
 ### The change
 
 Replace the sequential `_nextId` counter with a generator that produces
-**unguessable** ids: a per-server random 64-bit stream (seeded once at
-construction from a `std::random_device`, advanced by a counter run through a
-mixing function) so ids are non-sequential and not predictable from a previously
-observed id. The id stays a `std::uint64_t` on the wire (`ModelId`), so the wire
+**unguessable** ids: an internal counter run through a **keyed** 64-bit
+permutation whose key is drawn once at construction from a
+`std::random_device`, so ids are non-sequential and not predictable from a
+previously observed id. (The keying is essential: an *unkeyed* public mixing
+function is invertible, so an attacker who observes one id could recover the
+counter and predict the next.) The id stays a `std::uint64_t` on the wire
+(`ModelId`), so the wire
 format and `Envelope` are unchanged — only the *values* become opaque.
 
 Requirements:
 
 - **Uniqueness within a server.** The generator must not collide over a server's
-  lifetime. A 64-bit space with a counter-backed mixing function (not raw
-  `random()` draws) guarantees no collision until wraparound, which is
-  unreachable in practice.
+  lifetime. A 64-bit space with a counter fed through a **bijective** keyed
+  permutation (not raw `random()` draws) guarantees no collision until
+  wraparound, which is unreachable in practice.
 - **No cross-server meaning.** Ids remain backend-local, exactly as today
   (`HandlerBinding` re-registers on `switchBackend` and gets fresh ids); opaque
   ids do not change that contract.
 - **Cheap and lock-free-ish.** Generation happens under the existing register
-  path; an `std::atomic<uint64_t>` counter fed through the mixer keeps it cheap.
+  path; an `std::atomic<uint64_t>` counter fed through the keyed permutation
+  keeps it cheap.
 
 ### Why this is defence-in-depth, not the primary control
 
@@ -168,5 +174,8 @@ rather than a literal — which is the only contract the ids ever guaranteed.
   rule the new hooks slot into.
 - [session.md](../spec/session.md) — `IAuthorizer`, `Context`, `authenticate`; the new
   `authorizeRegister` is declared alongside them.
-- [wire.md](../spec/wire.md) — the `register` envelope (`typeId`, `contextKey`,
-  `session`) the gate reads; ids stay `uint64_t` so the envelope is unchanged.
+- [wire.md](../spec/wire.md) — the `register` envelope (`typeId`, `contextKey`)
+  and the envelope-level `session` the gate reads (wire.md documents `session`
+  for `execute`; the register path already reads it for owner recording — see
+  [security.md](../spec/security.md)); ids stay `uint64_t` so the envelope is
+  unchanged.

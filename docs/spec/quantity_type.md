@@ -58,7 +58,8 @@ mixed accidentally. The application supplies:
 - a `UnitTraits<Enum>` specialisation — id, display text, default decimal
   places, and a flat list of **peer-to-peer `UnitRelation` entries** that
   declare exact conversion ratios between same-dimension units with a
-  `morph::math::Rational`. Each entry `{Unit::g, Unit::kg, Rational{1, 1000}}`
+  `morph::math::Rational`. Each entry
+  `{Unit::g, Unit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}`
   generates a `convert` in both directions; a `UnitTraits<E>::convert` static
   takes precedence when the conversion is not a simple ratio (e.g. Celsius ↔
   Fahrenheit).
@@ -74,11 +75,11 @@ same-unit quantities is whatever the application's own `operator/` returns for
 inject one; a unit system that wants a dimensionless result must declare the
 enumerator and the algebra rule for it.
 
-Addition and subtraction are defined **only between identical units** —
-`kW + kW`, not `kW + W`. Negation and scaling by a dimensionless `Rational` are
-likewise provided directly. To add or subtract values of *different but
-convertible* units (`kW + W`), the right operand is converted to the left
-operand's unit first; that automatic conversion is what `convert` /
+Addition and subtraction are **evaluated in a single unit**: `kW + kW` combines
+directly, while a mixed *convertible* pair (`kW + W`) first converts the right
+operand to the left operand's unit and then combines. A non-convertible pair does
+not compile. Negation and scaling by a dimensionless `Rational` are likewise
+provided directly. The automatic operand conversion is what `convert` /
 `operator Quantity<To>()` exist for (see *Unit conversion*).
 
 ## Exact value and precision
@@ -251,13 +252,17 @@ magnitude that rounds down to zero prints as `0`, never `-0`. Examples: `2/3`
 at 4 places → `0.6667`; `1/6` at 3 places → `0.167`; `-2/3` at 4 places →
 `-0.6667`.
 
-**Overflow safety.** `numerator` and `denominator` are `int64`, but a fractional
-digit step forms `remainder · 10`, which can exceed `int64` when the denominator
-is near `INT64_MAX`. That intermediate is computed in `unsigned __int128` (a
-clang-cl-supported extended integer), and each digit is chosen by 128-bit
-*comparison* rather than division — clang-cl's MSVC runtime provides no 128-bit
-divide/modulo helper (`__udivti3`), so the long division deliberately avoids
-`__int128` `/` and `%` and uses only multiply and compare.
+**Overflow safety.** `numerator` and `denominator` are `int64`, and a naive
+fractional digit step would form `remainder · 10`, which can need up to 67 bits
+when the denominator is near `INT64_MAX`. The formatter never forms that product.
+Because the running `remainder` is always `< denominator`, each digit
+`q = floor(remainder · 10 / denominator)` lies in `0..9`, so `mulTenDivMod`
+computes it by adding `remainder` to an accumulator ten times and reducing modulo
+`denominator` as it goes. The accumulator stays below `denominator` before each
+add and below `2·denominator ≤ 2^64` after, so every intermediate is exact in
+64-bit — no 128-bit type, no `__int128` `/` or `%`, and no dependency on the
+`__udivti3` 128-bit divide helper that clang-cl's MSVC runtime lacks. The result
+is identical under MSVC and clang-cl.
 
 **With the unit.** The `Quantity` formatter (`std::formatter<Quantity<...>>`)
 appends the unit's `display` text to the number with no separating space:
@@ -389,8 +394,9 @@ substitution/result/legend lines):
   formatted value alone (the `N/A` text when empty);
 - a **bare unnamed leaf** (a raw input never operated on) → its formatted value;
 - an **engaged value with no recorded derivation node** — one materialised
-  directly (aggregate init or the wire codec writing `payload`), bypassing the
-  value constructors that call `recordLeaf()` → its formatted value;
+  directly (the wire codec writing `payload`, or direct assignment to the public
+  `payload` member), bypassing the value constructors that call `recordLeaf()` →
+  its formatted value;
 - a value whose **root is a bare unit conversion** (a `static_cast` / implicit
   conversion never further operated on, and left unnamed) → its formatted
   (converted) value — a lone `convert` node is treated as an atom;
@@ -529,13 +535,14 @@ struct morph::units::UnitTraits<Unit> {
     static constexpr UnitMeta meta(Unit u) noexcept { /* ... */ }
 
     static constexpr std::array<UnitRelation<Unit>, 2> relations{{
-        {Unit::g,   Unit::kg, Rational{  1, 1000}},
-        {Unit::t,   Unit::kg, Rational{1000,    1}},
+        {Unit::g, Unit::kg, Rational{Numerator{1},    Denominator{1000}, DecimalPlaces{3}}},
+        {Unit::t, Unit::kg, Rational{Numerator{1000}, Denominator{1},    DecimalPlaces{3}}},
     }};
 };
 ```
 
-`{Unit::g, Unit::kg, Rational{1, 1000}}` means **1 g = 1/1000 kg**.
+`{Unit::g, Unit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}`
+means **1 g = 1/1000 kg**.
 The framework inverts the ratio for the reverse direction:
 - `g → kg`: multiply value by `1/1000`
 - `kg → g`: multiply value by `1000/1`
@@ -772,7 +779,7 @@ and `unitAlternatives()`.
 | History structure | **Shared, unit-erased DAG (`ASTUnit` / `ASTNode` / `Context`)** | `ASTNode` (step + optional name + `shared_ptr` children) linked into a DAG; each `Quantity` holds a `Context` (a `shared_ptr<ASTNode>` root). Cheap copies; reused subexpressions deduped by node identity; shareable across units. |
 | Placeholders | **Reuse, not leaf-vs-computed, mints a `cN`** | A value used once inlines (leaf → its number, computed → its expression); only a value reused across the expression earns one shared placeholder, so shared work is written once. |
 | Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reset). |
-| Formatting | **`std::formatter` only, delegating to the `Rational` formatter** | Single formatting path; no `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
+| Formatting | **`std::formatter` only, delegating to the shared `formatRationalDecimal` renderer** | Single formatting path; no `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
 | Wire | **Payload only** | Units and history never travel; the wire stays a nullable `Rational`. |
 | Empty ordering | **Throws, not a compile error** | Emptiness is a runtime `optional` state, so ordering an empty operand throws `std::logic_error` (a testable defined diagnostic); `==` stays total. |
 | Conversion | **`UnitRelation` entries + auto-generated constrained-template `convert`; `UnitTraits::convert` static override** | Application declares exact peer-to-peer ratios in `UnitTraits::relations`; framework auto-generates a constrained `convert(From, To&)` template and records the provenance step. A `UnitTraits<E>::convert` static wins (`if constexpr`) for non-ratio conversions (C↔F, currency) — a static, not an ADL free function, because the unit is a non-type template arg so ADL can't reach the enum's namespace. Chaining composes ratio edges over the relation graph. |
@@ -812,7 +819,8 @@ struct morph::units::UnitTraits<Unit> {
 
     // Peer-to-peer unit relations: auto-generate convert(Watt↔Kilowatt).
     static constexpr std::array<morph::units::UnitRelation<Unit>, 1> relations{{
-        {Unit::watt, Unit::kilowatt, morph::math::Rational{1, 1000}},
+        {Unit::watt, Unit::kilowatt,
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
     }};
 };
 
@@ -977,9 +985,11 @@ the placeholder exists precisely to avoid writing shared work twice.
   *all* of its numeric behaviour from `Rational`: the `int64` overflow envelope
   (silent UB in the no-error-channel operators), the `DecimalPlaces` precision
   tag and its `std::max` propagation, the half-away-from-zero rounding of
-  `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on, and the
-  shared decimal formatter (`formatRationalDecimal` builds on `Rational`'s
-  `{:.Nf}` output). This spec does not restate those rules.
+  `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on. The decimal
+  formatter (`formatRationalDecimal`) is a separate exact-integer long division
+  over the canonical `num/den` at the runtime `DecimalPlaces`; it does **not**
+  route through `Rational`'s own `std::formatter` or `toDouble`. This spec does
+  not restate the `Rational` arithmetic rules.
 - **[`forms.md`](forms.md)** — how a `Quantity` field reaches a generated form:
   `ExtUnits` (unit id/display, emitted by `to_json_schema`) plus the
   schema-merge keys `x-decimalPlaces` (from `declaredDecimals`) and

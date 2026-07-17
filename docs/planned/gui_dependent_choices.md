@@ -80,6 +80,16 @@ A `Choice` with no `DependsOn` parameters is exactly today's independent `Choice
 existing `Choice<...>`.** `optionsDependsOn()` returns an empty pack for them, and
 nothing in the schema or the fetch path changes.
 
+Adding the variadic tail requires the two companion specialisations that pattern-
+match the `Choice` parameter list to be generalised in lockstep: `IsChoice`
+([choice.md](../spec/choice.md)) and the `glz::meta<Choice<...>>` serialisation
+specialisation (`choice.hpp`) are both written today against the exact
+four-parameter `Choice<T, OptionsAction, ValueField, LabelField>`, so each must
+gain the same `FixedString... DependsOn` pack to keep matching. The change is
+mechanical and preserves the emitted wire form (`glz::meta` still maps only
+`&Choice::value`), so a `Choice` with an empty pack serialises byte-for-byte as
+today.
+
 The `DependsOn` names are **wire (JSON) field names of sibling fields in the same
 action** — the same class of unchecked string the existing
 `ValueField`/`LabelField` already are ([choice.md](../spec/choice.md) "Author's

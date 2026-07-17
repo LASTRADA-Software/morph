@@ -41,7 +41,7 @@ The `session` field carries a `morph::session::Context` for authorization and
 routing. Populated on `"execute"`; ignored on every other kind.
 
 The `principal` sub-field a client sends is a *claim*, not a fact: a configured
-`session::Authorizer` may verify the accompanying `token` and **overwrite**
+`session::IAuthorizer` may verify the accompanying `token` and **overwrite**
 `session.principal` with the verified identity before dispatch (see
 `session.hpp`). Wire-layer `encode`/`decode` never inspect or validate the
 session — they round-trip it verbatim; enforcement lives in the server.
@@ -107,7 +107,7 @@ authorization) via the action's `fromJson`. Two consequences:
 - Any structural or depth check the outer parse performs does **not** apply to
   the contents of `body`. A deeply-nested or pathological payload smuggled
   inside `body` is invisible to the outer parse and only detonates on the inner
-  re-parse. glaze 7.2.1 exposes **no** `max_depth` read option, so the outer
+  re-parse. glaze 7.4 exposes **no** `max_depth` read option, so the outer
   parse cannot cap nesting depth even for the fields it does walk; the
   `kMaxEnvelopeBytes` size cap is the only wire-layer bound, and it works
   precisely because it bounds the *whole* message including `body`.
@@ -117,7 +117,7 @@ authorization) via the action's `fromJson`. Two consequences:
 
 ### Duplicate JSON keys are accepted (last-wins)
 
-glaze 7.2.1 does **not** reject duplicate object keys, and exposes no option to
+glaze 7.4 does **not** reject duplicate object keys, and exposes no option to
 make it do so. A duplicated key — top-level (`{"kind":"execute","kind":"register"}`
 decodes to `kind == "register"`) or nested (a repeated `session` keeps the last
 occurrence) — is silently accepted with the **last** value winning. `decode`
@@ -176,8 +176,8 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 | `kind` as a string vs. enum | **`std::string`** | JSON naturally discriminates by string; avoids an enum-to-string mapping. The factory functions (`makeRegister`, etc.) ensure callers never set `kind` manually. |
 | `"execute"` has no factory | **No factory** | `"execute"` envelopes are typically constructed by higher-level APIs (`Client`, `RemoteServer`), not by end users. Adding a factory would be dead code at the wire layer. |
 | Factory functions are `inline` | **Header-only** | The entire wire module lives in the header. Wrapping each factory as a named function keeps construction safe (correct `kind`, no forgotten fields) without a separate compilation unit. |
-| Serialization via glaze | **`glz::write_json` / `glz::read_json`** | glaze is the project's existing JSON library; no additional dependency. Throws on failure rather than returning error codes because encode/decode at the wire boundary should fail loud and early. |
+| Serialization via glaze | **`glz::write_json` / `glz::read<{.error_on_unknown_keys = false}>`** | glaze is the project's existing JSON library; no additional dependency. `decode` tolerates unknown keys for forward compatibility. Throws on failure rather than returning error codes because encode/decode at the wire boundary should fail loud and early. |
 | `contextKey` vs. `modelId` for register | **`contextKey` is a separate field, not `modelId`** | `modelId` is server-assigned (a `uint64_t` handle); `contextKey` is a client-chosen stable identity string. They are semantically different and the server treats them differently (log attachment vs. instance routing). |
 | `session` as a dedicated field | **`::morph::session::Context`** | Session context is a first-class concern for authorization and routing, not an opaque sub-payload in `body`. Keeping it at the Envelope level ensures every `"execute"` carries it without caller discipline. |
-| Wire-layer size cap | **`kMaxEnvelopeBytes` (8 MiB), checked before parsing** | The `body` double-parse means depth/structure checks on the outer parse never reach the nested payload; a total-length bound is the one check that does cover the whole message (including `body`) and it is cheap. 8 MiB is generous for legitimate payloads while keeping a single message's peak allocation bounded. glaze 7.2.1 has no `max_depth` option, so a size cap is the only wire-layer depth mitigation available. |
-| Duplicate JSON keys | **Accepted, last-wins (not rejected)** | glaze 7.2.1 exposes no option to error on duplicate keys and a correct hand-rolled JSON-aware scan would be complex and error-prone. Rather than a fragile mitigation, the behavior is documented honestly and callers are told not to rely on rejection; a security-sensitive proxy must canonicalize duplicates upstream. |
+| Wire-layer size cap | **`kMaxEnvelopeBytes` (8 MiB), checked before parsing** | The `body` double-parse means depth/structure checks on the outer parse never reach the nested payload; a total-length bound is the one check that does cover the whole message (including `body`) and it is cheap. 8 MiB is generous for legitimate payloads while keeping a single message's peak allocation bounded. glaze 7.4 has no `max_depth` option, so a size cap is the only wire-layer depth mitigation available. |
+| Duplicate JSON keys | **Accepted, last-wins (not rejected)** | glaze 7.4 exposes no option to error on duplicate keys and a correct hand-rolled JSON-aware scan would be complex and error-prone. Rather than a fragile mitigation, the behavior is documented honestly and callers are told not to rely on rejection; a security-sensitive proxy must canonicalize duplicates upstream. |

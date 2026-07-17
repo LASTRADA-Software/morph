@@ -117,6 +117,27 @@ must produce, proposed as a `morph::conformance` description the harness drives:
 - The wire body a renderer produces for a filled fixture **byte-matches** (modulo
   key order) the expected canonical body the corpus pins.
 
+**Accessibility assertions.** Generated forms must be *operable*, not just
+visible, so the kit carries an accessibility slice alongside the functional
+one:
+
+- every control exposes an **accessible name** — the property's `title`
+  (falling back to the wire key), so schema-driven labels reach the platform
+  accessibility tree;
+- **focus order follows `x-order`** (and group order under `x-layout`), never
+  visual coincidence;
+- every control class is **keyboard-operable** — combo, date, unit selector
+  and slider included; no pointer-only affordance;
+- a violated rule / blocked submit is **announced**, not merely tinted: the
+  message the renderer shows is exposed as the control's accessible
+  description.
+
+Like every other assertion these are platform-neutral behaviors; the QML
+reference implements them with Qt's `Accessible` attached properties, a web
+renderer with ARIA. Locale fixtures ([gui_i18n.md](gui_i18n.md)) run the same
+assertions under translation — the accessible name is the *translated* title
+when a catalog is installed.
+
 The kit is the executable form of forms.md's "normative" claim: a renderer that
 passes it demonstrably honors the vocabulary; a renderer that ignores an `x-*`
 key fails the specific assertion for that affordance while still passing the
@@ -131,8 +152,8 @@ client-side registry:
 
 - **`x-widget` (NEW optional action-schema key).** A hint naming a control
   variant when the type alone is ambiguous — e.g. `"slider"` vs the default
-  number field, `"radio"` vs the default combo. It is a Tier-1 field-metadata key
-  (its full definition belongs to `gui_widget_hints.md`,
+  number field, `"radio"` vs the default combo. It is a Tier-1 widget-hints key
+  (its full definition belongs to [gui_widget_hints.md](gui_widget_hints.md),
   [gui_overview.md](gui_overview.md)); the toolkit only defines how the renderer
   *dispatches* on it. Absent `x-widget`, the renderer picks the control from the
   type exactly as today — so `x-widget` is purely additive and ignorable.
@@ -204,6 +225,9 @@ schema directly.
 - An `x-widget: "slider"` field with no registered slot renders the default
   number control (additive/ignorable key), and with a registered `byWidget`
   slider renders the override.
+- The QML reference passes the accessibility slice: accessible names match
+  `title`, focus traversal matches `x-order`, every fixture control operates
+  keyboard-only, and rule violations surface as accessible descriptions.
 
 ## Cross-references
 
@@ -216,6 +240,9 @@ schema directly.
   conformance kit formalises into executable assertions.
 - [choice.md](../spec/choice.md) — the options-fetch / `optionRows` behavior the
   renderer implements and the kit asserts.
+- [gui_i18n.md](gui_i18n.md) — the `TranslationProvider` seam the shipped
+  renderer hosts, and the locale fixtures the kit runs (including under the
+  accessibility assertions).
 - [gui_collections_views.md](gui_collections_views.md) /
   [gui_workflows_navigation.md](gui_workflows_navigation.md) — the `v-*` / `w-*` /
   `app-*` view schemas the shipped renderer also consumes and the kit's collection

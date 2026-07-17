@@ -89,10 +89,11 @@ The default sink defends against this by passing every message through
 - Printable text — including non-ASCII UTF-8 continuation bytes (`>= 0x80`) —
   passes through untouched.
 
-It is a single cheap pass that does **no allocation on the common (already-clean)
-path**: it scans for the first byte needing escaping and returns a plain copy if
-there is none. The escaped result is always a single line, so a forged `\n`
-cannot splice a fake record into the stream.
+It is a single cheap pass that does **no per-byte escaping work on the common
+(already-clean) path**: it scans for the first byte needing escaping and, if
+there is none, returns a plain copy of the input (one `std::string` allocation,
+no character-by-character rewriting). The escaped result is always a single line,
+so a forged `\n` cannot splice a fake record into the stream.
 
 **Sanitisation lives in the *default sink*, not in the emit path.** `detail::log`
 still hands the sink the raw `std::string_view`; only the shipped `stderr` sink
@@ -260,7 +261,7 @@ during static teardown.
 |---|---|---|
 | `detail::levelName` | `constexpr std::string_view levelName(LogLevel) noexcept` | Returns `"DEBUG"`, `"INFO "`, `"WARN "`, `"ERROR"`, `"OFF  "` (padded to 5 chars). Falls back to `"?    "` for any out-of-range enum value. |
 | `detail::Logger` | `using Logger = std::function<void(LogLevel, std::string_view)>` | Sink function type. |
-| `detail::sanitizeLogLine` | `std::string sanitizeLogLine(std::string_view)` | Escapes newline/CR/TAB (as `\n`/`\r`/`\t`) and other control bytes (`< 0x20`, `0x7f`) as `\xHH`, leaving printable/UTF-8 text intact. Used by the default sink to prevent log-injection; allocation-free when the input is already clean. Reusable by custom sinks. |
+| `detail::sanitizeLogLine` | `std::string sanitizeLogLine(std::string_view)` | Escapes newline/CR/TAB (as `\n`/`\r`/`\t`) and other control bytes (`< 0x20`, `0x7f`) as `\xHH`, leaving printable/UTF-8 text intact. Used by the default sink to prevent log-injection; on already-clean input it does one plain copy with no per-byte escaping work. Reusable by custom sinks. |
 | `detail::log` | `void log(LogLevel, std::string_view)` | Internal emit entry point. First does a **lock-free** `level >= minLevel` check (relaxed atomic load) and returns early if suppressed; only then acquires `mtx` and calls the sink if it is non-null. The sink runs **while `mtx` is held** (see [Thread safety](#thread-safety)). |
 | `detail::logFormat` | `template<typename... Args> void logFormat(LogLevel, std::format_string<Args...>, Args&&...)` | Checks `level >= minLevel` **before** calling `std::format` (lock-free) and returns early if suppressed, so a filtered formatted call pays no formatting/allocation cost. When the level passes, formats via `std::format` and forwards to `detail::log`. |
 

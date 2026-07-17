@@ -176,8 +176,8 @@ All public methods are thread-safe (guarded by an internal mutex).
 ### `undoLast()`
 
 No inverse/undo operations are needed on the action types themselves — this
-reuses `replay()` over a shorter prefix of the same log. Takes optional
-`modelTypeId`, `registry`, and `dispatcher` — `registry` and `dispatcher`
+reuses `replay()` over a shorter prefix of the same log. Takes `modelTypeId`
+plus optional `registry` and `dispatcher` — `registry` and `dispatcher`
 default to the process-level singletons. Dropping the last entry rewinds only
 `SessionLog`'s in-memory history; it does **not** touch the checkpoint
 watermark. The watermark is a committed-`seq` threshold, not a position in the
@@ -217,10 +217,6 @@ watermark and never re-sends it. A checkpoint is a forward-only commit point,
 not a transaction that will be retried. If a durable sink can fail transiently,
 the caller must treat a throwing `checkpoint()` as data loss for that batch, not
 as a retryable no-op. See [Failure modes / durability](#failure-modes--durability).
-
-> Note: `journal.hpp`'s doxygen still describes this as "at-least-once"; that
-> phrasing is imprecise for the actual watermark-advances-first behavior. This
-> spec is the authoritative description.
 
 #### Concurrency and ordering
 

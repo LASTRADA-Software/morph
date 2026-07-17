@@ -43,7 +43,8 @@ discipline ([gui_overview.md](gui_overview.md)):
 2. **Declare to override** the inferred label and to add help / placeholder /
    read-only / hidden, via a typed `static constexpr` descriptor on the action.
 
-Flat, unannotated actions render exactly as today.
+An unannotated action changes only by gaining an inferred `title` per field;
+everything else in its schema and behaviour stays exactly as today.
 
 ## Design
 
@@ -62,6 +63,8 @@ struct FieldMeta {
     std::string_view label{};               // "" = infer from name
     std::string_view help{};                // "" = omit x-help / description
     std::string_view placeholder{};         // "" = omit x-placeholder
+    std::string_view widget{};              // "" = no override; semantics in
+                                            // gui_widget_hints.md (x-widget)
     bool readOnly{false};
     bool hidden{false};
 };
@@ -154,17 +157,25 @@ This is illustrative of *one* renderer; the contract stays renderer-agnostic.
   ([validation.md](validation.md), [forms.md](../spec/forms.md)'s trust
   boundary). A truly secret field must not be a member of the action at all.
 - **No i18n.** Labels and help are baked into the one cached schema per type
-  ([forms.md](../spec/forms.md), "no localisation"). Translated captions need the
-  separate mechanism forms.md defers, not this spec.
+  ([forms.md](../spec/forms.md), "no localisation"). Translated captions are
+  [gui_i18n.md](gui_i18n.md): a renderer-side catalog over stable message keys
+  (`FieldMeta` gains an optional `i18nKey` override there), never a per-locale
+  schema. The `label`/`help`/`placeholder` declared here are that mechanism's
+  fallback text.
 - **No widget selection.** *Which* control renders a field is
-  [gui_widget_hints.md](gui_widget_hints.md); this spec only labels and annotates
-  whatever control that spec (or the field type) selects.
+  [gui_widget_hints.md](gui_widget_hints.md); `FieldMeta` carries the `widget`
+  override slot as the shared per-field declaration surface, but its semantics
+  (and the `x-widget` key it emits) are defined entirely by that spec. This spec
+  only labels and annotates whatever control that spec (or the field type)
+  selects.
 - **No layout / grouping.** Sections, tabs, and column spans are
   [gui_layout_grouping.md](gui_layout_grouping.md); `fieldMetadata` never affects
   placement beyond `x-order` (unchanged).
 - **No cross-field logic.** Conditional read-only / hidden ("read-only *when*
-  another field is X") is [gui_cross_field_rules.md](gui_cross_field_rules.md);
-  `x-readonly` / `x-hidden` here are static, unconditional booleans.
+  another field is X") is [gui_cross_field_rules.md](gui_cross_field_rules.md)'s
+  `readonlyWhen` / `visibleWhen` presentation rules, which give exactly these
+  keys' semantics a condition; `x-readonly` / `x-hidden` here are static,
+  unconditional booleans.
 
 ## Testing (planned)
 

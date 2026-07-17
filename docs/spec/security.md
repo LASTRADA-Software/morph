@@ -358,10 +358,12 @@ matter in practice:
   disables server-identity verification (encrypts but does not authenticate the
   server, so it is MITM-vulnerable). Production clients must verify the server
   certificate against a trusted CA or a pinned certificate.
-- **No morph-level message-size cap.** `QtWebSocketServer` forwards each text
-  frame to `RemoteServer::handle()` with no size check of its own; the only bound
-  is `QWebSocket`'s default frame/message limit. There is no per-connection
-  request rate limit and no cap on the number of models a connection may register.
+- **No transport-level message-size check.** `QtWebSocketServer` forwards each
+  text frame to `RemoteServer::handle()` with no size check of its own; the bounds
+  are `QWebSocket`'s default frame/message limit and the wire-layer 8 MiB
+  `kMaxEnvelopeBytes` cap that `wire::decode` enforces before parsing (which
+  covers the whole envelope, including `body`). There is no per-connection request
+  rate limit and no cap on the number of models a connection may register.
 
 ## Residual limitations & hardening checklist
 

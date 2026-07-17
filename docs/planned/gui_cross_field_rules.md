@@ -5,8 +5,11 @@
 > the planned server-side validator in [validation.md](validation.md). It extends
 > the `x-*` vocabulary and readiness model of [forms.md](../spec/forms.md) with a
 > **closed, typed rule vocabulary** that one declaration drives onto the schema,
-> the client submit gate, *and* the server check with no drift. It describes the
-> intended behavior; the code does not implement it yet. See [todo.md](../todo.md).
+> the client submit gate, *and* the server check with no drift. The same
+> vocabulary carries the **presentation rules** (`visibleWhen` / `readonlyWhen`)
+> that make [gui_field_metadata.md](gui_field_metadata.md)'s static
+> `x-hidden`/`x-readonly` conditional. It describes the intended behavior; the
+> code does not implement it yet. See [todo.md](../todo.md).
 
 ## The gap
 
@@ -37,9 +40,9 @@ Let an action declare a `static constexpr` list of cross-field rules drawn from 
 **closed, typed vocabulary** (required-when, comparisons, exactly-one-of,
 mutually-exclusive, …). From that single declaration:
 
-1. `schemaJson<A>()` emits the rules as an `x-rules` array (and folds
-   unconditional requiredness into the existing `required` array) so a renderer
-   can show them and block submit;
+1. `schemaJson<A>()` emits the rules as an `x-rules` array (alongside the
+   existing `required` array, which keeps carrying unconditional per-field
+   requiredness exactly as today) so a renderer can show them and block submit;
 2. the client submit gate and the reactive `set<>` path evaluate them live; and
 3. the planned server-side validator ([validation.md](validation.md)) evaluates
    **the same rule list** inside the dispatcher runner.
@@ -70,7 +73,8 @@ struct BookRoom {
     static constexpr auto formRules = morph::forms::ruleList(
         greater(&BookRoom::checkOut, &BookRoom::checkIn),          // checkOut > checkIn
         exactlyOneOf(&BookRoom::email, &BookRoom::phone),          // one contact method
-        requiredWhen(&BookRoom::discount, engaged(&BookRoom::promo)) // discount iff promo set
+        requiredWhen(&BookRoom::discount, engaged(&BookRoom::promo)), // discount iff promo set
+        visibleWhen(&BookRoom::discount, engaged(&BookRoom::promo))   // and hidden until then
     );
 
     [[nodiscard]] bool validate() const {
@@ -109,8 +113,11 @@ client and the server run the *same* evaluation from the *same* serialized form.
 | `exactlyOneOf(f1, f2, …)` | Exactly one of the listed fields is engaged. | `"exactlyOneOf"` |
 | `atLeastOneOf(f1, f2, …)` | At least one is engaged. | `"atLeastOneOf"` |
 | `mutuallyExclusive(f1, f2, …)` | At most one is engaged. | `"mutuallyExclusive"` |
+| `visibleWhen(f1, …, cond)` | **Presentation:** the listed fields are shown only while `cond` holds. | `"visibleWhen"` |
+| `readonlyWhen(f1, …, cond)` | **Presentation:** the listed fields are editable only while `cond` does **not** hold. | `"readonlyWhen"` |
 
-Conditions accepted by `requiredWhen` are themselves a closed set of **condition
+Conditions accepted by the condition-bearing kinds (`requiredWhen`,
+`visibleWhen`, `readonlyWhen`) are themselves a closed set of **condition
 nodes** (NEW), not predicates: `engaged(field)` / `notEngaged(field)`,
 `equals(field, literal)`, and the comparison factories above reused as a boolean.
 Literals are restricted to the JSON-representable scalar types a field can hold
@@ -145,6 +152,8 @@ object a renderer (or the server) can evaluate without any C++ type information:
   { "kind": "greater", "fields": ["checkOut", "checkIn"] },
   { "kind": "exactlyOneOf", "fields": ["email", "phone"] },
   { "kind": "requiredWhen", "fields": ["discount"],
+    "when": { "kind": "engaged", "fields": ["promo"] } },
+  { "kind": "visibleWhen", "fields": ["discount"],
     "when": { "kind": "engaged", "fields": ["promo"] } }
 ]
 ```
@@ -161,7 +170,7 @@ table (all additive, all optional):
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
 | ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the table above (or a condition id: `engaged`, `notEngaged`, `equals`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). |
-| ↳ `when` | `requiredWhen` object | rule/condition object | The nested condition under which the listed `fields` become required. Present only for `requiredWhen`. |
+| ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on: for `requiredWhen`, when the listed `fields` become required; for the presentation kinds, when they are shown / made read-only. Present only on these condition-bearing kinds. |
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}` (see [rational.md](../spec/rational.md)), never a `double`. |
 
 ### Server-side: the same list, evaluated in the dispatcher
@@ -190,6 +199,40 @@ transitively runs `allRulesSatisfied`, so the action does not fire until every
 cross-field rule holds — the live gate and the submit gate become the same
 predicate. A schema renderer that reads `x-rules` can additionally show *which*
 rule is unsatisfied inline, rather than only greying the submit button.
+
+### Presentation rules — `visibleWhen` / `readonlyWhen` (client-only)
+
+Two rule kinds are **presentation, not validation**: they make
+[gui_field_metadata.md](gui_field_metadata.md)'s static `x-hidden` /
+`x-readonly` conditional, using the same condition grammar and the same
+`x-rules` emission as everything above — one declaration surface, no second
+mechanism.
+
+- **`visibleWhen(fields…, cond)`** — the renderer shows the listed fields only
+  while `cond` holds; while hidden they behave exactly like a static
+  `x-hidden` field: the control is omitted, but the value still travels in the
+  payload at its current draft value (hiding never clears the draft).
+- **`readonlyWhen(fields…, cond)`** — the renderer disables entry on the
+  listed fields while `cond` holds, exactly like a static `x-readonly`.
+
+The evaluator classifies kinds: `allRulesSatisfied<A>()` evaluates the
+validation kinds and **skips presentation kinds by construction** — on the
+client gate and in the planned server run alike. A presentation rule can never
+block a submit, fail a dispatch, or raise a `ValidationError`
+([validation.md](validation.md)). One evaluator, one classification, both
+sides.
+
+Degradation is therefore safe in both directions. A renderer that does not
+recognise a presentation kind falls back to showing / enabling the field — the
+static-form behavior, losing polish and nothing else (unlike an unknown
+*validation* kind, which defers enforcement to the server per the fail-closed
+rule above). And because they are presentation only, these rules are **not
+security controls** — verbatim the caveat on `x-hidden`/`x-readonly` in
+[gui_field_metadata.md](gui_field_metadata.md): a hand-built envelope ignores
+them, and a field whose *value* must be constrained needs a validation rule or
+a model check. An author who wants "hidden ⇒ also not required" pairs
+`visibleWhen(f, c)` with `requiredWhen(f, c)`: the two compose, and neither
+implies the other.
 
 ## Additivity and renderer fallback
 
@@ -223,8 +266,10 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
   option is still unchecked at both ends ([choice.md](../spec/choice.md)); a rule
   can require a `Choice` be engaged, not that its value is a live option.
 - **No localisation of rule messages.** `x-rules` carries structure, not
-  human-readable text; per-locale error strings are out of scope for the same
-  reason the schema is un-localised ([forms.md](../spec/forms.md)).
+  human-readable text; a renderer builds its violation messages itself and
+  localises them through [gui_i18n.md](gui_i18n.md)'s catalog
+  (`<action>.rule.<index>` keys), for the same reason the schema is
+  un-localised ([forms.md](../spec/forms.md)).
 
 ## Testing (planned)
 
@@ -235,6 +280,14 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
   correctly for zero, one, and multiple engaged fields.
 - `requiredWhen(discount, engaged(promo))`: `discount` is not required while
   `promo` is empty and becomes required once `promo` is engaged.
+- `visibleWhen(discount, engaged(promo))` emits its `x-rules` entry; the
+  reference renderer hides and shows `discount` live as `promo` disengages and
+  engages, the hidden value still travels in the payload, and
+  `allRulesSatisfied` is identical in both states — no `ValidationError` on
+  any path (presentation kinds never gate).
+- `readonlyWhen` toggles editability live and never affects the gate.
+- A renderer that ignores presentation kinds renders the field visible and
+  editable (fallback), with no change to submit-ability.
 - **No-drift:** the same violating action rejected on the client gate is rejected
   by the dispatcher runner via `ValidationError` ([validation.md](validation.md))
   over `SimulatedRemoteBackend` and the Qt WebSocket transport, and on

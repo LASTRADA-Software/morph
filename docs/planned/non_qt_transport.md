@@ -42,7 +42,7 @@ existing transports already establish:
 |---|---|
 | `registerModel(typeId, factory)` | Sends a `register` `Envelope` and blocks for the `ok`/`err` reply (synchronous control op). `factory` ignored (models live on the server). Throws `std::runtime_error("register failed: ...")` on `err` or disconnect. |
 | `registerModelWithContext(typeId, factory, contextKey)` | Default (drops `contextKey`) unless the transport carries it; overriding it lets the server's `LogProvider` attach a log. |
-| `deregisterModel(mid)` | Fire-and-forget `deregister` `Envelope` if connected; server reclaims on disconnect (same rationale as Qt — avoids a blocking teardown). |
+| `deregisterModel(mid)` | Fire-and-forget `deregister` `Envelope` if connected (same rationale as Qt — avoids a blocking teardown). As with the Qt transport there is no connection-scoped server cleanup, so an undelivered `deregister` leaves the model registered on the server; explicit deregistration is the client's responsibility. |
 | `execute(mid, call, cbExec)` | Assigns a monotonic `callId`, records the completion in a `callId → pending` map, serialises via `call.serializeAction()`, sends an `execute` `Envelope`, returns a `Completion` resolved by the matching-`callId` reply. Immediate `DisconnectedError` if not connected. |
 | `notifyBackendChanged()` | No-op (models live on the server, like every remote backend). |
 | `cancelPending(exc)` | Snapshots the pending map, resolves each with `exc`; on disconnect, resolve all with `DisconnectedError`. |

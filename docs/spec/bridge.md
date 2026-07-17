@@ -90,8 +90,9 @@ pre-built binding (for dependency injection, custom `contextKey`, or custom
 factory captures).
 
 **`executeVia<Model, Action>(binding, action, cbExec)`** dispatches one
-action. Uses a lock-free snapshot of the backend pointer and the binding's
-`currentId` so it does not block `switchBackend()`. If `currentId` is 0,
+action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
+`_backendMtx` (never `_mtx`) plus a lock-free atomic read of the binding's
+`currentId`, so it never blocks on `switchBackend()`'s `_mtx`. If `currentId` is 0,
 completes immediately with `"handler not bound"`. Constructs an `ActionCall`
 with serialization/deserialization lambdas and a `localOp` that calls
 `Model::execute(*action)` and optionally records a journal `LogEntry` for
@@ -366,10 +367,13 @@ exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
   error is logged via `morph::log::logError` tagged `[subscription:<typeId>]`,
   never silently dropped.
 - **Default validator fires on the first `set<>`.** `ActionValidator<A>::ready`
-  returns `true` for any action without a `BRIDGE_REGISTER_VALIDATOR`
-  specialisation, so the very first `set<>` puts the (single-field-populated)
-  draft into a ready state and dispatches immediately. Actions that need
-  several fields before firing must specialise the validator.
+  returns `true` only for an action that has *neither* a
+  `BRIDGE_REGISTER_VALIDATOR` specialisation *nor* a `bool validate() const`
+  member — for such an action the very first `set<>` puts the
+  (single-field-populated) draft into a ready state and dispatches immediately.
+  Actions that need several fields before firing add a `validate()` member (the
+  preferred, macro-free path — auto-detected via the `HasValidate` concept) or
+  specialise the validator.
 - **Every ready `set<>` re-fires.** Each `set<>` landing a `ready()==true`
   snapshot dispatches the action again — live recomputation. Rapid patches
   coalesce: while a flight is running, further `set<>` calls set
@@ -385,8 +389,8 @@ exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
 ## Thread safety
 
 `Bridge` is fully thread-safe (see the `Bridge` section: separate
-`_backendMtx`, `_mtx`, and `_sessionMtx`, with lock-free backend snapshots in
-`executeVia`).
+`_backendMtx`, `_mtx`, and `_sessionMtx`, with `executeVia` taking its backend
+snapshot under the short, dedicated `_backendMtx` rather than `_mtx`).
 
 `BridgeHandler`'s individual mutating operations — `set`, `subscribe`,
 `unsubscribe`, `reset` — are each internally safe: they take the
@@ -483,7 +487,7 @@ make teardown order-independent.)
 |---|---|---|
 | Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `_liveness` token — not by this weak storage.) |
 | Teardown order | **`shared_ptr<const void> _liveness` + per-handler `weak_ptr`** | Makes bridge-vs-handler destruction order-independent: a handler outliving its bridge skips deregistration instead of dereferencing a dangling `Bridge&`. Normal `execute`/`set` still require the bridge to outlive its handlers. |
-| Backend pointer | **Lock-free snapshot under `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under a dedicated mutex, so it never blocks `switchBackend()`. |
+| Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
 | Reconnect handler | **Liveness guard + weak‑backend guard + stale check; cleared in `~Bridge`** | The lambda captures a `weak_ptr<const void>` to `_liveness` and a `weak_ptr<IBackend>`. On invocation it first locks the liveness token — if the `Bridge` is gone it returns without touching `this` (no use-after-free). It then checks `pinned == loadBackend()` — if a switch occurred since the handler was installed, the reconnect is ignored. `~Bridge` and `switchBackend` also clear the outgoing backend's handler via `setReconnectHandler(nullptr)`; the liveness guard covers a reconnect already in flight when teardown races it. |
 | Fielded actions | **`SubscriberState` shared across `BridgeHandler` copy-unsafe design** | The handler is non-copyable; the subscriber state is `shared_ptr` so `tryFireImpl` can capture a `weak_ptr` and survive handler destruction. Flight tracking (`running`/`pending`) coalesces rapid `set` calls. |

@@ -138,13 +138,19 @@ rules encode recent fixes to real deadlocks and use-after-frees.
 
 This is the sharpest edge in the framework. `~StrandExecutor` **blocks** until
 `_inFlight == 0`, i.e. until every lambda it dispatched to the base executor has
-actually run. `~ThreadPoolExecutor` **drops** queued-but-unstarted tasks and
-joins its workers.
+actually run. `~ThreadPoolExecutor` **drains** its queue — after `_stop` is set,
+workers keep running already-queued tasks until the queue is empty, then join —
+so tasks already queued when destruction begins do run and decrement `_inFlight`.
 
-Therefore, if you destroy the pool **first**, the strand lambdas that were still
-queued are dropped, `_inFlight` never reaches 0, and `~StrandExecutor` waits
-forever → **deadlock**. The pool must be destroyed *after* every `StrandExecutor`
-(and hence after `LocalBackend` / `RemoteServer`, which own the strands).
+Draining is not enough to make arbitrary teardown order safe, because the strand
+can still be *dispatching* while the pool tears down. If you destroy the pool
+**first**, two things go wrong: an in-flight strand lambda may call
+`base->post()` on a pool whose destructor has already run (undefined behaviour —
+use-after-free on the pool), and a lambda posted after the workers have observed
+`_stop && _q.empty()` and exited is never run, so its `--_inFlight` never happens
+and `~StrandExecutor` waits forever → **deadlock**. The pool must be destroyed
+*after* every `StrandExecutor` (and hence after `LocalBackend` / `RemoteServer`,
+which own the strands).
 
 Corollary: **no `post()` may race or follow `~StrandExecutor`.** Once the strand
 executor's destructor has started, posting to it is undefined. Stop feeding a
@@ -476,4 +482,3 @@ One-liners to remember:
   *Error propagation* in `../ARCHITECTURE.md`).
 - *Thread safety* table in `../ARCHITECTURE.md` — the high-level summary this
   spec expands on.
-```

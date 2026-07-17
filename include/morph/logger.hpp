@@ -58,7 +58,7 @@ using Logger = std::function<void(LogLevel, std::string_view)>;
 /// (`\n`, `\r`, `\t`) and any remaining control byte (`< 0x20`, or `0x7f` DEL)
 /// with a `\xHH` escape, leaving printable text (including non-ASCII UTF-8
 /// continuation bytes `>= 0x80`) untouched. It is a cheap single pass with no
-/// allocation on the common (clean) path.
+/// per-byte escaping work on the common (clean) path (just one string copy).
 /// @param msg Raw message to sanitize.
 /// @return @p msg with control characters escaped; the same bytes if already clean.
 inline std::string sanitizeLogLine(std::string_view msg) {

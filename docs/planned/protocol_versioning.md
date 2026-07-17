@@ -51,7 +51,7 @@ Add a wire-layer version constant and an optional `Envelope` field:
 
 ```cpp
 // namespace morph::wire — NEW.
-inline constexpr std::uint32_t kProtocolVersion = 1;  // bumped on a wire change
+inline constexpr std::uint32_t kProtocolVersion = 1;  // bumped on a breaking wire change
 
 struct Envelope {
     // ... existing fields (kind, callId, typeId, ...) unchanged ...
@@ -104,7 +104,7 @@ predates any `execute`); the version check is orthogonal to
 ### 3. Action-evolution policy (documented rules, NEW)
 
 The version field is only meaningful with a discipline that keeps action structs
-compatible within a protocol major version. The policy:
+compatible within a protocol version. The policy:
 
 - **Additive-only within a major version.** New fields on an action or result
   struct must be *optional* (a `std::optional<...>`, a `Quantity`/`Timestamp`
@@ -117,9 +117,10 @@ compatible within a protocol major version. The policy:
   renumber or rename," [ARCHITECTURE.md](../ARCHITECTURE.md)). Renaming a field is
   a removal + an addition = a break.
 - **Deprecation window.** A field being removed is first marked deprecated (kept
-  on the wire, ignored by new code) for at least one minor release, then removed
-  only at a `kProtocolVersion` major bump. `kProtocolVersion` bumps only on a
-  *breaking* change; additive changes do not bump it.
+  on the wire, ignored by new code) for at least one library release, then
+  removed only at a `kProtocolVersion` bump. `kProtocolVersion` (a single
+  integer, not major.minor) bumps only on a *breaking* change; additive changes
+  do not bump it.
 - **Removals/retypes require a version bump.** Any non-additive change increments
   `kProtocolVersion`, and the server advertises a `{min, max}` range that drops
   support for the old version only after the deprecation window.

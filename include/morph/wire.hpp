@@ -137,7 +137,7 @@ inline std::string encode(const Envelope& env) {
 /// `body` performed later by the action codec — that codec must impose its own
 /// limits — but it does bound the total message a single `decode` will accept.
 ///
-/// glaze 7.2.1 runs with its default options here. Note the parser does **not**
+/// glaze 7.4 runs with its default options here. Note the parser does **not**
 /// reject duplicate JSON object keys: a duplicated key is accepted and the last
 /// occurrence wins. There is no glaze option to change this, so `decode` cannot
 /// enforce rejection; callers must not treat duplicate-key rejection as a

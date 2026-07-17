@@ -98,8 +98,9 @@ the fallback [gui_overview.md](gui_overview.md) requires of every additive key.
 
 ### Columns derived from the result-row type (infer by default)
 
-The query action's result is a struct (or a struct with one array-valued member,
-the same shape `Choice` reads — see `optionRows` in `DynamicForm.qml`). Its
+The query action's result is an array of rows, or a struct whose first
+array-valued member holds them — the same two shapes `Choice` reads (see
+`optionRows` in `DynamicForm.qml`). Its
 **row element type** is a plain aggregate `{ id, name, ... }`. Where the row
 type is reflectable, `viewSchemaJson<V>()` derives one column per row field, in
 declaration order (`x-order` reused), typed from the field's JSON type — no
