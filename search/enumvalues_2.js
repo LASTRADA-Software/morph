@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['overflow_0',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]]
+  ['expired_0',['Expired',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8',1,'morph::session']]]
 ];

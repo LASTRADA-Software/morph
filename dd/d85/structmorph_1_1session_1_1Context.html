@@ -106,8 +106,11 @@ $(document).ready(function(){initNavTree('dd/d85/structmorph_1_1session_1_1Conte
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a6f3f23e2695b3b2cbd6d85bf6a237c3f" id="r_a6f3f23e2695b3b2cbd6d85bf6a237c3f"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f">principal</a></td></tr>
-<tr class="memdesc:a6f3f23e2695b3b2cbd6d85bf6a237c3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Auth principal (user id, JWT, session token — application-defined).  <br /></td></tr>
+<tr class="memdesc:a6f3f23e2695b3b2cbd6d85bf6a237c3f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Auth principal (user id).  <br /></td></tr>
 <tr class="separator:a6f3f23e2695b3b2cbd6d85bf6a237c3f"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a31e455b3253d2c25b24a73e3000aa103" id="r_a31e455b3253d2c25b24a73e3000aa103"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#a31e455b3253d2c25b24a73e3000aa103">token</a></td></tr>
+<tr class="memdesc:a31e455b3253d2c25b24a73e3000aa103"><td class="mdescLeft">&#160;</td><td class="mdescRight">Bearer credential verified server-side (empty if unauthenticated).  <br /></td></tr>
+<tr class="separator:a31e455b3253d2c25b24a73e3000aa103"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a985070c36f98f59186888105e2d57e46" id="r_a985070c36f98f59186888105e2d57e46"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#a985070c36f98f59186888105e2d57e46">requestId</a></td></tr>
 <tr class="memdesc:a985070c36f98f59186888105e2d57e46"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stable id used for distributed tracing / log correlation. Empty if unused.  <br /></td></tr>
 <tr class="separator:a985070c36f98f59186888105e2d57e46"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -123,7 +126,7 @@ Public Attributes</h2></td></tr>
 <p><code><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html" title="Per-call session context carried through the bridge to the model.">Context</a></code> is an open data bag: callers populate whichever fields make sense for the app (user identity, request tracing, locale, app-specific metadata). The framework only inspects <code>principal</code> and the action ids when consulting the configured <code><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html" title="Authorizes incoming actions on a RemoteServer.">IAuthorizer</a></code>; everything else is passed through verbatim from caller to model.</p>
 <p>On remote backends the <code><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html" title="Per-call session context carried through the bridge to the model.">Context</a></code> is serialised into the wire envelope, so the server-side <code>RemoteServer</code> sees the same values the GUI sent. On the local backend it travels in-memory via the <code>ActionCall</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00022">22</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="a6f3f23e2695b3b2cbd6d85bf6a237c3f" name="a6f3f23e2695b3b2cbd6d85bf6a237c3f"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6f3f23e2695b3b2cbd6d85bf6a237c3f">&#9670;&#160;</a></span>principal</h2>
@@ -137,9 +140,29 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Auth principal (user id, JWT, session token — application-defined). </p>
+<p>Auth principal (user id). </p>
+<p>On the client this is whatever the caller sets and is <b>not</b> trustworthy on its own — it is untrusted wire input. When a verifying authorizer (e.g. <code><a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html" title="IAuthorizer that authenticates via a signed Context::token.">SigningAuthorizer</a></code>, <code><a class="el" href="../../d3/d6a/session__auth_8hpp.html" title="Opt-in authenticated sessions: signed bearer tokens and a verifying IAuthorizer so a RemoteServer can...">session_auth.hpp</a></code>) is installed, <code>RemoteServer</code> <b>overwrites</b> this field with the principal extracted from a valid <code>token</code> before dispatch, so <code>session::current()-&gt;principal</code> read inside a model is the authenticated identity, not the client's claim. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00024">24</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a31e455b3253d2c25b24a73e3000aa103" name="a31e455b3253d2c25b24a73e3000aa103"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a31e455b3253d2c25b24a73e3000aa103">&#9670;&#160;</a></span>token</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::session::Context::token</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Bearer credential verified server-side (empty if unauthenticated). </p>
+<p>Typically a signed token minted by a login action via <code><a class="el" href="../../dc/de7/classmorph_1_1session_1_1TokenIssuer.html" title="Mints signed bearer tokens from claims using a shared secret.">session::TokenIssuer</a></code> and attached to every call (see <code><a class="el" href="../../d3/d6a/session__auth_8hpp.html" title="Opt-in authenticated sessions: signed bearer tokens and a verifying IAuthorizer so a RemoteServer can...">session_auth.hpp</a></code> and <code>docs/spec/security.md</code>). Travels in the wire envelope's <code>session</code>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -157,7 +180,7 @@ Public Attributes</h2></td></tr>
 
 <p>Stable id used for distributed tracing / log correlation. Empty if unused. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -175,7 +198,7 @@ Public Attributes</h2></td></tr>
 
 <p>BCP-47 locale tag (e.g. <code>en-US</code>, <code>fr-FR</code>) for i18n. Empty for app default. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>
@@ -193,7 +216,7 @@ Public Attributes</h2></td></tr>
 
 <p>Free-form bag of string→string metadata (feature flags, A/B buckets, …). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>

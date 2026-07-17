@@ -10,10 +10,12 @@ var searchData=
   ['error_20propagation_7',['Error propagation',['../index.html#error-propagation',1,'']]],
   ['exact_20numbers_20on_20the_20wire_8',['&lt;tt&gt;morph::math::Rational&lt;/tt&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
   ['exact_20values_20units_20and_20schema_20driven_20forms_9',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['execute_10',['execute',['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74',1,'morph::qt::QtWebSocketBackend::execute()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4',1,'morph::backend::SimulatedRemoteBackend::execute()'],['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#abc6521631ae08814323f707f748dbc47',1,'morph::bridge::ActionExecuteRegistry::execute()'],['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4',1,'morph::backend::LocalBackend::execute()']]],
+  ['execute_10',['execute',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4',1,'morph::backend::SimulatedRemoteBackend::execute()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74',1,'morph::qt::QtWebSocketBackend::execute()'],['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#abc6521631ae08814323f707f748dbc47',1,'morph::bridge::ActionExecuteRegistry::execute()'],['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4',1,'morph::backend::LocalBackend::execute()']]],
   ['execution_20history_11',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
   ['executor_12',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]],
-  ['executor_20before_20callbacks_20fire_13',['&lt;tt&gt;CompletionState&lt;/tt&gt; requires a non-null executor before callbacks fire',['../index.html#completionstate-requires-a-non-null-executor-before-callbacks-fire',1,'']]],
+  ['executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_13',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
   ['executors_14',['Executors',['../index.html#executors',1,'']]],
-  ['exists_15',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['exists_15',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
+  ['expired_16',['Expired',['../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8',1,'morph::session']]],
+  ['expiresatms_17',['expiresAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1',1,'morph::session::SessionToken']]]
 ];

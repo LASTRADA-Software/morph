@@ -48,8 +48,12 @@ var hierarchy =
     [ "morph::session::Context", "dd/d85/structmorph_1_1session_1_1Context.html", null ],
     [ "morph::session::detail::ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", null ],
     [ "morph::session::IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", [
-      [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ]
+      [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ],
+      [ "morph::session::SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", null ]
     ] ],
+    [ "morph::session::SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", null ],
+    [ "morph::session::TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", null ],
+    [ "morph::session::TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", null ],
     [ "morph::time::DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", null ],
     [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
     [ "morph::units::Quantity< U, DeclaredDecimals >", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],

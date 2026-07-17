@@ -148,7 +148,7 @@ class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00144">144</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00151">151</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -190,12 +190,12 @@ template&lt;typename T &gt; </div>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">statePtr</td><td>Shared state produced by the backend. </td></tr>
-    <tr><td class="paramname">execPtr</td><td>Executor on which callbacks are posted. May be <code>nullptr</code> (direct call). </td></tr>
+    <tr><td class="paramname">execPtr</td><td>Executor on which callbacks are posted. If <code>nullptr</code>, callbacks are never delivered — they are silently dropped (see <code>setValue</code>/<code>setException</code>, which post only when <code>cbExec != nullptr</code>). </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -267,7 +267,7 @@ template&lt;typename T &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>*this</code> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -307,7 +307,7 @@ template&lt;typename T &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>*this</code> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -339,7 +339,7 @@ template&lt;typename T &gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <code>nullptr</code> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00199">199</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

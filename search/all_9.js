@@ -8,5 +8,7 @@ var searchData=
   ['headers_20tt_20include_20morph_20qt_20tt_5',['Qt integration headers (&lt;tt&gt;include/morph/qt/&lt;/tt&gt;)',['../index.html#qt-integration-headers-includemorphqt',1,'']]],
   ['headers_20tt_20include_20morph_20tt_6',['Core headers (&lt;tt&gt;include/morph/&lt;/tt&gt;)',['../index.html#core-headers-includemorph',1,'']]],
   ['heap_20allocated_7',['&lt;tt&gt;RemoteServer&lt;/tt&gt; must be heap-allocated',['../index.html#remoteserver-must-be-heap-allocated',1,'']]],
-  ['history_8',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]]
+  ['history_8',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['hmacsha256_9',['hmacSha256',['../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b',1,'morph::session']]],
+  ['hmacsha256raw_10',['hmacSha256Raw',['../d3/d6a/session__auth_8hpp.html#a8fe2f67a9ab540a7fa24562e9e1dffc5',1,'morph::session::detail']]]
 ];

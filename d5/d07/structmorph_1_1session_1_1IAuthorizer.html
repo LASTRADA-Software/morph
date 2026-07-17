@@ -109,6 +109,7 @@ Inheritance diagram for morph::session::IAuthorizer:</div>
   <img src="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.png" usemap="#morph::session::IAuthorizer_map" alt=""/>
   <map id="morph::session::IAuthorizer_map" name="morph::session::IAuthorizer_map">
 <area href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything." alt="morph::session::AllowAllAuthorizer" shape="rect" coords="0,56,206,80"/>
+<area href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html" title="IAuthorizer that authenticates via a signed Context::token." alt="morph::session::SigningAuthorizer" shape="rect" coords="216,56,422,80"/>
   </map>
 </div></div>
 <table class="memberdecls">
@@ -117,13 +118,16 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a8e866ec952e0075389623c0d48fcb901" id="r_a8e866ec952e0075389623c0d48fcb901"><td class="memItemLeft" align="right" valign="top">virtual bool&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">authorize</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx, std::string_view modelType, std::string_view actionType) const =0</td></tr>
 <tr class="memdesc:a8e866ec952e0075389623c0d48fcb901"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns <code>true</code> if <code>ctx</code> is allowed to invoke <code>actionType</code> on <code>modelType</code>.  <br /></td></tr>
 <tr class="separator:a8e866ec952e0075389623c0d48fcb901"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a639b6c6bfe77ba9143b0533788726568" id="r_a639b6c6bfe77ba9143b0533788726568"><td class="memItemLeft" align="right" valign="top">virtual std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">authenticate</a> (const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;ctx) const</td></tr>
+<tr class="memdesc:a639b6c6bfe77ba9143b0533788726568"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the authenticated principal for <code>ctx</code>, or <code>nullopt</code>.  <br /></td></tr>
+<tr class="separator:a639b6c6bfe77ba9143b0533788726568"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Authorizes incoming actions on a <code>RemoteServer</code>. </p>
 <p>Called once per <code>execute</code> envelope, before the action is dispatched. A <code>false</code> return causes the server to reply with <code>err|unauthorized</code> (the client surfaces the error through the <code>.onError(...)</code> callback).</p>
 <p>Default implementation supplied by the framework is <code><a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything.">AllowAllAuthorizer</a></code>. Real deployments install a custom subclass that checks principal claims, action permissions, rate limits, etc. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="a8e866ec952e0075389623c0d48fcb901" name="a8e866ec952e0075389623c0d48fcb901"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a8e866ec952e0075389623c0d48fcb901">&#9670;&#160;</a></span>authorize()</h2>
@@ -176,7 +180,46 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> to allow dispatch, <code>false</code> to reject with <code>err|unauthorized</code>. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html#a15563dffc836682b80f6d15cba956f42">morph::session::AllowAllAuthorizer</a>.</p>
+<p>Implemented in <a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html#a15563dffc836682b80f6d15cba956f42">morph::session::AllowAllAuthorizer</a>, and <a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#a998542ab6e7b9aeca272f2a05fc452a5">morph::session::SigningAuthorizer</a>.</p>
+
+</div>
+</div>
+<a id="a639b6c6bfe77ba9143b0533788726568" name="a639b6c6bfe77ba9143b0533788726568"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a639b6c6bfe77ba9143b0533788726568">&#9670;&#160;</a></span>authenticate()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::optional&lt; std::string &gt; morph::session::IAuthorizer::authenticate </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">Context</a> &amp;&#160;</td>
+          <td class="paramname"><em>ctx</em></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns the authenticated principal for <code>ctx</code>, or <code>nullopt</code>. </p>
+<p>Called by <code>RemoteServer</code> after <code>authorize</code> succeeds. If it returns a value, the server overwrites <code><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f" title="Auth principal (user id).">Context::principal</a></code> with it before dispatch, making the identity authoritative for model code that reads <code>session::current()</code>. The default returns <code>nullopt</code> — authorizers that do not authenticate (e.g. <code><a class="el" href="../../dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html" title="Default authorizer that permits everything.">AllowAllAuthorizer</a></code>) leave the client's principal untouched. A verifying authorizer (<code><a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html" title="IAuthorizer that authenticates via a signed Context::token.">SigningAuthorizer</a></code>) overrides this. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">ctx</td><td>Per-call session attached by the client. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The verified principal to make authoritative, or <code>nullopt</code>. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#ab46b3d7dabef6cf09d31cf51023762ef">morph::session::SigningAuthorizer</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d5e/session_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a>.</p>
 
 </div>
 </div>

@@ -148,7 +148,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Process-local <code>seq</code></dt><dd>Like <code><a class="el" href="../../d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html" title="Thread-safe in-memory implementation of IActionLog.">InMemoryActionLog</a></code>, <code>seq</code> is assigned fresh per process instance — it does not resume from the highest <code>seq</code> already on disk if the file is reopened. Entries remain correctly ordered on disk regardless (append-only), but <code>seq</code> alone is not a cross-restart unique key; use <code><a class="el" href="../../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#aee38ac14807005f7ba0e194d884b6cc3" title="Re-reads the file from disk and decodes every line. Thread-safe.">entries()</a></code>' natural file order for that.</dd></dl>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). Safe to use from multiple threads within one process; not safe for multiple processes to append to the same path concurrently. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac31c936b2ec3c6a63f979aca51a92fd5" name="ac31c936b2ec3c6a63f979aca51a92fd5"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac31c936b2ec3c6a63f979aca51a92fd5">&#9670;&#160;</a></span>FileActionLog()</h2>
@@ -188,7 +188,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the underlying file. </p>
 <p><code>_file</code> is always non-null here: the constructor either finishes with a valid handle or throws before completing (in which case this destructor never runs), and copy/move are deleted, so there is no path that could null it out afterwards. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,7 +257,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,7 +288,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00081">81</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +327,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00099">99</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>

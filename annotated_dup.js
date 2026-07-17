@@ -71,7 +71,11 @@ var annotated_dup =
         ] ],
         [ "AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer" ],
         [ "Context", "dd/d85/structmorph_1_1session_1_1Context.html", "dd/d85/structmorph_1_1session_1_1Context" ],
-        [ "IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", "d5/d07/structmorph_1_1session_1_1IAuthorizer" ]
+        [ "IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", "d5/d07/structmorph_1_1session_1_1IAuthorizer" ],
+        [ "SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", "d8/dd5/structmorph_1_1session_1_1SessionToken" ],
+        [ "SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer" ],
+        [ "TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", "dc/de7/classmorph_1_1session_1_1TokenIssuer" ],
+        [ "TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", "d5/dc7/classmorph_1_1session_1_1TokenVerifier" ]
       ] ],
       [ "time", null, [
         [ "DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", "d5/d44/structmorph_1_1time_1_1DateTime" ],

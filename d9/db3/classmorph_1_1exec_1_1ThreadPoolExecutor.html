@@ -126,9 +126,9 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Multi-threaded executor backed by a fixed-size thread pool. </p>
-<p>Tasks are placed in a FIFO queue and consumed by worker threads. Exceptions thrown by tasks are silently caught and discarded. The destructor blocks until all worker threads have exited. </p>
+<p>Tasks are placed in a FIFO queue and consumed by worker threads. Exceptions thrown by tasks are caught and logged via <code>morph::log</code> (they do not propagate out of the worker or abort sibling tasks). The destructor blocks until all worker threads have exited. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ab3b2f3ea1e73b4cc34cc07c0d98dbf09" name="ab3b2f3ea1e73b4cc34cc07c0d98dbf09"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ab3b2f3ea1e73b4cc34cc07c0d98dbf09">&#9670;&#160;</a></span>ThreadPoolExecutor()</h2>
@@ -162,7 +162,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +192,7 @@ Public Member Functions</h2></td></tr>
 <p>Signals all workers to stop and joins them. </p>
 <p>Remaining queued tasks that have not started are dropped. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -231,7 +231,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

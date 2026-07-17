@@ -153,7 +153,7 @@ Public Member Functions</h2></td></tr>
 <p>Callable that supplies the action log to attach to a newly registered instance, given its model type and <code>contextKey</code>. </p>
 <p>Return <code>nullptr</code> to register the instance with no log attached (e.g. for model types or context keys the host app doesn't want journaled). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +349,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Synchronously processes a JSON <code>Envelope</code> on the calling thread and returns the reply. </p>
 <p>Equivalent to <code><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">handle()</a></code> but never posts to the worker pool, so it is safe to call from a thread that <em>is</em> the worker pool — for example, from a <code>BridgeHandler</code> constructor invoked from inside an action handler.</p>
-<p>Only safe for control messages (<code>register</code>, <code>deregister</code>) — <code>execute</code> messages still post to the strand and would return before the result is produced. The implementation rejects <code>execute</code> to make this explicit.</p>
+<p>Only safe for control messages (<code>register</code>, <code>deregister</code>). An <code>execute</code> envelope posts to the strand and produces its reply asynchronously, after this synchronous call has already returned and destroyed the local reply buffer the deferred callback would write into. To keep that from becoming a dangling write, <code>execute</code> is rejected up front with an <code>err</code> reply.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">msg</td><td>JSON-encoded <code><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">morph::wire::Envelope</a></code> (via <code>wire::encode</code>). </td></tr>
@@ -358,7 +358,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>JSON-encoded reply envelope. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -394,7 +394,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

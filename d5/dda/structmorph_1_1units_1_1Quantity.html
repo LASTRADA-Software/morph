@@ -142,10 +142,10 @@ requires (OtherDecimals != DeclaredDecimals)</td></tr>
 <tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's runtime precision to the declared one.  <br /></td></tr>
 <tr class="separator:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a161651d7fca578b928901cdac557051a" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
-<tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
+<tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
 <tr class="separator:a161651d7fca578b928901cdac557051a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft" align="right" valign="top">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
-<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <code>docs/quantity_type.md</code>).  <br /></td></tr>
+<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <code>docs/spec/quantity_type.md</code>).  <br /></td></tr>
 <tr class="separator:ac4899dbe76c9b39a724a0e8073257c73"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a5252c3cebbc4708d242bcee514b55869" id="r_a5252c3cebbc4708d242bcee514b55869"><td class="memTemplParams" colspan="2">template&lt;auto To&gt; <br />
 requires Convertible&lt;U, To&gt;</td></tr>
@@ -727,7 +727,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off. </p>
+<p>Seals this value with a name: <code><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/quantity_type.md).">equation()</a></code> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">label</td><td>The symbol name. </td></tr>
@@ -758,7 +758,7 @@ requires UnitEnum&lt;decltype(U)&gt;</div>
       </table>
 </div><div class="memdoc">
 
-<p>The worked derivation as print-ready lines (see <code>docs/quantity_type.md</code>). </p>
+<p>The worked derivation as print-ready lines (see <code>docs/spec/quantity_type.md</code>). </p>
 <dl class="section return"><dt>Returns</dt><dd><code>[0]</code> formula, <code>[1]</code> substitution, <code>[2]</code> result, <code>[3..]</code> <code>where</code> legend; a single formatted-value element for a degenerate root (empty, named root, bare leaf, or tracing off). </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html">quantity_equation.hpp</a>.</p>

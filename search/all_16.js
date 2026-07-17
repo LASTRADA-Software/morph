@@ -5,5 +5,6 @@ var searchData=
   ['value_5for_2',['value_or',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834',1,'morph::units::Quantity']]],
   ['valuefield_3',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a7ee9bd530727b58937656503574eb1a0',1,'morph::forms::Choice']]],
   ['values_20units_20and_20schema_20driven_20forms_4',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['view_5',['view',['../df/d5e/structmorph_1_1forms_1_1FixedString.html#af1a5e7a3bb5175ca88d37c606d081026',1,'morph::forms::FixedString']]]
+  ['verify_5',['verify',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492',1,'morph::session::TokenVerifier']]],
+  ['view_6',['view',['../df/d5e/structmorph_1_1forms_1_1FixedString.html#af1a5e7a3bb5175ca88d37c606d081026',1,'morph::forms::FixedString']]]
 ];

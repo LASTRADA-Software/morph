@@ -19,7 +19,9 @@ var searchData=
   ['isnegative_16',['isNegative',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a475dff8a3da3dc6bbec031941b107b4d',1,'morph::math::Rational']]],
   ['isonline_17',['isOnline',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a4c93dfd54f19a863d724a196b4bfb319',1,'morph::offline::NetworkMonitor']]],
   ['isquantity_18',['isQuantity',['../d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69',1,'morph::units']]],
-  ['issue_203_20—_20ordered_20coalescing_20identity_20aware_20execution_20history_19',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['iszero_20',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
-  ['it_20exists_21',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['issue_19',['issue',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33',1,'morph::session::TokenIssuer']]],
+  ['issue_203_20—_20ordered_20coalescing_20identity_20aware_20execution_20history_20',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['issuedatms_21',['issuedAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#afb6785806e6a8a89687140e50bd9f6c5',1,'morph::session::SessionToken']]],
+  ['iszero_22',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
+  ['it_20exists_23',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];
