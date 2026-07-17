@@ -166,16 +166,49 @@ private:
                         }
                     }
                 }
+                // Record the owner principal for per-instance authorization. We
+                // derive it from the *verified* identity of the register call
+                // (never the client's raw claim): a verifying authorizer returns
+                // the principal for the register envelope's session; an
+                // authorize-only / allow-all authorizer returns nullopt, so the
+                // instance is recorded as unowned (empty). This is what lets
+                // `authorizeInstance` later deny a different principal.
+                std::string owner;
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    owner = std::move(*verified);
+                }
                 ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
                 {
                     std::scoped_lock const lock{_regMtx};
                     _models[mid] = std::move(holder);
+                    _owners[mid] = std::move(owner);
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
+                ::morph::exec::detail::ModelId const mid{env.modelId};
+                // Per-instance authorization also gates deregister: consult the
+                // hook with the recorded owner before destroying the instance.
+                // The default hook allows all, so unconfigured behaviour is
+                // unchanged; an ownership-enforcing authorizer can reject a
+                // caller tearing down an instance it does not own.
+                std::string owner;
+                bool known = false;
                 {
                     std::scoped_lock const lock{_regMtx};
-                    _models.erase(::morph::exec::detail::ModelId{env.modelId});
+                    auto iter = _owners.find(mid);
+                    if (iter != _owners.end()) {
+                        owner = iter->second;
+                        known = true;
+                    }
+                }
+                if (known && !_authorizer->authorizeInstance(env.session, {}, {}, mid.v, owner)) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
+                {
+                    std::scoped_lock const lock{_regMtx};
+                    _models.erase(mid);
+                    _owners.erase(mid);
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
@@ -194,31 +227,63 @@ private:
             reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
             return;
         }
-        // Make the identity authoritative: a verifying authorizer replaces the
-        // client-asserted principal with the one it extracted from a valid token,
-        // so model code reading session::current()->principal can trust it. A
-        // non-authenticating authorizer returns nullopt and leaves it unchanged.
+        // Make the identity authoritative. A verifying authorizer returns the
+        // principal it extracted from a valid token; we stamp it so model code
+        // reading session::current()->principal can trust it. If authenticate()
+        // returns nullopt the authorizer cannot vouch for the caller, so we CLEAR
+        // the client-asserted principal rather than passing it through unverified.
+        // This closes two holes: (1) the TOCTOU window where a token that passed
+        // authorize() expires before authenticate() (worst case is now an empty
+        // principal, never the attacker's claim), and (2) an authorize-only or
+        // allow-all authorizer that never authenticates (the model never sees an
+        // untrusted principal as authoritative). See docs/spec/security.md.
         if (auto verified = _authorizer->authenticate(env.session)) {
             env.session.principal = std::move(*verified);
+        } else {
+            env.session.principal.clear();
         }
         ::morph::exec::detail::ModelId const mid{env.modelId};
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
+        std::string owner;
+        bool known = false;
         {
             std::scoped_lock const lock{_regMtx};
             auto iter = _models.find(mid);
             if (iter != _models.end()) {
                 holder = iter->second;
+                if (auto ownerIter = _owners.find(mid); ownerIter != _owners.end()) {
+                    owner = ownerIter->second;
+                    known = true;
+                }
             }
         }
         if (!holder) {
             reply(::morph::wire::encode(::morph::wire::makeErr("model not found", env.callId)));
             return;
         }
-        _strand.post(mid, [&disp = _dispatcher, env = std::move(env), holder = std::move(holder),
+        // Per-instance (row-level) authorization. `authorize` above only saw the
+        // model *type*; this consults the optional ownership hook with the target
+        // instance id and its recorded owner. The default hook allows all, so
+        // behaviour is unchanged unless an authorizer overrides it. env.session
+        // now carries the verified principal (stamped just above), so an
+        // ownership authorizer compares the recorded owner against it.
+        if (known && !_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, owner)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+            return;
+        }
+        // Capture a strong self-reference so the server (and therefore
+        // `_dispatcher`, which is a reference member) stays alive until this
+        // strand task runs and delivers its reply. `handle()`'s task only holds
+        // `self` until it enqueues onto the strand; without this capture the last
+        // external shared_ptr could drop before the strand task executes, leaving
+        // `_dispatcher` dangling (use-after-free) or the reply silently lost so a
+        // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
+        auto self = shared_from_this();
+        _strand.post(mid, [self = std::move(self), env = std::move(env), holder = std::move(holder),
                            reply = std::move(reply)]() mutable {
             try {
                 ::morph::session::detail::ScopedContext const scoped{env.session};
-                auto result = disp.dispatch(env.modelType, env.actionType, *holder, env.body);
+                auto result = self->_dispatcher.dispatch(env.modelType, env.actionType, *holder, env.body);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
                 reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
@@ -235,18 +300,24 @@ private:
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
         _models;
+    // Owner principal recorded per instance at register time, consulted by
+    // IAuthorizer::authorizeInstance on execute/deregister. Guarded by _regMtx
+    // (same lock as _models); empty string means "no recorded owner".
+    std::unordered_map<::morph::exec::detail::ModelId, std::string, ::morph::exec::detail::ModelIdHash> _owners;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
 };
 
-/// @brief `IBackend` adapter that routes all calls through a `RemoteServer` using a
-///        synchronous request-reply protocol.
+/// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
+///        wire `Envelope` messages.
 ///
-/// Intended for testing and in-process simulation of remote execution. All
-/// `registerModel()`, `deregisterModel()`, and `execute()` calls are forwarded
-/// as protocol messages to the server; the calling thread blocks until the reply
-/// arrives via `std::promise`.
+/// Intended for testing and in-process simulation of remote execution.
+/// `registerModel()` and `deregisterModel()` are processed inline on the calling
+/// thread via `RemoteServer::handleInline`. `execute()` is asynchronous: it sends
+/// the message through `RemoteServer::handle` and resolves the returned
+/// `Completion` when the reply arrives (there is no `std::promise` and no
+/// blocking wait).
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
     /// @brief Constructs the backend targeting @p server.

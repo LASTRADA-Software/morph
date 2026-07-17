@@ -40,6 +40,15 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
     });
     QObject::connect(&_socket, &QWebSocket::disconnected, [this]() {
         _connected = false;
+        // Unblock any parked synchronous call (e.g. a register whose reply is
+        // outstanding). Without this the nested QEventLoop in sendSync never
+        // quits, freezing the Qt thread forever. We clear _pendingReply first so
+        // the woken sendSync observes an empty reply and reports a failure rather
+        // than acting on a stale one. See docs/spec/backend.md (QtWebSocketBackend).
+        if (_syncLoop != nullptr) {
+            _pendingReply.clear();
+            _syncLoop->quit();
+        }
         cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
         if (!_shuttingDown && _cfg.reconnectEnabled && _everConnected) {
             scheduleReconnect();
@@ -79,18 +88,44 @@ bool QtWebSocketBackend::waitForConnected(int timeoutMs) {  // NOLINT(readabilit
 }
 
 std::string QtWebSocketBackend::sendSync(const std::string& msg) {
+    // A synchronous send parks a nested event loop until the reply arrives. Only
+    // one may be parked at a time: nested/reentrant sync calls would clobber the
+    // single _syncLoop pointer and cross their replies. Callers (register) run on
+    // the Qt thread and never re-enter sendSync from within a parked loop, but we
+    // fail loudly rather than corrupt state if that assumption is ever violated.
+    if (_syncLoop != nullptr) {
+        throw std::runtime_error("sendSync: a synchronous call is already in flight (reentrant use)");
+    }
+    if (!_connected) {
+        throw std::runtime_error("disconnected");
+    }
+    _pendingReply.clear();
     _socket.sendTextMessage(QString::fromStdString(msg));
     QEventLoop loop;
     _syncLoop = &loop;
     loop.exec();
     _syncLoop = nullptr;
+    // A disconnect (or a timeout with no reply) leaves _pendingReply empty; the
+    // disconnected slot quits the loop with the buffer cleared. Surface that as a
+    // disconnect error so callers throw a clear message instead of decoding "".
+    if (_pendingReply.empty()) {
+        throw std::runtime_error("disconnected");
+    }
     return _pendingReply;
 }
 
 ::morph::exec::detail::ModelId QtWebSocketBackend::registerModel(
     const std::string& typeId,
     std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) {
-    auto replyJson = sendSync(::morph::wire::encode(::morph::wire::makeRegister(typeId)));
+    std::string replyJson;
+    try {
+        replyJson = sendSync(::morph::wire::encode(::morph::wire::makeRegister(typeId)));
+    } catch (const std::exception& exc) {
+        // sendSync throws "disconnected" if the socket drops (or was never
+        // connected) while the register reply was outstanding — the nested event
+        // loop is now quit rather than hung. Surface it as a register failure.
+        throw std::runtime_error(std::string{"register failed: "} + exc.what());
+    }
     auto reply = ::morph::wire::decode(replyJson);
     if (reply.kind == "ok") {
         return ::morph::exec::detail::ModelId{reply.modelId};

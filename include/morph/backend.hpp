@@ -175,13 +175,47 @@ public:
         _models.erase(mid);
     }
 
-    /// @brief Notifies every live model that implements `IBackendChangedSink`. Thread-safe.
+    /// @brief Schedules `onBackendChanged()` on each live model's strand. Thread-safe.
+    ///
+    /// Every model that implements `IBackendChangedSink` has its
+    /// `onBackendChanged()` **posted onto that model's own strand** (the same
+    /// per-`ModelId` serial queue `execute` uses), rather than invoked inline on
+    /// the caller's thread. Two properties follow, and they are the whole point:
+    ///
+    /// - **Strand-serialised, lock-free model code.** `onBackendChanged()` runs
+    ///   on the pool inside the model's strand, so it never overlaps an
+    ///   `execute()` on the same model. A model reacting to a backend switch
+    ///   (e.g. draining an offline queue and mutating counters) needs no locking
+    ///   of its own state — exactly what `offline.md` promises.
+    /// - **Not under `Bridge::_mtx`.** `Bridge::switchBackend` calls this while
+    ///   holding `_mtx`, but only the cheap `post()` runs there; the model body
+    ///   runs later on a pool thread. A model that re-enters the bridge from
+    ///   `onBackendChanged()` (`switchBackend`/`registerHandler`/`deregisterHandler`)
+    ///   therefore acquires `_mtx` freshly on the strand thread instead of
+    ///   deadlocking on a lock the switch caller still holds.
+    ///
+    /// A `shared_ptr` copy of each holder is captured into the posted task so a
+    /// concurrent `deregisterModel` cannot free the model out from under its
+    /// pending notification (mirrors `execute`'s holder capture).
     void notifyBackendChanged() override {
-        std::scoped_lock const lock{_regMtx};
-        for (auto& [modelId, holder] : _models) {
-            if (auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get())) {
-                sink->onBackendChanged();
+        std::vector<std::pair<::morph::exec::detail::ModelId,
+                              std::shared_ptr<::morph::model::detail::IModelHolder>>>
+            sinks;
+        {
+            std::scoped_lock const lock{_regMtx};
+            for (auto& [modelId, holder] : _models) {
+                if (dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get()) != nullptr) {
+                    sinks.emplace_back(modelId, holder);
+                }
             }
+        }
+        for (auto& [modelId, holder] : sinks) {
+            _strand.post(modelId, [holder = std::move(holder)]() mutable {
+                auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get());
+                if (sink != nullptr) {
+                    sink->onBackendChanged();
+                }
+            });
         }
     }
 

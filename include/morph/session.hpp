@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -84,6 +85,46 @@ struct IAuthorizer {
     /// @return The verified principal to make authoritative, or `nullopt`.
     [[nodiscard]] virtual std::optional<std::string> authenticate([[maybe_unused]] const Context& ctx) const {
         return std::nullopt;
+    }
+
+    /// @brief Optional per-**instance** authorization hook — the multi-tenant gate.
+    ///
+    /// `authorize` sees only the model *type*, so it cannot answer "may this
+    /// caller touch *this instance* (row)?". Model instances on a `RemoteServer`
+    /// are addressable by guessable sequential ids, so without an ownership check
+    /// any authenticated caller can `execute`/`deregister` against an id it did
+    /// not create — a cross-tenant targeting gap. This hook closes it: when
+    /// installed, `RemoteServer` consults it on every `execute` **and** every
+    /// `deregister`, passing the id of the target instance and the principal
+    /// recorded as its owner at `register` time (empty if the instance was
+    /// registered by an unauthenticated caller or predates ownership tracking).
+    ///
+    /// The **default allows everything**, so an authorizer that does not override
+    /// it — including `AllowAllAuthorizer` and a plain `SigningAuthorizer` — keeps
+    /// the pre-existing behaviour exactly (no per-instance restriction). A
+    /// deployer opts into ownership enforcement by overriding this, typically to
+    /// compare @p ownerPrincipal against `ctx.principal`:
+    /// @code
+    /// bool authorizeInstance(const Context& ctx, std::string_view, std::string_view,
+    ///                        uint64_t, std::string_view ownerPrincipal) const override {
+    ///     return ownerPrincipal.empty() || ownerPrincipal == ctx.principal;
+    /// }
+    /// @endcode
+    ///
+    /// @param ctx            Per-call session (its `principal` is authoritative
+    ///                       only if a verifying authorizer is installed).
+    /// @param modelType      Target model type id (empty for `deregister`).
+    /// @param actionType     Target action type id (empty for `deregister`).
+    /// @param modelId        Numeric id of the target instance.
+    /// @param ownerPrincipal Principal recorded as the instance's owner at
+    ///                       `register` time; empty if none was recorded.
+    /// @return `true` to allow the operation on this instance, `false` to reject.
+    [[nodiscard]] virtual bool authorizeInstance([[maybe_unused]] const Context& ctx,
+                                                 [[maybe_unused]] std::string_view modelType,
+                                                 [[maybe_unused]] std::string_view actionType,
+                                                 [[maybe_unused]] std::uint64_t modelId,
+                                                 [[maybe_unused]] std::string_view ownerPrincipal) const {
+        return true;
     }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
