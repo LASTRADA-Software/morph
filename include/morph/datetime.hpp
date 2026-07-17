@@ -94,13 +94,26 @@ struct DateTime {
     ///
     /// The calendar date must exist (2026-02-30 is rejected) and clock
     /// components must be in range; no time zones other than `Z`, no
-    /// lowercase separators, no trailing input.
+    /// lowercase separators, no trailing input. The fixed-width date and clock
+    /// fields (month, day, hour, minute, second, fraction) reject a leading
+    /// sign; only the year field may carry a `-` (negative years).
     /// @param text Candidate ISO-8601 string.
     /// @return The parsed instant, or `std::nullopt` when @p text is malformed.
     // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
     [[nodiscard]] static std::optional<DateTime> fromIso8601(std::string_view text) noexcept {
         // Callers only pass offsets within the length-checked prefix below.
-        auto const number = [&text](std::size_t offset, std::size_t count) noexcept -> std::optional<int> {
+        // `allowSign` gates the leading '-'/'+' that `std::from_chars` would
+        // otherwise accept: the whole-string year is the only field where a
+        // sign is legitimate (negative years). For the fixed-width date/clock
+        // fields a leading sign is a sign-injection attack — "T-5:30:15" would
+        // read hour = -5 and silently shift to a different valid instant — so
+        // those callers reject it and the value is forced non-negative.
+        auto const number = [&text](std::size_t offset, std::size_t count,
+                                    bool allowSign) noexcept -> std::optional<int> {
+            if (!allowSign && count > 0 && offset < text.size() &&
+                (text[offset] == '-' || text[offset] == '+')) {
+                return std::nullopt;
+            }
             int parsed = 0;
             auto const* first = text.data() + offset;
             auto const [end, errc] = std::from_chars(first, first + count, parsed);
@@ -117,12 +130,12 @@ struct DateTime {
             !separator(13, ':') || !separator(16, ':')) {
             return std::nullopt;
         }
-        auto const year = number(0, 4);
-        auto const month = number(5, 2);
-        auto const day = number(8, 2);
-        auto const hour = number(11, 2);
-        auto const minute = number(14, 2);
-        auto const second = number(17, 2);
+        auto const year = number(0, 4, /*allowSign=*/true);
+        auto const month = number(5, 2, /*allowSign=*/false);
+        auto const day = number(8, 2, /*allowSign=*/false);
+        auto const hour = number(11, 2, /*allowSign=*/false);
+        auto const minute = number(14, 2, /*allowSign=*/false);
+        auto const second = number(17, 2, /*allowSign=*/false);
         if (!year || !month || !day || !hour || !minute || !second) {
             return std::nullopt;
         }
