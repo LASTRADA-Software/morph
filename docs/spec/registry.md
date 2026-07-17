@@ -311,6 +311,23 @@ class ModelRegistryFactory {
 
 - `create` throws `std::runtime_error` for unknown model types.
 
+#### Instance identity and per-instance authorization
+
+`ModelRegistryFactory` maps a **string type-id** to a fresh holder; it has no
+notion of a per-*instance* id or owner. The numeric **instance id** that
+addresses a live holder is assigned separately by `RemoteServer` from a single
+sequential counter (`_nextId`), and those ids are therefore guessable across
+tenants. To keep a caller from `execute`/`deregister`-ing an instance it did not
+create, `RemoteServer` records an **owner principal** for each instance at
+`register` time — the *verified* identity of the register call
+(`IAuthorizer::authenticate`), not the client's raw claim — and consults the
+optional `IAuthorizer::authorizeInstance(ctx, modelType, actionType, modelId,
+ownerPrincipal)` hook on every `execute` and `deregister`. The hook **defaults
+to allow**, so this registry's type-keyed behaviour is unchanged unless a
+deployer installs an authorizer that overrides it. The type registry maps type
+ids only; instance ownership lives one layer up in `RemoteServer`. See
+[session.md](session.md) and [security.md](security.md).
+
 ### `ActionExecuteRegistry`
 
 Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type

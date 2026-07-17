@@ -328,8 +328,10 @@ TEST_CASE(
     req.actionType = "RX_WhoAmI";
     req.body = "{}";
     req.session.principal = "spoofed-client-claim";
-    req.session.token =
-        morph::session::TokenIssuer{secret}.issue(morph::session::SessionToken{.principal = "real-verified-user"});
+    // expiresAtMs must be strictly positive — a zero expiry is now treated as
+    // already-expired (never eternal), so mint with a far-future real expiry.
+    req.session.token = morph::session::TokenIssuer{secret}.issue(
+        morph::session::SessionToken{.principal = "real-verified-user", .expiresAtMs = 9'999'999'999'999});
 
     WaitReply waiter;
     server->handle(morph::wire::encode(req), std::ref(waiter));

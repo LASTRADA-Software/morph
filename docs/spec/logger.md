@@ -11,6 +11,7 @@ free functions operating on a hidden `LogState` singleton.
 
 - [Log levels](#log-levels)
 - [Global state](#global-state)
+- [Log-injection sanitisation](#log-injection-sanitisation)
 - [Level helpers](#level-helpers)
 - [Scoped override](#scoped-override)
 - [Thread safety](#thread-safety)
@@ -48,8 +49,9 @@ load with **no mutex acquisition** (see [Thread safety](#thread-safety)).
 A single `detail::LogState` singleton holds:
 
 - **`sink`** — a `std::function<void(LogLevel, std::string_view)>` called for
-  every message that passes the level filter. Default: writes `[LEVEL] msg` to
-  `stderr`. Guarded by `mtx`.
+  every message that passes the level filter. Default: writes
+  `[LEVEL] sanitizeLogLine(msg)` to `stderr` (newline/control-char sanitisation,
+  see [Log-injection sanitisation](#log-injection-sanitisation)). Guarded by `mtx`.
 - **`minLevel`** — the minimum `LogLevel` to emit, as a
   `std::atomic<LogLevel>`. Default: `debug` (everything passes). Read/written
   lock-free with relaxed ordering; **not** guarded by `mtx`.
@@ -70,6 +72,36 @@ The relaxed memory order is intentional: level filtering is advisory (a message
 racing a concurrent `setLogLevel` may be emitted or dropped depending on
 timing), so no cross-thread happens-before relationship on the level is needed,
 and relaxed is the cheapest correct choice.
+
+## Log-injection sanitisation
+
+A log message is a single logical record, and the default sink emits it as one
+physical line (`[LEVEL] msg\n`). User-controlled text containing a newline could
+otherwise **forge a log line** — a message like `"login ok\n[ERROR] breach"`
+would appear as two lines, the second a fabricated `[ERROR]` record — or corrupt
+a line-oriented log parser with embedded control bytes.
+
+The default sink defends against this by passing every message through
+`detail::sanitizeLogLine` before writing:
+
+- `\n`, `\r`, `\t` become the C-style escapes `\n`, `\r`, `\t`.
+- Any other control byte (`< 0x20`, or `0x7f` DEL) becomes a `\xHH` escape.
+- Printable text — including non-ASCII UTF-8 continuation bytes (`>= 0x80`) —
+  passes through untouched.
+
+It is a single cheap pass that does **no allocation on the common (already-clean)
+path**: it scans for the first byte needing escaping and returns a plain copy if
+there is none. The escaped result is always a single line, so a forged `\n`
+cannot splice a fake record into the stream.
+
+**Sanitisation lives in the *default sink*, not in the emit path.** `detail::log`
+still hands the sink the raw `std::string_view`; only the shipped `stderr` sink
+sanitises. A custom sink installed via `setLogger` receives the unsanitised
+message and is responsible for its own escaping (or for routing to a structured
+backend where raw bytes are safe) — `sanitizeLogLine` is a public
+`detail`-namespace helper a custom sink can reuse. This keeps the fast path free
+of forced escaping for sinks that do not need it, while the out-of-the-box
+behaviour is safe.
 
 ## Level helpers
 
@@ -228,6 +260,7 @@ during static teardown.
 |---|---|---|
 | `detail::levelName` | `constexpr std::string_view levelName(LogLevel) noexcept` | Returns `"DEBUG"`, `"INFO "`, `"WARN "`, `"ERROR"`, `"OFF  "` (padded to 5 chars). Falls back to `"?    "` for any out-of-range enum value. |
 | `detail::Logger` | `using Logger = std::function<void(LogLevel, std::string_view)>` | Sink function type. |
+| `detail::sanitizeLogLine` | `std::string sanitizeLogLine(std::string_view)` | Escapes newline/CR/TAB (as `\n`/`\r`/`\t`) and other control bytes (`< 0x20`, `0x7f`) as `\xHH`, leaving printable/UTF-8 text intact. Used by the default sink to prevent log-injection; allocation-free when the input is already clean. Reusable by custom sinks. |
 | `detail::log` | `void log(LogLevel, std::string_view)` | Internal emit entry point. First does a **lock-free** `level >= minLevel` check (relaxed atomic load) and returns early if suppressed; only then acquires `mtx` and calls the sink if it is non-null. The sink runs **while `mtx` is held** (see [Thread safety](#thread-safety)). |
 | `detail::logFormat` | `template<typename... Args> void logFormat(LogLevel, std::format_string<Args...>, Args&&...)` | Checks `level >= minLevel` **before** calling `std::format` (lock-free) and returns early if suppressed, so a filtered formatted call pays no formatting/allocation cost. When the level passes, formats via `std::format` and forwards to `detail::log`. |
 
@@ -239,7 +272,8 @@ during static teardown.
 | Level filtering | **Runtime `uint8_t` comparison, not template-based** | Levels are known at runtime from configuration; a virtual dispatch or template per level adds complexity with no benefit. The `>=` comparison on the enum's underlying value is branch-predictable and cheap. |
 | Sink type | **`std::function<void(LogLevel, std::string_view)>`** | Erases any callable (lambda, function pointer, callable object) without requiring the user to subclass an interface. The cost of a `std::function` invocation is negligible relative to I/O. |
 | Thread safety | **Split: lock-free `std::atomic<LogLevel>` for the level, `std::mutex` for the sink** | The level is the per-call hot path, read on every log call; making it an atomic keeps filtering contention-free and lets a suppressed formatted call reject before `std::format`. The sink is a `std::function` that cannot be swapped atomically, so it keeps the mutex — which also serialises sink calls. The default `stderr` sink is independently thread-safe, but serialising keeps arbitrary user sinks' output from interleaving. Consequence: the sink runs under a non-recursive mutex and must not re-enter `morph::log` (see [Thread safety](#thread-safety)). |
-| Default sink | **`std::println(stderr, "[{}] {}", levelName(lvl), msg)`** | C++23 `std::println` is the modern replacement for `fprintf` — type-safe, no format string mismatch, and it appends a newline automatically. The `[LEVEL]` prefix is concise and grep-friendly. |
+| Default sink | **`std::println(stderr, "[{}] {}", levelName(lvl), sanitizeLogLine(msg))`** | C++23 `std::println` is the modern replacement for `fprintf` — type-safe, no format string mismatch, and it appends a newline automatically. The `[LEVEL]` prefix is concise and grep-friendly. The message is run through `sanitizeLogLine` so a newline/control byte in user-controlled text cannot forge a second log line (see [Log-injection sanitisation](#log-injection-sanitisation)). |
+| Sanitise in the sink, not the emit path | **Only the default sink escapes; `detail::log` passes the raw view** | Keeps the fast path allocation-free for custom sinks that route to structured backends where raw bytes are safe; the out-of-the-box `stderr` sink is still safe by default, and custom sinks can reuse the public `detail::sanitizeLogLine`. |
 | Format support | **Two overloads per level: `std::string_view` and `std::format_string` + variadic args** | The plain overload avoids forcing `std::format` on callers with a raw string; the variadic overload provides type-safe formatting. SFINAE on `std::format_string` ensures the format args are checked at compile time. |
 | `ScopedLoggerOverride` | **RAII guard with two constructors (snapshot-only and install), deleted copy/move** | The default constructor enables a pattern where test fixtures set up their own logger mid-test and still get automatic restoration. The explicit constructor is the common case. Deleted copy/move prevents double-restore. |
 | No `operator<<` | **`std::format` / `std::print` only** | Consistent with C++23 direction — no iostreams dependency, no ADL pitfalls, no locale contamination. |
@@ -267,6 +301,13 @@ logger is the right tool:
   formatted call are always evaluated even when the message is suppressed
   (only the `std::format` step is skipped). There is no macro or `if constexpr`
   that removes suppressed call sites from the binary.
+- **Only the default sink sanitises.** Newline/control-char escaping
+  (`sanitizeLogLine`) is applied by the shipped `stderr` sink, not by
+  `detail::log`. A custom sink installed via `setLogger` receives the raw
+  message and must sanitise itself (it may reuse `detail::sanitizeLogLine`) if it
+  writes to a line-oriented target — otherwise user-controlled text can inject
+  forged lines through *that* sink. See
+  [Log-injection sanitisation](#log-injection-sanitisation).
 - **`ScopedLoggerOverride` swaps *global* state.** The override replaces the one
   global sink/level, so it isolates only tests that run **serially**. Two tests
   running concurrently (or code on a background thread) share the same override
