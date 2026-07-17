@@ -186,6 +186,7 @@ no problem, since the wire value is validated by the action, not by the schema.
 | Blank state | **`std::nullopt` in the payload** | Same pattern as `Quantity` and `Timestamp`; a non-optional `Choice` member is required by the forms rules. |
 | Glaze serialisation | **Through the `value` member directly** | The glaze `meta` specialisation maps `value` so the type serialises as its nullable payload, with the type name `"Choice"`. |
 | Equality | **Total, through `std::optional`'s semantics** | Empty equals empty; engaged values compare by `T`'s equality. |
+| Converting constructors | **Both the `T` and `std::optional<T>` ctors are implicit** | Lets a `Choice` field be assigned directly from a bare value or an optional — `draft.slot = 4` and `slot = std::optional<int64_t>{}` both work — so authors need not name the field type at every assignment. `Choice` has no member the two ctors could ambiguate on, so an implicit `T` and an implicit `std::optional<T>` coexist without a conversion clash. |
 
 ## Usage example
 

@@ -65,6 +65,21 @@ the state is already ready with the *opposite* kind of result (e.g. `attachThen`
 on an error state, or `attachOnError` on a value state), neither branch runs: no
 closure is built and no handler is stored — the attach is a silent no-op.
 
+**Copy vs. move of the value on dispatch.** The two dispatch paths handle the
+stored value differently, and the difference is observable:
+
+- *Set-after-attach* (`setValue` finds an already-registered `onOk`): the value
+  is **moved** out of `value` into the closure (`std::move(*value)`). After
+  dispatch, `value` holds a moved-from `T`.
+- *Attach-after-ready* (`attachThen` fires now against a settled value): the
+  value is **copied** (`savedVal = *value`), leaving `value` intact.
+
+The fire-now copy is what makes a repeated `then()` on an already-settled value
+state fire again with the same result (see [Failure modes](#failure-modes)); a
+move there would hand the second handler a moved-from value. Errors have no such
+asymmetry — an `exception_ptr` is cheap to copy and is copied on both paths, so
+`error` is never emptied.
+
 `attachOnError` sets `onErrAttached = (cbExec != nullptr)` unconditionally on
 entry, before inspecting the state. So attaching an error handler on a
 null-executor state does **not** suppress orphan logging: the handler will never
@@ -176,7 +191,12 @@ them raise or throw — they are silent by construction.
 - **Overwriting a delivered handler has no effect.** Once a handler has fired
   (its slot was moved out on dispatch), re-registering is governed by the rules
   above against the now-`ready` state — i.e. a matching-outcome re-attach fires
-  again with the settled result, a mismatched one is a no-op.
+  again with the settled result, a mismatched one is a no-op. A re-attached
+  `then` fires with a *copy* of the value (the fire-now path copies; see
+  [Shared state](#shared-state--completionstatet)), so the value is not consumed
+  by the first fire-now dispatch. If the value was instead delivered via the
+  set-after-attach path (moved out), a subsequent `then()` re-attach still fires,
+  but against the now moved-from `value`.
 
 ## Empty state
 
@@ -222,6 +242,7 @@ that will never signal.
 | First-result-wins | **`setValue`/`setException` are no-ops after `ready`** | An asynchronous operation should complete exactly once; subsequent calls are silently ignored. |
 | Move-only handle | **`Completion` is move-only, `CompletionState` is shared via `shared_ptr`** | The handle is owned by one consumer at a time; the shared state is owned jointly by the producer and any consumer that has moved the handle. |
 | Empty completion | **Null state pointer makes `then`/`onError` no-ops** | Default-constructed `Completion` is a safe placeholder that never signals. |
+| Value copy on fire-now | **`attachThen` copies `*value`; `setValue` moves it into the closure** | The set-after-attach path moves because the value is consumed exactly once. The attach-after-ready path must copy so `value` stays intact and a repeated `then()` on a settled state can still fire with the result. |
 
 ## Limitations
 

@@ -18,7 +18,7 @@ a consequence of holding those two invariants together.
 - [Executor exception handling](#executor-exception-handling)
 - [Backend error types](#backend-error-types)
 - [Remote wire errors](#remote-wire-errors)
-- [Value-codec philosophy: clamp vs. reject](#value-codec-philosophy-clamp-vs-reject)
+- [Value-codec philosophy: clamp vs. reject vs. propagate-empty](#value-codec-philosophy-clamp-vs-reject-vs-propagate-empty)
 - [Other typed failures](#other-typed-failures)
 - [How to observe failures](#how-to-observe-failures)
 - [Cross-references](#cross-references)
@@ -203,15 +203,16 @@ canonical decode-error reply above; on the client side (in
 `"err"` reply turned into `throw std::runtime_error(reply.message)` — is caught
 and routed to `setException`, then to `.onError`.
 
-## Value-codec philosophy: clamp vs. reject
+## Value-codec philosophy: clamp vs. reject vs. propagate-empty
 
-The two exact value types take deliberately **opposite** stances on hostile
-wire input, because the two kinds of value denote differently:
+The exact value types take deliberately **different** stances on bad input,
+because the kinds of value denote differently:
 
-| Type | Hostile input policy | Rationale |
+| Type | Bad-input policy | Rationale |
 |---|---|---|
-| `math::Rational` (`rational.hpp`) | **Clamps** | A number always denotes *some* quantity; the nearest valid value is a meaningful answer |
+| `math::Rational` (`rational.hpp`) | **Clamps** structure; `std::expected` for arithmetic | A number always denotes *some* quantity; the nearest valid value is a meaningful answer |
 | `time::DateTime` (`datetime.hpp`) | **Rejects** (JSON read error) | A malformed instant denotes *nothing*; there is no meaningful "nearest" timestamp |
+| `units::Quantity<U, Dec>` (`quantity.hpp`) | **Propagates empty**; clamps precision; throws only on ordering an absent value | A measurement can legitimately be *not entered*; a missing/failed value is `std::nullopt`, which flows through arithmetic rather than raising |
 
 **`Rational` clamps.** Its Glaze read side (`from_json`/`read`) rebuilds
 through the canonicalising constructor: `dp` is run through
@@ -232,6 +233,28 @@ calendar date (`2026-02-30`) or out-of-range clock field returns
 `ctx.error = error_code::syntax_error` — a JSON **read error** that fails the
 whole decode, exactly as if the field were the wrong type. There is no clamp
 because a mistyped instant has no valid nearby value.
+
+**`Quantity` propagates empty.** A `Quantity<U, Dec>` is an optional
+`math::Rational` plus a compile-time unit and declared precision, so its error
+surface layers three separate policies:
+
+- *No error channel for arithmetic.* `operator+ - * /`, dimensionless scaling,
+  and `fromDouble` (which lifts `Rational::fromFloat`) all take the
+  **empty-propagation** stance: empty in → empty out, and a division whose
+  divisor is zero (or whose `Rational::dividedBy` otherwise fails) yields
+  `std::nullopt` rather than an error — the underlying `expected` from
+  `Rational` is folded away to empty. Empty is a first-class "not entered /
+  not measured" state, not a failure.
+- *One throw, and only one.* `operator<=>` on two same-unit quantities throws
+  `std::logic_error("morph::units::Quantity: relational comparison requires
+  engaged operands")` when either operand is empty. Ordering an absent value is
+  a **programming error**, not a data condition (equality `operator==` does not
+  throw — two empties compare equal). This is the only exception `Quantity`
+  raises, and it escapes *out of* the call rather than resolving a completion.
+- *Silent precision clamp.* The compile-time `DeclaredDecimals` is a
+  `static_assert` (a code bug fails the build); the runtime `withDecimalPlaces`
+  reuses `Rational`'s `clampWireDecimalPlaces` and clamps silently, matching the
+  `Rational` two-tier rule.
 
 ## Other typed failures
 
@@ -288,6 +311,7 @@ accordingly.
 - [`registry.md`](registry.md) — `ActionDispatcher`, `ModelRegistryFactory`, `ParseError`, the codec macros.
 - [`journal.md`](journal.md) — `LogEntry`, `SerializationError`, `replay`, `SessionLog`.
 - [`rational.md`](rational.md) — `Rational`, `RationalError`, the clamping wire codec.
+- [`quantity_type.md`](quantity_type.md) — `Quantity<U, Dec>`, empty-propagation arithmetic, the ordering `logic_error`.
 - [`datetime.md`](datetime.md) — `DateTime` and its strict, rejecting ISO-8601 codec.
 - [`session.md`](session.md) / [`security.md`](security.md) — `Context`, `IAuthorizer`, `AuthError`, `SigningAuthorizer`.
 - [`logger.md`](logger.md) — `morph::log`, `setLogger`, log levels.
