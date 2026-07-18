@@ -58,7 +58,8 @@ mixed accidentally. The application supplies:
 - a `UnitTraits<Enum>` specialisation — id, display text, default decimal
   places, and a flat list of **peer-to-peer `UnitRelation` entries** that
   declare exact conversion ratios between same-dimension units with a
-  `morph::math::Rational`. Each entry `{Unit::g, Unit::kg, Rational{1, 1000}}`
+  `morph::math::Rational`. Each entry
+  `{Unit::g, Unit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}`
   generates a `convert` in both directions; a `UnitTraits<E>::convert` static
   takes precedence when the conversion is not a simple ratio (e.g. Celsius ↔
   Fahrenheit).
@@ -74,11 +75,11 @@ same-unit quantities is whatever the application's own `operator/` returns for
 inject one; a unit system that wants a dimensionless result must declare the
 enumerator and the algebra rule for it.
 
-Addition and subtraction are defined **only between identical units** —
-`kW + kW`, not `kW + W`. Negation and scaling by a dimensionless `Rational` are
-likewise provided directly. To add or subtract values of *different but
-convertible* units (`kW + W`), the right operand is converted to the left
-operand's unit first; that automatic conversion is what `convert` /
+Addition and subtraction are **evaluated in a single unit**: `kW + kW` combines
+directly, while a mixed *convertible* pair (`kW + W`) first converts the right
+operand to the left operand's unit and then combines. A non-convertible pair does
+not compile. Negation and scaling by a dimensionless `Rational` are likewise
+provided directly. The automatic operand conversion is what `convert` /
 `operator Quantity<To>()` exist for (see *Unit conversion*).
 
 ## Exact value and precision
@@ -200,9 +201,14 @@ quantities; with tracing enabled it is the empty-specific path.)
 quantity, both are no-ops that return the same empty quantity unchanged.
 There is no `Rational` to retag.
 
-**Wire serialization.** On the morph JSON wire an empty quantity serializes as
-JSON `null` — the payload's `std::nullopt` maps directly to a null JSON token,
-and the unit metadata travels only in the schema, never in the instance.
+**Wire serialization.** On the morph JSON wire a quantity *is* its
+`std::optional<Rational>` payload (`glz::meta` maps the instance to `payload`
+alone), so an empty quantity's `std::nullopt` is a JSON `null` and a null token
+read back clears the field. As a **struct member** an empty quantity is written
+according to glaze's default optional handling — the null field is **omitted
+from the serialized object** rather than emitted as `"field":null` — while the
+same field still *accepts* an explicit `null` on read (which clears it). The
+unit metadata travels only in the schema, never in the instance.
 
 ## How a value prints
 
@@ -212,13 +218,51 @@ a value reads identically everywhere. There is a single formatting path and
 **no `operator<<`** (streaming is done by formatting to a `std::string` first).
 
 **The decimal form.** `formatRationalDecimal` renders the exact `Rational` as a
-fixed decimal at its **runtime `DecimalPlaces`** (`{:.Nf}`) and then trims
-trailing zeros (and a bare trailing point). So a whole value prints with no point
-(`2`), and `0.30` / `1.360` print as `0.3` / `1.36`. This is deliberately **not**
+fixed decimal at its **runtime `DecimalPlaces`** and then trims trailing zeros
+(and a bare trailing point). So a whole value prints with no point (`2`), and
+`0.30` / `1.360` print as `0.3` / `1.36`. This is deliberately **not**
 `Rational`'s own `std::format("{}", r)`, which prints an integer numerator or a
 `num/den` *fraction* — `Quantity` always prints a trimmed decimal. The runtime
 `DecimalPlaces` tag is the single source of truth for how many decimals appear;
 no field's *declared* precision is consulted at print time.
+
+**The decimal is exact — the value never passes through `double`.**
+`formatRationalDecimal` computes the fixed-point string by **integer long
+division** of the canonical `numerator/denominator`: the integer part is
+`|numerator| / denominator`, and each fractional digit is the next digit of the
+exact quotient, carrying the exact integer remainder forward. Nothing is routed
+through `Rational::toDouble` or `std::formatter<double>`, so the display no
+longer inherits floating-point error. Two cases the old double path got wrong
+now render correctly: large exact integers beyond the 2^53 double mantissa
+(`9007199254740993` prints as itself, not `…992`), and long non-terminating
+quotients (`1/3` at 18 places prints eighteen `3`s, not `…315`). The wire and
+journal codecs were already exact (they serialise the int64 `num`/`den`/`dp`
+directly); this change brings **display** to the same exactness the rest of the
+type already had.
+
+**Rounding rule.** A non-terminating quotient (or one whose denominator does not
+divide `10^DecimalPlaces`) is rounded **half away from zero** at the runtime
+`DecimalPlaces` — the same rule `Rational::toDouble`'s `std::round` uses, so
+display and `toDouble` agree on the last digit. The test is exact integer math:
+after producing `DecimalPlaces` digits, the truncated result rounds up when
+`2 · remainder ≥ denominator`. The rounding carry propagates through the
+fractional digits and, when it reaches the top, into the integer part
+(`0.9999` at 3 places rounds to `1`). Rounding is symmetric in sign, and a
+magnitude that rounds down to zero prints as `0`, never `-0`. Examples: `2/3`
+at 4 places → `0.6667`; `1/6` at 3 places → `0.167`; `-2/3` at 4 places →
+`-0.6667`.
+
+**Overflow safety.** `numerator` and `denominator` are `int64`, and a naive
+fractional digit step would form `remainder · 10`, which can need up to 67 bits
+when the denominator is near `INT64_MAX`. The formatter never forms that product.
+Because the running `remainder` is always `< denominator`, each digit
+`q = floor(remainder · 10 / denominator)` lies in `0..9`, so `mulTenDivMod`
+computes it by adding `remainder` to an accumulator ten times and reducing modulo
+`denominator` as it goes. The accumulator stays below `denominator` before each
+add and below `2·denominator ≤ 2^64` after, so every intermediate is exact in
+64-bit — no 128-bit type, no `__int128` `/` or `%`, and no dependency on the
+`__udivti3` 128-bit divide helper that clang-cl's MSVC runtime lacks. The result
+is identical under MSVC and clang-cl.
 
 **With the unit.** The `Quantity` formatter (`std::formatter<Quantity<...>>`)
 appends the unit's `display` text to the number with no separating space:
@@ -350,8 +394,9 @@ substitution/result/legend lines):
   formatted value alone (the `N/A` text when empty);
 - a **bare unnamed leaf** (a raw input never operated on) → its formatted value;
 - an **engaged value with no recorded derivation node** — one materialised
-  directly (aggregate init or the wire codec writing `payload`), bypassing the
-  value constructors that call `recordLeaf()` → its formatted value;
+  directly (the wire codec writing `payload`, or direct assignment to the public
+  `payload` member), bypassing the value constructors that call `recordLeaf()` →
+  its formatted value;
 - a value whose **root is a bare unit conversion** (a `static_cast` / implicit
   conversion never further operated on, and left unnamed) → its formatted
   (converted) value — a lone `convert` node is treated as an atom;
@@ -408,7 +453,21 @@ no-op that slices to a plain value — see Provenance.)
 A compile-time convenience wrapper, `NamedQuantity<"load", Unit::kW>`, names a
 value on construction and slices losslessly back to a plain `Quantity` wherever
 one is expected — the name lives in the shared history, not as extra data on the
-value.
+value. The compile-time symbol is a `detail::FixedString` non-type template
+argument (a structural fixed-capacity buffer built from a string literal), which
+is what lets the name live in the type. `morph::units::detail::FixedString` is an
+alias for the single shared `morph::detail::FixedString`
+(`include/morph/detail/fixed_string.hpp`) — the *same* type the forms layer
+exposes as `morph::forms::FixedString` for `Choice` (see [choice.md](choice.md));
+there is one definition, not two. `NamedQuantity` publicly derives from
+`Quantity<U>` (declared-precision default) and offers four ways in — a **default
+constructor** (empty, then named), an **`optional<Rational>` constructor**, a
+**`Quantity<U>` (`Base`) constructor**, and a **`static fromDouble(double)`** —
+each of which constructs the plain value first and then applies `named(Name)`,
+so every path funnels through the same naming node. Naming an *empty* value is a
+no-op (see `named()`), so a default-constructed `NamedQuantity` is simply empty
+and unnamed until a value arrives; that empty name never surfaces because
+`equation()` and formatting both short-circuit on empty.
 
 ## Wire and schema
 
@@ -476,20 +535,37 @@ struct morph::units::UnitTraits<Unit> {
     static constexpr UnitMeta meta(Unit u) noexcept { /* ... */ }
 
     static constexpr std::array<UnitRelation<Unit>, 2> relations{{
-        {Unit::g,   Unit::kg, Rational{  1, 1000}},
-        {Unit::t,   Unit::kg, Rational{1000,    1}},
+        {Unit::g, Unit::kg, Rational{Numerator{1},    Denominator{1000}, DecimalPlaces{3}}},
+        {Unit::t, Unit::kg, Rational{Numerator{1000}, Denominator{1},    DecimalPlaces{3}}},
     }};
 };
 ```
 
-`{Unit::g, Unit::kg, Rational{1, 1000}}` means **1 g = 1/1000 kg**.
+`{Unit::g, Unit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}`
+means **1 g = 1/1000 kg**.
 The framework inverts the ratio for the reverse direction:
 - `g → kg`: multiply value by `1/1000`
 - `kg → g`: multiply value by `1000/1`
 
-`fromTo` must be **strictly positive** — the reverse direction divides by it, so
-zero is rejected, and a negative ratio has no physical meaning for a
-within-dimension scale. `from` and `to` must be distinct units.
+`fromTo` must be **strictly positive** (numerator > 0 and denominator > 0), and
+`from` / `to` must be distinct units.
+
+**Positivity is now a compile-time guard, not just a caller contract.** Every
+`relations` array is consumed by the `consteval` `detail::conversionRatio`
+breadth-first search, which calls `detail::requirePositiveRatio(fromTo)` on each
+edge it touches (both the forward `fromTo` and, via `detail::reciprocal`, the
+reverse). `requirePositiveRatio` is `consteval` and `throw`s on a non-positive
+ratio, so a zero or negative `fromTo` is a **compile error** at the
+relation-consuming call site rather than silent runtime corruption. This is the
+fix for the old failure mode: a zero `fromTo` used to make the reverse direction
+(`reciprocal`, a bare numerator/denominator swap) produce a degenerate `den:0`
+ratio — which `Rational` clamps to `1` — silently corrupting conversions and
+leaking `den:0` into `x-unitAlternatives`; a negative ratio silently flipped the
+conversion direction. Both are now rejected before the program can be built.
+
+`from == to` is separately excluded from *use* by the `SameEnumDistinct`
+constraint on `convert`; a self-edge in `relations` is still not rejected at
+declaration (only non-positive ratios are).
 
 ### 2. Auto-generated `convert` and user override
 
@@ -580,6 +656,12 @@ dimensions* (`kg * m3`, `kg / m3`, same-unit `→ scalar`), while `convert`
   multiply that `convert` then applies to the value can still overflow per the
   usual `Rational` envelope — that part is the documented magnitude limitation,
   distinct from this compile-time guard.
+- **A non-positive `fromTo` is a compile error.** The BFS calls
+  `detail::requirePositiveRatio` on every edge it touches; that `consteval`
+  guard `throw`s on a numerator ≤ 0 or denominator ≤ 0, so a zero/negative ratio
+  declared in `relations` fails the build instead of producing a degenerate
+  `den:0` (clamped to `1`) or sign-flipped conversion at run time. See
+  [1. `UnitRelation` — declaring peer-to-peer ratios](#1-unitrelation--declaring-peer-to-peer-ratios).
 - **The search always terminates.** The BFS runs over a fixed-capacity queue
   (`capacity = 2 * relationCount + 1`) and refuses to revisit a unit already
   enqueued (the `seen` scan over visited nodes), so it visits each reachable
@@ -673,7 +755,7 @@ yields empty.
 
 | Symbol | Kind | Notes |
 |---|---|---|
-| `NamedQuantity<Name, U>` | class template | `Quantity<U>` that names itself `Name` on construction; slices losslessly to a plain `Quantity<U>`. The name lives in the shared history, not as extra data. |
+| `NamedQuantity<Name, U>` | class template | `Quantity<U>` (declared precision defaulted) that names itself `Name` on construction; slices losslessly to a plain `Quantity<U>`. `Name` is a `detail::FixedString` NTTP. Constructors: default (empty), `optional<Rational>`, and from a plain `Quantity<U>` — each names the value after building it; plus `static fromDouble(double)`. The name lives in the shared history, not as extra data. |
 | `std::formatter<Quantity<U, Dec>>` | specialisation | Renders value + unit (`5.2kW`, `N/A%`). No `operator<<`. |
 | `std::formatter<NamedQuantity<Name, U>>` | specialisation | Forwards to the `Quantity` formatter. |
 
@@ -697,7 +779,7 @@ and `unitAlternatives()`.
 | History structure | **Shared, unit-erased DAG (`ASTUnit` / `ASTNode` / `Context`)** | `ASTNode` (step + optional name + `shared_ptr` children) linked into a DAG; each `Quantity` holds a `Context` (a `shared_ptr<ASTNode>` root). Cheap copies; reused subexpressions deduped by node identity; shareable across units. |
 | Placeholders | **Reuse, not leaf-vs-computed, mints a `cN`** | A value used once inlines (leaf → its number, computed → its expression); only a value reused across the expression earns one shared placeholder, so shared work is written once. |
 | Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reset). |
-| Formatting | **`std::formatter` only, delegating to the `Rational` formatter** | Single formatting path; no `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
+| Formatting | **`std::formatter` only, delegating to the shared `formatRationalDecimal` renderer** | Single formatting path; no `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
 | Wire | **Payload only** | Units and history never travel; the wire stays a nullable `Rational`. |
 | Empty ordering | **Throws, not a compile error** | Emptiness is a runtime `optional` state, so ordering an empty operand throws `std::logic_error` (a testable defined diagnostic); `==` stays total. |
 | Conversion | **`UnitRelation` entries + auto-generated constrained-template `convert`; `UnitTraits::convert` static override** | Application declares exact peer-to-peer ratios in `UnitTraits::relations`; framework auto-generates a constrained `convert(From, To&)` template and records the provenance step. A `UnitTraits<E>::convert` static wins (`if constexpr`) for non-ratio conversions (C↔F, currency) — a static, not an ADL free function, because the unit is a non-type template arg so ADL can't reach the enum's namespace. Chaining composes ratio edges over the relation graph. |
@@ -737,7 +819,8 @@ struct morph::units::UnitTraits<Unit> {
 
     // Peer-to-peer unit relations: auto-generate convert(Watt↔Kilowatt).
     static constexpr std::array<morph::units::UnitRelation<Unit>, 1> relations{{
-        {Unit::watt, Unit::kilowatt, morph::math::Rational{1, 1000}},
+        {Unit::watt, Unit::kilowatt,
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
     }};
 };
 
@@ -902,9 +985,11 @@ the placeholder exists precisely to avoid writing shared work twice.
   *all* of its numeric behaviour from `Rational`: the `int64` overflow envelope
   (silent UB in the no-error-channel operators), the `DecimalPlaces` precision
   tag and its `std::max` propagation, the half-away-from-zero rounding of
-  `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on, and the
-  shared decimal formatter (`formatRationalDecimal` builds on `Rational`'s
-  `{:.Nf}` output). This spec does not restate those rules.
+  `fromFloat` (via `llround`) that `Quantity::fromDouble` relies on. The decimal
+  formatter (`formatRationalDecimal`) is a separate exact-integer long division
+  over the canonical `num/den` at the runtime `DecimalPlaces`; it does **not**
+  route through `Rational`'s own `std::formatter` or `toDouble`. This spec does
+  not restate the `Rational` arithmetic rules.
 - **[`forms.md`](forms.md)** — how a `Quantity` field reaches a generated form:
   `ExtUnits` (unit id/display, emitted by `to_json_schema`) plus the
   schema-merge keys `x-decimalPlaces` (from `declaredDecimals`) and
@@ -913,8 +998,18 @@ the placeholder exists precisely to avoid writing shared work twice.
 - **[`choice.md`](choice.md)** and **[`datetime.md`](datetime.md)** —
   one-kind-of-empty siblings. `Choice<T>` and `Timestamp` share `Quantity`'s
   `std::optional`-backed single empty state and total `==` (empty == empty).
-  `Timestamp` differs on ordering — its `operator<=>` is total (empty sorts
-  before any engaged value) where `Quantity`'s *throws* on an empty operand.
+  **The family is deliberately *not* uniform on ordering — do not assume one
+  behaviour across all three:**
+
+  | Type | Ordering behaviour |
+  |---|---|
+  | `Quantity<U>` | `operator<=>` is defined but **throws `std::logic_error`** if either operand is empty (an empty quantity has no position on the number line). |
+  | `Timestamp` | `operator<=>` is **total** — defaulted over the underlying `std::optional`, so empty sorts *before* any engaged instant; never throws. |
+  | `Choice<T>` | **No `operator<=>` at all** — only `==`. A `Choice` is a selected option, not an orderable scalar, so relational comparison is intentionally absent (using `<` on one is a compile error). |
+
+  Equality (`==`) *is* uniform across the three; ordering is not. Code that
+  templates over "empty-capable field" types must therefore rely only on `==`
+  and `hasValue()`, never on a common `<`/`<=>`.
 
 ## Limitations
 
@@ -946,10 +1041,6 @@ deliberately not attempted):
   no-op that discards the name. Code that depends on the *content* of those
   outputs (tests, generated reports) behaves differently across the two builds —
   the toggle changes observable behaviour, not just performance.
-
-> **Doc note (not a code change).** The header comments in `quantity.hpp` and
-> `detail/quantity_equation.hpp` still cite the pre-move path
-> `docs/quantity_type.md`; this spec now lives at `docs/spec/quantity_type.md`.
 
 ## Out of scope
 

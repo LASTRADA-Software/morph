@@ -2,6 +2,7 @@
 
 #pragma once
 #include <glaze/glaze.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -10,6 +11,19 @@
 #include "session.hpp"
 
 namespace morph::wire {
+
+/// @brief Maximum accepted serialized size, in bytes, of a single wire envelope.
+///
+/// `decode` rejects any input longer than this before handing it to the JSON
+/// parser. The cap is a wire-layer denial-of-service backstop: the outer decode
+/// treats `body` as one opaque string, so a deeply-nested or enormous JSON
+/// payload smuggled *inside* `body` is invisible to any structural/depth check
+/// and would only detonate when the action codec re-parses it later (the "body
+/// double-parse"). Bounding the total message length caps that cost up
+/// front. The default of 8 MiB is generous for legitimate action payloads while
+/// keeping a single message's peak allocation bounded; transports that want a
+/// tighter bound should enforce it before calling `decode`.
+inline constexpr std::size_t kMaxEnvelopeBytes = 8u * 1024u * 1024u;
 
 /// @brief JSON wire envelope used between any client and `RemoteServer`.
 ///
@@ -24,8 +38,9 @@ namespace morph::wire {
 /// - `"deregister"` — client destroys an instance. Uses `modelId`.
 /// - `"execute"`   — client dispatches an action. Uses `callId`, `modelId`,
 ///                   `modelType`, `actionType`, `body`, and optionally `session`.
-/// - `"ok"`        — server success reply. Uses `callId` if present and `result`.
-///                   For `register` replies, `modelId` carries the new id.
+/// - `"ok"`        — server success reply. Uses `callId` if present and carries
+///                   the serialized result in `body`. For `register` replies,
+///                   `modelId` carries the new id.
 /// - `"err"`       — server failure reply. Uses `callId` if present and `message`.
 struct Envelope {
     /// @brief Discriminator — see class docstring for valid values.
@@ -114,10 +129,37 @@ inline std::string encode(const Envelope& env) {
 }
 
 /// @brief Decodes @p json into an `Envelope`.
-/// @throws std::runtime_error if @p json is not a valid envelope.
+///
+/// Enforces a wire-layer size cap: inputs longer than `kMaxEnvelopeBytes` are
+/// rejected before any parsing, bounding the cost of an oversized or
+/// deeply-nested payload smuggled inside the opaque `body` string (see
+/// `kMaxEnvelopeBytes`). This guard does **not** cap the *inner* re-parse of
+/// `body` performed later by the action codec — that codec must impose its own
+/// limits — but it does bound the total message a single `decode` will accept.
+///
+/// glaze 7.4 runs with its default options here. Note the parser does **not**
+/// reject duplicate JSON object keys: a duplicated key is accepted and the last
+/// occurrence wins. There is no glaze option to change this, so `decode` cannot
+/// enforce rejection; callers must not treat duplicate-key rejection as a
+/// security boundary (see docs/spec/wire.md).
+///
+/// @param json Serialized envelope JSON to decode.
+/// @return The decoded `Envelope`.
+/// @throws std::runtime_error if @p json exceeds `kMaxEnvelopeBytes` or is not a
+///         valid envelope.
 inline Envelope decode(std::string_view json) {
+    if (json.size() > kMaxEnvelopeBytes) {
+        throw std::runtime_error("envelope decode failed: input exceeds maximum size (" +
+                                 std::to_string(json.size()) + " > " +
+                                 std::to_string(kMaxEnvelopeBytes) + " bytes)");
+    }
     Envelope env{};
-    if (auto errCode = glz::read_json(env, json)) {
+    // Ignore unknown keys so the envelope is forward-compatible: a newer peer may
+    // add fields a older peer does not know, and vice versa, without a hard parse
+    // failure. Duplicate keys are still accepted last-wins (glaze offers no reject
+    // option) — see docs/spec/wire.md "Parsing guarantees and hardening".
+    static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+    if (auto errCode = glz::read<kLenient>(env, json)) {
         throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }
     return env;

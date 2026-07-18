@@ -139,7 +139,7 @@ An empty format spec `{}` or `{:}` is accepted; any non-empty spec throws
 |---|---|---|
 | Precision | **Milliseconds** | Sufficient for domain timestamps without the cost/scope of microsecond/nanosecond. |
 | Default state | **Unix epoch, not empty** | `DateTime` is a pure value wrapper; the empty/optional distinction lives in `Timestamp`. |
-| Parser | **Hand-rolled, strict** | Identical behaviour across all standard libraries (no `std::chrono::parse` dependency, no locale). `from_chars` for each numeric field; `year_month_day.ok()` for calendar validity. |
+| Parser | **Hand-rolled, strict** | Identical behaviour across all standard libraries (no `std::chrono::parse` dependency, no locale). `from_chars` for each numeric field, with a leading-sign guard on the fixed-width fields (only the year may carry `-`); `year_month_day.ok()` for calendar validity. |
 | Malformed input | **Read error, not clamped** | Unlike `Rational`, there is no meaningful fallback for "yesterday" — reject at the wire boundary. |
 | Wire output | **Always `.mmmZ`** | The canonical form is the most precise, unambiguous representation; optional precision on input is a leniency, not the output contract. |
 | Timestamp empty state | **Inside the struct**, not `std::optional<Timestamp>` | Same one-kind-of-empty design as `Quantity`; required-ness is a `morph::forms` property, not a type property. |
@@ -155,22 +155,33 @@ narrower than the value it carries:
 
 - **Output** (`toIso8601`) formats the year with `{:04}` — a minimum-width-4,
   zero-padded field, *not* a fixed-width one. Years 1–9999 emit exactly four
-  digits; year `10000` emits five (`"10000-…"`) and a negative year emits a
-  leading `-` (`"-001-…"`).
-- **Input** (`fromIso8601`) reads the year as *exactly four digits*
-  (`number(0, 4)`) and then requires a `-` at offset 4. A five-digit year shifts
-  the `-` past offset 4, and a leading `-` puts a digit where the separator is
-  expected; **both fail the separator check**.
+  digits; year `10000` emits five (`"10000-…"`), a negative year in
+  −1…−999 emits a `-` and three digits (`"-001-…"`, `"-999-…"`, four
+  characters total), and a year ≤ −1000 emits a `-` and four-or-more digits
+  (`"-1000-…"`, five-or-more characters).
+- **Input** (`fromIso8601`) reads the year as the *first four characters*
+  (`number(0, 4, allowSign=true)`) and then requires a `-` at offset 4. The
+  year field is the **one place a leading `-` is legitimate**: for a year in
+  −1…−999 the four characters are `-` plus three digits, `std::from_chars`
+  reads the negative value, and the separator lands exactly at offset 4, so it
+  round-trips. A five-or-more-digit magnitude (year `10000`, year ≤ −1000)
+  pushes the `-` separator past offset 4 and **fails the separator check**.
 
-The consequence: **only years 0001–9999 round-trip.** Anything outside that band
-is representable as a `DateTime` value (and can be constructed, compared, and
-arithmetic-shifted in memory) but cannot survive a serialize→parse cycle — the
-serialized text either won't re-parse or would re-parse as a *different*
-instant. This is treated as a **producer precondition**: application timestamps
-live inside the four-digit era, and feeding an out-of-band instant to the wire
-codec is a lossy operation the codec does not guard against. Millisecond
-precision is the other axis of the same contract — a 4th fractional digit is not
-silently dropped (see [Failure modes](#failure-modes--what-is-rejected)).
+The consequence: **years −999…9999 round-trip.** (Year 0 is the astronomical
+year zero, emitted as `"0000"`; the Gregorian proleptic calendar `chrono`
+uses has no year 0 gap, so it round-trips like any other.) Anything outside
+that band — year ≤ −1000 or ≥ 10000 — is representable as a `DateTime` value
+(and can be constructed, compared, and arithmetic-shifted in memory) but
+cannot survive a serialize→parse cycle: the serialized text won't re-parse
+(the widened year shifts the `-` separator off offset 4). This is treated as a
+**producer precondition**: application timestamps live inside the round-tripping
+band, and feeding an out-of-band instant to the wire codec is a lossy operation
+the codec does not guard against. Millisecond precision is the other axis of the
+same contract — a 4th fractional digit is not silently dropped (see
+[Failure modes](#failure-modes--what-is-rejected)).
+
+The pinned boundary is exercised by `DateTime::Iso8601::NegativeYearRoundTrip`
+in `tests/test_datetime.cpp` (−1 and −999 round-trip; −1000 does not).
 
 ## Failure modes — what is rejected
 
@@ -186,6 +197,10 @@ and cross-stdlib-identical), so they are enumerated here.
 | `2026-07-05T14:30:15+02:00` | **read error** | Non-UTC zone offset — trailing input after the seconds field. UTC only. |
 | `2026-07-05T14:30:15.` | **read error** | A `.` with no following digit (`digits == 0`). |
 | `2026-02-30T10:00:00Z` | **read error** | Calendar date that does not exist (`year_month_day::ok()` is false). |
+| `2026-07-05T-5:30:15` | **read error** | Sign injection. `std::from_chars` accepts a leading `-`, so without a guard this would read `hour = -5` — passing the one-sided `hour > 23` range check — and silently resolve to a *different* valid instant (`2026-07-04T19:30:15Z`). The parser rejects a leading `-`/`+` in every fixed-width date/clock field (month, day, hour, minute, second) and in the fraction. |
+| `2026-07-05T14:-5:15`, `2026-07-05T14:30:-5` | **read error** | Same sign injection in the minute / second field. |
+| `2026-07-05T+5:30:15`, `2026-+7-05T14:30:15` | **read error** | A leading `+` is rejected in the fixed-width fields for the same reason. |
+| `2026-07-05T14:30:15.-5Z` | **read error** | A signed fraction: the `-` is not a digit, so the fraction loop consumes nothing (`digits == 0`). |
 | **`2026-07-05T14:30:15`** (no `Z`) | **accepted, interpreted as UTC** | The trailing `Z` is *optional* on input. |
 
 **The silent-UTC asymmetry.** A zone offset (`+02:00`) is rejected, yet a
@@ -215,9 +230,10 @@ learns only that the string was not a valid canonical UTC timestamp.
 - **The cross-stdlib-identical claim is test-backed, not proven.** The parser is
   hand-rolled precisely so that libstdc++, libc++ (WASM), and MSVC agree; that
   agreement rests on the round-trip and boundary tests
-  (`DateTime::Iso8601::RoundTrip` and `DateTime::Iso8601::RejectsMalformedInput`
-  in `tests/test_datetime.cpp`) exercising the same inputs everywhere, not on a
-  formal argument. A stdlib-specific `year_month_day::ok()` or `from_chars`
+  (`DateTime::Iso8601::RoundTrip`, `DateTime::Iso8601::RejectsMalformedInput`,
+  `DateTime::Iso8601::RejectsSignInjection`, and
+  `DateTime::Iso8601::NegativeYearRoundTrip` in `tests/test_datetime.cpp`)
+  exercising the same inputs everywhere, not on a formal argument. A stdlib-specific `year_month_day::ok()` or `from_chars`
   discrepancy would only surface as a test failure on that platform.
 - **An empty `Timestamp` sorts *before* every real instant.** `Timestamp`'s
   defaulted `operator<=>` delegates to `std::optional<DateTime>`, whose ordering

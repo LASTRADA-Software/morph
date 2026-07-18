@@ -197,14 +197,37 @@ inline std::string base64UrlEncode(std::string_view in) {
     return out;
 }
 
-/// @brief Decodes base64url text (no padding). Returns nullopt on invalid input.
+/// @brief Decodes canonical base64url text (no padding). Returns nullopt on invalid input.
+///
+/// Canonical decoding is enforced to remove token-string malleability: a token
+/// is a signed byte string, but base64url is a *bit*-oriented encoding, so a
+/// naive decoder that silently discards the leftover bits of the final symbol
+/// would map several distinct encodings onto the same bytes (e.g. the trailing
+/// character could be perturbed within the discarded low bits without changing
+/// the decoded MAC). This function rejects any such non-canonical input:
+///
+/// - A length `% 4 == 1` is impossible for real base64url output and is rejected.
+/// - The leftover bits that do not form a whole output byte (2 bits for a
+///   1-remainder group, 4 bits for a 2-remainder group) **must be zero**; a
+///   nonzero remainder means the encoding is not the canonical one this decoder
+///   would itself produce, so it is rejected rather than truncated.
+///
+/// The result is thus a bijection over valid tokens: exactly one string decodes
+/// to any given byte sequence.
 /// @param in base64url text.
-/// @return Decoded bytes, or nullopt if @p in contains an invalid character or length.
+/// @return Decoded bytes, or nullopt if @p in has an invalid character, an
+///         impossible length, or nonzero leftover (non-canonical) bits.
 inline std::optional<std::string> base64UrlDecode(std::string_view in) {
     auto valueOf = [](char chr) -> int {
         const auto pos = kB64Alphabet.find(chr);
         return pos == std::string_view::npos ? -1 : static_cast<int>(pos);
     };
+    // A base64url group of 4 symbols encodes 3 bytes; the only valid tail
+    // remainders are 0 (whole groups), 2 (→1 byte), or 3 (→2 bytes). A
+    // remainder of 1 symbol cannot be produced by the encoder and is rejected.
+    if (in.size() % 4 == 1) {
+        return std::nullopt;
+    }
     std::string out;
     uint32_t buffer = 0;
     int bits = 0;
@@ -219,6 +242,12 @@ inline std::optional<std::string> base64UrlDecode(std::string_view in) {
             bits -= 8;
             out.push_back(static_cast<char>((buffer >> bits) & 0xff));
         }
+    }
+    // Reject non-canonical encodings: any bit left in `buffer` below the byte
+    // boundary must be zero, otherwise this input is a distinct encoding of the
+    // same bytes (malleability) rather than the canonical one.
+    if (bits > 0 && (buffer & ((1U << bits) - 1)) != 0) {
+        return std::nullopt;
     }
     return out;
 }
@@ -258,19 +287,30 @@ inline int64_t systemClockMs() {
 struct SessionToken {
     /// @brief Authenticated user/principal id.
     std::string principal;
-    /// @brief Issue time, ms since epoch (informational).
+    /// @brief Issue time, ms since epoch. If positive, `verify` rejects a token
+    ///        whose `issuedAtMs` is more than `kClockSkewMs` in the future
+    ///        (not-yet-valid). `0` (unset) disables the not-before check.
     int64_t issuedAtMs = 0;
-    /// @brief Expiry, ms since epoch. `0` means "never expires" (discouraged).
+    /// @brief Expiry, ms since epoch. **Must be strictly positive** — a token
+    ///        must carry a real expiry. `verify` treats `expiresAtMs <= 0`
+    ///        (including the default `0`) as invalid/expired, so a zero token is
+    ///        never an eternal credential.
     int64_t expiresAtMs = 0;
     /// @brief Coarse-grained roles the app can key authorization policy on.
     std::vector<std::string> roles;
 };
 
+/// @brief Allowed clock skew (ms) between issuer and verifier for the
+///        not-before (`issuedAtMs`) check. Keeps a token minted a moment ahead
+///        of the verifier's clock from being spuriously rejected.
+inline constexpr int64_t kClockSkewMs = 60'000;  // 60s
+
 /// @brief Why token verification failed.
 enum class AuthError : std::uint8_t {
     Malformed,     ///< Not `payload.sig`, bad base64url, or unparseable claims.
     BadSignature,  ///< MAC did not match — forged or tampered.
-    Expired,       ///< `expiresAtMs` is in the past relative to the supplied clock.
+    Expired,       ///< Missing/non-positive `expiresAtMs`, or it is in the past.
+    NotYetValid,   ///< `issuedAtMs` is set and more than `kClockSkewMs` in the future.
 };
 
 /// @brief Mints signed bearer tokens from claims using a shared secret.
@@ -337,11 +377,27 @@ public:
             return std::unexpected(AuthError::Malformed);
         }
         SessionToken claims;
-        if (glz::read_json(claims, *json)) {
+        // Ignore unknown claims so a token minted by a newer issuer (with extra
+        // application claims) still verifies against an older verifier — the
+        // forward-compatibility the SessionToken doc promises. See security.md.
+        static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+        if (glz::read<kLenient>(claims, *json)) {
             return std::unexpected(AuthError::Malformed);
         }
-        if (claims.expiresAtMs != 0 && nowMs > claims.expiresAtMs) {
+        // A token MUST carry a strictly-positive expiry. A missing/zero (or
+        // negative) `expiresAtMs` is treated as already-expired rather than
+        // "eternal", so a default-constructed or zeroed token is never an
+        // unbounded bearer credential. See docs/spec/security.md.
+        if (claims.expiresAtMs <= 0 || nowMs > claims.expiresAtMs) {
             return std::unexpected(AuthError::Expired);
+        }
+        // Not-before / issued-at check. When `issuedAtMs` is set (positive), a
+        // token whose issue time is more than `kClockSkewMs` in the future is
+        // not yet valid — it was minted against a clock ahead of ours beyond the
+        // tolerated skew. An unset (`0`) or non-positive `issuedAtMs` skips this
+        // check (issue time is optional/informational).
+        if (claims.issuedAtMs > 0 && claims.issuedAtMs - nowMs > kClockSkewMs) {
+            return std::unexpected(AuthError::NotYetValid);
         }
         return claims;
     }
@@ -359,7 +415,7 @@ private:
 /// authoritative. Install it on the server:
 /// @code
 /// auto authz = std::make_shared<morph::session::SigningAuthorizer>(sharedSecret);
-/// auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry, authz);
+/// auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz);
 /// @endcode
 class SigningAuthorizer : public IAuthorizer {
 public:

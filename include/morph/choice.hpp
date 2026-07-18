@@ -41,30 +41,20 @@
 #include <string_view>
 #include <type_traits>
 
+#include "detail/fixed_string.hpp"
+
 namespace morph::forms {
 
 /// @brief A structural, NTTP-capable compile-time string (for naming the
 ///        options action and its value/label result fields in the type).
+///
+/// An alias for the shared `morph::detail::FixedString` — the same underlying
+/// type the units layer's `NamedQuantity` uses — so there is one definition, not
+/// two look-alikes. Kept as a public `morph::forms::` name for source
+/// compatibility.
 /// @tparam N Storage size including the terminating null.
 template <std::size_t N>
-struct FixedString {
-    /// @brief Character storage (null-terminated).
-    std::array<char, N> data{};
-
-    /// @brief Captures a string literal.
-    /// @param literal The literal to copy, e.g. `"ListSamples"`.
-    // NOLINTNEXTLINE(modernize-avoid-c-arrays, cppcoreguidelines-avoid-c-arrays, cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — string literals ARE C arrays.
-    consteval FixedString(const char (&literal)[N]) noexcept {
-        for (std::size_t index = 0; index < N; ++index) {
-            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
-            data[index] = literal[index];
-        }
-    }
-
-    /// @brief A view of the string (without the terminating null).
-    /// @return The string contents.
-    [[nodiscard]] constexpr std::string_view view() const noexcept { return {data.data(), N - 1}; }
-};
+using FixedString = ::morph::detail::FixedString<N>;
 
 /// @brief An optionally-empty value selected from options served by another
 ///        action.

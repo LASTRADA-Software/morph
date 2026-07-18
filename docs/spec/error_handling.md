@@ -18,7 +18,7 @@ a consequence of holding those two invariants together.
 - [Executor exception handling](#executor-exception-handling)
 - [Backend error types](#backend-error-types)
 - [Remote wire errors](#remote-wire-errors)
-- [Value-codec philosophy: clamp vs. reject](#value-codec-philosophy-clamp-vs-reject)
+- [Value-codec philosophy: clamp vs. reject vs. propagate-empty](#value-codec-philosophy-clamp-vs-reject-vs-propagate-empty)
 - [Other typed failures](#other-typed-failures)
 - [How to observe failures](#how-to-observe-failures)
 - [Cross-references](#cross-references)
@@ -37,10 +37,11 @@ Model::execute(action) throws
                  └─ fn receives exception_ptr; caller rethrows to inspect
 ```
 
-The exact code (`LocalBackend::execute`) is:
+The strand task (`LocalBackend::execute`) is:
 
 ```cpp
-_strand.post(mid, [localOp, holder, compState, session]() mutable {
+_strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder),
+                   compState, session = std::move(session)]() mutable {
     try {
         ::morph::session::detail::ScopedContext const scoped{session};
         compState->setValue(localOp(*holder));   // happy path
@@ -73,16 +74,20 @@ handler.execute(action)
 
 The remote path (`SimulatedRemoteBackend::execute`, and real WebSocket
 backends) is identical from the caller's side: the reply-handling lambda calls
-`state->setValue(deser(reply.body))` on an `"ok"` reply, or throws a
-`std::runtime_error(reply.message)` (caught into `setException`) on an `"err"`
-reply. See [Remote wire errors](#remote-wire-errors) for how the server side
-produces those `err` messages.
+`state->setValue(deser(reply.body))` on an `"ok"` reply, or throws
+`std::runtime_error(reply.message)` (caught into `setException`) for **any**
+non-`ok` reply — substituting `"malformed reply"` when `reply.message` is empty.
+See [Remote wire errors](#remote-wire-errors) for how the server side produces
+those `err` messages.
 
 ## Orphan logging and single-shot callbacks
 
 `CompletionState<T>` (see `completion.hpp`) protects a value slot, an
-`std::exception_ptr error` slot, two callback slots (`onOk` / `onErr`), an
-`onErrAttached` flag, and a `cbExec` pointer, all under one mutex.
+`std::exception_ptr error` slot, two callback slots (`onOk` / `onErr`), and an
+`onErrAttached` flag, all under one mutex. The `cbExec` pointer is *not* mutex-
+guarded: it is set once in the `Completion` constructor, before any concurrency,
+and read unlocked thereafter (as `callback != nullptr && cbExec != nullptr`
+outside the critical section).
 
 **Single-shot, last-writer-wins.** `then()` and `onError()` each register at
 most one handler:
@@ -95,7 +100,9 @@ most one handler:
 | `onError` registered before ready | Stored in `onErr`, fired when `setException` lands |
 | `onError` on an already-**error** state | Fired immediately (posted to `cbExec`) |
 | `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then`/`onError` after ready | Overwrites the stored slot; but if already fired, the slot is empty so nothing re-fires |
+| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again). **What it delivers depends on how the value was first consumed:** if a `then` was attached *before* the state settled, `setValue` moved the value out of the still-engaged slot, so the re-fire copies a **moved-from** value (e.g. an empty `shared_ptr` on the backend path); only when every `then` was attached *after* settling does each receive a copy of the original value |
+| Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path) |
+| Second `then`/`onError` registered **before** ready | Overwrites the stored `onOk`/`onErr` slot; the last handler registered before the state settles is the one that fires |
 
 **Orphan logging.** If a `Completion` is destroyed while its state holds an
 unhandled error, `~CompletionState` logs it through `morph::log::logError`:
@@ -181,7 +188,7 @@ produces them:
 
 | Error `message` | Raised in | Cause |
 |---|---|---|
-| `"unauthorized"` | `dispatchExecute` | `IAuthorizer::authorize` returned `false` (bad/expired/absent token, or policy denial) |
+| `"unauthorized"` | `dispatchExecute` (type-level `authorize` and instance-level `authorizeInstance`) and `dispatchMessage`'s deregister branch (`authorizeInstance` against the recorded owner) | An authorizer hook returned `false` — `authorize` (bad/expired/absent token, or type/action policy denial) or `authorizeInstance` (the caller's principal does not own the target instance) |
 | `"register requires a typeId"` | `dispatchMessage` (`register`) | `register` envelope with empty `typeId` |
 | `"unknown model type: <id>"` | `ModelRegistryFactory::create` | `register` for a type-id with no registered factory |
 | `"model not found"` | `dispatchExecute` | `execute` for a `modelId` the server doesn't hold |
@@ -203,15 +210,16 @@ canonical decode-error reply above; on the client side (in
 `"err"` reply turned into `throw std::runtime_error(reply.message)` — is caught
 and routed to `setException`, then to `.onError`.
 
-## Value-codec philosophy: clamp vs. reject
+## Value-codec philosophy: clamp vs. reject vs. propagate-empty
 
-The two exact value types take deliberately **opposite** stances on hostile
-wire input, because the two kinds of value denote differently:
+The exact value types take deliberately **different** stances on bad input,
+because the kinds of value denote differently:
 
-| Type | Hostile input policy | Rationale |
+| Type | Bad-input policy | Rationale |
 |---|---|---|
-| `math::Rational` (`rational.hpp`) | **Clamps** | A number always denotes *some* quantity; the nearest valid value is a meaningful answer |
+| `math::Rational` (`rational.hpp`) | **Clamps** structure; `std::expected` for arithmetic | A number always denotes *some* quantity; the nearest valid value is a meaningful answer |
 | `time::DateTime` (`datetime.hpp`) | **Rejects** (JSON read error) | A malformed instant denotes *nothing*; there is no meaningful "nearest" timestamp |
+| `units::Quantity<U, Dec>` (`quantity.hpp`) | **Propagates empty**; clamps precision; throws only on ordering an absent value | A measurement can legitimately be *not entered*; a missing/failed value is `std::nullopt`, which flows through arithmetic rather than raising |
 
 **`Rational` clamps.** Its Glaze read side (`from_json`/`read`) rebuilds
 through the canonicalising constructor: `dp` is run through
@@ -233,6 +241,28 @@ calendar date (`2026-02-30`) or out-of-range clock field returns
 whole decode, exactly as if the field were the wrong type. There is no clamp
 because a mistyped instant has no valid nearby value.
 
+**`Quantity` propagates empty.** A `Quantity<U, Dec>` is an optional
+`math::Rational` plus a compile-time unit and declared precision, so its error
+surface layers three separate policies:
+
+- *No error channel for arithmetic.* `operator+ - * /`, dimensionless scaling,
+  and `fromDouble` (which lifts `Rational::fromFloat`) all take the
+  **empty-propagation** stance: empty in → empty out, and a division whose
+  divisor is zero (or whose `Rational::dividedBy` otherwise fails) yields
+  `std::nullopt` rather than an error — the underlying `expected` from
+  `Rational` is folded away to empty. Empty is a first-class "not entered /
+  not measured" state, not a failure.
+- *One throw, and only one.* `operator<=>` on two same-unit quantities throws
+  `std::logic_error("morph::units::Quantity: relational comparison requires
+  engaged operands")` when either operand is empty. Ordering an absent value is
+  a **programming error**, not a data condition (equality `operator==` does not
+  throw — two empties compare equal). This is the only exception `Quantity`
+  raises, and it escapes *out of* the call rather than resolving a completion.
+- *Silent precision clamp.* The compile-time `DeclaredDecimals` is a
+  `static_assert` (a code bug fails the build); the runtime `withDecimalPlaces`
+  reuses `Rational`'s `clampWireDecimalPlaces` and clamps silently, matching the
+  `Rational` two-tier rule.
+
 ## Other typed failures
 
 | Type / message | Where | Trigger |
@@ -242,7 +272,7 @@ because a mistyped instant has no valid nearby value.
 | `std::runtime_error("unknown action: <model>/<action>")` | `ActionDispatcher::dispatch` (`registry.hpp`) | `(modelType, actionType)` pair was never registered |
 | `std::runtime_error("unknown model type: <id>")` | `ModelRegistryFactory::create` (`registry.hpp`) | Model type-id was never registered — also surfaces as the `register` wire `err` |
 | `std::runtime_error` from `journal::replay` | `journal.hpp` | Replay hits an unregistered model type-id or an entry with an unregistered action type (it delegates to `dispatch`/`create`) |
-| `session::AuthError` (`enum { Malformed, BadSignature, Expired }`) | `TokenVerifier::verify` returns `std::expected<SessionToken, AuthError>` (`session_auth.hpp`) | `Malformed`: not `payload.sig`, bad base64url, or unparseable claims. `BadSignature`: MAC mismatch (forged/tampered). `Expired`: `expiresAtMs` in the past |
+| `session::AuthError` (`enum { Malformed, BadSignature, Expired, NotYetValid }`) | `TokenVerifier::verify` returns `std::expected<SessionToken, AuthError>` (`session_auth.hpp`) | `Malformed`: not `payload.sig`, bad/non-canonical base64url, or unparseable claims. `BadSignature`: MAC mismatch (forged/tampered). `Expired`: `expiresAtMs` missing/non-positive (`<= 0`) or in the past relative to the clock. `NotYetValid`: `issuedAtMs` is set and more than `kClockSkewMs` (60s) in the future |
 
 Note the auth asymmetry with the wire layer: `AuthError` is a **typed value**
 returned to the server's authorizer, never a thrown exception and never sent
@@ -269,8 +299,10 @@ accordingly.
    - orphan errors (`[orphan] ...`) — a failed `Completion` destroyed with no
      `.onError`, or with an `.onError` but a null callback executor.
 
-   The default logger is a no-op sink; without `setLogger` these are invisible.
-   Point it at spdlog, Qt logging, or a test spy at startup.
+   The default sink writes `[LEVEL] sanitizeLogLine(msg)` to `stderr`, so these
+   are visible out of the box wherever stderr is. Call `setLogger` early to route
+   them to spdlog, Qt logging, or a test spy (or to capture them at all in
+   environments where stderr is discarded).
 
 3. **The log is the only signal for exceptions on worker threads.** A throw on
    a pool or strand thread never propagates to the main thread (the sole
@@ -288,8 +320,8 @@ accordingly.
 - [`registry.md`](registry.md) — `ActionDispatcher`, `ModelRegistryFactory`, `ParseError`, the codec macros.
 - [`journal.md`](journal.md) — `LogEntry`, `SerializationError`, `replay`, `SessionLog`.
 - [`rational.md`](rational.md) — `Rational`, `RationalError`, the clamping wire codec.
+- [`quantity_type.md`](quantity_type.md) — `Quantity<U, Dec>`, empty-propagation arithmetic, the ordering `logic_error`.
 - [`datetime.md`](datetime.md) — `DateTime` and its strict, rejecting ISO-8601 codec.
 - [`session.md`](session.md) / [`security.md`](security.md) — `Context`, `IAuthorizer`, `AuthError`, `SigningAuthorizer`.
 - [`logger.md`](logger.md) — `morph::log`, `setLogger`, log levels.
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md#error-propagation) — the "Error propagation" overview this spec expands.
-```

@@ -59,7 +59,10 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
 /// otherwise — and only that reduced set reaches the durable sink.
 ///
 /// @par Thread safety
-/// All public methods are thread-safe (guarded by an internal mutex).
+/// All public methods are thread-safe. A history mutex guards `_all` and the
+/// watermark; a separate forwarding mutex serializes `checkpoint()` bodies end
+/// to end so concurrent checkpoints forward to the durable sink in append order
+/// without blocking ordinary `append()` calls during the sink's I/O.
 class SessionLog : public IActionLog {
 public:
     /// @brief Appends @p entry, assigning a monotonically increasing `seq`.
@@ -101,6 +104,15 @@ public:
     /// this reuses `replay()` over a shorter prefix of the same log. A no-op
     /// (returns a freshly created, un-replayed holder) if the log is empty.
     ///
+    /// Undo only rewinds this in-memory history; it never moves the checkpoint
+    /// watermark, which is keyed by entry `seq` (see `checkpoint()`). Undoing an
+    /// entry a prior `checkpoint()` already forwarded does **not** un-forward it:
+    /// the durable sink is append-only, so that entry stays durable while the
+    /// reconstructed history diverges from it. A later `checkpoint()` never
+    /// re-forwards a coalesced-away, already-committed entry. Applications that
+    /// need to durably reverse a checkpointed action must record a compensating
+    /// action, not rely on `undoLast()`.
+    ///
     /// @param modelTypeId String type-id of the model to reconstruct.
     /// @param registry    Model factory registry; defaults to the process-level singleton.
     /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.
@@ -113,8 +125,19 @@ public:
         {
             std::scoped_lock const lock{_mtx};
             if (!_all.empty()) {
+                // The checkpoint watermark is a *seq* threshold, not a raw index
+                // into `_all`, so simply dropping the tail entry is all that is
+                // needed: `_committedUpToSeq` already names exactly the set of
+                // entries a prior `checkpoint()` forwarded, and popping a
+                // never-committed tail entry (the only kind whose loss is
+                // recoverable) cannot lower it. The watermark is therefore
+                // monotonic — undo never rewinds it, and a later `checkpoint()`
+                // never re-forwards a coalesced-away, already-committed entry.
+                // Undoing an entry that a prior checkpoint already forwarded does
+                // not un-forward it from the durable sink (see the class docs and
+                // journal.md): the sink is append-only, so that entry stays
+                // durable and the reconstructed history simply diverges from it.
                 _all.pop_back();
-                _committedUpTo = std::min(_committedUpTo, _all.size());
             }
             remaining = _all;
         }
@@ -124,10 +147,21 @@ public:
     /// @brief Coalesces entries appended since the last checkpoint and forwards
     ///        the reduced set, in order, to @p durableSink; then flushes it.
     ///
-    /// Advances the checkpoint regardless of whether @p durableSink->flush()
-    /// throws, matching `IOfflineQueue`-style at-least-once semantics: a
-    /// checkpoint is a forward-only commit point, not a transaction to retry.
-    /// A no-op if nothing has been appended since the last checkpoint.
+    /// Advances the checkpoint watermark (the `seq` of the last committed entry)
+    /// *before* forwarding, so the batch is consumed even if @p durableSink's
+    /// `append()` or `flush()` throws: a checkpoint is a forward-only commit
+    /// point (at-most-once), not a transaction to retry. A no-op if nothing has
+    /// been appended since the last checkpoint.
+    ///
+    /// @par Concurrency and ordering
+    /// The whole checkpoint body runs under a dedicated forwarding mutex, so
+    /// concurrent checkpoints are fully serialized: the batch whose watermark is
+    /// taken first is also forwarded to @p durableSink first, and no two
+    /// checkpoints ever interleave their `append()` calls. This preserves the
+    /// append-order identity the sink relies on. The forwarding mutex is *not*
+    /// the mutex that guards `append()`, which is held only briefly to select the
+    /// pending entries and advance the watermark — never across the sink's I/O —
+    /// so ordinary `append()` calls keep making progress during a checkpoint.
     ///
     /// @param durableSink Receives only the coalesced entries — never the raw stream.
     /// @param dispatcher  Supplies each action's `coalesce` policy; defaults to
@@ -135,14 +169,36 @@ public:
     ///                    registered against via `BRIDGE_REGISTER_ACTION`).
     void checkpoint(IActionLog& durableSink,
                     ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
+        // `_checkpointMtx` serializes the *entire* checkpoint body across
+        // concurrent callers, so {take the pending slice + advance the
+        // watermark} and {forward that slice to the sink} happen atomically with
+        // respect to any other checkpoint. Without it, two concurrent
+        // checkpoints could each grab a disjoint pending slice under `_mtx`,
+        // release `_mtx`, then race on the unlocked forward phase — letting
+        // batches reach the durable sink out of append order and breaking the
+        // append-order identity the sink relies on. It is deliberately *not*
+        // `_mtx`: `_mtx` is held only briefly (slice + watermark), never across
+        // the sink's `append()`/`flush()` I/O, so regular `append()` calls keep
+        // making progress while a checkpoint is forwarding.
+        std::scoped_lock const checkpointLock{_checkpointMtx};
         std::vector<LogEntry> pending;
+        uint64_t highestSeq = _committedUpToSeq;
         {
             std::scoped_lock const lock{_mtx};
-            if (_committedUpTo >= _all.size()) {
+            // Forward every entry whose seq is strictly past the last committed
+            // seq. `seq` is assigned once at append and never reused, so this is
+            // stable under coalescing and under `undoLast()` removing tail
+            // entries — unlike a raw index into `_all`, which those mutate.
+            for (const auto& entry : _all) {
+                if (entry.seq > _committedUpToSeq) {
+                    pending.push_back(entry);
+                    highestSeq = std::max(highestSeq, entry.seq);
+                }
+            }
+            if (pending.empty()) {
                 return;
             }
-            pending.assign(_all.begin() + static_cast<std::ptrdiff_t>(_committedUpTo), _all.end());
-            _committedUpTo = _all.size();
+            _committedUpToSeq = highestSeq;
         }
         for (auto& entry : coalesced(pending, dispatcher)) {
             durableSink.append(std::move(entry));
@@ -178,8 +234,9 @@ private:
     }
 
     mutable std::mutex _mtx;
+    std::mutex _checkpointMtx;
     std::vector<LogEntry> _all;
-    std::size_t _committedUpTo{0};
+    uint64_t _committedUpToSeq{0};
     uint64_t _nextSeq{0};
 };
 

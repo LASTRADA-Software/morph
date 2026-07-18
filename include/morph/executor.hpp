@@ -43,16 +43,26 @@ struct IExecutor {
 class ThreadPoolExecutor : public IExecutor {
 public:
     /// @brief Constructs the pool with @p n worker threads.
-    /// @param n Number of threads to spawn. Must be > 0.
+    ///
+    /// @p n is clamped to a minimum of 1: a pool with zero workers would accept
+    /// posted tasks that could never run (every `post()` would hang forever), so
+    /// `ThreadPoolExecutor(0)` yields a usable single-worker pool rather than a
+    /// silently dead one.
+    /// @param n Number of threads to spawn. Values below 1 are clamped to 1.
     explicit ThreadPoolExecutor(std::size_t n) {
-        for (std::size_t i = 0; i < n; ++i) {
+        std::size_t const workers = n == 0 ? 1 : n;
+        for (std::size_t i = 0; i < workers; ++i) {
             _workers.emplace_back([this] { loop(); });
         }
     }
 
     /// @brief Signals all workers to stop and joins them.
     ///
-    /// Remaining queued tasks that have not started are dropped.
+    /// Workers drain the queue before exiting: after `_stop` is set they keep
+    /// popping and running already-queued tasks and only return once the queue is
+    /// empty, so the join blocks until every task queued before destruction has
+    /// run. Tasks `post()`ed concurrently with or after destruction race this and
+    /// may be silently lost.
     ~ThreadPoolExecutor() override {
         {
             std::scoped_lock const lock{_m};
@@ -124,11 +134,14 @@ public:
         _cv.notify_all();
     }
 
-    /// @brief Drains the task queue for up to @p timeout.
+    /// @brief Pumps the task queue for up to @p timeout.
     ///
-    /// Runs queued tasks one by one until the deadline is reached or the queue
-    /// is empty. Exceptions thrown by tasks are logged and execution continues
-    /// with the next task.
+    /// Runs queued tasks one by one. It does **not** return early when the queue
+    /// drains: while time remains before the deadline it blocks waiting for
+    /// newly posted tasks, and only returns once the deadline is reached (with
+    /// any still-queued tasks left for a subsequent call — this is a pump, not a
+    /// flush). Exceptions thrown by tasks are logged and execution continues with
+    /// the next task.
     ///
     /// Must be called from the thread that "owns" this executor.
     /// @param timeout Maximum wall-clock time to spend draining.

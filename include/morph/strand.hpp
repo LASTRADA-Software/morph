@@ -68,22 +68,52 @@ public:
     /// @param task Callable to execute.
     void post(ModelId key, std::function<void()> task) {
         std::shared_ptr<Strand> strand;
+        bool schedule = false;
         {
-            std::scoped_lock const lock{_mapMtx};
+            // Hold _mapMtx across the whole slot-lookup + push + re-arm
+            // decision, and take strand->mtx *while still holding _mapMtx*. The
+            // drain-and-erase step in scheduleNext makes its "keep-running vs.
+            // erase" decision under the same {_mapMtx, strand->mtx} pair, so the
+            // two are mutually exclusive.
+            //
+            // Doing the lookup and the re-arm under separate locks once opened a
+            // window: a post() could capture a strand, release _mapMtx, then
+            // re-arm it under strand->mtx *after* a concurrent drain had already
+            // erased it from the map — orphaning a live strand and letting a
+            // later post(key) create a second strand for the same key that ran
+            // concurrently. Because the map lookup and the re-arm now share
+            // _mapMtx with the erase, the strand we push into is always the map's
+            // current entry for this key: a strand that becomes `running` here is
+            // guaranteed to still be the map entry, and it cannot be erased
+            // out from under us (the erase needs _mapMtx too, and never fires
+            // while pending is non-empty).
+            //
+            // Lock order is _mapMtx → strand->mtx, matching scheduleNext's
+            // scoped_lock{_mapMtx, strand->mtx}. A freshly created strand's mtx
+            // is uncontended; an existing strand's mtx can only be held
+            // elsewhere under the same _mapMtx-first order, so no deadlock.
+            std::scoped_lock const mapLock{_mapMtx};
             auto& slot = _strands[key];
             if (!slot) {
                 slot = std::make_shared<Strand>();
                 slot->base = _base;
             }
             strand = slot;
-        }
-        bool schedule = false;
-        {
-            std::scoped_lock const lock{strand->mtx};
+            std::scoped_lock const strandLock{strand->mtx};
             strand->pending.push(std::move(task));
             if (!strand->running) {
                 strand->running = true;
                 schedule = true;
+                // Account for the strand lambda we are about to dispatch *while
+                // still holding _mapMtx*, before releasing it. If we deferred the
+                // ++_inFlight into scheduleNext (which re-takes _mapMtx), a window
+                // opened between releasing _mapMtx here and re-acquiring it there
+                // in which ~StrandExecutor could observe _inFlight == 0, destroy
+                // _strands, and let scheduleNext touch freed state. Incrementing
+                // under this lock makes "decided to schedule" and "counted as
+                // in-flight" atomic, so the destructor never sees a zero it should
+                // not.
+                ++_inFlight;
             }
         }
         if (schedule) {
@@ -99,11 +129,16 @@ private:
         bool running = false;
     };
 
+    /// @brief Dispatches one strand lambda onto the base executor.
+    ///
+    /// **Precondition:** the caller must have already incremented `_inFlight`
+    /// (under `_mapMtx`) to account for this dispatch. `post()` does so in the
+    /// same critical section that decides to schedule, and the re-entrant call
+    /// below does so under the `_mapMtx` it already holds. Keeping the increment
+    /// with the *decision* (rather than here) closes the window where
+    /// `~StrandExecutor` could observe `_inFlight == 0` between the decision and
+    /// this dispatch and destroy `_strands` out from under us.
     void scheduleNext(const std::shared_ptr<Strand>& strand, ModelId key) {
-        {
-            std::scoped_lock const lock{_mapMtx};
-            ++_inFlight;
-        }
         strand->base->post([this, strand, key] {
             std::function<void()> task;
             {
@@ -131,7 +166,17 @@ private:
             // strands could run model tasks concurrently → data race.
             bool more = false;
             {
-                std::scoped_lock const lock{_mapMtx, strand->mtx};
+                // Same lock order as post(): _mapMtx first, then strand->mtx.
+                // Acquiring them sequentially (rather than via a single
+                // scoped_lock over both, whose std::lock back-off can grab them
+                // in address order) keeps a single, consistent ordering across
+                // every site that holds both, so there is no lock-ordering
+                // deadlock. This is the point where "drain-and-erase" is decided
+                // atomically w.r.t. a concurrent post(): a post() re-arming this
+                // strand and this block erasing it cannot interleave, because
+                // both hold _mapMtx across the whole decision.
+                std::scoped_lock const mapLock{_mapMtx};
+                std::scoped_lock const strandLock{strand->mtx};
                 more = !strand->pending.empty();
                 if (!more) {
                     strand->running = false;
@@ -139,6 +184,14 @@ private:
                     if (iter != _strands.end() && iter->second == strand) {
                         _strands.erase(iter);
                     }
+                } else {
+                    // Account for the re-armed dispatch *before* releasing
+                    // _mapMtx (scheduleNext's precondition). Because this run's
+                    // own decrement below has not happened yet, _inFlight is
+                    // briefly 2 here and never dips to 0 across the handoff, so
+                    // ~StrandExecutor cannot slip in and destroy _strands between
+                    // the two runs.
+                    ++_inFlight;
                 }
             }
             if (more) {

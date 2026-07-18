@@ -1,10 +1,16 @@
 # The `morph::backend` types — design
 
 `morph::backend` provides the execution backends that own model instances and
-dispatch actions against them. The namespace is split into two header files:
+dispatch actions against them. The abstraction spans several header files:
 
 - **`backend.hpp`** — `ActionCall`, `IBackend`, error types, `LocalBackend`.
 - **`remote.hpp`** — `RemoteServer`, `SimulatedRemoteBackend`.
+- **`qt/qt_websocket_backend.hpp`** / **`qt/qt_websocket_server.hpp`** (namespace
+  `morph::qt`) — `QtWebSocketBackend` (the client-side `IBackend` over a real
+  WebSocket transport) and `QtWebSocketServer` (the transport in front of a
+  `RemoteServer`). These are the concrete remote transport that gives
+  `DisconnectedError`, `setReconnectHandler`, and the reconnect lifecycle their
+  meaning; `SimulatedRemoteBackend` is the in-process stand-in for the same shape.
 
 `Bridge` (in `bridge.hpp`) holds one active backend at a time and can swap it
 atomically via `Bridge::switchBackend()`. Every backend follows the same
@@ -19,6 +25,8 @@ and react to backend changes.
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
+- [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
+- [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Failure modes](#failure-modes)
 - [Thread context](#thread-context)
@@ -85,8 +93,12 @@ Three exception types are thrown into in-flight `Completion`s:
   calling `localOp`, and returns the `Completion`.
 - `cancelPending` — snapshots the pending list under the pending mutex, delivers
   `exc` to every still-live state.
-- `notifyBackendChanged` — iterates all models, calls `onBackendChanged()` on
-  every holder that implements `IBackendChangedSink`.
+- `notifyBackendChanged` — under `_regMtx`, scans all models for holders that
+  implement `IBackendChangedSink` (via `dynamic_cast`) and collects them; then,
+  outside the lock, **posts** `onBackendChanged()` onto each such model's strand
+  (the holder captured by `shared_ptr`). Delivery is asynchronous and serialised
+  against that model's `execute` tasks; it never runs under `_regMtx` or
+  `Bridge::_mtx`, so a sink that re-enters the bridge cannot deadlock.
 - `setReconnectHandler` — no-op (no transport to reconnect).
 
 Each model instance gets its own strand so actions are serialised per-model
@@ -108,8 +120,8 @@ server.
 
 | `kind` | Request fields | Reply | Notes |
 |---|---|---|---|
-| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Creates a model via the `ModelRegistryFactory`. Empty `typeId` → `err "register requires a typeId"`. If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. |
-| `deregister` | `modelId` | `ok` | Erases the model from the registry. |
+| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Creates a model via the `ModelRegistryFactory` and records its owner from `_authorizer->authenticate(env.session)` (empty/unowned when the authorizer returns `nullopt`, e.g. allow-all). Empty `typeId` → `err "register requires a typeId"`. If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. |
+| `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 
 **Execute flow (`dispatchExecute`).** In order:
@@ -122,23 +134,42 @@ server.
    verified principal *before* building the `ScopedContext`. So model code that
    reads `session::current()->principal` on the remote path sees the identity the
    authorizer extracted from a valid token, not the client's asserted claim
-   (`Context::principal` is untrusted wire input on its own). A non-verifying
-   authorizer — including the default `AllowAllAuthorizer` — returns `nullopt`
-   from `authenticate` and the client-supplied principal is left unchanged. This
-   is the only place the principal is made authoritative; the verifying
-   implementation lives in `SigningAuthorizer` (`session_auth.hpp`, cross-ref
-   security.md). The rewrite happens on the calling/pool thread, before the
-   strand task is posted.
-3. **Look up the model.** Under `_regMtx`, find `env.modelId`. Missing →
-   `err "model not found"` (with `callId`), no dispatch. (Note: the remote
-   message is the bare string `"model not found"`, without the id — unlike the
-   `LocalBackend` path, which resolves the completion with
+   (`Context::principal` is untrusted wire input on its own). If `authenticate`
+   returns `nullopt` — a non-verifying authorizer, including the default
+   `AllowAllAuthorizer`, or a token that passed `authorize` but expired in the
+   window before `authenticate` — the server **clears** `env.session.principal`
+   to the empty string. The client's unverified claim is therefore never
+   presented to the model as authoritative: the worst case is an empty
+   principal, never an attacker-chosen one (this closes the TOCTOU divergence
+   and the authorize-only passthrough — see security.md). This is the only place
+   the principal is made authoritative; the verifying implementation lives in
+   `SigningAuthorizer` (`session_auth.hpp`, cross-ref security.md). The rewrite
+   happens on the calling/pool thread, before the strand task is posted.
+3. **Look up the model.** Under `_regMtx`, find `env.modelId` and read its
+   recorded owner. Missing → `err "model not found"` (with `callId`), no dispatch.
+   (Note: the remote message is the bare string `"model not found"`, without the
+   id — unlike the `LocalBackend` path, which resolves the completion with
    `std::runtime_error("model not found: id=<n>")`.)
-4. **Dispatch on the strand.** Posts to the model's strand a task that installs a
+4. **Per-instance authorize.** `authorize` above saw only the model *type*; this
+   step consults `_authorizer->authorizeInstance(env.session, env.modelType,
+   env.actionType, modelId, owner)` with the target instance id and its recorded
+   owner. Denied → `err "unauthorized"` (with `callId`), no dispatch. The default
+   hook allows all, so behaviour is unchanged unless an ownership-enforcing
+   authorizer overrides it; `env.session` already carries the verified principal
+   stamped in step 2, so the hook compares the recorded owner against it.
+5. **Dispatch on the strand.** Posts to the model's strand a task that installs a
    `ScopedContext` from the (now possibly rewritten) `env.session`, calls
-   `ActionDispatcher::dispatch(modelType, actionType, *holder, body)`, and replies
-   `ok` with the serialised result. Any `std::exception` thrown by the dispatch is
-   caught on the strand and returned as `err exc.what()` with the `callId`.
+   `dispatch(modelType, actionType, *holder, body)` on the server's dispatcher,
+   and replies `ok` with the serialised result. Any `std::exception` thrown by
+   the dispatch is caught on the strand and returned as `err exc.what()` with the
+   `callId`. The strand task **captures `shared_from_this()`** so the server
+   (and therefore its `_dispatcher` reference member) stays alive until the task
+   runs and its reply is delivered. `handle()`'s pool task only holds the server
+   alive until it enqueues onto the strand; without the self-capture the last
+   external `shared_ptr` could drop first, leaving the dispatcher dangling (a
+   use-after-free) or the reply lost so a client `Completion` hangs forever. The
+   task reads the dispatcher via `self->_dispatcher`, never a bare reference
+   capture. See concurrency_and_lifetimes.md.
 
 Any envelope that fails to decode produces `err` carrying the decode
 exception's message. An unrecognised `kind` produces `err "unknown envelope
@@ -196,6 +227,155 @@ in-process simulation of remote execution.
 - `cancelPending` snapshots and resolves pending completions, same pattern as
   `LocalBackend`.
 
+## `QtWebSocketBackend` — client-side WebSocket transport
+
+`morph::qt::QtWebSocketBackend` is the concrete `IBackend` that talks to a
+`RemoteServer` over a real WebSocket (`ws://` or `wss://`). It owns a
+`QWebSocket` and opens the connection to `serverUrl` in its constructor. It holds
+**no local model objects** — every model lives on the server, exactly like
+`SimulatedRemoteBackend`, but across an actual socket instead of an in-process
+call.
+
+**Threading.** Single-threaded: must be constructed and used on the Qt event
+loop thread. `execute`, the `QWebSocket` signal slots, and the reconnect timer
+all run on that one thread, so `_connected`, `_nextCallId`, and the reconnect
+state need no locking. Only `_pending` (the callId → completion map) is guarded
+by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
+`~Bridge` on another thread.
+
+**Control operations are synchronous; execute is asynchronous.**
+- `registerModel` — sends a `register` envelope via `sendSync`, which pumps a
+  **nested `QEventLoop`** on the Qt thread until the reply arrives, then decodes
+  it. `ok` → returns the server-assigned `ModelId`; a non-`ok` reply throws
+  `std::runtime_error("register failed: " + message)`. If `sendSync` throws
+  (see below — the socket is not connected, or disconnects while the reply is
+  outstanding), `registerModel` wraps it as
+  `std::runtime_error("register failed: <what>")` (so a lost connection surfaces
+  as `"register failed: disconnected"`) rather than propagating the raw error or
+  hanging. The `factory` argument is ignored (model construction is delegated to
+  the server, as with all remote backends). `registerModelWithContext` is
+  **not** overridden — the default drops the `contextKey`, so this transport
+  does not carry a context key to the server's `LogProvider`.
+
+  `sendSync` itself is hardened against a disconnect mid-call. Before parking the
+  nested loop it checks `_connected` and throws `"disconnected"` up front if the
+  socket is already down, and it rejects a **reentrant** call (a second sync send
+  while one is already parked) with an error rather than clobbering the single
+  `_syncLoop` pointer. The `disconnected` slot, if a sync loop is parked, clears
+  `_pendingReply` and quits the loop, so a register whose reply never arrives
+  unblocks and reports failure instead of freezing the Qt thread forever; when
+  the parked loop returns with an empty `_pendingReply`, `sendSync` throws
+  `"disconnected"`. See concurrency_and_lifetimes.md.
+- `deregisterModel` — **fire-and-forget**, not synchronous: if `_connected`, it
+  sends a `deregister` envelope and returns immediately without waiting for the
+  ack; if disconnected, it does nothing. This deliberately avoids a nested
+  `QEventLoop` during a destructor, which can trip Qt asserts. Note there is **no
+  connection-scoped cleanup on the server**: an undelivered or lost `deregister`
+  leaves the model registered on the server indefinitely (see Limitations).
+- `execute` — if not connected, resolves the returned `Completion` immediately
+  with `DisconnectedError`. Otherwise it assigns a monotonic `callId`
+  (`++_nextCallId`), records the completion state + `deserializeResult` +
+  `cbExec` in `_pending[callId]`, serialises the action, and sends the `execute`
+  envelope. The `Completion` resolves when the reply with the matching `callId`
+  arrives.
+
+**Reply framing / callId multiplexing.** `onTextMessage` decodes each incoming
+frame and routes it by `callId`:
+- A **non-zero `callId`** is an async `execute` reply. The backend pops the
+  matching `PendingExecute` from `_pending`; `ok` → `deserialize(body)` into the
+  completion's value (deserialisation exceptions become the completion's error),
+  any other kind → `std::runtime_error(message)` into the completion's error. A
+  reply whose `callId` is **not** in `_pending` (e.g. a late reply for an
+  already-cancelled call) is dropped silently.
+- A **`callId == 0`** frame is a synchronous control reply (`register`); it is
+  stored in `_pendingReply` and quits the parked nested `QEventLoop`. A frame
+  that fails to decode is also routed to the parked sync waiter (as the raw
+  string) so the blocked `sendSync` unblocks with an error rather than hanging.
+
+Because `execute` replies are matched on `callId`, concurrent in-flight execute
+calls are supported; `RemoteServer`/`QtWebSocketServer` echo the request `callId`
+in the reply (see wire.md).
+
+**Reconnect lifecycle.** Configured by `QtWebSocketBackendConfig` (aliased as
+`QtWebSocketBackend::Config`):
+
+| Field | Default | Meaning |
+|---|---|---|
+| `reconnectEnabled` | `true` | Whether to auto-reconnect after an unsolicited disconnect. |
+| `initialReconnectDelay` | `500 ms` | Delay before the first reconnect attempt. |
+| `maxReconnectDelay` | `30 s` | Upper bound on the exponential backoff. |
+| `backoffMultiplier` | `2.0` | Multiplier applied to the delay after each failed attempt. |
+
+The state machine:
+- On **`connected`**: sets `_connected`, resets the backoff delay to
+  `initialReconnectDelay`, quits any parked sync loop. It fires the
+  `_reconnectHandler` **only on subsequent connects** (`_everConnected` was
+  already true) — never on the first connect, because initial handler
+  registration is driven by the `BridgeHandler` constructors, not the reconnect
+  path.
+- On **`disconnected`**: clears `_connected` and immediately calls
+  `cancelPending(DisconnectedError{})`, resolving every in-flight execute with
+  `DisconnectedError`. If not shutting down, `reconnectEnabled`, and the socket
+  had *ever* connected, it schedules a reconnect with the current backoff delay,
+  then multiplies the delay by `backoffMultiplier` (capped at
+  `maxReconnectDelay`) for the next attempt. A connection that never succeeded
+  the first time is **not** retried.
+- `attemptReconnect` re-opens the socket; if it fails, `QWebSocket` fires
+  `disconnected` again and the cycle repeats with the grown backoff.
+
+`Bridge` installs a `_reconnectHandler` (via `setReconnectHandler`) that
+re-registers every live `HandlerBinding` so model ids stay valid after the
+server assigns fresh ones on the new connection (cross-ref bridge.md).
+
+**`waitForConnected(timeoutMs = 5000)`** pumps the Qt event loop until the socket
+connects or the timeout elapses; returns the current `_connected` flag. Intended
+to be called once after construction on the Qt thread.
+
+**TLS.** Pass a `QSslConfiguration` to enable `wss://`. For self-signed
+certificates, set `QSslSocket::VerifyNone` on the configuration before passing
+it in. A plain `ws://` client against a `wss://` server never connects (and vice
+versa).
+
+**Destruction.** The destructor sets `_shuttingDown`, stops the reconnect timer,
+disconnects all `QWebSocket` signals (so no slot touches members mid-teardown),
+`abort()`s the socket (TCP RST, no close handshake), then calls `cancelPending`
+again as a safety net (in case the owner did not run it first — e.g. the backend
+was used outside a `Bridge`), and finally drains the Qt event queue so the socket's
+internal state machine settles before its `QObject` destructor runs.
+
+## `QtWebSocketServer` — server-side WebSocket transport
+
+`morph::qt::QtWebSocketServer` is a `QObject` that fronts a `RemoteServer` with a
+real listening socket. It does not own the `RemoteServer` — it holds
+`RemoteServer& _server` by reference, so the server's owning `shared_ptr` must
+outlive the transport (see Lifetime & ownership).
+
+**Flow.** `listen()` binds to the requested TCP port on `QHostAddress::LocalHost`
+and starts accepting; `port()` returns the bound port (useful when constructed
+with port `0` to let the OS assign a free one); `close()` (and the destructor)
+stops accepting and aborts/`deleteLater`s every client socket. Each accepted
+`QWebSocket` is tracked in `_clients`; on its `disconnected` signal it is removed
+from `_clients` and `deleteLater`d.
+
+**Message handling.** For every text frame from a client, `onTextMessage` calls
+`RemoteServer::handle(msg, reply)` (asynchronous — dispatched to the server's
+worker pool). The reply callback captures a `QPointer<QWebSocket>` (a *weak*
+handle) and marshals the send back onto the Qt thread via
+`QMetaObject::invokeMethod(..., Qt::QueuedConnection)`: the reply is produced on
+a pool thread but `QWebSocket::sendTextMessage` must run on the Qt thread. If the
+client socket was destroyed before the reply is ready, the `QPointer` is null and
+the reply is silently dropped. A malformed frame produces an `err` reply from the
+`RemoteServer` and does not disconnect the client or affect other clients.
+
+**Multi-client / concurrency.** One server serves many clients; each client
+registers its own model instances on the shared `RemoteServer`, so per-client
+model state is isolated. Because `handle()` posts to the pool, replies for
+different clients (and different calls) can be produced concurrently on separate
+pool threads and are each marshalled back to their originating socket.
+
+**TLS.** Constructing with a `QSslConfiguration` puts the `QWebSocketServer` into
+`SecureMode` (`wss://`); without one it runs in `NonSecureMode`.
+
 ## Lifetime & ownership
 
 The backends hold *references*, not owning pointers, to the resources they run
@@ -214,14 +394,16 @@ are:
   calling `handle()` throws `std::bad_weak_ptr` (see ARCHITECTURE.md
   "RemoteServer must be heap-allocated").
 - **The `RemoteServer` shared_ptr must outlive every referencing
-  `SimulatedRemoteBackend` (and every transport `QtWebSocketServer` etc.).**
-  `SimulatedRemoteBackend` stores `RemoteServer& _server` — a non-owning
-  reference — and forwards every `registerModel` / `deregisterModel` / `execute`
-  through it. If the server's owning shared_ptr is released while a backend still
+  `SimulatedRemoteBackend` and every transport `QtWebSocketServer`.**
+  Both `SimulatedRemoteBackend` and `QtWebSocketServer` store `RemoteServer&
+  _server` — a non-owning reference — and forward client messages through it. If
+  the server's owning shared_ptr is released while such an adapter still
   references it, subsequent calls dereference a dangling reference. The `handle()`
   path is self-protecting for tasks already *in flight* (each captures a
-  shared_ptr copy), but `SimulatedRemoteBackend`'s reference member is not — the
-  caller must keep the server alive for the backend's whole lifetime.
+  shared_ptr copy), but the reference member is not — the caller must keep the
+  server alive for the adapter's whole lifetime. (`QtWebSocketBackend`, by
+  contrast, holds no `RemoteServer` reference: it is a client that reaches the
+  server only over the socket.)
 - **Pending strand tasks capture shared_ptr copies, so model destruction
   mid-flight is safe.** Both backends' `execute` strand tasks capture the model
   `holder` by `shared_ptr` copy (and `RemoteServer`'s also captures the reply
@@ -241,6 +423,17 @@ are:
 | Action handler throws | Caught on the strand; completion resolves with the thrown exception. | Caught on the strand; `err exc.what()` reply, which the client re-throws into the completion. |
 | Envelope fails to decode | N/A | `err <decode exception message>` (no `callId` echoed — it couldn't be parsed). |
 | Unrecognised `kind` | N/A | `err "unknown envelope kind: <kind>"`. |
+
+Over the WebSocket transport (`QtWebSocketBackend`) the same server-side rows
+apply, plus transport-level failures the in-process backends cannot hit:
+
+| Situation | `QtWebSocketBackend` |
+|---|---|
+| `execute` while the socket is disconnected | Completion resolves immediately with `DisconnectedError`. |
+| Socket drops with execute calls in flight | The `disconnected` slot calls `cancelPending(DisconnectedError{})`, resolving every pending completion with `DisconnectedError`. `Bridge` may retry on reconnect. |
+| Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
+| `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
+| Malformed reply frame while a sync waiter is parked | The raw frame is handed to the parked `sendSync` loop so it unblocks rather than hanging; decode then fails there. |
 
 There is **no typed "model not found" exception** on either path — callers that
 need to distinguish it from any other `std::runtime_error` have only the message
@@ -265,6 +458,19 @@ lookup on the pool thread that `dispatchMessage` runs on, then runs
 `ActionDispatcher::dispatch` (and the `ScopedContext`) on the model strand.
 Completion *callbacks* (`.then`/`.onError`) are delivered via the `cbExec`
 executor passed to `execute`, independent of all of the above.
+
+Over the WebSocket transport the split is different again:
+
+| Callable | Runs on (`QtWebSocketBackend`) |
+|---|---|
+| `serializeAction` | The **Qt event-loop thread** — `execute` invokes it while building the envelope. |
+| `deserializeResult` | The **Qt event-loop thread** — invoked in `onTextMessage` when the matching reply frame arrives. |
+| `localOp` | Never invoked (no local models). |
+
+`QtWebSocketBackend` is single-threaded (Qt event loop). `QtWebSocketServer`
+receives frames on the Qt thread, hands them to `RemoteServer::handle` (which
+runs on the server pool / model strand as above), and marshals the reply *back*
+onto the Qt thread before `sendTextMessage`.
 
 ## API reference
 
@@ -306,7 +512,7 @@ executor passed to `execute`, independent of all of the above.
 | `explicit LocalBackend(IExecutor& workerPool)` | Constructs with a strand around `workerPool`. |
 | `registerModel(typeId, factory)` | Atomically increments `_nextId`, stores the holder under `_regMtx`. `typeId` is accepted for interface compatibility but not used. |
 | `deregisterModel(mid)` | Erases from `_models` under `_regMtx`. |
-| `notifyBackendChanged()` | Calls `onBackendChanged()` on `IBackendChangedSink` holders. |
+| `notifyBackendChanged()` | Collects `IBackendChangedSink` holders under `_regMtx`, then posts `onBackendChanged()` onto each model's strand (outside the lock). |
 | `execute(mid, call, cbExec)` | Posts `call.localOp` on the model's strand with `ScopedContext`. Returns a `Completion`. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
 
@@ -332,6 +538,37 @@ executor passed to `execute`, independent of all of the above.
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
 
+### `QtWebSocketBackendConfig` (`QtWebSocketBackend::Config`)
+
+| Member | Type | Default |
+|---|---|---|
+| `reconnectEnabled` | `bool` | `true` |
+| `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
+| `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
+| `backoffMultiplier` | `double` | `2.0` |
+
+### `QtWebSocketBackend` (namespace `morph::qt`)
+
+| Method | Notes |
+|---|---|
+| `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. |
+| `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
+| `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. |
+| `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |
+| `notifyBackendChanged()` | No-op. |
+| `cancelPending(exc)` | Drains `_pending` under `_pendingMtx`, delivers `exc` to each state. |
+| `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
+
+### `QtWebSocketServer` (namespace `morph::qt`)
+
+| Method | Notes |
+|---|---|
+| `QtWebSocketServer(server, port = 0, tls = nullopt, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. Does not start listening. |
+| `listen()` | Binds to `LocalHost:port` and starts accepting; returns success. |
+| `port()` | Bound port (OS-assigned when constructed with `0`). |
+| `close()` | Stops accepting; aborts and `deleteLater`s all client sockets. Also run by the destructor. |
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -345,6 +582,11 @@ executor passed to `execute`, independent of all of the above.
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
+| WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. The trade-off is accepting that a lost/undelivered deregister leaks the model on the server (there is no connection-scoped cleanup — see Limitations). |
+| `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; control replies carry `0` | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). |
+| Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
+| No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
+| Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
 
 ## Cross-references
 
@@ -356,6 +598,8 @@ executor passed to `execute`, independent of all of the above.
 | wire.md | `Envelope`, `encode`/`decode`, `makeOk`/`makeErr`/`makeRegister`/`makeDeregister`, and the `kind` discriminator the server switches on. |
 | registry.md | `ModelRegistryFactory::create` (remote model construction, `BRIDGE_REGISTER_MODEL`), `ActionDispatcher::dispatch` (the remote execute call site), and the `Loggable` policy. |
 | completion.md | `Completion<shared_ptr<void>>` returned by `execute`, the `CompletionState` the backends track for `cancelPending`, and `cbExec` callback delivery. |
+| offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
+| executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool) and `qt/qt_executor.hpp`'s `QtExecutor`, the `cbExec` used to deliver completion callbacks onto the Qt thread. |
 
 ## Limitations
 
@@ -369,22 +613,33 @@ executor passed to `execute`, independent of all of the above.
   `err "unknown model type: ..."` (or fail to compile the registration if it is
   not default-constructible). Parity between the two paths is a property of the
   model, not something the framework guarantees.
-- **Remote model ids are guessable and register/deregister are unauthorized.**
+- **Remote model ids are guessable and `register` is type-unauthorized.**
   `RemoteServer` assigns model ids from a sequential `std::atomic<uint64_t>`
-  counter (`_nextId + 1`), so ids are trivially guessable. Only `execute` runs
-  through the `IAuthorizer`; `register` and `deregister` are **not** authorized
-  at all — any client that can reach the transport can create and destroy model
-  instances. See security.md.
+  counter (`_nextId + 1`), so ids are trivially guessable. `register` performs no
+  type-level authorization gate: any client that can reach the transport can
+  create model instances (it does call `authenticate` to *record* the owner, so
+  ownership is established for later per-instance checks, but creation itself is
+  not denied). `execute` and `deregister` are gated by the optional
+  `authorizeInstance` hook — which defaults to allow-all — in addition to
+  `execute`'s type-level `authorize` step. See security.md.
+- **No connection-scoped cleanup — orphaned models leak.** There is no
+  mechanism that reclaims a client's models when its connection closes.
+  `QtWebSocketServer::onDisconnected` only removes the socket from `_clients` and
+  calls `deleteLater()`; it never touches the `RemoteServer`, which has no
+  connection concept at all. A model whose `deregister` frame is never sent (a
+  client crash) or is lost in flight (fire-and-forget) stays registered on the
+  server **indefinitely**. Deregistration is the client's responsibility, and an
+  undelivered deregister is an unbounded server-side resource leak.
 - **`notifyBackendChanged` uses RTTI over every model under the registry lock.**
   `LocalBackend::notifyBackendChanged` iterates the entire `_models` map holding
   `_regMtx` and `dynamic_cast`s each holder to `IBackendChangedSink`. This
-  depends on RTTI being enabled and its cost scales with the number of live
-  models while the registry lock is held. (`SimulatedRemoteBackend`'s override is
-  a no-op — its models live in the server.)
-- **Stale `SimulatedRemoteBackend` header doc.** The class comment in
-  `remote.hpp` still describes a "synchronous request-reply protocol" where "the
-  calling thread blocks until the reply arrives via `std::promise`". The code
-  does not match: `execute` is **asynchronous** (it calls `handle()` and returns
-  a `Completion`), and there is no `std::promise` anywhere in the class — only
-  the control operations (`registerModel`/`deregisterModel`) are synchronous, via
-  `handleInline`. Treat this spec, not that comment, as authoritative.
+  depends on RTTI being enabled and its cost (the cast scan) scales with the
+  number of live models while the registry lock is held; the resulting
+  `onBackendChanged()` calls are then posted to each model's strand outside the
+  lock. (`SimulatedRemoteBackend`'s override is a no-op — its models live in the
+  server.)
+- **WebSocket transport is single-threaded and Qt-bound.** `QtWebSocketBackend`
+  must live on the Qt event loop thread; there is no way to drive it from a
+  plain worker thread, and `waitForConnected` / the synchronous `register` path
+  both pump nested `QEventLoop`s on that thread. Completion callbacks reach the
+  GUI only if `cbExec` (typically `QtExecutor`) posts back to the Qt loop.

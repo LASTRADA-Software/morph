@@ -125,7 +125,7 @@ GUI thread
   └─ bridge::BridgeHandler<M>::execute(action)
        └─ bridge::Bridge::executeVia<M, A>
             └─ backend::SimulatedRemoteBackend::execute
-                 └─ serialize action → backend::RemoteServer::handle (5-part text protocol)
+                 └─ serialize action → backend::RemoteServer::handle (JSON wire envelope)
                       └─ ActionDispatcher → StrandExecutor → Model::execute
                            └─ serialize result → Completion<T>::then → GUI executor
 ```
@@ -138,7 +138,7 @@ GUI thread (Qt process)                         Server process
        └─ bridge::Bridge::executeVia<M, A>
             └─ qt::QtWebSocketBackend::execute
                  └─ assign callId, send JSON  ──► qt::QtWebSocketServer::handle
-                                                        └─ backend::RemoteServer::handle (6-part protocol)
+                                                        └─ backend::RemoteServer::handle (JSON wire envelope)
                                                              └─ ActionDispatcher → StrandExecutor → Model::execute
                  ◄── JSON reply (ok|callId|result) ──────────────────────────────
             └─ resolve pending Completion
@@ -642,7 +642,7 @@ If `runFor(timeout)` returns because the timeout expired rather than because the
 | `LogLevel : uint8_t` | Minimises storage; 5 levels fit in one byte. |
 | Glaze for JSON | Reflects aggregate types automatically; no hand-written serialisation per action. |
 | `CompletionState<T>` internal only | Keeps the public API free of state-handling machinery; implementation can change without breaking callers. |
-| 6-part Qt wire protocol | Carries a `callId` so async WebSocket replies can be correlated back to pending `Completion` objects. |
+| JSON `Envelope` wire protocol | Self-describing and forward-compatible (unknown keys ignored); carries a `callId` so async WebSocket replies can be correlated back to pending `Completion` objects. |
 | Client-side drafts for fielded actions | Avoids new wire messages, server-side draft state, and a server push channel. Patches never leave the client; only the full action is sent when the validator passes. |
 | `ActionValidator<A>` is action-typed, not model-typed | Different actions on the same model have different readiness requirements; pinning the predicate to the action keeps GUI code oblivious to model internals. |
 | `set<auto FieldPtr>(value)` over `set<Action>(&Action::f, value)` | Member-pointer NTTP encodes both the action type and the field type; the call site stays terse without losing type safety. |

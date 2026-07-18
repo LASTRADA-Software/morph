@@ -90,13 +90,24 @@ pre-built binding (for dependency injection, custom `contextKey`, or custom
 factory captures).
 
 **`executeVia<Model, Action>(binding, action, cbExec)`** dispatches one
-action. Uses a lock-free snapshot of the backend pointer and the binding's
-`currentId` so it does not block `switchBackend()`. If `currentId` is 0,
+action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
+`_backendMtx` (never `_mtx`) plus a lock-free atomic read of the binding's
+`currentId`, so it never blocks on `switchBackend()`'s `_mtx`. If `currentId` is 0,
 completes immediately with `"handler not bound"`. Constructs an `ActionCall`
 with serialization/deserialization lambdas and a `localOp` that calls
 `Model::execute(*action)` and optionally records a journal `LogEntry` for
 loggable actions. The typed result is unwrapped from `std::shared_ptr<void>`
-into the final `Completion<R>`.
+into the final `Completion<R>` inside a `try`/`catch`: moving the result out of
+the opaque `shared_ptr<void>` can throw (a throwing move/copy on `R`, or a bad
+cast), and if that exception escaped the `.then` callback it would be swallowed
+by a `ThreadPoolExecutor` — leaving the typed `Completion` unresolved (a silent
+hang) — or reach `QCoreApplication::exec` under `QtExecutor` and
+`std::terminate`. On a caught exception the forwarding routes it to the typed
+completion's error sink via `setException`, so the caller's `.onError(...)`
+fires instead. This mirrors the identical forwarding guard in
+`SimulatedRemoteBackend::execute` (remote.hpp). The type-erased `executeJson`
+path (`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
+forwarding the same way.
 
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
 switch either fully succeeds or leaves everything exactly as it was. It runs
@@ -122,8 +133,31 @@ cleared on the old one, and the old backend's pending completions are cancelled
 with `BackendChangedError` — outside `_mtx`, because `cancelPending` delivers
 callbacks through user executors and the bridge never runs user code while
 holding its mutex. Lock ordering: `_mtx` is acquired before the backend's
-internal mutex. `onBackendChanged()` implementations must not call
-`registerHandler()` or `deregisterHandler()` (deadlock).
+internal mutex.
+
+**`onBackendChanged()` runs on the model's strand, not inline under `_mtx`.**
+`notifyBackendChanged()` fires while `_mtx` is held, but for `LocalBackend` it
+does not *call* each model's `onBackendChanged()` — it **posts** it onto that
+model's own strand (the same per-`ModelId` serial queue `execute` uses) and
+returns. Consequences:
+
+- **Strand-serialised, lock-free.** The callback body runs single-threaded per
+  model, never overlapping an `execute()` on the same model, so a model
+  reconciling state there (e.g. draining a shared `IOfflineQueue`) needs no
+  locking of its own fields. It runs *after* `switchBackend` returns, so an
+  observer must wait for it rather than assume it ran synchronously.
+- **`registerHandler()` / `deregisterHandler()` are now safe from
+  `onBackendChanged()`.** Because the body runs on a pool thread with `_mtx`
+  free, a re-entrant `registerHandler`/`deregisterHandler` acquires `_mtx`
+  freshly instead of self-deadlocking on the switch caller's held lock (the
+  earlier inline-under-`_mtx` design deadlocked here — this was the fix).
+- **`switchBackend()` from `onBackendChanged()` is still unsupported** — but for
+  a different reason than the lock. The callback runs on the *outgoing* backend's
+  strand; a nested `switchBackend` would release the last reference to that
+  backend when it returns, and `~StrandExecutor` blocks until its in-flight tasks
+  finish — including the very task calling it — a self-join hang. Re-registering
+  models or reconciling queue state is the supported reaction; swapping the
+  backend again from inside the notification is not.
 
 **`deregisterHandler(binding)`** calls `deregisterModel` on the active backend
 (only if the binding still has a non-zero `currentId`), then resets
@@ -136,9 +170,18 @@ sending a now-destroyed `ModelId` to the backend.
 `morph::session::Context` that is attached to every `executeVia()` call.
 Thread-safe, separate mutex from `_mtx`.
 
-**Destructor** cancels every pending completion on the active backend with
-`BridgeDestroyedError`. In-flight replies that arrive after destruction are
-no-ops (`CompletionState::setValue`/`setException` is idempotent).
+**Destructor** first **clears the active backend's reconnect handler**
+(`setReconnectHandler(nullptr)`), then cancels every pending completion on that
+backend with `BridgeDestroyedError`. In-flight replies that arrive after
+destruction are no-ops (`CompletionState::setValue`/`setException` is
+idempotent). Clearing the reconnect handler matters because the installed
+handler captures `this`: a backend co-owned elsewhere can outlive the `Bridge`,
+and a reconnect firing afterward would otherwise dereference the freed `Bridge`.
+The clear happens outside `_mtx` — `setReconnectHandler` only stores a callback
+and never re-enters the bridge, so there is no lock-ordering hazard. This closes
+the common case; the handler additionally guards on the `_liveness` token (see
+below) so a reconnect already latched on the transport thread when the `Bridge`
+is destroyed is also a safe no-op.
 
 **`liveness()`** (private, exposed only to `BridgeHandler` via friendship)
 returns a `std::weak_ptr<const void>` observing the bridge's `_liveness`
@@ -173,9 +216,29 @@ automatically by the bridge.
 **`executeJson(actionType, bodyJson)`** type-erased variant. Looks up the
 executor in `ActionExecuteRegistry::instance()` and dispatches. The
 registry's executor deserializes the JSON body via
-`ActionTraits<Action>::fromJson`, calls `execute<Action>`, and serializes
-the result back to JSON. Throws `std::runtime_error` if the action was never
-registered.
+`ActionTraits<Action>::fromJson`, then — before invoking the handler —
+**reconciles Quantity precision and enforces the action's validator** (see
+below), calls `execute<Action>`, and serializes the result back to JSON. Throws
+`std::runtime_error` if the action was never registered.
+
+Between decode and dispatch the registry executor applies two normalisations, so
+the request/reply path matches the schema and the reactive `set<>` path rather
+than trusting the raw wire body:
+
+- **Declared-precision reconciliation.** `morph::forms::reconcileDeclaredPrecision`
+  retags every `Quantity` field of the decoded action to its *declared* precision
+  (`Quantity<U, Dec>::declaredDecimals`), so the stored value's precision matches
+  the schema's advertised `x-decimalPlaces` instead of whatever runtime `dp` the
+  client sent. It is a no-op for actions with no `Quantity` members and for
+  actions whose type glaze cannot reflect. See [forms.md](forms.md).
+- **Validator enforcement.** `ActionValidator<Action>::ready(action)` is checked;
+  if it returns `false` the executor throws `std::invalid_argument` and the
+  completion resolves through `onError` (a proper error reply upstream) — the
+  handler is never invoked with an invalid action. This closes a gap where the
+  request/reply path skipped the readiness/validity check that the reactive
+  `set<>` path (`tryFireImpl`) already performs. `ActionValidator::ready`
+  auto-detects a `bool validate() const` member and defaults to `true`, so
+  actions without a validator dispatch exactly as before (backward compatible).
 
 **`subscribe<Action>(cb)`** / **`subscribe<Action>(cb, errCb)`** stores a
 result (and optional error) callback keyed by
@@ -220,15 +283,20 @@ holds a `draft` (`std::any` of the action struct), `sink`, `errSink`, and
 
 Process-level singleton (`instance()`). Maps `(modelTypeId, actionTypeId)`
 pairs to `Executor` values (`std::function<Completion<string>(void*,
-string_view)>`). Populated by
+string_view)>`). The backing store is
+`unordered_map<pair<string,string>, Executor, morph::model::detail::PairKeyHash>` —
+the same `PairKeyHash` the server-side `ActionDispatcher` uses to key its
+`(modelId, actionId)` map. Populated by
 `registerActionExecutorOnce<Model, Action>()`, which
 `BRIDGE_REGISTER_ACTION` calls during static initialization.
 
 **`execute(modelId, actionId, handler, bodyJson)`** looks up the executor and
 invokes it. The executor `static_cast`s the `void*` back to
-`BridgeHandler<Model>*`, deserializes the JSON body, calls
-`handler->execute<Action>()`, and serializes the result back to JSON.
-Throws `std::runtime_error` if no executor is registered for the pair.
+`BridgeHandler<Model>*`, deserializes the JSON body, reconciles Quantity fields
+to their declared precision, enforces `ActionValidator<Action>::ready` (throwing
+`std::invalid_argument` on failure), calls `handler->execute<Action>()`, and
+serializes the result back to JSON. Throws `std::runtime_error` if no executor is
+registered for the pair.
 
 **Requirement**: every translation unit calling `BRIDGE_REGISTER_ACTION`
 must include `bridge.hpp` (directly or transitively), because
@@ -299,10 +367,13 @@ exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
   error is logged via `morph::log::logError` tagged `[subscription:<typeId>]`,
   never silently dropped.
 - **Default validator fires on the first `set<>`.** `ActionValidator<A>::ready`
-  returns `true` for any action without a `BRIDGE_REGISTER_VALIDATOR`
-  specialisation, so the very first `set<>` puts the (single-field-populated)
-  draft into a ready state and dispatches immediately. Actions that need
-  several fields before firing must specialise the validator.
+  returns `true` only for an action that has *neither* a
+  `BRIDGE_REGISTER_VALIDATOR` specialisation *nor* a `bool validate() const`
+  member — for such an action the very first `set<>` puts the
+  (single-field-populated) draft into a ready state and dispatches immediately.
+  Actions that need several fields before firing add a `validate()` member (the
+  preferred, macro-free path — auto-detected via the `HasValidate` concept) or
+  specialise the validator.
 - **Every ready `set<>` re-fires.** Each `set<>` landing a `ready()==true`
   snapshot dispatches the action again — live recomputation. Rapid patches
   coalesce: while a flight is running, further `set<>` calls set
@@ -318,8 +389,8 @@ exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
 ## Thread safety
 
 `Bridge` is fully thread-safe (see the `Bridge` section: separate
-`_backendMtx`, `_mtx`, and `_sessionMtx`, with lock-free backend snapshots in
-`executeVia`).
+`_backendMtx`, `_mtx`, and `_sessionMtx`, with `executeVia` taking its backend
+snapshot under the short, dedicated `_backendMtx` rather than `_mtx`).
 
 `BridgeHandler`'s individual mutating operations — `set`, `subscribe`,
 `unsubscribe`, `reset` — are each internally safe: they take the
@@ -375,12 +446,12 @@ make teardown order-independent.)
 | Member | Signature | Notes |
 |---|---|---|
 | ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend. |
-| dtor | `~Bridge()` | Cancels all pending completions with `BridgeDestroyedError`. |
+| dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. Records journal for loggable actions. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 
@@ -416,13 +487,13 @@ make teardown order-independent.)
 |---|---|---|
 | Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `_liveness` token — not by this weak storage.) |
 | Teardown order | **`shared_ptr<const void> _liveness` + per-handler `weak_ptr`** | Makes bridge-vs-handler destruction order-independent: a handler outliving its bridge skips deregistration instead of dereferencing a dangling `Bridge&`. Normal `execute`/`set` still require the bridge to outlive its handlers. |
-| Backend pointer | **Lock-free snapshot under `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under a dedicated mutex, so it never blocks `switchBackend()`. |
+| Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
-| Reconnect handler | **Weak‑backend guard + stale check** | The lambda captures a `weak_ptr<IBackend>`. On invocation it checks `pinned == loadBackend()` — if a switch occurred since the handler was installed, the reconnect is ignored. |
+| Reconnect handler | **Liveness guard + weak‑backend guard + stale check; cleared in `~Bridge`** | The lambda captures a `weak_ptr<const void>` to `_liveness` and a `weak_ptr<IBackend>`. On invocation it first locks the liveness token — if the `Bridge` is gone it returns without touching `this` (no use-after-free). It then checks `pinned == loadBackend()` — if a switch occurred since the handler was installed, the reconnect is ignored. `~Bridge` and `switchBackend` also clear the outgoing backend's handler via `setReconnectHandler(nullptr)`; the liveness guard covers a reconnect already in flight when teardown races it. |
 | Fielded actions | **`SubscriberState` shared across `BridgeHandler` copy-unsafe design** | The handler is non-copyable; the subscriber state is `shared_ptr` so `tryFireImpl` can capture a `weak_ptr` and survive handler destruction. Flight tracking (`running`/`pending`) coalesces rapid `set` calls. |
 | Action readiness | **`ActionValidator<Action>::ready(snapshot)`** | Framework-agnostic validation — each action struct defines its own required-field semantics. The bridge never interprets action fields. |
 | Subscription keys | **`string_view` into static storage** | `ActionTraits::typeId()` returns `constexpr` string literals with static duration. The `unordered_map` holds non-owning keys; no allocation, no lifetime issues. |
-| `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map<(modelId, actionId), Executor>` lets any translation unit register its actions without central registration or RTTI. |
+| `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map<(modelId, actionId), Executor, PairKeyHash>` lets any translation unit register its actions without central registration or RTTI. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |
 
 ## Limitations

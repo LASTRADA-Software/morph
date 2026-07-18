@@ -85,6 +85,68 @@ TEST_CASE("DateTime::Iso8601::RejectsMalformedInput", "[datetime]") {
     CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:61Z").has_value());
 }
 
+TEST_CASE("DateTime::Iso8601::RejectsSignInjection", "[datetime]") {
+    // A leading '-' in a fixed-width clock field must NOT parse as a negative
+    // component (from_chars accepts a leading sign). Without the guard,
+    // "T-5:30:15" would read hour = -5 and silently shift to a *different*
+    // valid instant instead of failing. Every clock field is checked.
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T-5:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:-5:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:-5").has_value());
+    // Likewise for the fixed-width date fields month and day.
+    CHECK_FALSE(DateTime::fromIso8601("2026--7-05T14:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-07--5T14:30:15").has_value());
+    // And a leading '+' is equally rejected in those fields.
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T+5:30:15").has_value());
+    CHECK_FALSE(DateTime::fromIso8601("2026-+7-05T14:30:15").has_value());
+    // A signed fraction is rejected too (the sign is trailing junk after the
+    // dot, so digits == 0).
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T14:30:15.-5Z").has_value());
+
+    // Regression: the specific instant from the bug report must not shift to
+    // 2026-07-04T19:30:15Z.
+    CHECK_FALSE(DateTime::fromIso8601("2026-07-05T-5:30:15").has_value());
+}
+
+TEST_CASE("DateTime::Iso8601::NegativeYearRoundTrip", "[datetime]") {
+    // Negative years round-trip as long as toIso8601 emits exactly four
+    // characters for the year field ('-' + three digits), i.e. years -001..-999,
+    // and fromIso8601 reads exactly four characters back. A leading '-' is
+    // legitimate ONLY in the whole-string year field.
+    auto const roundTrip = [](std::chrono::year y) {
+        DateTime const dt{y,
+                          std::chrono::month{7},
+                          std::chrono::day{5},
+                          std::chrono::hours{14},
+                          std::chrono::minutes{30},
+                          std::chrono::seconds{15}};
+        auto const text = dt.toIso8601();
+        auto const parsed = DateTime::fromIso8601(text);
+        return parsed.has_value() && *parsed == dt;
+    };
+
+    // Boundary: -001 and -999 round-trip (four-character year field).
+    CHECK(roundTrip(std::chrono::year{-1}));
+    CHECK(roundTrip(std::chrono::year{-999}));
+    CHECK(roundTrip(std::chrono::year{-123}));
+    CHECK(DateTime::fromIso8601("-123-07-05T14:30:15") ==
+          std::optional<DateTime>{DateTime{std::chrono::year{-123}, std::chrono::month{7}, std::chrono::day{5},
+                                           std::chrono::hours{14}, std::chrono::minutes{30},
+                                           std::chrono::seconds{15}}});
+
+    // Just past the boundary: year -1000 emits a FIVE-character field
+    // ("-1000-…"), which shifts the '-' separator past offset 4, so it does not
+    // round-trip. This pins the true lower bound at -999.
+    CHECK(DateTime{std::chrono::year{-1000}, std::chrono::month{7}, std::chrono::day{5}, std::chrono::hours{14},
+                   std::chrono::minutes{30}, std::chrono::seconds{15}}
+              .toIso8601()
+              .starts_with("-1000-"));
+    CHECK_FALSE(DateTime::fromIso8601("-1000-07-05T14:30:15").has_value());
+
+    // Year 0000 round-trips too (four digits, no sign).
+    CHECK(roundTrip(std::chrono::year{0}));
+}
+
 TEST_CASE("DateTime::ComparisonAndArithmetic", "[datetime]") {
     auto const earlier = sample();
     auto later = earlier + std::chrono::minutes{5};

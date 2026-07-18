@@ -5,7 +5,8 @@ against a model instance. It is the audit trail and the raw material for
 state reconstruction — the journal, not the live model, is the source of truth
 for "what happened."
 
-Three concerns live here, spread across two headers (`action_log.hpp` and `journal.hpp`):
+Three concerns live here, spread across three headers (`action_log.hpp`,
+`file_action_log.hpp`, and `journal.hpp`):
 
 1. **The log entry format** — `LogEntry`, a flat struct of what one action
    execution produced, plus `toJson`/`fromJson` for wire/file encoding.
@@ -17,6 +18,10 @@ Three concerns live here, spread across two headers (`action_log.hpp` and `journ
    auto-attach to it. `replay()` and `SessionLog::undoLast()` live in
    `journal.hpp` and depend on `ModelRegistryFactory`/`ActionDispatcher`.
 
+For remote topologies, a fourth attachment path — `RemoteServer::LogProvider`
+(declared in `remote.hpp`) — attaches an `IActionLog` to server-owned instances
+by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-remote-instances).
+
 ## Contents
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
@@ -27,6 +32,7 @@ Three concerns live here, spread across two headers (`action_log.hpp` and `journ
 - [SessionLog](#sessionlog)
 - [replay()](#replay)
 - [Process-wide default log](#process-wide-default-log)
+- [Attaching a log to remote instances](#attaching-a-log-to-remote-instances)
 - [ScopedActionLog](#scopedactionlog)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -128,14 +134,18 @@ processes to append to the same path concurrently.
 `entries()` re-reads the file from disk and decodes every line. Reads whatever
 is currently on disk, including anything written but not yet `flush()`ed if the
 platform's stdio buffering has already handed it to the OS. `flush()` first for
-a guaranteed-durable view. Blank lines are skipped before decoding.
+a guaranteed-durable view. Strictly-empty lines are skipped before decoding
+(the check is `line.empty()`; a whitespace-only line is *not* treated as blank
+and is handed to `fromJson`).
 
 **Torn-write tolerance.** A crash between `append()`'s `fwrite` and the next
 `flush()` can leave a truncated final line (bytes written, never completed).
-`entries()` tolerates exactly that case: if decoding fails on the **last**
-non-empty line, it skips that line, logs a warning via `morph::log::logWarn`
-(naming the path and the parse error), and returns everything before it. A
-decode failure on any line **mid-file** is treated as genuine corruption and
+`entries()` tolerates it by position, not by cause: if decoding fails on the
+**last** non-empty line *for any reason* (truncation is the expected one, but the
+catch is over `std::exception` generally), it skips that line, logs a warning via
+`morph::log::logWarn` (naming the path and the parse error), and returns
+everything before it. A decode failure on any line **mid-file** is treated as
+genuine corruption and
 the `fromJson` exception is re-thrown — the log is not silently truncated at an
 interior tear. So a single trailing torn record is recoverable; interior
 damage is fatal and surfaced to the caller.
@@ -161,19 +171,23 @@ All public methods are thread-safe (guarded by an internal mutex).
 | `flush` | `void flush()` | No-op — `checkpoint()` is the real commit point. |
 | `entries` | `std::vector<LogEntry> entries(std::string_view entityKey = {})` | Full history (or one entity's slice) in append order. |
 | `undoLast` | `std::unique_ptr<IModelHolder> undoLast(modelTypeId, registry, dispatcher)` | Drops the most recent entry and replays the remainder against a **fresh, detached** model instance, reconstructing pre-undo state. Returns that new holder — the caller must install/use it (it does not mutate any live instance). No-op (returns a freshly created, un-replayed holder) if the log is empty. |
-| `checkpoint` | `void checkpoint(IActionLog& durableSink, ActionDispatcher& dispatcher = defaultDispatcher())` | Coalesces entries since the last checkpoint and forwards the reduced set to `durableSink`; then flushes it. Advances the internal checkpoint watermark to the current tail *before* forwarding anything, so it stays advanced regardless of whether the subsequent `durableSink.append()`/`durableSink.flush()` throws — this makes the batch **at-most-once / forward-only** (a throwing sink drops it permanently), NOT the at-least-once its `IOfflineQueue` shape might suggest. See [Failure modes / durability](#failure-modes--durability). No-op if nothing has been appended since the last checkpoint. |
+| `checkpoint` | `void checkpoint(IActionLog& durableSink, ActionDispatcher& dispatcher = defaultDispatcher())` | Coalesces entries since the last checkpoint and forwards the reduced set to `durableSink`; then flushes it. Advances the internal checkpoint watermark (the highest committed entry `seq`) *before* forwarding anything, so it stays advanced regardless of whether the subsequent `durableSink.append()`/`durableSink.flush()` throws — this makes the batch **at-most-once / forward-only** (a throwing sink drops it permanently), NOT the at-least-once its `IOfflineQueue` shape might suggest. The whole body is serialized against other checkpoints (see [Concurrency and ordering](#concurrency-and-ordering)). See [Failure modes / durability](#failure-modes--durability). No-op if nothing has been appended since the last checkpoint. |
 
 ### `undoLast()`
 
 No inverse/undo operations are needed on the action types themselves — this
-reuses `replay()` over a shorter prefix of the same log. Takes optional
-`modelTypeId`, `registry`, and `dispatcher` — `registry` and `dispatcher`
-default to the process-level singletons. Dropping the last entry also clamps
-the checkpoint watermark down to the new tail, so a previously-committed final
-entry does not leave the watermark past the end of the (now shorter) history.
-Because the durable sink is append-only, `undoLast()` only rewinds `SessionLog`'s
-own in-memory history — it cannot remove an entry already forwarded to a
-durable sink by a prior `checkpoint()`.
+reuses `replay()` over a shorter prefix of the same log. Takes `modelTypeId`
+plus optional `registry` and `dispatcher` — `registry` and `dispatcher`
+default to the process-level singletons. Dropping the last entry rewinds only
+`SessionLog`'s in-memory history; it does **not** touch the checkpoint
+watermark. The watermark is a committed-`seq` threshold, not a position in the
+mutable `_all` vector (see [checkpoint()](#checkpoint) and the
+[undo / checkpoint / coalescing interaction](#undo--checkpoint--coalescing-interaction)),
+so removing a tail entry cannot lower it. Because the durable sink is
+append-only, `undoLast()` cannot remove an entry a prior `checkpoint()` already
+forwarded: undoing a checkpointed entry leaves it durable while the
+reconstructed history diverges from it. Durably reversing a checkpointed action
+requires a **compensating action**, not `undoLast()`.
 
 `undoLast()` returns a **fresh, detached** holder (created by `replay()`, which
 immediately detaches the auto-attached default log — see [replay()](#replay)),
@@ -204,9 +218,54 @@ not a transaction that will be retried. If a durable sink can fail transiently,
 the caller must treat a throwing `checkpoint()` as data loss for that batch, not
 as a retryable no-op. See [Failure modes / durability](#failure-modes--durability).
 
-> Note: `journal.hpp`'s doxygen still describes this as "at-least-once"; that
-> phrasing is imprecise for the actual watermark-advances-first behavior. This
-> spec is the authoritative description.
+#### Concurrency and ordering
+
+`checkpoint()` runs its entire body under a dedicated forwarding mutex, distinct
+from the mutex that guards `append()`/`entries()`/the history. Two effects:
+
+- **Serialized forwarding.** Concurrent checkpoints never interleave. The
+  checkpoint that selects its pending batch and advances the watermark first is
+  also the one that forwards to `durableSink` first, and its `durableSink.append()`
+  calls all complete before the next checkpoint's begin. Entries therefore reach
+  the durable sink in strictly nondecreasing append order — the append-order
+  identity the sink relies on holds even under concurrent checkpointing. Without
+  this, two checkpoints could each grab a disjoint pending slice under the
+  history mutex, release it, then race on the unlocked forward phase, letting
+  batches land at the sink out of order.
+- **Appends still progress during I/O.** The history mutex is held only briefly —
+  to select the pending entries and advance the watermark — and is released
+  *before* the sink's `append()`/`flush()` runs. A slow durable sink does not
+  block ordinary `append()` calls. The lock order is always forwarding-mutex
+  then history-mutex, and no path holds the history mutex while acquiring the
+  forwarding mutex, so there is no deadlock.
+
+#### undo / checkpoint / coalescing interaction
+
+The checkpoint watermark is the **highest committed entry `seq`**, not an index
+into the mutable `_all` history. This is what makes checkpointing coherent with
+both coalescing and `undoLast()`:
+
+- **Coalescing.** `checkpoint()` selects every entry whose `seq` exceeds the
+  watermark, coalesces that set, forwards it, and advances the watermark to the
+  highest `seq` in the batch. `seq` is assigned once at `append()` and never
+  reused, so it is a stable identity even though coalescing forwards *fewer*
+  entries than it consumes. An index-based watermark cannot express "these
+  specific entries are committed" once coalescing collapses several source
+  entries into one.
+- **Undo.** `undoLast()` pops the tail of `_all` and never moves the watermark.
+  Popping a not-yet-checkpointed tail entry simply means a later `checkpoint()`
+  no longer sees it (its `seq` is gone from the history). Popping an
+  already-checkpointed entry does not lower the watermark, so a later
+  `checkpoint()` never re-forwards a coalesced-away, already-committed entry —
+  durable state is monotonic and forward-only. A fresh action appended after an
+  undo gets a new, higher `seq` and is forwarded exactly once; it is never
+  confused with a removed entry, because identity is by `seq`, not position.
+- **Undo of a checkpointed entry is a divergence, not a rollback.** Since the
+  durable sink is append-only, undoing an entry a checkpoint already forwarded
+  leaves that entry durable while the reconstructed in-memory history no longer
+  contains it. `SessionLog` does not attempt to reconcile the two; an
+  application that must durably reverse a checkpointed action records a
+  compensating action instead.
 
 ## replay()
 
@@ -265,6 +324,48 @@ Thread-safe.
 The state is a function-local static (`detail::defaultActionLogState()`), not a
 namespace-scope global, so it is safe regardless of translation-unit init order.
 
+## Attaching a log to remote instances
+
+The process-wide default and `IModelHolder::attachActionLog` cover local mode,
+but for a remote/simulated-remote topology the client never owns the model
+instance — `RemoteServer` creates and holds it — so a log attached via the
+client's `HandlerBinding` factory is never populated (that factory is not even
+invoked server-side). `RemoteServer::LogProvider` closes that gap. It is
+declared in `remote.hpp`, not the journal headers, but it is the fourth way a
+`journal::IActionLog` gets attached to an instance and is documented here for
+completeness.
+
+```cpp
+// RemoteServer::LogProvider
+using LogProvider = std::function<
+    std::shared_ptr<morph::journal::IActionLog>(
+        std::string_view modelType, std::string_view contextKey)>;
+
+void RemoteServer::setLogProvider(LogProvider provider);   // thread-safe
+```
+
+- **Where `contextKey` comes from.** The client sets
+  `HandlerBinding::contextKey`; `SimulatedRemoteBackend::registerModelWithContext`
+  (the default `Backend` override drops it) carries it in the `register`
+  wire envelope as `wire::Envelope::contextKey` (`wire::makeRegister(typeId,
+  contextKey)`), defaulting to empty.
+- **When the provider is consulted.** On each `register` envelope whose
+  `contextKey` is **non-empty**, `RemoteServer` invokes the provider
+  synchronously with `(typeId, contextKey)`. An empty `contextKey` skips the
+  provider entirely — the instance is registered with no log. A provider that
+  returns `nullptr` also attaches no log; otherwise the returned sink is attached
+  via `holder->attachActionLog(log, contextKey)`, so `contextKey` becomes the
+  entry `entityKey`.
+- **Installing / removing.** `setLogProvider(nullptr)` removes a previously
+  installed provider (subsequent registrations get no log). The provider slot is
+  guarded by its own mutex, and the provider is copied out under that lock before
+  being called, so `setLogProvider` is safe to call concurrently with request
+  handling.
+
+This is the only recording path for a genuinely remote topology: recording is
+server-side, keyed by the per-instance identity the client chose. See
+`bridge.md` and `backend.md` for the surrounding wiring.
+
 ## ScopedActionLog
 
 RAII helper that installs a default action log for its lifetime and restores the
@@ -311,6 +412,11 @@ All symbols live in `namespace morph::journal`.
 | `defaultActionLog` | free function | `[[nodiscard]] std::shared_ptr<IActionLog> defaultActionLog()`. Thread-safe. |
 | `ScopedActionLog` | class | RAII: saves previous default, restores on destruction. `explicit ScopedActionLog(std::shared_ptr<IActionLog>)`. Copy/move deleted. |
 
+The remote attachment path lives outside this namespace: `morph::backend::RemoteServer::LogProvider`
+(a `std::function<std::shared_ptr<IActionLog>(std::string_view modelType, std::string_view contextKey)>`)
+and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
+[Attaching a log to remote instances](#attaching-a-log-to-remote-instances).
+
 ### State reconstruction
 
 | Symbol | Kind | Notes |
@@ -326,7 +432,9 @@ All symbols live in `namespace morph::journal`.
 | Entries are never removed | **Append-only, no deletion API** | Permanent audit trail — unlike `IOfflineQueue` whose `markDone()` deletes retried items. |
 | Default log is a function-local static | **`detail::defaultActionLogState()` returns a `pair<mutex, shared_ptr>`** | Safe regardless of translation-unit init order, unlike a namespace-scope global. |
 | `SessionLog::checkpoint` advances the watermark *before* forwarding | **At-most-once / forward-only** | A checkpoint is a forward-only commit point, not a transaction to retry: the watermark advances first, so a throwing durable sink drops that batch permanently. (`IOfflineQueue`'s retry semantics do *not* carry over — the shared shape is superficial.) |
-| `SessionLog::undoLast` uses `replay()` | **No inverse operations on actions** | Replays the shorter prefix against a fresh model — no per-action undo logic needed. |
+| Checkpoint watermark is a committed-`seq` threshold, not an `_all` index | **Track committed state by entry identity** | `seq` is assigned once and never reused, so it stays a valid commit marker even as coalescing forwards fewer entries than it consumes and as `undoLast()` pops tail entries. A raw index into the mutable `_all` vector cannot: it silently shifts meaning when entries are removed, which is the root of the undo/coalescing incoherence this replaces. |
+| `checkpoint()` forwarding is serialized by a dedicated mutex | **Ordered, non-blocking forwarding** | Holding a forwarding mutex across the whole body keeps concurrent checkpoints from racing on the unlocked forward phase and landing batches at the sink out of append order. It is a *separate* mutex from the history lock (held only briefly for slice + watermark), so a slow sink never blocks `append()`. |
+| `SessionLog::undoLast` uses `replay()` | **No inverse operations on actions** | Replays the shorter prefix against a fresh model — no per-action undo logic needed. Undo rewinds only in-memory history and never moves the watermark; reversing a checkpointed action durably needs a compensating action. |
 | `FileActionLog::seq` is process-local | **Fresh per process, not resumed from disk** | `seq` is a monotonic order key within one process instance, not a cross-restart durable identifier. On-disk order is append order; `entries()` returns in that order regardless of `seq` gaps. |
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
@@ -362,6 +470,16 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   mutate a live instance; the reconstructed pre-undo state lives only in the
   returned holder (whose default log is detached, so using it records nothing
   into the live trail).
+- **The checkpoint watermark is monotonic and identity-based.** It is the
+  highest committed entry `seq`, never an index into `_all`, and it never
+  decreases. `checkpoint()` forwards exactly the entries with `seq` above it and
+  then raises it; `undoLast()` never lowers it. Consequently a coalesced-away,
+  already-committed entry is never re-forwarded, and durable state advances
+  forward-only regardless of interleaved undos and checkpoints.
+- **Concurrent checkpoints forward in append order.** `checkpoint()` serializes
+  its whole body under a dedicated forwarding mutex, so no two checkpoints
+  interleave their `append()` calls at the durable sink; entries reach the sink
+  in strictly nondecreasing append order even under concurrent checkpointing.
 
 ## Failure modes / durability
 

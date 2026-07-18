@@ -2,10 +2,12 @@
 
 #pragma once
 #include <atomic>
+#include <cstdint>
 #include <format>
 #include <functional>
 #include <mutex>
 #include <print>
+#include <string>
 #include <string_view>
 
 namespace morph::log {
@@ -46,8 +48,65 @@ constexpr std::string_view levelName(LogLevel level) noexcept {
 /// @brief Sink function type used internally for log output.
 using Logger = std::function<void(LogLevel, std::string_view)>;
 
+/// @brief Escapes newline and control characters so a message cannot forge log
+///        lines (log injection).
+///
+/// A message is a single logical record; the default sink emits it as one line.
+/// User-controlled text containing `\n`, `\r`, or other C0 control bytes could
+/// otherwise splice a forged `[ERROR] ...` line into the stream or corrupt a
+/// line-oriented log parser. This replaces CR/LF/TAB with their C-style escapes
+/// (`\n`, `\r`, `\t`) and any remaining control byte (`< 0x20`, or `0x7f` DEL)
+/// with a `\xHH` escape, leaving printable text (including non-ASCII UTF-8
+/// continuation bytes `>= 0x80`) untouched. It is a cheap single pass with no
+/// per-byte escaping work on the common (clean) path (just one string copy).
+/// @param msg Raw message to sanitize.
+/// @return @p msg with control characters escaped; the same bytes if already clean.
+inline std::string sanitizeLogLine(std::string_view msg) {
+    auto needsEscape = [](unsigned char chr) { return chr < 0x20 || chr == 0x7f; };
+    std::size_t firstBad = std::string_view::npos;
+    for (std::size_t i = 0; i < msg.size(); ++i) {
+        if (needsEscape(static_cast<unsigned char>(msg[i]))) {
+            firstBad = i;
+            break;
+        }
+    }
+    if (firstBad == std::string_view::npos) {
+        return std::string{msg};  // clean: one copy, no per-char work
+    }
+    std::string out;
+    out.reserve(msg.size() + 8);
+    out.append(msg.substr(0, firstBad));
+    static constexpr std::string_view kHex = "0123456789abcdef";
+    for (std::size_t i = firstBad; i < msg.size(); ++i) {
+        const auto chr = static_cast<unsigned char>(msg[i]);
+        switch (chr) {
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
+            default:
+                if (needsEscape(chr)) {
+                    out += "\\x";
+                    out.push_back(kHex[chr >> 4]);
+                    out.push_back(kHex[chr & 0x0f]);
+                } else {
+                    out.push_back(static_cast<char>(chr));
+                }
+                break;
+        }
+    }
+    return out;
+}
+
 struct LogState {
-    Logger sink = [](LogLevel lvl, std::string_view msg) { std::println(stderr, "[{}] {}", levelName(lvl), msg); };
+    Logger sink = [](LogLevel lvl, std::string_view msg) {
+        std::println(stderr, "[{}] {}", levelName(lvl), sanitizeLogLine(msg));
+    };
     // Atomic so the level check is a lock-free fast path: `logFormat` and `log`
     // can reject a suppressed message without touching `mtx` or formatting it.
     std::atomic<LogLevel> minLevel{LogLevel::debug};

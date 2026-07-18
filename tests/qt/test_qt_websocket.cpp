@@ -332,6 +332,69 @@ TEST_CASE("morph::qt::QtWebSocketBackend reconnects to a fresh server on the sam
     REQUIRE(result.load() == 42);
 }
 
+// FIX 3 — a register whose reply never arrives (socket never connected or
+// dropped) must fail fast with a "register failed: disconnected" error instead
+// of parking the nested QEventLoop in sendSync forever. registerModel() is what
+// Bridge/BridgeHandler construction calls, so a hang here would freeze the whole
+// Qt thread the moment a handler is created against a dead connection.
+
+TEST_CASE("morph::qt::QtWebSocketBackend: registerModel on a never-connected socket throws, does not hang",
+          "[qt][ws][lifecycle][disconnect]") {
+    ensureApp();
+    // Port 1 is reserved and never listening — the socket never reaches Connected.
+    QUrl url{QString("ws://127.0.0.1:1")};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE_FALSE(backend.waitForConnected(200));
+
+    bool threw = false;
+    std::string what;
+    try {
+        (void)backend.registerModel("WsEchoModel", nullptr);
+    } catch (const std::exception& exc) {
+        threw = true;
+        what = exc.what();
+    }
+    REQUIRE(threw);
+    REQUIRE(what.find("register failed") != std::string::npos);
+    REQUIRE(what.find("disconnected") != std::string::npos);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: register after the server closes fails instead of hanging",
+          "[qt][ws][lifecycle][disconnect]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    // One good register while connected.
+    auto mid = backend.registerModel("WsEchoModel", nullptr);
+    REQUIRE(mid.v != 0U);
+
+    // Close the server and drain the disconnect notification so the backend's
+    // _connected flag flips to false.
+    wsServer->close();
+    wsServer.reset();
+    pumpUntil([] { return false; }, 20);
+
+    // A register now must fail fast (the up-front connected check in sendSync
+    // trips) rather than park a nested event loop that never resolves.
+    bool threw = false;
+    std::string what;
+    try {
+        (void)backend.registerModel("WsEchoModel", nullptr);
+    } catch (const std::exception& exc) {
+        threw = true;
+        what = exc.what();
+    }
+    REQUIRE(threw);
+    REQUIRE(what.find("register failed") != std::string::npos);
+}
+
 TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected signal", "[qt][ws][lifecycle]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};

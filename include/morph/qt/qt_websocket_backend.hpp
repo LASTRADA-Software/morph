@@ -38,10 +38,11 @@ struct QtWebSocketBackendConfig {
 
 /// @brief `IBackend` implementation that communicates with a `RemoteServer` over WebSocket.
 ///
-/// All `registerModel()` and `deregisterModel()` calls are synchronous (block the
-/// calling thread via a nested `QEventLoop` until the server replies). `execute()`
-/// is asynchronous: it assigns a call-id, sends the message, and resolves the
-/// returned `Completion` when the matching reply arrives.
+/// `registerModel()` is synchronous (blocks the calling thread via a nested
+/// `QEventLoop` until the server replies). `deregisterModel()` is fire-and-forget
+/// (it sends the message without waiting, avoiding a nested event loop during
+/// destruction). `execute()` is asynchronous: it assigns a call-id, sends the
+/// message, and resolves the returned `Completion` when the matching reply arrives.
 ///
 /// @par TLS
 /// Pass a `QSslConfiguration` to enable `wss://`. For self-signed certificates
@@ -90,7 +91,12 @@ public:
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override;
 
-    /// @brief Sends a `deregister` message and blocks until the server acknowledges.
+    /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
+    ///
+    /// No acknowledgement is awaited, which avoids a nested `QEventLoop` during
+    /// destruction (that can trip Qt asserts). Note the server performs no
+    /// connection-scoped cleanup: an undelivered or lost `deregister` leaves the
+    /// model registered on the server indefinitely.
     ///
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override;

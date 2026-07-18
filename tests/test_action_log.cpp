@@ -17,10 +17,16 @@
 #include <morph/remote.hpp>
 #include <morph/session.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <string_view>
+#include <thread>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -509,6 +515,117 @@ TEST_CASE("SessionLog::undoLast: clamps the checkpoint position when undoing pas
     // covered the one remaining entry before the undo) rather than re-sending it.
     session->checkpoint(durable, dispatcher);
     REQUIRE(durable.entries().size() == 2);
+}
+
+// ── Bug B: undoLast after a coalescing checkpoint must not resurrect a
+// forwarded entry ────────────────────────────────────────────────────────────
+//
+// SetNickname coalesces, so a checkpoint over [SetNickname(a), SetNickname(b)]
+// forwards a single entry (b). The full-fidelity history still holds two raw
+// entries. undoLast pops the raw tail, but a subsequent checkpoint must never
+// re-forward the coalesced-away entry `a`: durable state stays monotonic.
+
+TEST_CASE("SessionLog::undoLast: a coalescing checkpoint never re-forwards an undone entry",
+          "[action_log][journal]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALSetNickname>("AL_Model", "AL_SetNickname");
+
+    auto nickA = morph::model::ActionTraits<ALSetNickname>::toJson(ALSetNickname{.name = "a"});
+    auto nickB = morph::model::ActionTraits<ALSetNickname>::toJson(ALSetNickname{.name = "b"});
+
+    auto session = std::make_shared<SessionLog>();
+    session->append(makeEntry("AL_Model", "acct-b", "AL_SetNickname", nickA, "a"));
+    session->append(makeEntry("AL_Model", "acct-b", "AL_SetNickname", nickB, "b"));
+
+    InMemoryActionLog durable;
+    session->checkpoint(durable, dispatcher);  // coalesces [a,b] -> forwards one entry (b)
+    REQUIRE(durable.entries().size() == 1);
+    REQUIRE(durable.entries()[0].result == "b");
+
+    // undoLast pops the raw tail (b), leaving one raw entry (a) in history.
+    session->undoLast("AL_Model", registry, dispatcher);
+    REQUIRE(session->entries().size() == 1);
+
+    // The coalescing batch already committed the SetNickname; `a` must NOT be
+    // re-forwarded — durable state is forward-only and never regresses.
+    session->checkpoint(durable, dispatcher);
+    REQUIRE(durable.entries().size() == 1);  // still just the one committed entry
+    REQUIRE(durable.entries()[0].result == "b");
+
+    // A genuinely new action appended after the undo must still be forwarded
+    // exactly once. This is the case a raw-index watermark gets wrong: the new
+    // entry reuses a vector index that a coalesced-away, already-committed entry
+    // previously occupied, so an index-based watermark would wrongly skip it (or
+    // an over-eager clamp would re-forward the old one). Committed state must be
+    // tracked by entry identity, not by position in the mutable history.
+    auto nickC = morph::model::ActionTraits<ALSetNickname>::toJson(ALSetNickname{.name = "c"});
+    session->append(makeEntry("AL_Model", "acct-b", "AL_SetNickname", nickC, "c"));
+    session->checkpoint(durable, dispatcher);
+
+    auto out = durable.entries();
+    REQUIRE(out.size() == 2);       // the original committed entry + the new one
+    REQUIRE(out[0].result == "b");  // unchanged, never regressed
+    REQUIRE(out[1].result == "c");  // the new entry, forwarded exactly once
+}
+
+// ── Bug A: concurrent checkpoint() must forward in append order ──────────────
+//
+// Two threads checkpoint the same SessionLog concurrently. Each grabs a
+// disjoint pending slice under the lock; the forward phase must be serialized
+// so entries reach the durable sink in strictly nondecreasing append order —
+// the slice taken first is forwarded first, with no interleaving.
+
+namespace {
+/// Durable sink that records the (original, pre-restamp) `seq` of every entry it
+/// receives, in the exact order append() is called. Used to assert the forward
+/// phase preserves append order under concurrency.
+class OrderRecordingSink : public IActionLog {
+public:
+    void append(LogEntry entry) override {
+        std::scoped_lock const lock{_mtx};
+        _received.push_back(entry.seq);
+    }
+    void flush() override {}
+    [[nodiscard]] std::vector<LogEntry> entries(std::string_view = {}) const override { return {}; }
+    [[nodiscard]] std::vector<uint64_t> received() const {
+        std::scoped_lock const lock{_mtx};
+        return _received;
+    }
+
+private:
+    mutable std::mutex _mtx;
+    std::vector<uint64_t> _received;
+};
+}  // namespace
+
+TEST_CASE("SessionLog::checkpoint: concurrent checkpoints forward in strictly nondecreasing append order",
+          "[action_log][journal]") {
+    morph::model::detail::ActionDispatcher dispatcher;  // no actions registered -> nothing coalesces
+    auto session = std::make_shared<SessionLog>();
+
+    constexpr int kEntries = 2000;
+    for (int i = 0; i < kEntries; ++i) {
+        session->append(makeEntry("M", "e", "A"));  // seq runs 1..kEntries in append order
+    }
+
+    OrderRecordingSink sink;
+    std::atomic<bool> go{false};
+    auto worker = [&] {
+        while (!go.load()) { /* spin until both threads are ready */
+        }
+        session->checkpoint(sink, dispatcher);
+    };
+    std::thread t1{worker};
+    std::thread t2{worker};
+    go.store(true);
+    t1.join();
+    t2.join();
+
+    auto got = sink.received();
+    REQUIRE(got.size() == static_cast<std::size_t>(kEntries));  // every entry forwarded exactly once
+    REQUIRE(std::is_sorted(got.begin(), got.end()));            // and in strictly append order
 }
 
 // ── setActionLog / defaultActionLog / ScopedActionLog ───────────────────────

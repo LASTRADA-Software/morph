@@ -24,7 +24,7 @@
 ///   renderer can lay fields out in declaration order (JSON object key order
 ///   is not reliable once schemas pass through DOMs/maps).
 /// - **`x-unitAlternatives`** — for `Quantity` members whose unit system
-///   declares convertible units (`UnitTraits<E>::alternatives`): an array of
+///   declares convertible units (`UnitTraits<E>::relations`): an array of
 ///   `{id, display, decimals, num, den}` entries, where `num/den` is the
 ///   exact alternative-to-canonical ratio. Renderers offer a unit selector
 ///   and recalculate entered values exactly on switch; payloads always carry
@@ -79,9 +79,15 @@ namespace morph::forms {
 
 /// @brief Concept: a field type with an internal empty state (`Quantity`,
 ///        `Choice`, `Timestamp`, or any user type exposing `hasValue()`).
+///
+/// `hasValue()` must be `noexcept`: `allRequiredEngaged` is `noexcept` and calls
+/// it on every member, so a throwing `hasValue()` would cross a `noexcept`
+/// boundary and call `std::terminate`. Requiring it here turns that into a
+/// compile-time rejection instead — a user field with a throwing `hasValue()`
+/// simply does not satisfy the concept.
 template <typename T>
 concept EmptyCapableField = requires(const T& field) {
-    { field.hasValue() } -> std::convertible_to<bool>;
+    { field.hasValue() } noexcept -> std::convertible_to<bool>;
 };
 
 namespace detail {
@@ -202,6 +208,51 @@ template <typename A>
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace detail
+
+/// @brief Retags every `Quantity` member of @p action to its **declared**
+///        precision, so a stored value matches the precision the schema
+///        advertises via `x-decimalPlaces`.
+///
+/// A wire payload carries each `Quantity` with its own runtime `dp`, which a
+/// client may set to anything. Left alone, the field is stored at the client's
+/// `dp`, silently contradicting the schema's `x-decimalPlaces` (which is the
+/// field's compile-time *declared* precision, `Quantity<U, Dec>::declaredDecimals`).
+/// Calling this on the decode path — right after `ActionTraits<A>::fromJson` and
+/// before dispatch — re-tags each `Quantity` to `declaredPrecision()` so the two
+/// agree. `atDeclaredPrecision()` only changes the value's precision tag (an
+/// exact `Rational` re-rounding to the declared decimals); an empty `Quantity`
+/// is left empty. Non-`Quantity` members are untouched.
+///
+/// This is the enforcement half of the `x-decimalPlaces` contract: the schema
+/// advertises the declared precision and the dispatch path now stores at that
+/// precision, rather than honouring whatever `dp` the client sent.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Draft action whose `Quantity` members are retagged in place.
+template <typename A>
+constexpr void reconcileDeclaredPrecision(A& action) {
+    using Plain = std::remove_cvref_t<A>;
+    // Only actions glaze can reflect member-by-member (aggregates, or types with
+    // a `glz::meta`) can be walked here. Actions with hand-written codecs and no
+    // reflectable shape — and there is nothing to retag on them anyway — fall
+    // through as a no-op so this stays safe to call for *every* registered
+    // action from the dispatch path, not only form actions.
+    if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
+        constexpr auto memberCount = glz::reflect<Plain>::size;
+        auto memberTie = glz::to_tie(action);
+        [&]<std::size_t... I>(std::index_sequence<I...>) {
+            auto retag = [&]<std::size_t Idx>() {
+                auto& member = glz::get_member(action, get<Idx>(memberTie));
+                using Member = std::remove_cvref_t<decltype(member)>;
+                if constexpr (units::isQuantity<Member>) {
+                    member = member.atDeclaredPrecision();
+                }
+            };
+            (retag.template operator()<I>(), ...);
+        }(std::make_index_sequence<memberCount>{});
+    } else {
+        static_cast<void>(action);
+    }
+}
 
 /// @brief Whether every required empty-capable member of @p action is
 ///        engaged (has a value).

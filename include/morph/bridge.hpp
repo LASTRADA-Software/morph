@@ -16,6 +16,7 @@
 
 #include "backend.hpp"
 #include "completion.hpp"
+#include "forms.hpp"
 #include "registry.hpp"
 #include "session.hpp"
 
@@ -178,8 +179,17 @@ public:
     /// Each `.onError(...)` callback receives a `BridgeDestroyedError`. In-flight
     /// server replies that arrive after destruction are no-ops because each
     /// `CompletionState::setValue`/`setException` is idempotent.
+    ///
+    /// Before cancelling, the active backend's reconnect handler is cleared: the
+    /// installed handler captures `this`, and a co-owned backend that outlives the
+    /// `Bridge` could otherwise fire it after destruction and dereference freed
+    /// memory. Clearing it here (outside `_mtx` — `setReconnectHandler` only stores
+    /// a callback and never re-enters the bridge) closes the common case; the
+    /// handler additionally guards on `_liveness` so a reconnect already in flight
+    /// on the transport thread becomes a no-op too. See docs/spec/concurrency_and_lifetimes.md.
     ~Bridge() {
         if (auto active = loadBackend()) {
+            active->setReconnectHandler(nullptr);
             active->cancelPending(std::make_exception_ptr(::morph::backend::BridgeDestroyedError{}));
         }
     }
@@ -250,9 +260,15 @@ public:
     /// fail naturally.
     ///
     /// @note Lock ordering: `Bridge::_mtx` is acquired before
-    ///       `LocalBackend::_regMtx`. `onBackendChanged()` implementations must
-    ///       **not** call `registerHandler()` or `deregisterHandler()` — those
-    ///       also acquire `_mtx` and would deadlock.
+    ///       `LocalBackend::_regMtx`. `notifyBackendChanged()` runs under `_mtx`
+    ///       but only **posts** each model's `onBackendChanged()` onto that
+    ///       model's strand (see `LocalBackend::notifyBackendChanged`); the model
+    ///       body runs later on a pool thread, off `_mtx`. So an
+    ///       `onBackendChanged()` implementation **may** re-enter the bridge
+    ///       (`switchBackend`/`registerHandler`/`deregisterHandler`) — it acquires
+    ///       `_mtx` freshly on the strand thread rather than deadlocking on the
+    ///       switch caller's still-held lock. It is also strand-serialised against
+    ///       `execute` on the same model, so it needs no locking of model state.
     ///
     /// @param newBackend Replacement backend. Ownership is transferred.
     void switchBackend(std::unique_ptr<::morph::backend::detail::IBackend> newBackend) {
@@ -404,7 +420,18 @@ public:
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
             .then([typedState](const std::shared_ptr<void>& vAny) {
-                typedState->setValue(std::move(*static_cast<R*>(vAny.get())));
+                // Guard the value-forwarding: if R's move/copy throws (or the cast
+                // is somehow wrong), route the exception to the typed completion's
+                // error sink instead of letting it escape the callback executor —
+                // where ThreadPoolExecutor swallows it (the outer completion would
+                // then hang forever) and QtExecutor lets it reach the event loop
+                // and std::terminate. Mirrors the forwarding guard in remote.hpp's
+                // SimulatedRemoteBackend::execute. See docs/spec/bridge.md.
+                try {
+                    typedState->setValue(std::move(*static_cast<R*>(vAny.get())));
+                } catch (...) {
+                    typedState->setException(std::current_exception());
+                }
             })
             .onError([typedState](const std::exception_ptr& err) { typedState->setException(err); });
         return typed;
@@ -442,9 +469,18 @@ private:
         }
         // The handler is invoked on the backend's transport thread. We keep a
         // weak_ptr to the same shared backend so a stale callback fired after a
-        // switchBackend is a no-op.
+        // switchBackend is a no-op, and a weak_ptr to the bridge's liveness token
+        // so a callback fired after the Bridge is destroyed (a co-owned backend
+        // outliving its bridge) is also a no-op instead of a use-after-free on
+        // `this`. `~Bridge` additionally clears the handler; this guard covers a
+        // reconnect that is already in flight when the Bridge is torn down.
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        backend->setReconnectHandler([this, weakBackend] {
+        std::weak_ptr<const void> const weakLiveness{_liveness};
+        backend->setReconnectHandler([this, weakBackend, weakLiveness] {
+            auto aliveToken = weakLiveness.lock();
+            if (!aliveToken) {
+                return;  // The Bridge is gone; do not touch `this`.
+            }
             auto pinned = weakBackend.lock();
             std::scoped_lock const lock{_mtx};
             if (!pinned || pinned != loadBackend()) {
@@ -777,10 +813,38 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
         auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
         try {
             Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
+            // Retag any Quantity fields to their declared precision so the stored
+            // value matches the schema's advertised `x-decimalPlaces`, rather than
+            // silently keeping whatever runtime `dp` the client sent. No-op for
+            // actions with no Quantity members. See docs/spec/forms.md.
+            ::morph::forms::reconcileDeclaredPrecision(action);
+            // Enforce the action's validator on the request/reply dispatch path,
+            // just as the reactive `set<>` path does via `tryFireImpl`. Without
+            // this, a submitted action that fails its readiness/validity check
+            // (empty required Quantity, out-of-range field, …) would reach the
+            // handler and either produce a silently wrong result or force every
+            // handler to re-check by hand. `ActionValidator<Action>::ready`
+            // auto-detects a `bool validate() const` member and defaults to
+            // `true` for actions with no validator, so this is a no-op for
+            // unvalidated actions and a hard gate for validated ones. An invalid
+            // action resolves the completion through `setException` (a proper
+            // error reply upstream), never a bad execution.
+            if (!::morph::model::ActionValidator<Action>::ready(action)) {
+                throw std::invalid_argument{"action failed validation: " +
+                                            std::string{::morph::model::ActionTraits<Action>::typeId()}};
+            }
             handler->template execute<Action>(std::move(action))
                 // NOLINTNEXTLINE(performance-unnecessary-value-param) — lambda captures the result by value
                 .then([resultState](auto result) {
-                    resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
+                    // Guard the JSON forwarding for the same reason as executeVia:
+                    // a throwing resultToJson (or the move it does) must land on
+                    // the error sink, not escape the callback executor and either
+                    // hang the completion or terminate the Qt loop.
+                    try {
+                        resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
+                    } catch (...) {
+                        resultState->setException(std::current_exception());
+                    }
                 })
                 .onError([resultState](const std::exception_ptr& err) { resultState->setException(err); });
         } catch (...) {

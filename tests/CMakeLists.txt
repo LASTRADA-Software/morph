@@ -4,6 +4,7 @@ add_executable(morph_tests
     test_executor_extra.cpp
     test_strand.cpp
     test_strand_extra.cpp
+    test_strand_race.cpp
     test_completion.cpp
     test_completion_extra.cpp
     test_model.cpp
@@ -14,6 +15,8 @@ add_executable(morph_tests
     test_bridge_remote.cpp
     test_bridge_execute_json.cpp
     test_remote_extra.cpp
+    test_security_fixes.cpp
+    test_bridge_lifetime.cpp
     test_dispatch_di.cpp
     test_handler_binding.cpp
     test_switch_backend.cpp
@@ -23,6 +26,7 @@ add_executable(morph_tests
     test_reconnect_coordinator.cpp
     test_offline_integration.cpp
     test_conflict_resolution.cpp
+    test_bridge_fixes.cpp
     test_completion_branches.cpp
     test_issues.cpp
     test_concurrency_invariants.cpp
@@ -31,6 +35,7 @@ add_executable(morph_tests
     test_coverage_extra.cpp
     test_coverage_push95.cpp
     test_server_limits.cpp
+    test_wire_hardening.cpp
     test_action_log.cpp
     test_action_log_phase2.cpp
     test_rational.cpp
@@ -38,6 +43,7 @@ add_executable(morph_tests
     test_quantity_forms.cpp
     test_datetime.cpp
     test_session_auth.cpp
+    test_policy_hardening.cpp
 )
 
 target_link_libraries(morph_tests

@@ -29,9 +29,18 @@ which action to call and which result fields to use without hardcoding anything.
 
 ## FixedString — an NTTP compile-time string
 
-`FixedString<N>` is a structural type that can appear as a non-type template
-parameter. It stores `N` characters (including the terminating null) in a
-`std::array<char, N>` and is constructed `consteval` from a string literal.
+`morph::forms::FixedString<N>` is a structural type that can appear as a
+non-type template parameter. It stores `N` characters (including the terminating
+null) in a `std::array<char, N>` and is constructed `consteval` from a string
+literal.
+
+It is an **alias** for the single shared definition `morph::detail::FixedString`
+(`include/morph/detail/fixed_string.hpp`). The units layer's `NamedQuantity`
+(see [quantity_type.md](quantity_type.md)) uses the *same* underlying type via
+its own `morph::units::detail::FixedString` alias, so there is exactly one
+`FixedString` definition in the codebase, not two look-alikes. `morph::forms::`
+and `morph::units::detail::` are kept as names for source compatibility and
+layer-local readability.
 
 | Member | Signature | Notes |
 |---|---|---|
@@ -186,6 +195,7 @@ no problem, since the wire value is validated by the action, not by the schema.
 | Blank state | **`std::nullopt` in the payload** | Same pattern as `Quantity` and `Timestamp`; a non-optional `Choice` member is required by the forms rules. |
 | Glaze serialisation | **Through the `value` member directly** | The glaze `meta` specialisation maps `value` so the type serialises as its nullable payload, with the type name `"Choice"`. |
 | Equality | **Total, through `std::optional`'s semantics** | Empty equals empty; engaged values compare by `T`'s equality. |
+| Converting constructors | **Both the `T` and `std::optional<T>` ctors are implicit** | Lets a `Choice` field be assigned directly from a bare value or an optional — `draft.slot = 4` and `slot = std::optional<int64_t>{}` both work — so authors need not name the field type at every assignment. `Choice` has no member the two ctors could ambiguate on, so an implicit `T` and an implicit `std::optional<T>` coexist without a conversion clash. |
 
 ## Usage example
 
