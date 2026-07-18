@@ -192,7 +192,14 @@ struct U128 {
 /// @brief Multiplies two u64 exactly into 128 bits (for exact fraction comparison).
 [[nodiscard]] constexpr U128 mulU64(std::uint64_t lhs, std::uint64_t rhs) noexcept {
 #ifdef __SIZEOF_INT128__
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wpedantic"
+#  endif
     auto const product = static_cast<unsigned __int128>(lhs) * rhs;
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic pop
+#  endif
     return U128{.hi = static_cast<std::uint64_t>(product >> 64), .lo = static_cast<std::uint64_t>(product)};
 #else
     // Portable 32-bit limb multiplication (MSVC has no __int128).

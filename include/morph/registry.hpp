@@ -78,7 +78,6 @@ concept HasValidate = requires(const A& act) {
 /// and keeping the predicate next to the action keeps the GUI side oblivious
 /// to model internals.
 ///
-/// @par Example — member function
 /// @code
 /// struct FormAction {
 ///     double a;

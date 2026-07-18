@@ -1,5 +1,6 @@
 function(apply_warnings target)
     target_compile_options(${target} PRIVATE
+        # ── MSVC ──────────────────────────────────────────────────────────────
         $<$<CXX_COMPILER_ID:MSVC>:
             /W4
             /permissive-
@@ -25,6 +26,7 @@ function(apply_warnings target)
             /w14928     # illegal copy-initialization
             /wd4068     # suppress: unknown pragma (e.g. clang pragmas in shared headers)
         >
+        # ── clang-cl (clang on Windows, MSVC ABI) ────────────────────────────
         $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
             -Wno-c++98-compat
             -Wno-c++98-compat-pedantic
@@ -35,13 +37,11 @@ function(apply_warnings target)
             -Wno-shadow-uncaptured-local
             -Wno-unused-command-line-argument
         >>
-
+        # ── GNU / Clang (common baseline) ────────────────────────────────────
         $<$<CXX_COMPILER_ID:GNU,Clang>:
             -Wall
             -Wextra
             -Wpedantic
-        >
-        $<$<CXX_COMPILER_ID:Clang>:
             -Wshadow
             -Wnon-virtual-dtor
             -Wold-style-cast
@@ -55,6 +55,62 @@ function(apply_warnings target)
             -Wimplicit-fallthrough
         >
     )
+
+    # ── Strict mode: warnings-as-errors + maximum diagnostics ──────────────
+    # Controlled by MORPH_ENABLE_STRICT_COMPILATION (default ON in CI).
+    if(MORPH_ENABLE_STRICT_COMPILATION)
+        target_compile_options(${target} PRIVATE
+            $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
+            $<$<CXX_COMPILER_ID:MSVC>:/WX>
+
+            # ── GNU / Clang (common strict) ──────────────────────────────────
+            $<$<CXX_COMPILER_ID:GNU,Clang>:
+                -Wcast-qual
+                -Wformat=2
+                -Wredundant-decls
+                -Winit-self
+                -Wmissing-include-dirs
+                -Wundef
+                -Wswitch-default
+                -Wswitch-enum
+                -Wctor-dtor-privacy
+                -Wpacked
+                -Wdouble-promotion
+                -Wformat-security
+                -Wformat-nonliteral
+                -Wmissing-declarations
+                -Warray-bounds
+            >
+
+            # ── GCC-only (strict) ────────────────────────────────────────────
+            $<$<CXX_COMPILER_ID:GNU>:
+                -Wduplicated-cond
+                -Wduplicated-branches
+                -Wlogical-op
+                -Wuseless-cast
+                -Wrestrict
+                -Warray-bounds=2
+                -Walloc-zero
+                -Wstringop-overflow=4
+                -Wstringop-truncation
+                -Wstrict-overflow=5
+                -Wsuggest-override
+                -Wnoexcept
+                -Wsubobject-linkage
+                -Wtrampolines
+                -Wconditionally-supported
+            >
+
+            # ── Clang-only (strict) ──────────────────────────────────────────
+            $<$<CXX_COMPILER_ID:Clang>:
+                -Wheader-hygiene
+                -Wdocumentation
+                -Wcomma
+                -Wdeprecated
+                -Wshorten-64-to-32
+            >
+        )
+    endif()
 endfunction()
 
 function(apply_sanitizers target mode)

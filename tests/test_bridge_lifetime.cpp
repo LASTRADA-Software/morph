@@ -100,7 +100,7 @@ private:
 // and does not throw, so the fake backend can build the result once; the throw
 // only fires when executeVia's `.then` closure moves it into the typed state.
 struct ThrowOnMove {
-    ThrowOnMove() = default;
+    ThrowOnMove() = default;  // NOLINT (used by model factory)
     ThrowOnMove(const ThrowOnMove&) = default;
     ThrowOnMove& operator=(const ThrowOnMove&) = default;
     // NOLINTNEXTLINE(performance-noexcept-move-constructor)
@@ -147,7 +147,7 @@ struct morph::model::ActionTraits<ThrowAction> {
     using Result = ThrowOnMove;
     static constexpr std::string_view typeId() { return "BL_ThrowAction"; }
     static std::string toJson(const ThrowAction&) { return "{}"; }
-    static ThrowAction fromJson(std::string_view) { return {}; }
+    [[maybe_unused]] static ThrowAction fromJson(std::string_view) { return {}; }
     static std::string resultToJson(const ThrowOnMove&) { return "{}"; }
     static ThrowOnMove resultFromJson(std::string_view) { return {}; }
 };

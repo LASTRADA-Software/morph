@@ -242,15 +242,13 @@ struct UnitAlternative {
 template <typename E>
 struct UnitTraits;
 
-/// @brief Concept: an enum with a `UnitTraits` specialisation.
-/// @tparam E Candidate enum type.
+/// @brief Concept: an enum with a `UnitTraits` specialisation (template param `E`).
 template <typename E>
 concept UnitEnum = std::is_enum_v<E> && requires(E unit) {
     { UnitTraits<E>::meta(unit) } -> std::convertible_to<UnitMeta>;
 };
 
-/// @brief Concept: `UnitTraits<E>` also declares within-dimension `relations`.
-/// @tparam E Candidate enum type.
+/// @brief Concept: `UnitTraits<E>` also declares within-dimension `relations` (template param `E`).
 template <typename E>
 concept HasUnitRelations = requires {
     { UnitTraits<E>::relations };
@@ -307,7 +305,7 @@ struct RatioResult {
 /// @param value A strictly-positive rational.
 /// @return `1 / value`.
 [[nodiscard]] consteval morph::math::Rational reciprocal(const morph::math::Rational& value) {
-    requirePositiveRatio(value);
+    static_cast<void>(requirePositiveRatio(value));    // compile error on a bad ratio
     return morph::math::Rational{morph::math::Numerator{value.denominator},
                                  morph::math::Denominator{value.numerator}, value.decimalPlaces};
 }
@@ -346,7 +344,7 @@ template <typename E>
             bool touches = false;
             if (relation.from == current) {
                 neighbour = relation.to;
-                requirePositiveRatio(relation.fromTo);  // compile error on a bad ratio
+                static_cast<void>(requirePositiveRatio(relation.fromTo));  // compile error on a bad ratio
                 edge = relation.fromTo;
                 touches = true;
             } else if (relation.to == current) {
@@ -426,9 +424,7 @@ template <auto U>
 template <auto U>
 inline constexpr auto kUnitAlternatives = makeAlternatives<U>();
 
-/// @brief Concept: two enumerators of the same enum with distinct values.
-/// @tparam A First enumerator.
-/// @tparam B Second enumerator.
+/// @brief Concept: two enumerators of the same enum with distinct values (template params `A`, `B`).
 template <auto A, auto B>
 concept SameEnumDistinct = std::same_as<decltype(A), decltype(B)> && (A != B);
 
@@ -440,9 +436,7 @@ template <auto U, std::uint32_t DeclaredDecimals = UnitTraits<decltype(U)>::meta
     requires UnitEnum<decltype(U)>
 struct Quantity;
 
-/// @brief Concept: the auto-generated ratio `convert` applies to `From → To`.
-/// @tparam From Source unit enumerator.
-/// @tparam To   Target unit enumerator.
+/// @brief Concept: the auto-generated ratio `convert` applies to `From → To` (template params `From`, `To`).
 template <auto From, auto To>
 concept RatioConvertible = detail::SameEnumDistinct<From, To> && UnitEnum<decltype(From)> &&
                            HasUnitRelations<decltype(From)> && detail::conversionRatio(From, To).found;
@@ -462,18 +456,14 @@ template <auto From, auto To>
 void convert(const Quantity<From>& in, Quantity<To>& out);
 
 /// @brief Concept: the application supplied a `UnitTraits<E>::convert` static
-///        for this pair (a non-ratio override, e.g. °C → °F).
-/// @tparam From Source unit enumerator.
-/// @tparam To   Target unit enumerator.
+///        for this pair (a non-ratio override, e.g. °C → °F) (template params `From`, `To`).
 template <auto From, auto To>
 concept HasUserConvert = requires(Quantity<From> from, Quantity<To>& to) {
     UnitTraits<decltype(From)>::convert(from, to);
 };
 
 /// @brief Concept: `From → To` is convertible — a user override takes
-///        precedence over an auto-generated ratio path.
-/// @tparam From Source unit enumerator.
-/// @tparam To   Target unit enumerator.
+///        precedence over an auto-generated ratio path (template params `From`, `To`).
 template <auto From, auto To>
 concept Convertible =
     detail::SameEnumDistinct<From, To> && (HasUserConvert<From, To> || RatioConvertible<From, To>);

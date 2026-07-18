@@ -58,7 +58,7 @@ inline std::string sha256(std::string_view data) {
                                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
 
     std::vector<uint8_t> msg(data.begin(), data.end());
-    const uint64_t bitLen = static_cast<uint64_t>(msg.size()) * 8;
+    const uint64_t bitLen = msg.size() * 8;
     msg.push_back(0x80);
     while (msg.size() % 64 != 56) {
         msg.push_back(0x00);

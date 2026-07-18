@@ -41,8 +41,9 @@ constexpr std::string_view levelName(LogLevel level) noexcept {
             return "ERROR";
         case LogLevel::off:
             return "OFF  ";
+        default:
+            return "?    ";
     }
-    return "?    ";
 }
 
 /// @brief Sink function type used internally for log output.
@@ -220,7 +221,6 @@ void logError(std::format_string<Args...> fmt, Args&&... args) {
 /// custom sink into other tests. Thread-safe construction and destruction —
 /// the global mutex is acquired briefly during each.
 ///
-/// @par Example
 /// @code
 /// {
 ///     std::vector<std::string> captured;

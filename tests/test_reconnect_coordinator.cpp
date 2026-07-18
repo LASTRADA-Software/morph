@@ -103,7 +103,7 @@ struct Fakes {
         return -1;
     }
 
-    [[nodiscard]] int count(const std::string& name) const {
+    [[nodiscard, maybe_unused]] int count(const std::string& name) const {
         int n = 0;
         for (const auto& e : events) {
             if (e == name) {

@@ -43,10 +43,10 @@ template <>
 struct morph::model::ActionTraits<SecEcho> {
     using Result = std::string;
     static constexpr std::string_view typeId() { return "SEC_Echo"; }
-    static std::string toJson(const SecEcho&) { return "{}"; }
+    [[maybe_unused]] static std::string toJson(const SecEcho&) { return "{}"; }
     static SecEcho fromJson(std::string_view) { return {}; }
     static std::string resultToJson(const std::string& res) { return "\"" + res + "\""; }
-    static std::string resultFromJson(std::string_view json) {
+    [[maybe_unused]] static std::string resultFromJson(std::string_view json) {
         std::string out;
         (void)glz::read_json(out, json);
         return out;
@@ -209,7 +209,7 @@ TEST_CASE("RemoteServer::dispatchExecute: verifying authorizer still stamps the 
     // expiresAtMs must be strictly positive — a zero expiry is now treated as
     // already-expired (never eternal), so mint with a far-future real expiry.
     req.session.token = morph::session::TokenIssuer{secret}.issue(
-        morph::session::SessionToken{.principal = "verified-user", .expiresAtMs = 9'999'999'999'999});
+        morph::session::SessionToken{.principal = "verified-user", .expiresAtMs = 9'999'999'999'999, .roles = {}});
 
     morph::testing::WaitReply waiter;
     server->handle(morph::wire::encode(req), std::ref(waiter));

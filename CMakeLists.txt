@@ -23,6 +23,10 @@ endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
+option(MORPH_ENABLE_STRICT_COMPILATION
+    "Enable strict compilation: treat all warnings as errors with extra diagnostics"
+    ON
+)
 
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
