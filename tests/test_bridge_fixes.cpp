@@ -137,7 +137,7 @@ int waitInt(auto completion) {
 
 }  // namespace
 
-TEST_CASE("Bridge::switchBackend fires onBackendChanged on the model strand — serialised, no race",
+TEST_CASE("Bridge::switchBackend fires onBackendChanged on the model strand - serialised, no race",
           "[bridge][backend-changed]") {
     morph::exec::ThreadPoolExecutor pool1{2};
     morph::exec::ThreadPoolExecutor pool2{2};

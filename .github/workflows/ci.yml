@@ -287,12 +287,14 @@ jobs:
             --suppressions=cmake/valgrind.supp \
             build/gcc-debug/tests/morph_tests
 
-  # ── clang-tidy static analysis ────────────────────────────────────────
+  # ── clang-tidy-diff (changed lines only) ──────────────────────────────
   clang-tidy:
-    name: clang-tidy
+    name: clang-tidy-diff
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history for git diff against base
 
       - name: Cache apt packages
         uses: actions/cache@v4
@@ -331,17 +333,31 @@ jobs:
       - name: Build
         run: cmake --build --preset clang-debug
 
-      - name: Run clang-tidy on library headers and source
+      - name: Run clang-tidy-diff on changed lines
         run: |
-          mapfile -t files < <(find include/morph src tests \
-            \( -name "*.cpp" -o -name "*.hpp" \) \
-            -not -path '*/qt/*')
-          clang-tidy-${{ env.CLANG_VERSION }} \
-            -p build/clang-debug \
-            --extra-arg=-std=c++23 \
-            --warnings-as-errors='*' \
-            "${files[@]}" \
-            2>&1 | tee clang-tidy-report.txt
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="${{ github.event.before }}"
+          fi
+          CLANG_TIDY_DIFF="$(find /usr/lib/llvm-${{ env.CLANG_VERSION }}/share/clang /usr/share/clang \
+            -name 'clang-tidy-diff.py' 2>/dev/null | head -1)"
+          if [ -z "$CLANG_TIDY_DIFF" ]; then
+            echo "::error::clang-tidy-diff.py not found"
+            exit 1
+          fi
+          echo "Base SHA: $BASE_SHA"
+          echo "Script: $CLANG_TIDY_DIFF"
+          git diff -U0 "$BASE_SHA" | \
+            python3 "$CLANG_TIDY_DIFF" \
+              -path build/clang-debug \
+              -clang-tidy-binary clang-tidy-${{ env.CLANG_VERSION }} \
+              -p1 \
+              -j "$(nproc)" \
+              -extra-arg=-std=c++23 \
+              -warnings-as-errors='*' \
+              -quiet \
+              2>&1 | tee clang-tidy-report.txt
 
       - name: Upload clang-tidy report
         if: always()
