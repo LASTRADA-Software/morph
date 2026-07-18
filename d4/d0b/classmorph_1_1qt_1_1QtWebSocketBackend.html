@@ -132,7 +132,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a5b0bba2d347ea69930d4166c541528fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <code>register</code> message to the server and blocks until the reply arrives.  <br /></td></tr>
 <tr class="separator:a5b0bba2d347ea69930d4166c541528fd"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa00b19a8994d4d4f2ca9b9b7a3e3a70a" id="r_aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
-<tr class="memdesc:aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <code>deregister</code> message and blocks until the server acknowledges.  <br /></td></tr>
+<tr class="memdesc:aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <code>deregister</code> message fire-and-forget (does not wait for a reply).  <br /></td></tr>
 <tr class="separator:aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a374300e019ee7e66a133f35c60dd8c74" id="r_a374300e019ee7e66a133f35c60dd8c74"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74">execute</a> (::morph::exec::detail::ModelId mid, ::morph::backend::detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
 <tr class="memdesc:a374300e019ee7e66a133f35c60dd8c74"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <code>execute</code> message and returns a <code>Completion</code> that resolves on reply.  <br /></td></tr>
@@ -149,11 +149,11 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><code>IBackend</code> implementation that communicates with a <code>RemoteServer</code> over WebSocket. </p>
-<p>All <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel()</a></code> and <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a" title="Sends a deregister message and blocks until the server acknowledges.">deregisterModel()</a></code> calls are synchronous (block the calling thread via a nested <code>QEventLoop</code> until the server replies). <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></code> is asynchronous: it assigns a call-id, sends the message, and resolves the returned <code>Completion</code> when the matching reply arrives.</p>
+<p><code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel()</a></code> is synchronous (blocks the calling thread via a nested <code>QEventLoop</code> until the server replies). <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel()</a></code> is fire-and-forget (it sends the message without waiting, avoiding a nested event loop during destruction). <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></code> is asynchronous: it assigns a call-id, sends the message, and resolves the returned <code>Completion</code> when the matching reply arrives.</p>
 <dl class="section user"><dt>TLS</dt><dd>Pass a <code>QSslConfiguration</code> to enable <code>wss://</code>. For self-signed certificates set <code>QSslSocket::VerifyNone</code> on the configuration before passing it in.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. <code><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></code> and the internal message handler are both called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><h2 class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -169,7 +169,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -345,7 +345,8 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Sends a <code>deregister</code> message and blocks until the server acknowledges. </p>
+<p>Sends a <code>deregister</code> message fire-and-forget (does not wait for a reply). </p>
+<p>No acknowledgement is awaited, which avoids a nested <code>QEventLoop</code> during destruction (that can trip Qt asserts). Note the server performs no connection-scoped cleanup: an undelivered or lost <code>deregister</code> leaves the model registered on the server indefinitely.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">mid</td><td>Id of the model to remove on the server. </td></tr>
@@ -434,7 +435,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

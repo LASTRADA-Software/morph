@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127',1,'morph::backend::RemoteServer']]]
+  ['fixedstring_0',['FixedString',['../d1/d8b/choice_8hpp.html#a31801e6f345832a99c0a55b55889c1e0',1,'morph::forms']]]
 ];

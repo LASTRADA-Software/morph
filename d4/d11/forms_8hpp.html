@@ -120,6 +120,10 @@ Concepts</h2></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a6a9c6b0f07868b9478b18542088f5003" id="r_a6a9c6b0f07868b9478b18542088f5003"><td class="memTemplParams" colspan="2">template&lt;typename A &gt; </td></tr>
+<tr class="memitem:a6a9c6b0f07868b9478b18542088f5003"><td class="memTemplItemLeft" align="right" valign="top">constexpr void&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d4/d11/forms_8hpp.html#a6a9c6b0f07868b9478b18542088f5003">morph::forms::reconcileDeclaredPrecision</a> (A &amp;action)</td></tr>
+<tr class="memdesc:a6a9c6b0f07868b9478b18542088f5003"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags every <code>Quantity</code> member of <code>action</code> to its <b>declared</b> precision, so a stored value matches the precision the schema advertises via <code>x-decimalPlaces</code>.  <br /></td></tr>
+<tr class="separator:a6a9c6b0f07868b9478b18542088f5003"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a189f23031917866a3f217aa288506601" id="r_a189f23031917866a3f217aa288506601"><td class="memTemplParams" colspan="2">template&lt;typename A &gt; </td></tr>
 <tr class="memitem:a189f23031917866a3f217aa288506601"><td class="memTemplItemLeft" align="right" valign="top">constexpr bool&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a> (const A &amp;action) noexcept</td></tr>
 <tr class="memdesc:a189f23031917866a3f217aa288506601"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether every required empty-capable member of <code>action</code> is engaged (has a value).  <br /></td></tr>
@@ -136,7 +140,7 @@ Functions</h2></td></tr>
 <li>**<code>required</code>** — glaze's schema writer emits no <code>required</code> array at all. <code>schemaJson&lt;A&gt;()</code> derives one: a member is <em>required</em> unless it is a <code>std::optional&lt;...&gt;</code> or its name is listed in the action's opt-out list (see below).</li>
 <li>**<code>x-decimalPlaces</code>** — for <code>Quantity</code> members, the unit's default decimal count from <code>UnitTraits</code>, so a client knows the input step without hardcoding unit knowledge.</li>
 <li>**<code>x-order</code>** — the member's declaration index on every property, so a renderer can lay fields out in declaration order (JSON object key order is not reliable once schemas pass through DOMs/maps).</li>
-<li>**<code>x-unitAlternatives</code>** — for <code>Quantity</code> members whose unit system declares convertible units (<code>UnitTraits&lt;E&gt;::alternatives</code>): an array of <code>{id, display, decimals, num, den}</code> entries, where <code>num/den</code> is the exact alternative-to-canonical ratio. Renderers offer a unit selector and recalculate entered values exactly on switch; payloads always carry the canonical unit.</li>
+<li>**<code>x-unitAlternatives</code>** — for <code>Quantity</code> members whose unit system declares convertible units (<code>UnitTraits&lt;E&gt;::relations</code>): an array of <code>{id, display, decimals, num, den}</code> entries, where <code>num/den</code> is the exact alternative-to-canonical ratio. Renderers offer a unit selector and recalculate entered values exactly on switch; payloads always carry the canonical unit.</li>
 <li>**<code>x-optionsAction</code> / <code>x-optionValue</code> / <code>x-optionLabel</code>** — for <code><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">morph::forms::Choice</a></code> members: which registered action serves the options, and which result-row fields carry the submitted value and the display label. Renderers turn these into combo boxes populated by executing the named action.</li>
 </ul>
 <p><code><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html" title="An optionally-empty timestamp field.">morph::time::Timestamp</a></code> members need no extension keys: their schema carries the standard <code>"format": "date-time"</code> annotation.</p>
@@ -148,12 +152,57 @@ Functions</h2></td></tr>
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::array optionalFields{std::string_view{<span class="stringliteral">&quot;moisture&quot;</span>}};</div>
 <div class="line">    [[nodiscard]] <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> <a class="code hl_function" href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a>(*<span class="keyword">this</span>); }</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00217">forms.hpp:217</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00268">forms.hpp:268</a></div></div>
 </div><!-- fragment --></dd></dl>
 <dl class="section user"><dt>Readiness helper</dt><dd><code>allRequiredEngaged(action)</code> returns <code>true</code> when every <em>required</em> empty-capable member (<code>Quantity</code>, <code>Choice</code>, <code>Timestamp</code> — anything with a <code>hasValue()</code>) is engaged. Wire it up as the action's <code>validate()</code> (the existing <code>ActionValidator</code> machinery picks that method up automatically) so the same declaration drives the schema's <code>required</code> array, the client-side submit gate, and the fielded-action readiness check. Non-quantity members are not checked — a plain <code>int64_t</code> cannot express "not filled in"; use a <code>Quantity</code> (or a custom <code>validate()</code>) when that distinction matters. </dd></dl>
 
 <p class="definition">Definition in file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><h2 class="groupheader">Function Documentation</h2>
+<a id="a6a9c6b0f07868b9478b18542088f5003" name="a6a9c6b0f07868b9478b18542088f5003"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6a9c6b0f07868b9478b18542088f5003">&#9670;&#160;</a></span>reconcileDeclaredPrecision()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename A &gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr void morph::forms::reconcileDeclaredPrecision </td>
+          <td>(</td>
+          <td class="paramtype">A &amp;&#160;</td>
+          <td class="paramname"><em>action</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Retags every <code>Quantity</code> member of <code>action</code> to its <b>declared</b> precision, so a stored value matches the precision the schema advertises via <code>x-decimalPlaces</code>. </p>
+<p>A wire payload carries each <code>Quantity</code> with its own runtime <code>dp</code>, which a client may set to anything. Left alone, the field is stored at the client's <code>dp</code>, silently contradicting the schema's <code>x-decimalPlaces</code> (which is the field's compile-time <em>declared</em> precision, <code>Quantity&lt;U, Dec&gt;::declaredDecimals</code>). Calling this on the decode path — right after <code>ActionTraits&lt;A&gt;::fromJson</code> and before dispatch — re-tags each <code>Quantity</code> to <code>declaredPrecision()</code> so the two agree. <code>atDeclaredPrecision()</code> only changes the value's precision tag (an exact <code>Rational</code> re-rounding to the declared decimals); an empty <code>Quantity</code> is left empty. Non-<code>Quantity</code> members are untouched.</p>
+<p>This is the enforcement half of the <code>x-decimalPlaces</code> contract: the schema advertises the declared precision and the dispatch path now stores at that precision, rather than honouring whatever <code>dp</code> the client sent. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">A</td><td>Action type (a reflectable aggregate). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">action</td><td>Draft action whose <code>Quantity</code> members are retagged in place. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00232">232</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a189f23031917866a3f217aa288506601" name="a189f23031917866a3f217aa288506601"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a189f23031917866a3f217aa288506601">&#9670;&#160;</a></span>allRequiredEngaged()</h2>
 
@@ -195,7 +244,7 @@ template&lt;typename A &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> when no required empty-capable field is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00268">268</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -230,7 +279,7 @@ template&lt;typename A &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The merged schema JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00299">299</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

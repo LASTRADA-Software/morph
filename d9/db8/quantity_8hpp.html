@@ -118,6 +118,7 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp.html','../../'); 
 <code>#include &lt;vector&gt;</code><br />
 <code>#include &lt;memory&gt;</code><br />
 <code>#include &lt;unordered_map&gt;</code><br />
+<code>#include &quot;<a class="el" href="../../d7/d7f/fixed__string_8hpp_source.html">detail/fixed_string.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>&quot;</code><br />
 <code>#include &quot;<a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html">detail/quantity_equation.hpp</a>&quot;</code><br />
 </div>
@@ -310,7 +311,7 @@ requires RatioConvertible&lt;From, To&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00635">635</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00763">763</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -360,7 +361,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> when both empty or both engaged with equal value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00652">652</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00780">780</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -416,7 +417,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00664">664</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00792">792</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -458,7 +459,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00683">683</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00811">811</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -500,7 +501,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00697">697</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -543,7 +544,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum in <code>A</code>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00712">712</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00840">840</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -586,7 +587,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference in <code>A</code>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00722">722</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00850">850</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -617,7 +618,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The negated value, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00730">730</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00858">858</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -660,7 +661,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A * B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00747">747</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00875">875</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -703,7 +704,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A / B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact quotient in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00764">764</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00892">892</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -745,7 +746,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00782">782</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00910">910</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -787,7 +788,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00796">796</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00924">924</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -829,7 +830,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The divided quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00806">806</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00934">934</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -864,7 +865,7 @@ template&lt;typename T &gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00629">629</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00757">757</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

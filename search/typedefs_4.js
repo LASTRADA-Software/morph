@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['macfunction_0',['MacFunction',['../d3/d6a/session__auth_8hpp.html#a1fdbc7fb676ba2b0ff30b5787c9d4f8a',1,'morph::session']]]
+  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127',1,'morph::backend::RemoteServer']]]
 ];

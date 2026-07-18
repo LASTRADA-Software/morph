@@ -115,17 +115,17 @@ Inheritance diagram for morph::exec::MainThreadExecutor:</div>
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a75c70e9c83fbda739ad5f3d93a820e85" id="r_a75c70e9c83fbda739ad5f3d93a820e85"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85">post</a> (std::function&lt; void()&gt; task) override</td></tr>
-<tr class="memdesc:a75c70e9c83fbda739ad5f3d93a820e85"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueues <code>task</code> to be run on the next <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Drains the task queue for up to timeout.">runFor()</a></code> call.  <br /></td></tr>
+<tr class="memdesc:a75c70e9c83fbda739ad5f3d93a820e85"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueues <code>task</code> to be run on the next <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></code> call.  <br /></td></tr>
 <tr class="separator:a75c70e9c83fbda739ad5f3d93a820e85"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af57aad9894721245d25d6c64b006cdc9" id="r_af57aad9894721245d25d6c64b006cdc9"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9">runFor</a> (std::chrono::milliseconds timeout)</td></tr>
-<tr class="memdesc:af57aad9894721245d25d6c64b006cdc9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Drains the task queue for up to <code>timeout</code>.  <br /></td></tr>
+<tr class="memdesc:af57aad9894721245d25d6c64b006cdc9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pumps the task queue for up to <code>timeout</code>.  <br /></td></tr>
 <tr class="separator:af57aad9894721245d25d6c64b006cdc9"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Single-thread executor intended for use on the calling (main) thread. </p>
-<p>Tasks posted from other threads are collected and dispatched only when the caller invokes <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Drains the task queue for up to timeout.">runFor()</a></code>. Useful in tests or event loops that have no native dispatcher. </p>
+<p>Tasks posted from other threads are collected and dispatched only when the caller invokes <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></code>. Useful in tests or event loops that have no native dispatcher. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00113">113</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00123">123</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="a75c70e9c83fbda739ad5f3d93a820e85" name="a75c70e9c83fbda739ad5f3d93a820e85"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a75c70e9c83fbda739ad5f3d93a820e85">&#9670;&#160;</a></span>post()</h2>
@@ -151,7 +151,7 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Enqueues <code>task</code> to be run on the next <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Drains the task queue for up to timeout.">runFor()</a></code> call. </p>
+<p>Enqueues <code>task</code> to be run on the next <code><a class="el" href="../../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></code> call. </p>
 <p>Thread-safe. The task is <em>not</em> executed immediately. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">task</td><td>Callable to execute. </td></tr>
@@ -161,7 +161,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00119">119</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00129">129</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -189,8 +189,8 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Drains the task queue for up to <code>timeout</code>. </p>
-<p>Runs queued tasks one by one until the deadline is reached or the queue is empty. Exceptions thrown by tasks are logged and execution continues with the next task.</p>
+<p>Pumps the task queue for up to <code>timeout</code>. </p>
+<p>Runs queued tasks one by one. It does <b>not</b> return early when the queue drains: while time remains before the deadline it blocks waiting for newly posted tasks, and only returns once the deadline is reached (with any still-queued tasks left for a subsequent call — this is a pump, not a flush). Exceptions thrown by tasks are logged and execution continues with the next task.</p>
 <p>Must be called from the thread that "owns" this executor. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">timeout</td><td>Maximum wall-clock time to spend draining. </td></tr>
@@ -198,7 +198,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00135">135</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

@@ -121,7 +121,7 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a9a539d67d97dbb987f5a644d2c6073d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the model with <code>mid</code>. Thread-safe.  <br /></td></tr>
 <tr class="separator:a9a539d67d97dbb987f5a644d2c6073d5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:adaa4fa967c7321689e55514788800a91" id="r_adaa4fa967c7321689e55514788800a91"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#adaa4fa967c7321689e55514788800a91">notifyBackendChanged</a> () override</td></tr>
-<tr class="memdesc:adaa4fa967c7321689e55514788800a91"><td class="mdescLeft">&#160;</td><td class="mdescRight">Notifies every live model that implements <code>IBackendChangedSink</code>. Thread-safe.  <br /></td></tr>
+<tr class="memdesc:adaa4fa967c7321689e55514788800a91"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <code>onBackendChanged()</code> on each live model's strand. Thread-safe.  <br /></td></tr>
 <tr class="separator:adaa4fa967c7321689e55514788800a91"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac638da4c0824021c5a63f1bd5f13b6f4" id="r_ac638da4c0824021c5a63f1bd5f13b6f4"><td class="memItemLeft" align="right" valign="top"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4">execute</a> (::morph::exec::detail::ModelId mid, detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
 <tr class="memdesc:ac638da4c0824021c5a63f1bd5f13b6f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <code>call.localOp</code> on the model's strand and returns a <code>Completion</code>.  <br /></td></tr>
@@ -279,9 +279,15 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Notifies every live model that implements <code>IBackendChangedSink</code>. Thread-safe. </p>
+<p>Schedules <code>onBackendChanged()</code> on each live model's strand. Thread-safe. </p>
+<p>Every model that implements <code>IBackendChangedSink</code> has its <code>onBackendChanged()</code> <b>posted onto that model's own strand</b> (the same per-<code>ModelId</code> serial queue <code>execute</code> uses), rather than invoked inline on the caller's thread. Two properties follow, and they are the whole point:</p>
+<ul>
+<li><b>Strand-serialised, lock-free model code.</b> <code>onBackendChanged()</code> runs on the pool inside the model's strand, so it never overlaps an <code><a class="el" href="../../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute()</a></code> on the same model. A model reacting to a backend switch (e.g. draining an offline queue and mutating counters) needs no locking of its own state — exactly what <code>offline.md</code> promises.</li>
+<li><b>Not under <code>Bridge::_mtx</code>.</b> <code>Bridge::switchBackend</code> calls this while holding <code>_mtx</code>, but only the cheap <code>post()</code> runs there; the model body runs later on a pool thread. A model that re-enters the bridge from <code>onBackendChanged()</code> (<code>switchBackend</code>/<code>registerHandler</code>/<code>deregisterHandler</code>) therefore acquires <code>_mtx</code> freshly on the strand thread instead of deadlocking on a lock the switch caller still holds.</li>
+</ul>
+<p>A <code>shared_ptr</code> copy of each holder is captured into the posted task so a concurrent <code>deregisterModel</code> cannot free the model out from under its pending notification (mirrors <code>execute</code>'s holder capture). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00179">179</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -337,7 +343,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00197">197</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00231">231</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -373,7 +379,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

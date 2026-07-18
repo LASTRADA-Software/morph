@@ -93,6 +93,7 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp.html','../../'); in
 <div class="header">
   <div class="summary">
 <a href="#nested-classes">Classes</a> &#124;
+<a href="#typedef-members">Typedefs</a> &#124;
 <a href="#var-members">Variables</a>  </div>
   <div class="headertitle"><div class="title">choice.hpp File Reference</div></div>
 </div><!--header-->
@@ -106,17 +107,22 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp.html','../../'); in
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
 <code>#include &lt;type_traits&gt;</code><br />
+<code>#include &quot;<a class="el" href="../../d7/d7f/fixed__string_8hpp_source.html">detail/fixed_string.hpp</a>&quot;</code><br />
 </div>
 <p><a href="../../d1/d8b/choice_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
-<tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../df/d5e/structmorph_1_1forms_1_1FixedString.html">morph::forms::FixedString&lt; N &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A structural, NTTP-capable compile-time string (for naming the options action and its value/label result fields in the type).  <a href="../../df/d5e/structmorph_1_1forms_1_1FixedString.html#details">More...</a><br /></td></tr>
-<tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:"><td class="memItemLeft" align="right" valign="top">struct &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice&lt; T, OptionsAction, ValueField, LabelField &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An optionally-empty value selected from options served by another action.  <a href="../../df/d65/structmorph_1_1forms_1_1Choice.html#details">More...</a><br /></td></tr>
 <tr class="separator:"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="typedef-members" name="typedef-members"></a>
+Typedefs</h2></td></tr>
+<tr class="memitem:a31801e6f345832a99c0a55b55889c1e0" id="r_a31801e6f345832a99c0a55b55889c1e0"><td class="memTemplParams" colspan="2">template&lt;std::size_t N&gt; </td></tr>
+<tr class="memitem:a31801e6f345832a99c0a55b55889c1e0"><td class="memTemplItemLeft" align="right" valign="top">using&#160;</td><td class="memTemplItemRight" valign="bottom"><a class="el" href="../../d1/d8b/choice_8hpp.html#a31801e6f345832a99c0a55b55889c1e0">morph::forms::FixedString</a> = <a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedString.html">::morph::detail::FixedString</a>&lt; N &gt;</td></tr>
+<tr class="memdesc:a31801e6f345832a99c0a55b55889c1e0"><td class="mdescLeft">&#160;</td><td class="mdescRight">A structural, NTTP-capable compile-time string (for naming the options action and its value/label result fields in the type).  <br /></td></tr>
+<tr class="separator:a31801e6f345832a99c0a55b55889c1e0"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -136,12 +142,39 @@ Variables</h2></td></tr>
 <div class="line">    <a class="code hl_struct" href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a>&lt;std::int64_t, <span class="stringliteral">&quot;ListSamples&quot;</span>&gt; sampleId;  <span class="comment">// combo box</span></div>
 <div class="line">    ...</div>
 <div class="line">};</div>
-<div class="ttc" id="astructmorph_1_1forms_1_1Choice_html"><div class="ttname"><a href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a></div><div class="ttdoc">An optionally-empty value selected from options served by another action.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00079">choice.hpp:79</a></div></div>
+<div class="ttc" id="astructmorph_1_1forms_1_1Choice_html"><div class="ttname"><a href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a></div><div class="ttdoc">An optionally-empty value selected from options served by another action.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00069">choice.hpp:69</a></div></div>
 </div><!-- fragment --><p>In the generated schema the declaration surfaces as <code>x-optionsAction</code> / <code>x-optionValue</code> / <code>x-optionLabel</code> on the property (added by <code><a class="el" href="../../d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">morph::forms::schemaJson</a></code>), so a client knows <em>which action to call</em> and <em>which result fields to use</em> without hardcoding anything.</p>
 <p>On the wire a <code>Choice</code> is its nullable underlying value (<code>T</code>); the options metadata never travels with payloads. Like <code>Quantity</code> and <code>Timestamp</code>, the blank state ("nothing selected") lives inside, and a non-optional <code>Choice</code> member is <em>required</em> by the <code>morph::forms</code> rules. </p>
 
 <p class="definition">Definition in file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
-</div><h2 class="groupheader">Variable Documentation</h2>
+</div><h2 class="groupheader">Typedef Documentation</h2>
+<a id="a31801e6f345832a99c0a55b55889c1e0" name="a31801e6f345832a99c0a55b55889c1e0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a31801e6f345832a99c0a55b55889c1e0">&#9670;&#160;</a></span>FixedString</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;std::size_t N&gt; </div>
+      <table class="memname">
+        <tr>
+          <td class="memname">using <a class="el" href="../../d1/d8b/choice_8hpp.html#a31801e6f345832a99c0a55b55889c1e0">morph::forms::FixedString</a> = typedef <a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedString.html">::morph::detail::FixedString</a>&lt;N&gt;</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>A structural, NTTP-capable compile-time string (for naming the options action and its value/label result fields in the type). </p>
+<p>An alias for the shared <code><a class="el" href="../../df/d52/structmorph_1_1detail_1_1FixedString.html" title="A structural, NTTP-capable compile-time string.">morph::detail::FixedString</a></code> — the same underlying type the units layer's <code>NamedQuantity</code> uses — so there is one definition, not two look-alikes. Kept as a public <code>morph::forms::</code> name for source compatibility. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">N</td><td>Storage size including the terminating null. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d8b/choice_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
+
+</div>
+</div>
+<h2 class="groupheader">Variable Documentation</h2>
 <a id="af575a12a456b913fe1574808369d48d4" name="af575a12a456b913fe1574808369d48d4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af575a12a456b913fe1574808369d48d4">&#9670;&#160;</a></span>isChoice</h2>
 
@@ -166,7 +199,7 @@ template&lt;typename T &gt; </div>
 
 <p><code>true</code> when <code>T</code> (cvref-stripped) is a <code><a class="el" href="../../df/d65/structmorph_1_1forms_1_1Choice.html" title="An optionally-empty value selected from options served by another action.">morph::forms::Choice</a></code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d8b/choice_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d8b/choice_8hpp_source.html#l00126">126</a> of file <a class="el" href="../../d1/d8b/choice_8hpp_source.html">choice.hpp</a>.</p>
 
 </div>
 </div>

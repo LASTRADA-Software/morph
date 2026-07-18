@@ -109,10 +109,10 @@ Public Attributes</h2></td></tr>
 <tr class="memdesc:a35047bcbf2deef7e0d6295268d09a9b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Authenticated user/principal id.  <br /></td></tr>
 <tr class="separator:a35047bcbf2deef7e0d6295268d09a9b7"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:afb6785806e6a8a89687140e50bd9f6c5" id="r_afb6785806e6a8a89687140e50bd9f6c5"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html#afb6785806e6a8a89687140e50bd9f6c5">issuedAtMs</a> = 0</td></tr>
-<tr class="memdesc:afb6785806e6a8a89687140e50bd9f6c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Issue time, ms since epoch (informational).  <br /></td></tr>
+<tr class="memdesc:afb6785806e6a8a89687140e50bd9f6c5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Issue time, ms since epoch. If positive, <code>verify</code> rejects a token whose <code>issuedAtMs</code> is more than <code>kClockSkewMs</code> in the future (not-yet-valid). <code>0</code> (unset) disables the not-before check.  <br /></td></tr>
 <tr class="separator:afb6785806e6a8a89687140e50bd9f6c5"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ac236bda69845ab2d93db16f42e8557c1" id="r_ac236bda69845ab2d93db16f42e8557c1"><td class="memItemLeft" align="right" valign="top">int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ac236bda69845ab2d93db16f42e8557c1">expiresAtMs</a> = 0</td></tr>
-<tr class="memdesc:ac236bda69845ab2d93db16f42e8557c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expiry, ms since epoch. <code>0</code> means "never expires" (discouraged).  <br /></td></tr>
+<tr class="memdesc:ac236bda69845ab2d93db16f42e8557c1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Expiry, ms since epoch. <b>Must be strictly positive</b> — a token must carry a real expiry. <code>verify</code> treats <code>expiresAtMs &lt;= 0</code> (including the default <code>0</code>) as invalid/expired, so a zero token is never an eternal credential.  <br /></td></tr>
 <tr class="separator:ac236bda69845ab2d93db16f42e8557c1"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:ab5babcea61c0929008503e675bb9a90c" id="r_ab5babcea61c0929008503e675bb9a90c"><td class="memItemLeft" align="right" valign="top">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ab5babcea61c0929008503e675bb9a90c">roles</a></td></tr>
 <tr class="memdesc:ab5babcea61c0929008503e675bb9a90c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Coarse-grained roles the app can key authorization policy on.  <br /></td></tr>
@@ -122,7 +122,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Verified claims carried by a session token. </p>
 <p>Serialised to JSON (Glaze) as the signed payload. Extend with app claims as needed — unknown fields are ignored on read, so adding claims is compatible. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00258">258</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="a35047bcbf2deef7e0d6295268d09a9b7" name="a35047bcbf2deef7e0d6295268d09a9b7"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a35047bcbf2deef7e0d6295268d09a9b7">&#9670;&#160;</a></span>principal</h2>
@@ -138,7 +138,7 @@ Public Attributes</h2></td></tr>
 
 <p>Authenticated user/principal id. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -154,9 +154,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Issue time, ms since epoch (informational). </p>
+<p>Issue time, ms since epoch. If positive, <code>verify</code> rejects a token whose <code>issuedAtMs</code> is more than <code>kClockSkewMs</code> in the future (not-yet-valid). <code>0</code> (unset) disables the not-before check. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,9 +172,9 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>Expiry, ms since epoch. <code>0</code> means "never expires" (discouraged). </p>
+<p>Expiry, ms since epoch. <b>Must be strictly positive</b> — a token must carry a real expiry. <code>verify</code> treats <code>expiresAtMs &lt;= 0</code> (including the default <code>0</code>) as invalid/expired, so a zero token is never an eternal credential. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -192,7 +192,7 @@ Public Attributes</h2></td></tr>
 
 <p>Coarse-grained roles the app can key authorization policy on. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00266">266</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00300">300</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

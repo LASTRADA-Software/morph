@@ -146,6 +146,7 @@ Enumerations</h2></td></tr>
 <tr class="memitem:af295697bcdeee7d6ab81f856fe0806bc" id="r_af295697bcdeee7d6ab81f856fe0806bc"><td class="memItemLeft" align="right" valign="top">enum class &#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bc">morph::session::AuthError</a> : std::uint8_t { <a class="el" href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca0dc7301026e66d38061d7eaba481c9a5">Malformed</a>
 , <a class="el" href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bcacf220632b6c3b4876d924d00ac2fee54">BadSignature</a>
 , <a class="el" href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8">Expired</a>
+, <a class="el" href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bca05a552d0584560b9eca4e5c2ed6c9fa2">NotYetValid</a>
  }</td></tr>
 <tr class="memdesc:af295697bcdeee7d6ab81f856fe0806bc"><td class="mdescLeft">&#160;</td><td class="mdescRight">Why token verification failed.  <a href="../../d3/d6a/session__auth_8hpp.html#af295697bcdeee7d6ab81f856fe0806bc">More...</a><br /></td></tr>
 <tr class="separator:af295697bcdeee7d6ab81f856fe0806bc"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -165,7 +166,7 @@ Functions</h2></td></tr>
 <tr class="memdesc:afb1c2ec44d02df9183625e78ba71b078"><td class="mdescLeft">&#160;</td><td class="mdescRight">base64url-encodes <code>in</code> without padding (RFC 4648 §5).  <br /></td></tr>
 <tr class="separator:afb1c2ec44d02df9183625e78ba71b078"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:aa2ae7cff98328471581cc6134806e03c" id="r_aa2ae7cff98328471581cc6134806e03c"><td class="memItemLeft" align="right" valign="top">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#aa2ae7cff98328471581cc6134806e03c">morph::session::detail::base64UrlDecode</a> (std::string_view in)</td></tr>
-<tr class="memdesc:aa2ae7cff98328471581cc6134806e03c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Decodes base64url text (no padding). Returns nullopt on invalid input.  <br /></td></tr>
+<tr class="memdesc:aa2ae7cff98328471581cc6134806e03c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Decodes canonical base64url text (no padding). Returns nullopt on invalid input.  <br /></td></tr>
 <tr class="separator:aa2ae7cff98328471581cc6134806e03c"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a0f07101ed7fc307683c3896acb1a805b" id="r_a0f07101ed7fc307683c3896acb1a805b"><td class="memItemLeft" align="right" valign="top">std::string&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b">morph::session::hmacSha256</a> (std::string_view key, std::string_view message)</td></tr>
 <tr class="memdesc:a0f07101ed7fc307683c3896acb1a805b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reference HMAC-SHA256 <code>MacFunction</code> (the default). Returns raw MAC bytes.  <br /></td></tr>
@@ -179,6 +180,9 @@ Variables</h2></td></tr>
 <tr class="memitem:a6e0fcee610e01c4702d0b5edee30b5e5" id="r_a6e0fcee610e01c4702d0b5edee30b5e5"><td class="memItemLeft" align="right" valign="top">constexpr std::string_view&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a6e0fcee610e01c4702d0b5edee30b5e5">morph::session::detail::kB64Alphabet</a> = &quot;ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_&quot;</td></tr>
 <tr class="memdesc:a6e0fcee610e01c4702d0b5edee30b5e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">The url-safe base64 alphabet (RFC 4648 §5): <code>-</code> and <code>_</code> replace <code>+</code>/<code>/</code>.  <br /></td></tr>
 <tr class="separator:a6e0fcee610e01c4702d0b5edee30b5e5"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a0514fd0c3e0770d0a922742091e073a8" id="r_a0514fd0c3e0770d0a922742091e073a8"><td class="memItemLeft" align="right" valign="top">constexpr int64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#a0514fd0c3e0770d0a922742091e073a8">morph::session::kClockSkewMs</a> = 60'000</td></tr>
+<tr class="memdesc:a0514fd0c3e0770d0a922742091e073a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Allowed clock skew (ms) between issuer and verifier for the not-before (<code>issuedAtMs</code>) check. Keeps a token minted a moment ahead of the verifier's clock from being spuriously rejected.  <br /></td></tr>
+<tr class="separator:a0514fd0c3e0770d0a922742091e073a8"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Opt-in authenticated sessions: signed bearer tokens and a verifying <code>IAuthorizer</code> so a <code>RemoteServer</code> can trust the caller's identity. </p>
@@ -201,7 +205,7 @@ Variables</h2></td></tr>
 <p>Pluggable message-authentication primitive: <code>mac(secret, message)</code>. </p>
 <p>Returns the raw MAC bytes. Defaults to <code>hmacSha256</code>; inject a vetted library's HMAC for production. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +223,7 @@ Variables</h2></td></tr>
 
 <p>Wall-clock source (milliseconds since the Unix epoch), injectable for tests. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00274">274</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,11 +254,13 @@ Variables</h2></td></tr>
 </td></tr>
 <tr><td class="fieldname"><a id="af295697bcdeee7d6ab81f856fe0806bcacf220632b6c3b4876d924d00ac2fee54" name="af295697bcdeee7d6ab81f856fe0806bcacf220632b6c3b4876d924d00ac2fee54"></a>BadSignature&#160;</td><td class="fielddoc"><p>MAC did not match — forged or tampered. </p>
 </td></tr>
-<tr><td class="fieldname"><a id="af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8" name="af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8"></a>Expired&#160;</td><td class="fielddoc"><p><code>expiresAtMs</code> is in the past relative to the supplied clock. </p>
+<tr><td class="fieldname"><a id="af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8" name="af295697bcdeee7d6ab81f856fe0806bca24fe48030f7d3097d5882535b04c3fa8"></a>Expired&#160;</td><td class="fielddoc"><p>Missing/non-positive <code>expiresAtMs</code>, or it is in the past. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="af295697bcdeee7d6ab81f856fe0806bca05a552d0584560b9eca4e5c2ed6c9fa2" name="af295697bcdeee7d6ab81f856fe0806bca05a552d0584560b9eca4e5c2ed6c9fa2"></a>NotYetValid&#160;</td><td class="fielddoc"><p><code>issuedAtMs</code> is set and more than <code>kClockSkewMs</code> in the future. </p>
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00309">309</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -453,16 +459,21 @@ Variables</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Decodes base64url text (no padding). Returns nullopt on invalid input. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Decodes canonical base64url text (no padding). Returns nullopt on invalid input. </p>
+<p>Canonical decoding is enforced to remove token-string malleability: a token is a signed byte string, but base64url is a <em>bit</em>-oriented encoding, so a naive decoder that silently discards the leftover bits of the final symbol would map several distinct encodings onto the same bytes (e.g. the trailing character could be perturbed within the discarded low bits without changing the decoded MAC). This function rejects any such non-canonical input:</p>
+<ul>
+<li>A length <code>% 4 == 1</code> is impossible for real base64url output and is rejected.</li>
+<li>The leftover bits that do not form a whole output byte (2 bits for a 1-remainder group, 4 bits for a 2-remainder group) <b>must be zero</b>; a nonzero remainder means the encoding is not the canonical one this decoder would itself produce, so it is rejected rather than truncated.</li>
+</ul>
+<p>The result is thus a bijection over valid tokens: exactly one string decodes to any given byte sequence. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">in</td><td>base64url text. </td></tr>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>Decoded bytes, or nullopt if <code>in</code> contains an invalid character or length. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Decoded bytes, or nullopt if <code>in</code> has an invalid character, an impossible length, or nonzero leftover (non-canonical) bits. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00203">203</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -510,7 +521,7 @@ Variables</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>32-byte HMAC as a byte string. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00269">269</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -540,7 +551,7 @@ Variables</h2></td></tr>
 <p>Default clock: <code>std::chrono::system_clock</code> in milliseconds since epoch. </p>
 <dl class="section return"><dt>Returns</dt><dd>Current time in ms since the Unix epoch. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00249">249</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00278">278</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -568,6 +579,32 @@ Variables</h2></td></tr>
 <p>The url-safe base64 alphabet (RFC 4648 §5): <code>-</code> and <code>_</code> replace <code>+</code>/<code>/</code>. </p>
 
 <p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00168">168</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0514fd0c3e0770d0a922742091e073a8" name="a0514fd0c3e0770d0a922742091e073a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0514fd0c3e0770d0a922742091e073a8">&#9670;&#160;</a></span>kClockSkewMs</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">constexpr int64_t morph::session::kClockSkewMs = 60'000</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Allowed clock skew (ms) between issuer and verifier for the not-before (<code>issuedAtMs</code>) check. Keeps a token minted a moment ahead of the verifier's clock from being spuriously rejected. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00306">306</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

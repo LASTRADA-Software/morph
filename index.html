@@ -245,7 +245,7 @@ Deployment topologies</h1>
 <div class="line">  └─ bridge::BridgeHandler&lt;M&gt;::execute(action)</div>
 <div class="line">       └─ bridge::Bridge::executeVia&lt;M, A&gt;</div>
 <div class="line">            └─ backend::SimulatedRemoteBackend::execute</div>
-<div class="line">                 └─ serialize action → backend::RemoteServer::handle (5-part text protocol)</div>
+<div class="line">                 └─ serialize action → backend::RemoteServer::handle (JSON wire envelope)</div>
 <div class="line">                      └─ ActionDispatcher → StrandExecutor → Model::execute</div>
 <div class="line">                           └─ serialize result → Completion&lt;T&gt;::then → GUI executor</div>
 </div><!-- fragment --><p><b>Qt WebSocket mode</b> — model lives in a separate process:</p>
@@ -254,7 +254,7 @@ Deployment topologies</h1>
 <div class="line">       └─ bridge::Bridge::executeVia&lt;M, A&gt;</div>
 <div class="line">            └─ qt::QtWebSocketBackend::execute</div>
 <div class="line">                 └─ assign callId, send JSON  ──► qt::QtWebSocketServer::handle</div>
-<div class="line">                                                        └─ backend::RemoteServer::handle (6-part protocol)</div>
+<div class="line">                                                        └─ backend::RemoteServer::handle (JSON wire envelope)</div>
 <div class="line">                                                             └─ ActionDispatcher → StrandExecutor → Model::execute</div>
 <div class="line">                 ◄── JSON reply (ok|callId|result) ──────────────────────────────</div>
 <div class="line">            └─ resolve pending Completion</div>
@@ -525,10 +525,10 @@ Exact values, units, and schema-driven forms</h1>
 <div class="line"><span class="keyword">using </span>Mass    = <a class="code hl_struct" href="d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity&lt;Unit::kg&gt;</a>;</div>
 <div class="line"><span class="keyword">using </span>Volume  = <a class="code hl_struct" href="d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity&lt;Unit::m3&gt;</a>;</div>
 <div class="line"><span class="comment">// Mass{...} / Volume{...} deduces Quantity&lt;Unit::kg_per_m3&gt; at compile time.</span></div>
-<div class="ttc" id="aquantity_8hpp_html_a84a433ffcee6be7bd3aa3deb5107f327"><div class="ttname"><a href="d9/db8/quantity_8hpp.html#a84a433ffcee6be7bd3aa3deb5107f327">morph::units::operator/</a></div><div class="ttdeci">Quantity&lt; A/B &gt; operator/(const Quantity&lt; A, DecA &gt; &amp;lhs, const Quantity&lt; B, DecB &gt; &amp;rhs)</div><div class="ttdoc">Cross-unit quotient; the result unit is A / B per the application's consteval unit algebra....</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00764">quantity.hpp:764</a></div></div>
-<div class="ttc" id="astructmorph_1_1units_1_1Quantity_html"><div class="ttname"><a href="d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a></div><div class="ttdoc">A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a ...</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00431">quantity.hpp:431</a></div></div>
-<div class="ttc" id="astructmorph_1_1units_1_1UnitMeta_html"><div class="ttname"><a href="d8/dab/structmorph_1_1units_1_1UnitMeta.html">morph::units::UnitMeta</a></div><div class="ttdoc">Static description of one unit, supplied by UnitTraits.</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00096">quantity.hpp:96</a></div></div>
-<div class="ttc" id="astructmorph_1_1units_1_1UnitTraits_html"><div class="ttname"><a href="de/d93/structmorph_1_1units_1_1UnitTraits.html">morph::units::UnitTraits</a></div><div class="ttdoc">Customisation point: the application specialises this for its unit enum, returning a UnitMeta per enu...</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00150">quantity.hpp:150</a></div></div>
+<div class="ttc" id="aquantity_8hpp_html_a84a433ffcee6be7bd3aa3deb5107f327"><div class="ttname"><a href="d9/db8/quantity_8hpp.html#a84a433ffcee6be7bd3aa3deb5107f327">morph::units::operator/</a></div><div class="ttdeci">Quantity&lt; A/B &gt; operator/(const Quantity&lt; A, DecA &gt; &amp;lhs, const Quantity&lt; B, DecB &gt; &amp;rhs)</div><div class="ttdoc">Cross-unit quotient; the result unit is A / B per the application's consteval unit algebra....</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00892">quantity.hpp:892</a></div></div>
+<div class="ttc" id="astructmorph_1_1units_1_1Quantity_html"><div class="ttname"><a href="d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a></div><div class="ttdoc">A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a ...</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00559">quantity.hpp:559</a></div></div>
+<div class="ttc" id="astructmorph_1_1units_1_1UnitMeta_html"><div class="ttname"><a href="d8/dab/structmorph_1_1units_1_1UnitMeta.html">morph::units::UnitMeta</a></div><div class="ttdoc">Static description of one unit, supplied by UnitTraits.</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00189">quantity.hpp:189</a></div></div>
+<div class="ttc" id="astructmorph_1_1units_1_1UnitTraits_html"><div class="ttname"><a href="de/d93/structmorph_1_1units_1_1UnitTraits.html">morph::units::UnitTraits</a></div><div class="ttdoc">Customisation point: the application specialises this for its unit enum, returning a UnitMeta per enu...</div><div class="ttdef"><b>Definition</b> <a href="d9/db8/quantity_8hpp_source.html#l00243">quantity.hpp:243</a></div></div>
 </div><!-- fragment --><p>Design decisions, in order:</p>
 <ul>
 <li><b>One kind of empty.</b> The blank state ("not entered", "not measured") lives <em>inside</em> the quantity as <code>std::optional&lt;Rational&gt;</code>; action structs never wrap a <code>Quantity</code> in another <code>std::optional</code>. Whether a field may still be empty at submit time is field <em>metadata</em> (below), not a second wrapper type. Empty propagates through arithmetic (spreadsheet/SQL-NULL semantics); division by zero also yields empty.</li>
@@ -599,7 +599,7 @@ Key design decisions</h1>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone"><code>CompletionState&lt;T&gt;</code> internal only   </td><td class="markdownTableBodyNone">Keeps the public API free of state-handling machinery; implementation can change without breaking callers.    </td></tr>
 <tr class="markdownTableRowEven">
-<td class="markdownTableBodyNone">6-part Qt wire protocol   </td><td class="markdownTableBodyNone">Carries a <code>callId</code> so async WebSocket replies can be correlated back to pending <code>Completion</code> objects.    </td></tr>
+<td class="markdownTableBodyNone">JSON <code>Envelope</code> wire protocol   </td><td class="markdownTableBodyNone">Self-describing and forward-compatible (unknown keys ignored); carries a <code>callId</code> so async WebSocket replies can be correlated back to pending <code>Completion</code> objects.    </td></tr>
 <tr class="markdownTableRowOdd">
 <td class="markdownTableBodyNone">Client-side drafts for fielded actions   </td><td class="markdownTableBodyNone">Avoids new wire messages, server-side draft state, and a server push channel. Patches never leave the client; only the full action is sent when the validator passes.    </td></tr>
 <tr class="markdownTableRowEven">

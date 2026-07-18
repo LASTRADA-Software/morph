@@ -8,13 +8,13 @@ var hierarchy =
     ] ],
     [ "morph::backend::RemoteServer", "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html", null ],
     [ "morph::bridge::ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", null ],
+    [ "morph::detail::FixedString< N >", "df/d52/structmorph_1_1detail_1_1FixedString.html", null ],
     [ "morph::exec::IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", [
       [ "morph::exec::MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", null ],
       [ "morph::exec::ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", null ],
       [ "morph::qt::QtExecutor", "d4/d30/classmorph_1_1qt_1_1QtExecutor.html", null ]
     ] ],
     [ "morph::forms::Choice< T, OptionsAction, ValueField, LabelField >", "df/d65/structmorph_1_1forms_1_1Choice.html", null ],
-    [ "morph::forms::FixedString< N >", "df/d5e/structmorph_1_1forms_1_1FixedString.html", null ],
     [ "morph::journal::IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", [
       [ "morph::journal::FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", null ],
       [ "morph::journal::InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", null ],

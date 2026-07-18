@@ -133,9 +133,9 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Full-fidelity, in-memory log of one model instance's executed actions. </p>
 <p>Attach directly via <code>IModelHolder::attachActionLog</code> — every successfully executed loggable action is appended here in order, regardless of any <code>ActionLogPolicy::coalesce</code> setting. This full history is the raw material for <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></code>. <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></code> is the one place coalescing actually happens: entries accumulated since the last checkpoint are reduced by <code>(modelType, entityKey, actionType)</code> — keeping only the latest occurrence where the action's policy says <code>coalesce == true</code>, keeping every occurrence otherwise — and only that reduced set reaches the durable sink.</p>
-<dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). </dd></dl>
+<dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. A history mutex guards <code>_all</code> and the watermark; a separate forwarding mutex serializes <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></code> bodies end to end so concurrent checkpoints forward to the durable sink in append order without blocking ordinary <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></code> calls during the sink's I/O. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="ad7fb2e3940c88d02d4d0fc0c29434e90" name="ad7fb2e3940c88d02d4d0fc0c29434e90"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ad7fb2e3940c88d02d4d0fc0c29434e90">&#9670;&#160;</a></span>append()</h2>
@@ -171,7 +171,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +202,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +241,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00085">85</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -287,6 +287,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Drops the most recently appended entry and replays everything that remains against a fresh model instance, reconstructing the state the model was in immediately before that entry executed. </p>
 <p>No inverse/undo operations are needed on the action types themselves — this reuses <code>replay()</code> over a shorter prefix of the same log. A no-op (returns a freshly created, un-replayed holder) if the log is empty.</p>
+<p>Undo only rewinds this in-memory history; it never moves the checkpoint watermark, which is keyed by entry <code>seq</code> (see <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></code>). Undoing an entry a prior <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></code> already forwarded does <b>not</b> un-forward it: the durable sink is append-only, so that entry stays durable while the reconstructed history diverges from it. A later <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa" title="Coalesces entries appended since the last checkpoint and forwards the reduced set,...">checkpoint()</a></code> never re-forwards a coalesced-away, already-committed entry. Applications that need to durably reverse a checkpointed action must record a compensating action, not rely on <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333" title="Drops the most recently appended entry and replays everything that remains against a fresh model inst...">undoLast()</a></code>.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">modelTypeId</td><td>String type-id of the model to reconstruct. </td></tr>
@@ -297,7 +298,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A freshly created holder with the pre-undo state replayed onto it. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00108">108</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>
@@ -336,7 +337,8 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Coalesces entries appended since the last checkpoint and forwards the reduced set, in order, to <code>durableSink</code>; then flushes it. </p>
-<p>Advances the checkpoint regardless of whether <code>durableSink-&gt;<a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point.">flush()</a></code> throws, matching <code>IOfflineQueue</code>-style at-least-once semantics: a checkpoint is a forward-only commit point, not a transaction to retry. A no-op if nothing has been appended since the last checkpoint.</p>
+<p>Advances the checkpoint watermark (the <code>seq</code> of the last committed entry) <em>before</em> forwarding, so the batch is consumed even if <code>durableSink's</code> <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></code> or <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65" title="No-op — checkpoint() is this class&#39;s real commit point.">flush()</a></code> throws: a checkpoint is a forward-only commit point (at-most-once), not a transaction to retry. A no-op if nothing has been appended since the last checkpoint.</p>
+<dl class="section user"><dt>Concurrency and ordering</dt><dd>The whole checkpoint body runs under a dedicated forwarding mutex, so concurrent checkpoints are fully serialized: the batch whose watermark is taken first is also forwarded to <code>durableSink</code> first, and no two checkpoints ever interleave their <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></code> calls. This preserves the append-order identity the sink relies on. The forwarding mutex is <em>not</em> the mutex that guards <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></code>, which is held only briefly to select the pending entries and advance the watermark — never across the sink's I/O — so ordinary <code><a class="el" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90" title="Appends entry, assigning a monotonically increasing seq.">append()</a></code> calls keep making progress during a checkpoint.</dd></dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">durableSink</td><td>Receives only the coalesced entries — never the raw stream. </td></tr>
@@ -345,7 +347,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dd/dda/journal_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../dd/dda/journal_8hpp_source.html">journal.hpp</a>.</p>
 
 </div>
 </div>

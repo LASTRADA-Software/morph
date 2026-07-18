@@ -143,12 +143,12 @@ Public Attributes</h2></td></tr>
 <li><code>"register"</code> — client requests model creation. Uses <code>typeId</code>, and optionally <code>contextKey</code> (the new instance's stable identity, e.g. an account id — see <code>RemoteServer::setLogProvider</code>).</li>
 <li><code>"deregister"</code> — client destroys an instance. Uses <code>modelId</code>.</li>
 <li><code>"execute"</code> — client dispatches an action. Uses <code>callId</code>, <code>modelId</code>, <code>modelType</code>, <code>actionType</code>, <code>body</code>, and optionally <code>session</code>.</li>
-<li><code>"ok"</code> — server success reply. Uses <code>callId</code> if present and <code>result</code>. For <code>register</code> replies, <code>modelId</code> carries the new id.</li>
+<li><code>"ok"</code> — server success reply. Uses <code>callId</code> if present and carries the serialized result in <code>body</code>. For <code>register</code> replies, <code>modelId</code> carries the new id.</li>
 <li><code>"err"</code> — server failure reply. Uses <code>callId</code> if present and <code>message</code>. </li>
 </ul>
 </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 </div><h2 class="groupheader">Member Data Documentation</h2>
 <a id="a81787fa40e7b4af0cb09babaf404278b" name="a81787fa40e7b4af0cb09babaf404278b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a81787fa40e7b4af0cb09babaf404278b">&#9670;&#160;</a></span>kind</h2>
@@ -164,7 +164,7 @@ Public Attributes</h2></td></tr>
 
 <p>Discriminator — see class docstring for valid values. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -182,7 +182,7 @@ Public Attributes</h2></td></tr>
 
 <p>Correlation id for matching async replies to their requests. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -200,7 +200,7 @@ Public Attributes</h2></td></tr>
 
 <p>Model type id for <code>register</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -218,7 +218,7 @@ Public Attributes</h2></td></tr>
 
 <p>Stable identity of the model instance being registered (e.g. an account id). Empty means "no identity" — the server-side holder gets no action log attached even if a <code>LogProvider</code> is configured. Ignored on every kind other than <code>register</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -236,7 +236,7 @@ Public Attributes</h2></td></tr>
 
 <p>Existing model instance id for <code>deregister</code>, <code>execute</code>, <code>ok(register)</code>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +254,7 @@ Public Attributes</h2></td></tr>
 
 <p>Model type id for <code>execute</code> (routing key in <code>ActionDispatcher</code>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00050">50</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00065">65</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +272,7 @@ Public Attributes</h2></td></tr>
 
 <p>Action type id for <code>execute</code> (the second routing key). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +290,7 @@ Public Attributes</h2></td></tr>
 
 <p>Serialized JSON of the action payload (<code>execute</code>) or of the deserializable result (<code>ok</code>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,7 +308,7 @@ Public Attributes</h2></td></tr>
 
 <p>Free-text error message on <code>err</code>. Empty on success. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -326,7 +326,7 @@ Public Attributes</h2></td></tr>
 
 <p>Session context for authorization and routing. Populated on <code>execute</code>; ignored on every other kind. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>

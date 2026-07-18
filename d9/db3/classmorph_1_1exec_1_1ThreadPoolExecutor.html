@@ -155,14 +155,14 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Constructs the pool with <code>n</code> worker threads. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p><code>n</code> is clamped to a minimum of 1: a pool with zero workers would accept posted tasks that could never run (every <code><a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></code> would hang forever), so <code>ThreadPoolExecutor(0)</code> yields a usable single-worker pool rather than a silently dead one. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">n</td><td>Number of threads to spawn. Must be &gt; 0. </td></tr>
+    <tr><td class="paramname">n</td><td>Number of threads to spawn. Values below 1 are clamped to 1. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -190,9 +190,9 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Signals all workers to stop and joins them. </p>
-<p>Remaining queued tasks that have not started are dropped. </p>
+<p>Workers drain the queue before exiting: after <code>_stop</code> is set they keep popping and running already-queued tasks and only return once the queue is empty, so the join blocks until every task queued before destruction has run. Tasks <code><a class="el" href="../../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6" title="Enqueues task for execution on one of the pool threads.">post()</a></code>ed concurrently with or after destruction race this and may be silently lost. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -231,7 +231,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

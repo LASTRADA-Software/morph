@@ -117,21 +117,37 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:add838e99c2cec5205ae9a6e754f862b7" id="r_add838e99c2cec5205ae9a6e754f862b7"><td class="memItemLeft" align="right" valign="top">uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#add838e99c2cec5205ae9a6e754f862b7">enqueue</a> (std::string payload) override</td></tr>
 <tr class="memdesc:add838e99c2cec5205ae9a6e754f862b7"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code>payload</code> and returns a monotonically increasing id.  <br /></td></tr>
 <tr class="separator:add838e99c2cec5205ae9a6e754f862b7"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a09bb85941338ca833b3815a9e77f2380" id="r_a09bb85941338ca833b3815a9e77f2380"><td class="memItemLeft" align="right" valign="top">uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a09bb85941338ca833b3815a9e77f2380">enqueue</a> (std::string payload, std::string idempotencyKey) override</td></tr>
+<tr class="memdesc:a09bb85941338ca833b3815a9e77f2380"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code>payload</code> carrying <code>idempotencyKey</code> and returns a monotonically increasing id.  <br /></td></tr>
+<tr class="separator:a09bb85941338ca833b3815a9e77f2380"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:af007406b08a1a2159ccef0683376c971" id="r_af007406b08a1a2159ccef0683376c971"><td class="memItemLeft" align="right" valign="top">std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt;&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af007406b08a1a2159ccef0683376c971">drain</a> () override</td></tr>
 <tr class="memdesc:af007406b08a1a2159ccef0683376c971"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a snapshot of all pending items. Thread-safe.  <br /></td></tr>
 <tr class="separator:af007406b08a1a2159ccef0683376c971"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:acf32c7e9f21fcd15b45be6cc41ea1c4a" id="r_acf32c7e9f21fcd15b45be6cc41ea1c4a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a">markDone</a> (uint64_t itemId) override</td></tr>
 <tr class="memdesc:acf32c7e9f21fcd15b45be6cc41ea1c4a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the item with <code>itemId</code> from the queue. Thread-safe.  <br /></td></tr>
 <tr class="separator:acf32c7e9f21fcd15b45be6cc41ea1c4a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a580ca19c41a025fd3a6f45f2f7fb9490" id="r_a580ca19c41a025fd3a6f45f2f7fb9490"><td class="memItemLeft" align="right" valign="top">virtual uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">enqueue</a> (std::string payload)=0</td></tr>
+<tr class="memdesc:a580ca19c41a025fd3a6f45f2f7fb9490"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code>payload</code> to the queue with no idempotency key.  <br /></td></tr>
+<tr class="separator:a580ca19c41a025fd3a6f45f2f7fb9490"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:adde4b8a1021e5bb0374f3843acc7fe40" id="r_adde4b8a1021e5bb0374f3843acc7fe40"><td class="memItemLeft" align="right" valign="top">virtual uint64_t&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">enqueue</a> (std::string payload, std::string idempotencyKey)</td></tr>
+<tr class="memdesc:adde4b8a1021e5bb0374f3843acc7fe40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code>payload</code> carrying the cross-subsystem <code>idempotencyKey</code>.  <br /></td></tr>
+<tr class="separator:adde4b8a1021e5bb0374f3843acc7fe40"><td class="memSeparator" colspan="2">&#160;</td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 class="groupheader"><a id="inherited" name="inherited"></a>
+Additional Inherited Members</h2></td></tr>
+<tr class="inherit_header pro_methods_structmorph_1_1offline_1_1IOfflineQueue"><td colspan="2" onclick="javascript:toggleInherit('pro_methods_structmorph_1_1offline_1_1IOfflineQueue')"><img src="../../closed.png" alt="-"/>&#160;Protected Member Functions inherited from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html">morph::offline::IOfflineQueue</a></td></tr>
+<tr class="memitem:ab3e24454f2625fcd447f76d9ed0fd820 inherit pro_methods_structmorph_1_1offline_1_1IOfflineQueue" id="r_ab3e24454f2625fcd447f76d9ed0fd820"><td class="memItemLeft" align="right" valign="top">virtual void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ab3e24454f2625fcd447f76d9ed0fd820">setIdempotencyKey</a> (uint64_t itemId, std::string idempotencyKey)</td></tr>
+<tr class="memdesc:ab3e24454f2625fcd447f76d9ed0fd820 inherit pro_methods_structmorph_1_1offline_1_1IOfflineQueue"><td class="mdescLeft">&#160;</td><td class="mdescRight">Stamps an idempotency key onto an already-enqueued item.  <br /></td></tr>
+<tr class="separator:ab3e24454f2625fcd447f76d9ed0fd820 inherit pro_methods_structmorph_1_1offline_1_1IOfflineQueue"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Thread-safe in-memory implementation of <code><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></code>. </p>
 <p>Suitable for testing and for applications that do not require persistence across process restarts. Items are stored in a <code>std::deque</code> protected by a mutex. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="add838e99c2cec5205ae9a6e754f862b7" name="add838e99c2cec5205ae9a6e754f862b7"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#add838e99c2cec5205ae9a6e754f862b7">&#9670;&#160;</a></span>enqueue()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#add838e99c2cec5205ae9a6e754f862b7">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/4]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -165,7 +181,57 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00124">124</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a09bb85941338ca833b3815a9e77f2380" name="a09bb85941338ca833b3815a9e77f2380"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a09bb85941338ca833b3815a9e77f2380">&#9670;&#160;</a></span>enqueue() <span class="overload">[2/4]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">uint64_t morph::offline::InMemoryOfflineQueue::enqueue </td>
+          <td>(</td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>payload</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>idempotencyKey</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">override</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends <code>payload</code> carrying <code>idempotencyKey</code> and returns a monotonically increasing id. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">payload</td><td>Serialised action to store. </td></tr>
+    <tr><td class="paramname">idempotencyKey</td><td>Stable dedup token; stored verbatim on the item. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Unique id for this item. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -197,7 +263,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a7f244a0141c703a6f15972b39d8624b9">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00078">78</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +301,95 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a580ca19c41a025fd3a6f45f2f7fb9490" name="a580ca19c41a025fd3a6f45f2f7fb9490"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a580ca19c41a025fd3a6f45f2f7fb9490">&#9670;&#160;</a></span>enqueue() <span class="overload">[3/4]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual uint64_t morph::offline::IOfflineQueue::enqueue </td>
+          <td>(</td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>payload</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends <code>payload</code> to the queue with no idempotency key. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A stable id that can be passed to <code><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a" title="Removes the item with itemId from the queue. Thread-safe.">markDone()</a></code>. </dd></dl>
+
+<p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
+
+</div>
+</div>
+<a id="adde4b8a1021e5bb0374f3843acc7fe40" name="adde4b8a1021e5bb0374f3843acc7fe40"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#adde4b8a1021e5bb0374f3843acc7fe40">&#9670;&#160;</a></span>enqueue() <span class="overload">[4/4]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual uint64_t morph::offline::IOfflineQueue::enqueue </td>
+          <td>(</td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>payload</em>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string&#160;</td>
+          <td class="paramname"><em>idempotencyKey</em>&#160;</td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>)</td>
+          <td></td><td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel">inline</span><span class="mlabel">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Appends <code>payload</code> carrying the cross-subsystem <code>idempotencyKey</code>. </p>
+<p>The key is stored on the resulting <code><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></code> so a replay consumer can dedup this op against ones the journal (or a prior replay) already applied (see <code><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></code> and <code>docs/spec/offline.md</code>). The queue neither interprets nor enforces uniqueness on the key.</p>
+<p>The default implementation delegates to <code>enqueue(std::move(payload))</code> and then stamps the key via <code>setIdempotencyKey</code>, so existing <code><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></code> implementations keep working without overriding it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
+    <tr><td class="paramname">idempotencyKey</td><td>Stable dedup token for the logical op; may be empty. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A stable id that can be passed to <code><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#acf32c7e9f21fcd15b45be6cc41ea1c4a" title="Removes the item with itemId from the queue. Thread-safe.">markDone()</a></code>. </dd></dl>
+
+<p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00077">77</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

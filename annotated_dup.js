@@ -15,14 +15,16 @@ var annotated_dup =
       [ "bridge", null, [
         [ "ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry" ]
       ] ],
+      [ "detail", null, [
+        [ "FixedString", "df/d52/structmorph_1_1detail_1_1FixedString.html", "df/d52/structmorph_1_1detail_1_1FixedString" ]
+      ] ],
       [ "exec", null, [
         [ "IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", "d4/d49/structmorph_1_1exec_1_1IExecutor" ],
         [ "MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor" ],
         [ "ThreadPoolExecutor", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html", "d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor" ]
       ] ],
       [ "forms", null, [
-        [ "Choice", "df/d65/structmorph_1_1forms_1_1Choice.html", "df/d65/structmorph_1_1forms_1_1Choice" ],
-        [ "FixedString", "df/d5e/structmorph_1_1forms_1_1FixedString.html", "df/d5e/structmorph_1_1forms_1_1FixedString" ]
+        [ "Choice", "df/d65/structmorph_1_1forms_1_1Choice.html", "df/d65/structmorph_1_1forms_1_1Choice" ]
       ] ],
       [ "journal", null, [
         [ "FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", "d0/d2e/classmorph_1_1journal_1_1FileActionLog" ],
