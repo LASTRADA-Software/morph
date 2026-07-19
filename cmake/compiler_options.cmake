@@ -36,12 +36,6 @@ function(apply_warnings target)
             -Wno-global-constructors
             -Wno-shadow-uncaptured-local
             -Wno-unused-command-line-argument
-            -Wno-covered-switch-default
-            -Wno-documentation-unknown-command
-            -Wno-padded
-            -Wno-unique-object-duplication
-            -Wno-c2y-extensions
-            -Wno-missing-noreturn
         >>
         # ── GNU / Clang (common baseline) ────────────────────────────────────
         $<$<CXX_COMPILER_ID:GNU,Clang>:
@@ -60,6 +54,18 @@ function(apply_warnings target)
             -Wnull-dereference
             -Wimplicit-fallthrough
         >
+    )
+
+    # ── clang-cl suppressions (must come *after* -Wall/-Wextra which re-enable them) ──
+    target_compile_options(${target} PRIVATE
+        $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
+            -Wno-covered-switch-default
+            -Wno-documentation-unknown-command
+            -Wno-padded
+            -Wno-unique-object-duplication
+            -Wno-c2y-extensions
+            -Wno-missing-noreturn
+        >>
     )
 
     # ── Strict mode: warnings-as-errors + maximum diagnostics ──────────────
@@ -93,7 +99,6 @@ function(apply_warnings target)
                 -Wduplicated-branches
                 -Wlogical-op
                 -Wuseless-cast
-                -Wrestrict
                 -Walloc-zero
                 -Wstringop-truncation
                 -Wstrict-overflow=5
