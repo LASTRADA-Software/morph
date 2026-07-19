@@ -2,8 +2,8 @@
 
 #include "BankClient.hpp"
 
-#include <morph/backend.hpp>
-#include <morph/session.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/session/session.hpp>
 
 #include <memory>
 #include <utility>

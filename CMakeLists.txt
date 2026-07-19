@@ -96,28 +96,28 @@ target_sources(morph
     FILE_SET HEADERS
     BASE_DIRS include
     FILES
-        include/morph/logger.hpp
-        include/morph/executor.hpp
-        include/morph/strand.hpp
-        include/morph/completion.hpp
-        include/morph/model.hpp
-        include/morph/action_log.hpp
-        include/morph/journal.hpp
-        include/morph/file_action_log.hpp
-        include/morph/rational.hpp
-        include/morph/quantity.hpp
-        include/morph/datetime.hpp
-        include/morph/choice.hpp
-        include/morph/forms.hpp
-        include/morph/registry.hpp
-        include/morph/backend.hpp
-        include/morph/remote.hpp
-        include/morph/bridge.hpp
-        include/morph/network_monitor.hpp
-        include/morph/offline_queue.hpp
-        include/morph/sync_worker.hpp
-        include/morph/session.hpp
-        include/morph/wire.hpp
+        include/morph/core/logger.hpp
+        include/morph/core/executor.hpp
+        include/morph/core/strand.hpp
+        include/morph/core/completion.hpp
+        include/morph/core/model.hpp
+        include/morph/core/registry.hpp
+        include/morph/core/backend.hpp
+        include/morph/core/remote.hpp
+        include/morph/core/bridge.hpp
+        include/morph/core/wire.hpp
+        include/morph/journal/action_log.hpp
+        include/morph/journal/journal.hpp
+        include/morph/journal/file_action_log.hpp
+        include/morph/offline/network_monitor.hpp
+        include/morph/offline/offline_queue.hpp
+        include/morph/offline/sync_worker.hpp
+        include/morph/session/session.hpp
+        include/morph/forms/forms.hpp
+        include/morph/forms/choice.hpp
+        include/morph/util/rational.hpp
+        include/morph/util/quantity.hpp
+        include/morph/util/datetime.hpp
 )
 
 # ── Demo executable ──────────────────────────────────────────────────────────

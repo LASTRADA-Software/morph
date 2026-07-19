@@ -458,7 +458,7 @@ argument (a structural fixed-capacity buffer built from a string literal), which
 is what lets the name live in the type. `morph::units::detail::FixedString` is an
 alias for the single shared `morph::detail::FixedString`
 (`include/morph/detail/fixed_string.hpp`) — the *same* type the forms layer
-exposes as `morph::forms::FixedString` for `Choice` (see [choice.md](choice.md));
+exposes as `morph::forms::FixedString` for `Choice` (see [choice.md](../forms/choice.md));
 there is one definition, not two. `NamedQuantity` publicly derives from
 `Quantity<U>` (declared-precision default) and offers four ways in — a **default
 constructor** (empty, then named), an **`optional<Rational>` constructor**, a
@@ -990,12 +990,12 @@ the placeholder exists precisely to avoid writing shared work twice.
   over the canonical `num/den` at the runtime `DecimalPlaces`; it does **not**
   route through `Rational`'s own `std::formatter` or `toDouble`. This spec does
   not restate the `Rational` arithmetic rules.
-- **[`forms.md`](forms.md)** — how a `Quantity` field reaches a generated form:
+- **[`forms.md`](../forms/forms.md)** — how a `Quantity` field reaches a generated form:
   `ExtUnits` (unit id/display, emitted by `to_json_schema`) plus the
   schema-merge keys `x-decimalPlaces` (from `declaredDecimals`) and
   `x-unitAlternatives` (from `unitAlternatives()`), added per member by
   `morph::forms`' `mergeSchemaExtras`.
-- **[`choice.md`](choice.md)** and **[`datetime.md`](datetime.md)** —
+- **[`choice.md`](../forms/choice.md)** and **[`datetime.md`](datetime.md)** —
   one-kind-of-empty siblings. `Choice<T>` and `Timestamp` share `Quantity`'s
   `std::optional`-backed single empty state and total `==` (empty == empty).
   **The family is deliberately *not* uniform on ordering — do not assume one

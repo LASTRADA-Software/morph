@@ -4,20 +4,20 @@
 > counterpart of [protocol_versioning.md](protocol_versioning.md): that spec
 > governs peers exchanging envelopes *now*; this one governs a process reading
 > NDJSON journal lines written months of releases ago. It extends
-> [journal.md](../spec/journal.md) (`LogEntry`, `FileActionLog`, `replay()`)
+> [journal.md](../spec/journal/journal.md) (`LogEntry`, `FileActionLog`, `replay()`)
 > and closes two of its documented limitations — no format version on
 > persisted lines, unbounded file growth. See [todo.md](../todo.md).
 
 ## The gap
 
 - **No version stamp.** A `FileActionLog` line is a bare `toJson(LogEntry)`
-  ([journal.md](../spec/journal.md)); nothing records which line format (or
+  ([journal.md](../spec/journal/journal.md)); nothing records which line format (or
   which era of action struct) wrote it. A reader confronted with an
   incompatible file cannot even *detect* it, let alone say what wrote it.
 - **The reader is strict where the wire is lenient.** `journal::fromJson`
   decodes with glaze's default options — unknown keys are an **error** —
   unlike `wire::decode`, which explicitly reads with
-  `error_on_unknown_keys = false` ([wire.md](../spec/wire.md)). Today that
+  `error_on_unknown_keys = false` ([wire.md](../spec/core/wire.md)). Today that
   means the journal format cannot gain *any* new key without every older
   reader throwing `SerializationError` on the whole file: adding the version
   stamp itself would be a flag-day. Reader leniency has to land first.
@@ -41,7 +41,7 @@
 `journal::fromJson` switches to the same explicit stance as the wire:
 `glz::opts{.error_on_unknown_keys = false}`, for the same reason — a newer
 writer may add a key an older reader does not know. The duplicate-key
-caveat transfers verbatim ([wire.md](../spec/wire.md): last-wins, not a
+caveat transfers verbatim ([wire.md](../spec/core/wire.md): last-wins, not a
 security boundary). This must ship at least one release **before** any new
 key is written, so downgraded or side-by-side readers never hit the flag-day;
 the sequencing is the point of doing it now, ahead of need.
@@ -67,7 +67,7 @@ struct LogEntry {
   morph") — fail loud rather than guess at a shape this build has never seen.
   The existing positional torn-line rule is unchanged: a failing **last**
   line is still skipped with a warning whatever the failure's cause, an
-  interior failure still throws ([journal.md](../spec/journal.md)).
+  interior failure still throws ([journal.md](../spec/journal/journal.md)).
 - `kLogFormatVersion` bumps only on a *breaking* change to the line format;
   additive keys (tolerated by step 0) do not bump it — mirroring
   `kProtocolVersion`'s discipline
@@ -109,7 +109,7 @@ void rotate(const std::filesystem::path& sealedPath);
 - Full-history reads and replay compose segments **oldest → newest, then the
   active file** — documented recipe, no new API. File order is already the
   cross-restart ordering authority (`seq` stays process-local, unchanged —
-  [journal.md](../spec/journal.md)).
+  [journal.md](../spec/journal/journal.md)).
 - Crash safety: the rename is a single atomic filesystem operation; a crash
   around it leaves either the old active file or the sealed file plus a
   recreated-empty active — never a split line, so the torn-line rule keeps
@@ -140,7 +140,7 @@ their stores should adopt this contract's terms when they land.
 - **No compaction of sealed history.** `checkpoint()` is the reducer, applied
   *before* entries become durable; once written, the audit trail is immutable
   ("entries are never removed by the framework",
-  [journal.md](../spec/journal.md)).
+  [journal.md](../spec/journal/journal.md)).
 - **No multi-process appenders.** The existing single-process constraint on
   `FileActionLog` stands; rotation does not change it.
 - **No encryption or signing of segments.** At-rest protection of archived
@@ -163,10 +163,10 @@ their stores should adopt this contract's terms when they land.
 
 ## Cross-references
 
-- [journal.md](../spec/journal.md) — `LogEntry`, `toJson`/`fromJson`,
+- [journal.md](../spec/journal/journal.md) — `LogEntry`, `toJson`/`fromJson`,
   `FileActionLog` (NDJSON, fsync, torn-line rule, process-local `seq`),
   `replay()`, and the two limitations this closes.
-- [wire.md](../spec/wire.md) — the `error_on_unknown_keys = false` precedent
+- [wire.md](../spec/core/wire.md) — the `error_on_unknown_keys = false` precedent
   and duplicate-key caveat the journal reader adopts.
 - [protocol_versioning.md](protocol_versioning.md) — the additive-only
   policy and deprecation window this extends to retention scope; the

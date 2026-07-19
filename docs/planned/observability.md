@@ -2,12 +2,12 @@
 
 > **Status: planned — not yet implemented.** This spec introduces an injectable
 > observability seam modelled on the replaceable-sink pattern in
-> [logger.md](../spec/logger.md), and adds a health/readiness signal to
-> [backend.md](../spec/backend.md)'s `RemoteServer`. See [todo.md](../todo.md).
+> [logger.md](../spec/core/logger.md), and adds a health/readiness signal to
+> [backend.md](../spec/core/backend.md)'s `RemoteServer`. See [todo.md](../todo.md).
 
 ## The gap
 
-Logging is a replaceable sink ([logger.md](../spec/logger.md)): a global
+Logging is a replaceable sink ([logger.md](../spec/core/logger.md)): a global
 `std::function<void(LogLevel, std::string_view)>` swapped once at startup via
 `setLogger`, with a lock-free level check on the hot path. That is the only
 observability seam. There is:
@@ -20,9 +20,9 @@ observability seam. There is:
   ([transport_limits.md](transport_limits.md)) is meant to bound are not even
   observable.
 - **No tracing hooks.** A single `execute` crosses the calling thread, the model
-  strand, and the callback executor ([backend.md](../spec/backend.md)'s "Thread
+  strand, and the callback executor ([backend.md](../spec/core/backend.md)'s "Thread
   context"), but there is no span/correlation seam to follow one call across those
-  threads. `Context::requestId` exists on the wire ([wire.md](../spec/wire.md))
+  threads. `Context::requestId` exists on the wire ([wire.md](../spec/core/wire.md))
   but nothing consumes it for tracing.
 - **No health/readiness signal.** `RemoteServer` has no "am I up and able to
   serve?" callback or endpoint, so a load balancer or orchestrator has nothing to
@@ -30,7 +30,7 @@ observability seam. There is:
 
 `morph` deliberately keeps the logger minimal — its sink signature is only
 `(LogLevel, std::string_view)`, with "no source location, no category, no
-timestamp, no thread id" ([logger.md](../spec/logger.md)'s Limitations). Metrics
+timestamp, no thread id" ([logger.md](../spec/core/logger.md)'s Limitations). Metrics
 and traces cannot be smuggled through that signature; they need their own seam,
 built the same injectable way.
 
@@ -85,7 +85,7 @@ void setMetricSink(MetricSink);
 [[nodiscard]] bool metricsEnabled() noexcept;
 ```
 
-- **Hot-path discipline** matches [logger.md](../spec/logger.md): the framework
+- **Hot-path discipline** matches [logger.md](../spec/core/logger.md): the framework
   checks `metricsEnabled()` (a relaxed atomic load, no mutex) before constructing
   any `MetricEvent`, so a suppressed metric pays only the atomic load — the same
   contract that lets a filtered `logDebug` skip `std::format`.
@@ -95,8 +95,8 @@ void setMetricSink(MetricSink);
 
 ### 2. A trace seam (NEW)
 
-Tracing reuses the existing `Context::requestId` ([wire.md](../spec/wire.md),
-[session.md](../spec/session.md)) as the correlation id and adds span
+Tracing reuses the existing `Context::requestId` ([wire.md](../spec/core/wire.md),
+[session.md](../spec/session/session.md)) as the correlation id and adds span
 begin/end hooks the framework calls around a dispatch:
 
 ```cpp
@@ -119,7 +119,7 @@ void setTraceSink(TraceSink);   // default: none (no-op), thread-safe swap
 
 - The framework calls `beginSpan`/`endSpan` around the `ActionDispatcher::dispatch`
   call inside `RemoteServer::dispatchExecute` and around `localOp` in
-  `LocalBackend::execute` ([backend.md](../spec/backend.md)) — the same two call
+  `LocalBackend::execute` ([backend.md](../spec/core/backend.md)) — the same two call
   sites the journal records at ([ARCHITECTURE.md](../ARCHITECTURE.md)), so a trace
   covers exactly one `Model::execute`.
 - With no trace sink, both hooks are skipped behind the same enabled-check as
@@ -128,7 +128,7 @@ void setTraceSink(TraceSink);   // default: none (no-op), thread-safe swap
 ### 3. Health / readiness on `RemoteServer` (NEW)
 
 Add a readiness query and an optional state-change callback to `RemoteServer`
-([backend.md](../spec/backend.md)):
+([backend.md](../spec/core/backend.md)):
 
 ```cpp
 // namespace morph::backend — NEW on RemoteServer.
@@ -164,7 +164,7 @@ void setHealthHandler(std::function<void(const HealthStatus&)>);
 - **Not a replacement for the logger.** `morph::log` still carries free-text
   diagnostics; the observability seam carries *structured numbers and spans* the
   logger's `(LogLevel, string_view)` signature cannot express
-  ([logger.md](../spec/logger.md)). They are complementary sinks.
+  ([logger.md](../spec/core/logger.md)). They are complementary sinks.
 - **No sampling/aggregation logic in `morph`.** The framework emits raw
   observations; rate-limiting, histograms, and sampling live in the host's sink.
 - **No preemption or control.** Metrics/health *observe*; they do not throttle or
@@ -189,17 +189,17 @@ void setHealthHandler(std::function<void(const HealthStatus&)>);
 
 ## Cross-references
 
-- [logger.md](../spec/logger.md) — the replaceable-sink pattern (global
+- [logger.md](../spec/core/logger.md) — the replaceable-sink pattern (global
   `std::function` sink, mutex-guarded swap, lock-free hot-path check) this seam
   copies, and the sink-signature limitation that makes a separate metrics/trace
   seam necessary.
-- [backend.md](../spec/backend.md) — `RemoteServer`/`LocalBackend` dispatch call
+- [backend.md](../spec/core/backend.md) — `RemoteServer`/`LocalBackend` dispatch call
   sites the metric/trace hooks wrap, the "Thread context" a trace follows, and
   where `health()`/`setHealthHandler` live.
 - [transport_limits.md](transport_limits.md) — `LimitPolicy`'s in-flight/live-model
   counters this seam surfaces (shared state), and the values metrics make
   observable so limits can be tuned.
-- [offline.md](../spec/offline.md) — `SyncWorker`/`ReconnectCoordinator` and the
+- [offline.md](../spec/offline/offline.md) — `SyncWorker`/`ReconnectCoordinator` and the
   `IOfflineQueue` depth the `queueDepth`/`reconnect*` metrics report on.
-- [wire.md](../spec/wire.md) / [session.md](../spec/session.md) —
+- [wire.md](../spec/core/wire.md) / [session.md](../spec/session/session.md) —
   `Context::requestId`, reused as the trace correlation id.

@@ -22,8 +22,8 @@
 // Q_PROPERTY declarations below; it must not be pointed at morph's
 // template-heavy headers (bridge.hpp, glaze) or the Qt executor.
 #ifndef Q_MOC_RUN
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/qt/qt_executor.hpp>
 
 #include "lab_model.hpp"

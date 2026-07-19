@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/completion.hpp>
-#include <morph/logger.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/logger.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>

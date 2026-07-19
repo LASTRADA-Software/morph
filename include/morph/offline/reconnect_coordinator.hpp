@@ -7,7 +7,7 @@
 #include <mutex>
 #include <string>
 
-#include "logger.hpp"
+#include "../core/logger.hpp"
 
 namespace morph::offline {
 

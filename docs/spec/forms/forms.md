@@ -352,7 +352,7 @@ handler:
 - **`BridgeHandler::executeJson` → `ActionExecuteRegistry`** (the local /
   client-side path a schema-driven GUI uses). This path **now enforces**
   `ActionValidator<Action>::ready` after decoding and before invoking the handler
-  (see [bridge.md](bridge.md)): an action that fails `validate()` is rejected with
+  (see [bridge.md](../core/bridge.md)): an action that fails `validate()` is rejected with
   an error, never executed. It also retags `Quantity` fields to their declared
   precision (below). So on this path the schema's `required` array and the
   handler agree by construction.
@@ -368,7 +368,7 @@ quantities inside the handler**. The `examples/forms` model does exactly this �
 its `execute(RecordMeasurement)` calls `action.validate()` (the same
 `allRequiredEngaged` predicate) and throws `std::invalid_argument` if it fails,
 so schema, form, and server agree regardless of which dispatch path was used. See
-[security.md](security.md) for the wire dispatcher's validation stance.
+[security.md](../security.md) for the wire dispatcher's validation stance.
 
 ### Advertised precision is enforced on dispatch
 
@@ -422,11 +422,11 @@ wrong or un-merged schema rather than fail loudly.
 
 | Spec | Why |
 |---|---|
-| [choice.md](choice.md) | Full `Choice` / `FixedString` API and design (this spec cross-refs rather than duplicates them). |
-| [quantity_type.md](quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |
-| [datetime.md](datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |
-| [rational.md](rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. |
-| [security.md](security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
+| [choice.md](choice.md) | Full `Choice` API and design (this spec cross-refs rather than duplicates it). |
+| [quantity_type.md](../util/quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |
+| [datetime.md](../util/datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |
+| [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. |
+| [security.md](../security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
 
 ## Out of scope
 

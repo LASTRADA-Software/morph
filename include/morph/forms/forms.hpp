@@ -2,7 +2,7 @@
 
 #pragma once
 
-/// @file forms.hpp
+/// @file forms/forms.hpp
 /// @brief JSON-Forms-style schema generation for morph actions.
 ///
 /// Given an action type `A` (a plain aggregate, as registered with
@@ -73,7 +73,7 @@
 #include <utility>
 
 #include "choice.hpp"
-#include "quantity.hpp"
+#include "../util/quantity.hpp"
 
 namespace morph::forms {
 

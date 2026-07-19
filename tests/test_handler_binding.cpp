@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

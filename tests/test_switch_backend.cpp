@@ -3,11 +3,11 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/model.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/model.hpp>
+#include <morph/core/registry.hpp>
 #include <thread>
 
 #include "test_support.hpp"
@@ -232,7 +232,7 @@ TEST_CASE(
 
 // ── Remote backend no-op ──────────────────────────────────────────────────────
 
-#include <morph/remote.hpp>
+#include <morph/core/remote.hpp>
 
 TEST_CASE("morph::backend::SimulatedRemoteBackend::notifyBackendChanged is a documented no-op", "[remote][notify]") {
     morph::exec::ThreadPoolExecutor pool{2};

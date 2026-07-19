@@ -6,8 +6,8 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
-#include <morph/backend.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/registry.hpp>
 #include <chrono>
 #include <functional>
 #include <mutex>

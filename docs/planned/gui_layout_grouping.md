@@ -2,7 +2,7 @@
 
 > **Status: planned — not yet implemented.** This spec extends the GUI program
 > umbrella ([gui_overview.md](gui_overview.md)) and the schema-generation spine
-> ([forms.md](../spec/forms.md)). It is a Tier-1 richer-forms feature: visual
+> ([forms.md](../spec/forms/forms.md)). It is a Tier-1 richer-forms feature: visual
 > structure layered over the existing flat field list, additive and opt-in. See
 > [todo.md](../todo.md).
 
@@ -10,7 +10,7 @@
 
 `morph::forms::schemaJson<A>()` emits a **flat** form. The only layout signal is
 `x-order` — the member's 0-based declaration index — which a renderer uses to lay
-fields out top-to-bottom in declaration order ([forms.md](../spec/forms.md),
+fields out top-to-bottom in declaration order ([forms.md](../spec/forms/forms.md),
 "Renderer contract"). There is no way to express structure *over* that flat list:
 
 - **No sections / fieldsets.** Related fields (all the address fields, all the
@@ -118,7 +118,7 @@ container kind without reconstructing them from per-field tags:
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when > 1. A renderer laying fields in a grid widens the control; a single-column renderer ignores it (field still shows full width). |
 
 All four keys are **additive and non-breaking**: they extend the
-[forms.md](../spec/forms.md) contract table without touching any existing key,
+[forms.md](../spec/forms/forms.md) contract table without touching any existing key,
 per [gui_overview.md](gui_overview.md)'s versioning stance. A renderer that
 ignores them **falls back to exactly today's flat form** — it drops `x-layout`,
 `x-group`, `x-section`, and `x-colspan` and lays every field out top-to-bottom by
@@ -143,7 +143,7 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 ## Non-goals
 
 - **No nested / recursive groups.** Groups are a single flat level over the flat
-  field list — no group-within-group. This matches [forms.md](../spec/forms.md)'s
+  field list — no group-within-group. This matches [forms.md](../spec/forms/forms.md)'s
   "flat actions only" scope; deep hierarchy would need nested action types the
   form generator does not descend into.
 - **No responsive breakpoints.** `x-colspan` is a fixed column count, not a
@@ -181,7 +181,7 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 
 - [gui_overview.md](gui_overview.md) — infer-by-default / declare-to-override and
   the additive-`x-*` versioning stance this feature obeys.
-- [forms.md](../spec/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
+- [forms.md](../spec/forms/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
   `forEachNamedMember`, `x-order` (the intra-group ordering authority), the
   property-node placement rule, and the renderer-contract table these keys extend.
 - [gui_field_metadata.md](gui_field_metadata.md) — per-field labels/help that

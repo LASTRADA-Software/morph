@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/qt/qt_executor.hpp>
 
 #include <QString>

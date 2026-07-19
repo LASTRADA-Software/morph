@@ -17,7 +17,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "../rational.hpp"
+#include "../util/rational.hpp"
 
 namespace morph::units::detail {
 

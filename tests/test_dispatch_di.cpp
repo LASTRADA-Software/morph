@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/registry.hpp>
+#include <morph/core/registry.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <stdexcept>
 #include <string>

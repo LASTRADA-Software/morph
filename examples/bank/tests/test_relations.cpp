@@ -14,7 +14,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <Lightweight/Lightweight.hpp>
-#include <morph/bridge.hpp>
+#include <morph/core/bridge.hpp>
 
 #include <cstdint>
 #include <string>

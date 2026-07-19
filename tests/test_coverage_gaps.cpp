@@ -4,14 +4,14 @@
 // case names the file:line range it is meant to cover so future readers can
 // understand why an unusual edge case is being exercised here.
 
-#include <morph/bridge.hpp>
-#include <morph/completion.hpp>
-#include <morph/executor.hpp>
-#include <morph/logger.hpp>
-#include <morph/network_monitor.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

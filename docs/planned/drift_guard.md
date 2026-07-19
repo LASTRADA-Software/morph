@@ -13,7 +13,7 @@ code**. [todo.md](../todo.md) enumerates the actual drift that shipped:
 
 - the `authenticate` "principal-clearing" behavior a doc described wrongly,
 - the false "unknown keys ignored" claim that predated the real
-  `error_on_unknown_keys = false` behavior ([wire.md](../spec/wire.md)),
+  `error_on_unknown_keys = false` behavior ([wire.md](../spec/core/wire.md)),
 - a stale `runFor` comment,
 - a stale `AuthError` cardinality (the enum grew, the doc did not).
 
@@ -44,9 +44,9 @@ The facts, drawn from the audit's failure classes:
 | Fact class | Examples (verified real symbols) | Source of truth in code |
 |---|---|---|
 | **Enum cardinalities** | `AuthError` (`Malformed`/`BadSignature`/`Expired`/`NotYetValid`), `LogLevel` (5: `debug`/`info`/`warn`/`error`/`off`), `ReconnectOutcome` (3), `Metric` (once [observability.md](observability.md) lands) | the `enum class` declaration in the header |
-| **Key constants** | `kMaxEnvelopeBytes` (`8 * 1024 * 1024`, [wire.md](../spec/wire.md)), `kMaxDecimalPlaces` ([ARCHITECTURE.md](../ARCHITECTURE.md), `morph::math`), `kClockSkewMs` (60s, [security.md](../spec/security.md)) | the `constexpr` definition |
-| **Canonical error strings** | `BackendChangedError` = `"backend changed before completion resolved"`, `BridgeDestroyedError`, `DisconnectedError` ([backend.md](../spec/backend.md)); `err "unauthorized"`, `"model not found"`, `"register requires a typeId"` | the string literal in the throw/reply site |
-| **Glaze behavior flags** | `error_on_unknown_keys = false` on `wire::decode` ([wire.md](../spec/wire.md)); duplicate-key last-wins (behavioral, asserted by a pinned test) | the `glz::read<{...}>` options at the call site |
+| **Key constants** | `kMaxEnvelopeBytes` (`8 * 1024 * 1024`, [wire.md](../spec/core/wire.md)), `kMaxDecimalPlaces` ([ARCHITECTURE.md](../ARCHITECTURE.md), `morph::math`), `kClockSkewMs` (60s, [security.md](../spec/security.md)) | the `constexpr` definition |
+| **Canonical error strings** | `BackendChangedError` = `"backend changed before completion resolved"`, `BridgeDestroyedError`, `DisconnectedError` ([backend.md](../spec/core/backend.md)); `err "unauthorized"`, `"model not found"`, `"register requires a typeId"` | the string literal in the throw/reply site |
+| **Glaze behavior flags** | `error_on_unknown_keys = false` on `wire::decode` ([wire.md](../spec/core/wire.md)); duplicate-key last-wins (behavioral, asserted by a pinned test) | the `glz::read<{...}>` options at the call site |
 
 The manifest is the one place a human states "the spec claims X"; the code is
 scanned for the actual value; CI fails if they diverge. When a value legitimately
@@ -134,14 +134,14 @@ as the Doxygen `FAIL_ON_WARNINGS` gate `CLAUDE.md` already documents.
 
 ## Cross-references
 
-- [wire.md](../spec/wire.md) — `kMaxEnvelopeBytes`, the
+- [wire.md](../spec/core/wire.md) — `kMaxEnvelopeBytes`, the
   `error_on_unknown_keys = false` flag, and the duplicate-key behavior — three of
   the exact facts the audit found drifted.
 - [security.md](../spec/security.md) — `AuthError` cardinality and `kClockSkewMs`,
   audit-class facts this pins.
-- [backend.md](../spec/backend.md) — the canonical error-type `what()` strings and
+- [backend.md](../spec/core/backend.md) — the canonical error-type `what()` strings and
   reply strings (`"unauthorized"`, `"model not found"`) pinned as literals.
-- [logger.md](../spec/logger.md) — `LogLevel`'s 5-member cardinality.
+- [logger.md](../spec/core/logger.md) — `LogLevel`'s 5-member cardinality.
 - [api_stability.md](api_stability.md) — the complementary compatibility guard;
   drift-guard checks *doc accuracy*, api-stability checks *API compatibility*.
 - `CLAUDE.md` — the "specs are authoritative; update the spec on any change" rule

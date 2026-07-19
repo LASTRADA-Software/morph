@@ -5,15 +5,15 @@
 // RemoteServer::LogProvider mechanism that closes phase 1's "remote identity"
 // gap. (Phase 3, a Kafka-shaped sink, was dropped for now.)
 
-#include <morph/action_log.hpp>
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/file_action_log.hpp>
-#include <morph/journal.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/wire.hpp>
+#include <morph/journal/action_log.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

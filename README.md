@@ -312,7 +312,7 @@ with `checkpoint()` coalescing and `undoLast()`, which reconstructs state by
 *replaying* the remaining actions. This model is exact for pure, deterministic,
 in-memory models; a model that owns an external store (SQL, network) needs care,
 because replay re-executes actions rather than re-applying stored results — see
-the design notes in [`docs/spec/journal.md`](docs/spec/journal.md).
+the design notes in [`docs/spec/journal/journal.md`](docs/spec/journal/journal.md).
 
 ## Offline support
 
@@ -344,7 +344,7 @@ the `Context` is client-supplied data with no built-in integrity, the default
 authorizer allows everything, and the local backend does not authorize at all.
 Treat authentication as the transport's job (e.g. TLS + a token your authorizer
 validates) and enforce security-critical checks inside the model. See
-[`docs/spec/session.md`](docs/spec/session.md).
+[`docs/spec/session/session.md`](docs/spec/session/session.md).
 
 ## Building & dependencies
 

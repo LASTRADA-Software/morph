@@ -11,9 +11,9 @@ The framework is header-only (C++23, namespace `morph`), depends on Glaze for JS
 > subsystem, capturing invariants, API surface, and the reasoning behind each
 > design. Consult the matching spec before changing a public type: e.g.
 > `docs/spec/security.md` (authenticated sessions and the trust model),
-> `docs/spec/completion.md`, `docs/spec/executor.md`, `docs/spec/bridge.md`,
-> `docs/spec/journal.md`, `docs/spec/offline.md`, `docs/spec/session.md`,
-> `docs/spec/wire.md`. Where this document and a spec disagree, the spec wins.
+> `docs/spec/core/completion.md`, `docs/spec/core/executor.md`, `docs/spec/core/bridge.md`,
+> `docs/spec/journal/journal.md`, `docs/spec/offline/offline.md`, `docs/spec/session/session.md`,
+> `docs/spec/core/wire.md`. Where this document and a spec disagree, the spec wins.
 
 ## Namespace map
 
@@ -67,44 +67,6 @@ Every nested `detail` namespace under those topics holds implementation symbols.
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-## Header map
-
-### Core headers (`include/morph/`)
-
-| Header | Responsibility |
-|---|---|
-| `logger.hpp` | `LogLevel`, log configuration and level helpers; internals in `morph::log::detail` |
-| `executor.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` (`morph::exec::`) |
-| `strand.hpp` | `ModelId`, `ModelIdHash`, `StrandExecutor` — serialises tasks per model (`morph::exec::detail::`) |
-| `completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
-| `model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
-| `registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (now also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
-| `action_log.hpp` | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `toJson`/`fromJson`, `SerializationError`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` (`morph::journal::`) — the durable-sink interface and the process-wide default sink, with zero dependency on `model.hpp`/`registry.hpp` |
-| `journal.hpp` | `SessionLog`, `replay()` (`morph::journal::`) — full-fidelity session log with `checkpoint()` coalescing and `undoLast()`, built on `action_log.hpp` + the existing `ActionDispatcher`/`ModelRegistryFactory` |
-| `file_action_log.hpp` | `FileActionLog` (`morph::journal::`) — append-only NDJSON `IActionLog`, `flush()` fsyncs |
-| `rational.hpp` | `Rational`, `DecimalPlaces`, `RationalError` (`morph::math::`) — exact int64 rational arithmetic with a decimal-precision tag; Glaze wire codec (`{"num","den","dp"}`, canonicalised on read) and `std::formatter` |
-| `quantity.hpp` | `Quantity<U>`, `UnitMeta`, `UnitTraits` (`morph::units::`) — unit-tagged optional value over `Rational`; units are application enum NTTPs, schemas get `ExtUnits` automatically. See `docs/spec/quantity_type.md` for the full design. |
-| `datetime.hpp` | `DateTime`, `Timestamp` (`morph::time::`) — UTC instant (ms precision) with a strict ISO-8601 wire codec (malformed input is a read *error*) and the optionally-empty field wrapper; schemas carry `"format": "date-time"` |
-| `choice.hpp` | `Choice<T, "ListX", "id", "name">`, `FixedString`, `isChoice` (`morph::forms::`) — a field whose options are the result of executing the named action; surfaces as `x-optionsAction`/`x-optionValue`/`x-optionLabel` in schemas, renders as a combo box |
-| `forms.hpp` | `schemaJson<A>()`, `allRequiredEngaged()`, `EmptyCapableField` (`morph::forms::`) — JSON Schema per action with derived `required`, `x-decimalPlaces`, `x-order`, `x-options*` |
-| `backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
-| `remote.hpp` | `RemoteServer` (now with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
-| `bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (now carrying `contextKey`), `MemberPointerTraits` (detail) |
-| `network_monitor.hpp` | `NetworkMonitorConfig`, `NetworkMonitor` — background probe thread, online/offline state machine |
-| `offline_queue.hpp` | `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue` — durable write queue abstraction |
-| `sync_worker.hpp` | `SyncWorker`, `SyncResult` — drains offline queue on reconnect via caller-supplied replay |
-| `reconnect_coordinator.hpp` | `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` — sequences reconnect → activate → bind → replay on connectivity return; all side effects injected via `Deps` |
-| `session.hpp` | `Context`, `IAuthorizer`, `AllowAllAuthorizer`, `allowAllAuthorizer`, `current` (`morph::session::`) — per-call session bag carried through the bridge to the model, plus the server-side authorization seam; internals in `morph::session::detail` (`ScopedContext`, thread-local current context) |
-| `session_auth.hpp` | `SessionToken`, `TokenIssuer`, `TokenVerifier`, `SigningAuthorizer`, `MacFunction`, `hmacSha256`, `AuthError` (`morph::session::`) — opt-in signed bearer tokens and a verifying `IAuthorizer`; self-contained reference HMAC-SHA256 in `morph::session::detail`. See `docs/spec/security.md`. |
-
-### Qt integration headers (`include/morph/qt/`)
-
-| Header | Responsibility |
-|---|---|
-| `qt_executor.hpp` | `QtExecutor` — posts callables via `QMetaObject::invokeMethod` |
-| `qt_websocket_backend.hpp` | `QtWebSocketBackend` — WebSocket client; implements `IBackend` |
-| `qt_websocket_server.hpp` | `QtWebSocketServer` — QObject server; forwards messages to `RemoteServer` |
-
 ## Deployment topologies
 
 **Local mode** — model lives in the same process:
@@ -130,13 +92,14 @@ GUI thread
                            └─ serialize result → Completion<T>::then → GUI executor
 ```
 
-**Qt WebSocket mode** — model lives in a separate process:
+**Qt WebSocket mode** — model lives in a separate process. Three classes with distinct responsibilities collaborate here: `qt::QtWebSocketBackend` is the **network client** (owns the `QWebSocket`, correlates replies to pending `Completion`s, handles reconnect); `qt::QtWebSocketServer` is the **network server** (pure transport — receives text frames and forwards them verbatim to `RemoteServer::handle()`, sends the reply back); `backend::RemoteServer` is the **protocol + dispatch** layer (parses envelopes, authorizes, routes to models) and is transport-agnostic — the same class also serves the simulated-remote topology above.
 
 ```
 GUI thread (Qt process)                         Server process
+                                                qt::QtWebSocketServer (transport)
   └─ bridge::BridgeHandler<M>::execute(action)
        └─ bridge::Bridge::executeVia<M, A>
-            └─ qt::QtWebSocketBackend::execute
+            └─ qt::QtWebSocketBackend::execute   (network client)
                  └─ assign callId, send JSON  ──► qt::QtWebSocketServer::handle
                                                         └─ backend::RemoteServer::handle (JSON wire envelope)
                                                              └─ ActionDispatcher → StrandExecutor → Model::execute
@@ -146,6 +109,25 @@ GUI thread (Qt process)                         Server process
 ```
 
 The GUI sees the same `morph::async::Completion<T>` in all three modes.
+
+**Offline / sync mode** — how the `morph::offline` primitives compose. These four classes do not form a backend of their own; they wrap whichever backend is active and drive `Bridge::switchBackend` + replay when connectivity flaps. The framework ships the primitives and the sequencing; the application wires them together (the probe, the queue's persistence, and the replay function are all caller-supplied):
+
+```
+morph::offline::NetworkMonitor            (detects connectivity; probe is caller-supplied)
+  │ onOffline ──► app calls Bridge::switchBackend(local fallback)
+  │               app/enqueuer writes pending actions into IOfflineQueue
+  │                 (InMemoryOfflineQueue ships with the framework;
+  │                  a durable SQL-backed queue is the app's to provide)
+  │ onOnline  ──► morph::offline::ReconnectCoordinator  (sequences:)
+  │                 1. tryReconnect()      → probe the primary backend
+  │                 2. activatePrimary()   → Bridge::switchBackend(primary)
+  │                 3. bindContext()       → rebind handlers
+  │                 4. replay()            → morph::offline::SyncWorker::run()
+  │                                            drains IOfflineQueue via a
+  │                                            caller-supplied ReplayFunction
+```
+
+`NetworkMonitor` fires the transitions; `ReconnectCoordinator` owns the ordering and retry loop; `SyncWorker` owns the queue drain; `IOfflineQueue` owns the pending writes. Each is usable independently of the others.
 
 ## Wire protocol
 
@@ -163,8 +145,8 @@ field is the discriminator:
 All envelopes round-trip through Glaze JSON, so the protocol is self-describing,
 escaping-safe, and easy to extend (add a field, ignore unknowns).
 
-The `session` field is a `morph::session::Context`, which now carries a
-verified bearer `token` alongside the (untrusted) client-asserted `principal`.
+The `session` field is a `morph::session::Context` carrying a verified bearer
+`token` alongside the (untrusted) client-asserted `principal`.
 The server runs every incoming `execute` envelope through its configured
 `IAuthorizer`; a `false` return causes the server to reply with
 `err|unauthorized` (callId echoed). The default authorizer permits everything.
@@ -213,7 +195,7 @@ If a `Completion` is destroyed with an unhandled error (no `.onError` was attach
 ### Registry & type erasure
 
 `morph::model::ModelTraits<M>` and `morph::model::ActionTraits<A>` are specialised by registration macros. They provide:
-- String type IDs for protocol routing.
+- String type IDs for protocol routing — the string literals passed as the `NAME` argument to `BRIDGE_REGISTER_MODEL(M, "MyModel")` / `BRIDGE_REGISTER_ACTION(M, A, "MyAction")` in the `.cpp` that owns the model. These strings travel in the wire envelope's `modelType`/`actionType` fields and key the server's dispatch tables.
 - Glaze-based `toJson` / `fromJson` for actions and results.
 
 `morph::model::detail::ActionDispatcher` maps `(modelTypeId, actionTypeId)` → a runner lambda that downcasts `IModelHolder`, calls `model.execute(action)`, and returns the result as JSON.
@@ -237,7 +219,7 @@ Bridge            ──holds──►  weak_ptr<HandlerBinding>   (does NOT kee
 
 **RAII lifetime:** When `BridgeHandler` goes out of scope, its destructor calls `Bridge::deregisterHandler`, which tells the backend to destroy the model instance and removes the stale `weak_ptr` from the Bridge's list. No manual cleanup is required from application code.
 
-**Destruction order is now safe either way:** the `BridgeHandler` also holds a `weak_ptr<const void>` liveness token published by the `Bridge` (`Bridge::liveness()`; the token is destroyed with the bridge). The destructor deregisters only if that token is still live — if the `Bridge` was destroyed first, the token has expired and the handler skips deregistration instead of dereferencing a dangling `Bridge&`. Destroying a bridge before its handlers is still discouraged, but is defined behaviour rather than a use-after-free.
+**Destruction order is safe either way:** the `BridgeHandler` also holds a `weak_ptr<const void>` liveness token published by the `Bridge` (`Bridge::liveness()`; the token is destroyed with the bridge). The destructor deregisters only if that token is still live — if the `Bridge` was destroyed first, the token has expired and the handler skips deregistration instead of dereferencing a dangling `Bridge&`. Destroying a bridge before its handlers is still discouraged, but is defined behaviour rather than a use-after-free.
 
 **`atomic<uint64_t> currentId`:** Every call to `executeVia` reads `binding->currentId` to find out which backend-assigned ID to use. The value is an atomic so it can be updated during a backend switch without holding the bridge mutex for the duration of every execute call. A value of `0` is the sentinel for "not bound" — `executeVia` returns an immediate error in that case.
 
@@ -302,18 +284,17 @@ morph::offline::NetworkMonitor monitor{
 | `drain()` | Return all pending items in enqueue order; does **not** remove them |
 | `markDone(id)` | Remove item by id; no-op if unknown |
 
-`drain()` returning items without removing them is deliberate — items survive a crash between `drain()` and `markDone()`. A SQL-backed implementation (not in this repository) can persist items across process restarts by storing them in a table with a UNIQUE constraint on the payload.
+`drain()` returning items without removing them is deliberate — items survive a crash between `drain()` and `markDone()`. A SQL-backed implementation can persist items across process restarts by storing them in a table with a UNIQUE constraint on the payload.
 
 `InMemoryOfflineQueue` implements the interface with a `std::deque` protected by a mutex. It does not deduplicate.
 
-### Action log (issue #3) — ordered, coalescing, identity-aware execution history
+### Action log — ordered, coalescing, identity-aware execution history
 
 `morph::journal` records executed actions as an ordered, replayable log, distinct in purpose from `IOfflineQueue` above: `IOfflineQueue` holds pending writes awaiting retry and deletes them once delivered; the action log is a permanent audit/replay trail — entries are never removed by the framework.
 
 **`IActionLog`** is the durable-sink interface (`append`, `flush`, `entries`), implemented by `InMemoryActionLog` and `FileActionLog` (append-only NDJSON, `flush()` fsyncs). Each `LogEntry` carries `modelType`, `entityKey`, `actionType`, `payload`/`result` JSON, `principal`, and a sink-assigned `seq`. `FileActionLog::entries()` **tolerates a torn trailing line**: a crash between `append`'s write and the next flush can leave a truncated final line, so a malformed *last* line is logged and skipped rather than throwing — but a malformed line mid-file is genuine corruption and is re-thrown.
 
 **Set the sink once, in `main()` — every model uses it automatically.** `morph::journal::setActionLog(log)` installs a process-wide default. `ModelFactory::create<Model>()` — the factory behind every ordinary model registration, local *or* remote — attaches that default to each new instance automatically (empty `entityKey`). No per-model, per-handler, or per-backend wiring is required; `RemoteServer`-owned instances get it exactly the same way, since they're constructed through the same factory. `defaultActionLog()` reads the current sink back; `ScopedActionLog` (RAII, mirrors `morph::log::ScopedLoggerOverride`) installs one temporarily and restores the previous one on scope exit — the tool tests use it to avoid leaking a sink across test cases.
-
 
 Application code that needs a specific instance identity (e.g. per-account auditing) can still call `IModelHolder::attachActionLog(log, contextKey)` explicitly on that instance — an explicit call always overrides the default, and is the seam `HandlerBinding::contextKey`/`RemoteServer::setLogProvider` (below) build on for the remote case. Recording itself happens at the two call sites that are the *only* two places `Model::execute()` is ever invoked in the whole codebase:
 
@@ -330,11 +311,11 @@ Because these are mutually exclusive per topology, recording is automatically se
 
 **`SessionLog`** (`journal.hpp`) is where coalescing actually happens. It keeps full, uncoalesced history in memory (the raw material for `undoLast()`), and `checkpoint(durableSink)` reduces everything appended since the last checkpoint by `(modelType, entityKey, actionType)` — keeping only the latest entry where `coalesce == true`, every entry otherwise — before forwarding the reduced set to the real sink. `undoLast()` needs no inverse operations: it drops the most recent entry and calls `journal::replay()` over what remains, reusing the same `ActionDispatcher`/`ModelRegistryFactory` `RemoteServer` already relies on for dispatch. This is not a workaround — a model's entire state genuinely is "initial state plus its ordered actions replayed," so reconstructing it by replay is the direct statement of that fact, not a special case.
 
-**Replay/undo never records into the live default log.** `journal::replay()` builds the reconstructed holder through `ModelRegistryFactory::create`, which (like every factory-built model) auto-attaches the process-wide default action log. Before replaying, `replay()` immediately **detaches** it (`attachActionLog(nullptr, {})`), so re-running the recorded actions does not re-record each one into the live sink — which would corrupt the very audit trail being read from. The reconstructed holder is a detached, throwaway artifact.
+**Replay/undo never records into the live default log.** `journal::replay()` builds the reconstructed holder through `ModelRegistryFactory::create`, which (like every factory-built model) auto-attaches the process-wide default action log. Before replaying, `replay()` immediately **detaches** it (`attachActionLog(nullptr, {})`), so re-running the recorded actions does not re-record each one into the live sink — which would corrupt the very audit trail being read from. The suppression is scoped to the replay pass only: once replay finishes, the reconstructed instance becomes the live model, and any new action executed on it goes through the normal dispatch path (with the log attached) and is recorded as a new entry appended after the surviving entries — e.g. journal `[A, B, C]`, undo `C`, execute `D` leaves `[A, B, D]`.
 
 **Remote-mode per-instance identity** (`RemoteServer::setLogProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
 
-**Not yet built** (see the design note linked from issue #3): the outbox pattern an integration against a model that also owns its own durable store would need (to avoid the log and the store's committed state silently diverging) — see `examples/bank`, which demonstrates `setActionLog` end to end against SQLite-backed models but writes to its own DB and the audit log as two independent steps, not one atomic outbox write. A Kafka-backed sink (dropped for now; the `IActionLog` interface is designed so one can be added later without touching call sites) and any read-model built on top of it are noted as future work.
+**Not yet built** : the outbox pattern an integration against a model that also owns its own durable store would need (to avoid the log and the store's committed state silently diverging) — see `examples/bank`, which demonstrates `setActionLog` end to end against SQLite-backed models but writes to its own DB and the audit log as two independent steps, not one atomic outbox write.
 
 ### SyncWorker
 
@@ -478,7 +459,7 @@ handler.reset<FormAction>();
 ## Exact values, units, and schema-driven forms
 
 Three headers extend actions from "any aggregate" to *self-describing*
-aggregates a client can build its GUI from at runtime: `rational.hpp` (exact
+aggregates a client can build its GUI from a runtime: `rational.hpp` (exact
 numbers), `quantity.hpp` (unit-tagged, optionally-empty values) and
 `forms.hpp` (JSON Schema generation). Nothing else in the framework includes
 them — they are an opt-in layer that composes with registration, validators,
@@ -594,6 +575,76 @@ Two further field types follow the same one-kind-of-empty pattern:
   cannot fetch); the QML client fetches them live over the same in-process
   wire it submits on.
 
+## Header map
+
+The headers are grouped into per-sub-domain subdirectories that mirror the
+namespaces. Design specs live under `docs/spec/<sub-domain>/` with the same
+folder names.
+
+### Library headers (`include/morph/`)
+
+#### `core/` — async core, registry, bridge, backends, wire
+
+| Header | Responsibility |
+|---|---|
+| `core/logger.hpp` | `LogLevel`, log configuration and level helpers; internals in `morph::log::detail` |
+| `core/executor.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` (`morph::exec::`) |
+| `core/strand.hpp` | `ModelId`, `ModelIdHash`, `StrandExecutor` — serialises tasks per model (`morph::exec::detail::`) |
+| `core/completion.hpp` | `CompletionState<T>` (detail) + `Completion<T>` (public) — result handle |
+| `core/model.hpp` | `IModelHolder`, `ModelHolder<T>`, `ModelFactory`, `IBackendChangedSink`, `BackendChangedNotifiable` — type-erased model storage; `IModelHolder::attachActionLog`/`hasActionLog`/`recordIfAttached` (`morph::model::detail::`) |
+| `core/registry.hpp` | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` (public) + `ActionDispatcher` (also tracking each action's `coalesce` policy), `ModelRegistryFactory`, `defaultDispatcher()`, `defaultRegistry()`, `ParseError`, `registerModelOnce`, `registerActionOnce`, `actionLoggable<A>()` (detail). Registration macros `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION` (optional 4th `Loggable` argument), `BRIDGE_REGISTER_VALIDATOR` are defined here at file scope. |
+| `core/backend.hpp` | `LocalBackend` (public) + `ActionCall`, `IBackend` (detail), including the non-breaking `registerModelWithContext()` default method |
+| `core/remote.hpp` | `RemoteServer` (with `setLogProvider()`), `SimulatedRemoteBackend` (`morph::backend::`) |
+| `core/bridge.hpp` | `Bridge`, `BridgeHandler<M>` (public) + `HandlerBinding` (carrying `contextKey`), `MemberPointerTraits` (detail) |
+| `core/wire.hpp` | `Envelope`, `encode`/`decode`, `kMaxEnvelopeBytes` (`morph::wire::`) — the JSON wire envelope and length-bounded framing between any client and `RemoteServer` |
+
+#### `journal/` — ordered, replayable action log
+
+| Header | Responsibility |
+|---|---|
+| `journal/action_log.hpp` | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `toJson`/`fromJson`, `SerializationError`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` (`morph::journal::`) — the durable-sink interface and the process-wide default sink, with zero dependency on `core/model.hpp`/`core/registry.hpp` |
+| `journal/journal.hpp` | `SessionLog`, `replay()` (`morph::journal::`) — full-fidelity session log with `checkpoint()` coalescing and `undoLast()`, built on `action_log.hpp` + the existing `ActionDispatcher`/`ModelRegistryFactory` |
+| `journal/file_action_log.hpp` | `FileActionLog` (`morph::journal::`) — append-only NDJSON `IActionLog`, `flush()` fsyncs |
+
+#### `offline/` — connectivity + replay
+
+| Header | Responsibility |
+|---|---|
+| `offline/network_monitor.hpp` | `NetworkMonitorConfig`, `NetworkMonitor` — background probe thread, online/offline state machine |
+| `offline/offline_queue.hpp` | `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue` — durable write queue abstraction |
+| `offline/sync_worker.hpp` | `SyncWorker`, `SyncResult` — drains offline queue on reconnect via caller-supplied replay |
+| `offline/reconnect_coordinator.hpp` | `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` — sequences reconnect → activate → bind → replay on connectivity return; all side effects injected via `Deps` |
+
+#### `session/` — per-call context + authentication
+
+| Header | Responsibility |
+|---|---|
+| `session/session.hpp` | `Context`, `IAuthorizer`, `AllowAllAuthorizer`, `allowAllAuthorizer`, `current` (`morph::session::`) — per-call session bag carried through the bridge to the model, plus the server-side authorization seam; internals in `morph::session::detail` (`ScopedContext`, thread-local current context) |
+| `session/session_auth.hpp` | `SessionToken`, `TokenIssuer`, `TokenVerifier`, `SigningAuthorizer`, `MacFunction`, `hmacSha256`, `AuthError` (`morph::session::`) — opt-in signed bearer tokens and a verifying `IAuthorizer`; self-contained reference HMAC-SHA256 in `morph::session::detail`. See `docs/spec/security.md`. |
+
+#### `forms/` — JSON-Schema generation for auto-built GUIs
+
+| Header | Responsibility |
+|---|---|
+| `forms/forms.hpp` | `schemaJson<A>()`, `allRequiredEngaged()`, `EmptyCapableField` (`morph::forms::`) — JSON Schema per action with derived `required`, `x-decimalPlaces`, `x-order`, `x-options*` |
+| `forms/choice.hpp` | `Choice<T, "ListX", "id", "name">`, `FixedString`, `isChoice` (`morph::forms::`) — a field whose options are the result of executing the named action; surfaces as `x-optionsAction`/`x-optionValue`/`x-optionLabel` in schemas, renders as a combo box |
+
+#### `util/` — exact values, units, time
+
+| Header | Responsibility |
+|---|---|
+| `util/rational.hpp` | `Rational`, `DecimalPlaces`, `RationalError` (`morph::math::`) — exact int64 rational arithmetic with a decimal-precision tag; Glaze wire codec (`{"num","den","dp"}`, canonicalised on read) and `std::formatter` |
+| `util/quantity.hpp` | `Quantity<U>`, `UnitMeta`, `UnitTraits` (`morph::units::`) — unit-tagged optional value over `Rational`; units are application enum NTTPs, schemas get `ExtUnits` automatically. See `docs/spec/util/quantity_type.md` for the full design. |
+| `util/datetime.hpp` | `DateTime`, `Timestamp` (`morph::time::`) — UTC instant (ms precision) with a strict ISO-8601 wire codec (malformed input is a read *error*) and the optionally-empty field wrapper; schemas carry `"format": "date-time"` |
+
+### Qt integration headers (`include/morph/qt/`)
+
+| Header | Responsibility |
+|---|---|
+| `qt_executor.hpp` | `QtExecutor` — posts callables via `QMetaObject::invokeMethod` |
+| `qt_websocket_backend.hpp` | `QtWebSocketBackend` — WebSocket client; implements `IBackend` |
+| `qt_websocket_server.hpp` | `QtWebSocketServer` — QObject server; forwards messages to `RemoteServer` |
+
 ## Known limitations
 
 ### Validators do not run server-side
@@ -623,7 +674,7 @@ Callbacks (`onOffline`, `onOnline`) run directly on the probe thread. A blocking
 
 The `cbExec` pointer on `CompletionState` should be set before `setValue` / `setException` is called (or before `attachThen` / `attachOnError` if the state is already ready). If `cbExec` is null when a callback would fire, that callback is silently dropped — no error is raised. This is enforced by the `Completion<T>` constructor, which accepts an `IExecutor*`; the hazard only arises when using `CompletionState` directly (an internal type).
 
-An abandoned **error**, however, is no longer silenced by a null executor: `onErrAttached` (the flag that suppresses the destructor's orphan log) is only set when an executor actually exists to deliver the handler. With a null executor the error handler is never posted, so `onErrAttached` stays `false` and `~CompletionState` still logs the exception through the orphan logger rather than losing it.
+An abandoned **error**, however, is not silenced by a null executor: `onErrAttached` (the flag that suppresses the destructor's orphan log) is only set when an executor actually exists to deliver the handler. With a null executor the error handler is never posted, so `onErrAttached` stays `false` and `~CompletionState` still logs the exception through the orphan logger rather than losing it.
 
 ### `MainThreadExecutor::runFor` does not drain on timeout
 

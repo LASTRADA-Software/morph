@@ -3,7 +3,7 @@
 > **Status: planned — not yet implemented.** This is the umbrella spec for the
 > GUI-generation enhancement program. It frames the goal, the guiding principle,
 > and how the individual GUI specs (`gui_*.md`) layer on top of the existing
-> schema-driven forms surface ([forms.md](../spec/forms.md), [choice.md](../spec/choice.md)).
+> schema-driven forms surface ([forms.md](../spec/forms/forms.md), [choice.md](../spec/forms/choice.md)).
 > The individual features each have their own spec; this file is the map. See
 > [todo.md](../todo.md).
 
@@ -17,7 +17,7 @@ without forking the renderer.
 
 Today the spine already exists: an action struct is turned into a JSON Schema by
 `morph::forms::schemaJson<A>()`, enriched with `x-*` extension keys, and a
-renderer builds a form from it ([forms.md](../spec/forms.md)). The current surface
+renderer builds a form from it ([forms.md](../spec/forms/forms.md)). The current surface
 is **one action → one flat form**. This program extends that spine along two
 tiers plus an ecosystem layer.
 
@@ -36,7 +36,7 @@ with "flexible":
    registration macro on the action. Never mandatory; absence falls back to a
    sensible convention.
 3. **Escape hatch always available.** The schema is a documented, stable
-   contract ([forms.md](../spec/forms.md) "Renderer contract"). Anything the
+   contract ([forms.md](../spec/forms/forms.md) "Renderer contract"). Anything the
    generated GUI cannot express, an app builds by consuming the schema directly
    or overriding one field's widget (see [gui_renderer_toolkit.md](gui_renderer_toolkit.md)).
 
@@ -85,7 +85,7 @@ from Tier-1 action-forms.
 
 ## Versioning stance (unchanged, deliberately)
 
-Per [forms.md](../spec/forms.md), the emitted schema is **unversioned**, and the
+Per [forms.md](../spec/forms/forms.md), the emitted schema is **unversioned**, and the
 program keeps it that way: **every new key each `gui_*.md` spec introduces is
 additive and optional — an `x-*` extension, a standard JSON-Schema annotation
 (`title`, `description`), or a new top-level view-schema document — and an older
@@ -110,26 +110,26 @@ contract.
 
 ## How the specs relate to existing work
 
-- **Builds directly on:** [forms.md](../spec/forms.md) (schema generation, the
-  `x-*` vocabulary, `allRequiredEngaged`), [choice.md](../spec/choice.md)
-  (`Choice`/`FixedString`), [quantity_type.md](../spec/quantity_type.md),
-  [datetime.md](../spec/datetime.md).
+- **Builds directly on:** [forms.md](../spec/forms/forms.md) (schema generation, the
+  `x-*` vocabulary, `allRequiredEngaged`), [choice.md](../spec/forms/choice.md)
+  (`Choice`/`FixedString`), [quantity_type.md](../spec/util/quantity_type.md),
+  [datetime.md](../spec/util/datetime.md).
 - **Cross-field rules tie into** [validation.md](validation.md): one rule
   declaration should drive the schema's `required`/`x-rules`, the client submit
   gate, *and* the planned server-side validator — no drift between them.
 - **Reactive forms build on** the `subscribe`/`set<>` draft mechanism in
-  [bridge.md](../spec/bridge.md); computed fields and wizards extend it.
+  [bridge.md](../spec/core/bridge.md); computed fields and wizards extend it.
 - **Nothing here changes the wire or dispatch semantics** — the GUI program is an
   opt-in layer over registration, schema generation, and the existing dispatch
   paths, exactly as the forms layer is today.
 
 ## Cross-references
 
-- [forms.md](../spec/forms.md) — the schema-generation spine this program extends;
+- [forms.md](../spec/forms/forms.md) — the schema-generation spine this program extends;
   the normative `x-*` key vocabulary and renderer contract.
-- [choice.md](../spec/choice.md) — `Choice`/`FixedString`, the pattern the
+- [choice.md](../spec/forms/choice.md) — `Choice`/`FixedString`, the pattern the
   dependent-choices and view specs generalise.
-- [bridge.md](../spec/bridge.md) — the reactive `subscribe`/`set<>` draft path the
+- [bridge.md](../spec/core/bridge.md) — the reactive `subscribe`/`set<>` draft path the
   computed-field and wizard specs build on.
 - [validation.md](validation.md) — the planned server-side validation the
   cross-field rules must share a declaration with.

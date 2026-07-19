@@ -2,11 +2,11 @@
 
 > **Status: planned — not yet implemented.** This is the highest-level
 > view-schema document. It adds two **NEW** top-level descriptors above the
-> per-action form schema of [forms.md](../spec/forms.md): a **wizard** that
+> per-action form schema of [forms.md](../spec/forms/forms.md): a **wizard** that
 > sequences several actions into one flow with a draft spanning them, and an
 > **app-shell / route** descriptor (menu → screens → actions/views) so a renderer
 > builds navigation. It sits in Tier 2 of [gui_overview.md](gui_overview.md),
-> extends the reactive draft of [bridge.md](../spec/bridge.md) to span a
+> extends the reactive draft of [bridge.md](../spec/core/bridge.md) to span a
 > sequence, and composes the screens of
 > [gui_collections_views.md](gui_collections_views.md). See [todo.md](../todo.md).
 
@@ -14,7 +14,7 @@
 
 Two ceilings remain once single screens exist:
 
-- **No multi-step flow.** [bridge.md](../spec/bridge.md)'s reactive draft
+- **No multi-step flow.** [bridge.md](../spec/core/bridge.md)'s reactive draft
   (`subscribe`/`set<>`/`reset`) spans **one action**: a draft is created lazily
   on the first `set<>` for its action type and fires when that action is ready.
   A real onboarding or checkout is several actions in sequence sharing
@@ -35,7 +35,7 @@ Two additive, independent descriptors:
 1. A **wizard schema** — a `NEW` document naming an ordered list of actions and a
    **shared draft** that spans them, so a value entered in one step is available
    to later steps. It extends the per-action draft in
-   [bridge.md](../spec/bridge.md) to a *sequence* draft, reusing the existing
+   [bridge.md](../spec/core/bridge.md) to a *sequence* draft, reusing the existing
    `set<>` / validator machinery per step.
 2. An **app-shell / route schema** — a `NEW` lightweight top-level document
    (menu → screens → actions/views) a renderer turns into navigation, so the same
@@ -71,7 +71,7 @@ schemas, referencing action type-ids only. Its **NEW** key vocabulary (`w-*`):
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
 | `w-title` | top-level | string | Human title for the whole flow. |
-| `w-steps` | top-level | array | Ordered steps. Each step is one registered action rendered as its ordinary [forms.md](../spec/forms.md) form. |
+| `w-steps` | top-level | array | Ordered steps. Each step is one registered action rendered as its ordinary [forms.md](../spec/forms/forms.md) form. |
 | ↳ `action` | step | string | Type-id of the step's action. |
 | ↳ `title` | step | string | Step label (breadcrumb / header). |
 | ↳ `prefill` | step | object | Maps this action's field → a `"<PriorAction>.<field>"` path into an earlier step's *result or submitted draft*. This is how the shared draft threads a value forward. |
@@ -79,7 +79,7 @@ schemas, referencing action type-ids only. Its **NEW** key vocabulary (`w-*`):
 All `w-*` keys are **NEW proposed** keys in a **NEW proposed** document; none are
 verified against existing code.
 
-**The shared draft — extending [bridge.md](../spec/bridge.md).** Today each
+**The shared draft — extending [bridge.md](../spec/core/bridge.md).** Today each
 action type owns one `SubscriberEntry` draft keyed by
 `ActionTraits<A>::typeId()`, created on the first `set<>` and persisting across
 fires. A wizard groups several such drafts into one **flow draft** that outlives
@@ -104,7 +104,7 @@ public:
 
 - **A step is an ordinary action fire.** `advance()` fires the current step
   through the same `execute<Action>` / reactive path as a standalone form
-  ([bridge.md](../spec/bridge.md)); `ActionValidator<Action>::ready` gates it
+  ([bridge.md](../spec/core/bridge.md)); `ActionValidator<Action>::ready` gates it
   exactly as it gates a lone form. The wizard adds *sequencing*, not a new
   execution mode.
 - **`prefill` threads state forward.** On entering a step, the renderer resolves
@@ -114,7 +114,7 @@ public:
   [gui_collections_views.md](gui_collections_views.md), but the source is an
   earlier step rather than a table row.
 - **Drafts persist across steps and `back()`.** A per-step draft persists exactly
-  as [bridge.md](../spec/bridge.md) already guarantees (a draft "persists across
+  as [bridge.md](../spec/core/bridge.md) already guarantees (a draft "persists across
   fires ... destroyed only when the handler is destroyed or `reset<A>()`"). The
   flow session simply keeps every step's draft alive for the flow's lifetime, so
   navigating `back()` and forward preserves entered values without re-fetching.
@@ -151,7 +151,7 @@ navigation, replacing the "enumerate every schema onto one scroll" of
 | `app-title` | top-level | string | Application title (window/header). |
 | `app-menu` | top-level | array | Ordered navigation entries `{ label, screen }`. A renderer builds a menu/sidebar/tabs from these; the target `screen` keys into `app-screens`. |
 | `app-screens` | top-level | object | Map of screen-id → screen descriptor. |
-| ↳ `kind` | screen | string | `"form"` (one action, [forms.md](../spec/forms.md)), `"view"` (a collection/master-detail, [gui_collections_views.md](gui_collections_views.md)), or `"wizard"` (a flow, above). |
+| ↳ `kind` | screen | string | `"form"` (one action, [forms.md](../spec/forms/forms.md)), `"view"` (a collection/master-detail, [gui_collections_views.md](gui_collections_views.md)), or `"wizard"` (a flow, above). |
 | ↳ `ref` | screen | string | The type-id of the referenced action / view / wizard. The renderer fetches that thing's own schema and renders it into the routed area. |
 
 A screen is therefore **just a reference** to a Tier-1 form, a
@@ -161,7 +161,7 @@ An `app-*`-ignorant renderer falls back to today's behavior: it can still load
 each referenced action schema directly and render a form. The shell is declared
 in C++ as a descriptor over registered ids and registered with a **NEW**
 `BRIDGE_REGISTER_APP` macro (parallel to `BRIDGE_REGISTER_ACTION`,
-[registry.md](../spec/registry.md)); like the view registration it is metadata
+[registry.md](../spec/core/registry.md)); like the view registration it is metadata
 only — no dispatch path is added.
 
 ### One consistent layering
@@ -190,7 +190,7 @@ below, so every layer is independently ignorable — the additive-key contract o
   it is not a distributed transaction. All-or-nothing is a model-layer concern
   ([outbox.md](outbox.md)), not a wizard-schema one.
 - **No new dispatch path or wire change.** Each step and each screen fires
-  ordinary actions over the existing path ([bridge.md](../spec/bridge.md)); the
+  ordinary actions over the existing path ([bridge.md](../spec/core/bridge.md)); the
   wizard and app documents are metadata a renderer consumes.
 - **No server-driven navigation.** The menu/screens are a static declared
   descriptor, not a server-pushed, permission-filtered navigation tree. Hiding a
@@ -202,14 +202,14 @@ below, so every layer is independently ignorable — the additive-key contract o
   prefilled shared draft is the committed scope.
 - **Draft is client-side only.** The flow draft lives in the handler's
   `SubscriberState`, exactly as the per-action draft does
-  ([bridge.md](../spec/bridge.md)); it is not persisted or resumable across a
+  ([bridge.md](../spec/core/bridge.md)); it is not persisted or resumable across a
   process restart.
 
 ## Testing (planned)
 
 - `wizardSchemaJson<IntakeWizard>()` emits `w-title` and ordered `w-steps` with
   per-step `action`, `title`, and `prefill`; each referenced action still emits
-  its ordinary [forms.md](../spec/forms.md) schema unchanged.
+  its ordinary [forms.md](../spec/forms/forms.md) schema unchanged.
 - A `FlowSession` fires step 1, captures its result, and `advance()`s to step 2
   with the `prefill` paths issued as `set<>` on step 2's draft; `back()` returns
   to step 1 with its entered values intact (draft persistence).
@@ -222,22 +222,22 @@ below, so every layer is independently ignorable — the additive-key contract o
   plain form (additive-key fallback / regression guard).
 - Backend switch mid-flow: an in-flight step fire surfaces `BackendChangedError`
   on the step's `errSink` while the flow draft survives, matching
-  [bridge.md](../spec/bridge.md)'s draft-survives-switch guarantee, so the step
+  [bridge.md](../spec/core/bridge.md)'s draft-survives-switch guarantee, so the step
   re-fires cleanly against the new backend.
 
 ## Cross-references
 
 - [gui_overview.md](gui_overview.md) — Tier 2; the highest layer of the
   view/app schema stack and the additive-key contract each `*-` vocabulary obeys.
-- [forms.md](../spec/forms.md) — the per-action form each wizard step and each
+- [forms.md](../spec/forms/forms.md) — the per-action form each wizard step and each
   `kind: "form"` screen renders.
 - [gui_collections_views.md](gui_collections_views.md) — the `kind: "view"`
   screens the shell routes to; the `bind` prefill mechanic wizards reuse as
   `prefill`.
-- [bridge.md](../spec/bridge.md) — the per-action reactive draft
+- [bridge.md](../spec/core/bridge.md) — the per-action reactive draft
   (`subscribe`/`set<>`/`reset`, draft persistence across fires and backend
   switches) the wizard's shared flow draft extends to span a sequence.
-- [registry.md](../spec/registry.md) — `ActionTraits::typeId()` (the ids the
+- [registry.md](../spec/core/registry.md) — `ActionTraits::typeId()` (the ids the
   wizard/app reference) and the `BRIDGE_REGISTER_ACTION` pattern the proposed
   `BRIDGE_REGISTER_APP` mirrors.
 - [outbox.md](outbox.md) — where cross-action atomicity belongs (the wizard

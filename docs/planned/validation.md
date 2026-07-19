@@ -8,7 +8,7 @@
 
 ## The gap
 
-`ActionValidator<A>::ready(action)` (see [registry.md](../spec/registry.md)) is the
+`ActionValidator<A>::ready(action)` (see [registry.md](../spec/core/registry.md)) is the
 framework's readiness/validity predicate. Today it gates only the **client**:
 
 - The reactive `set<...>` path (`BridgeHandler::tryFireImpl`, `bridge.md`) checks
@@ -143,15 +143,15 @@ validator sees the same value the model will.
 
 ## Cross-references
 
-- [registry.md](../spec/registry.md) — `ActionValidator<A>::ready`, the `HasValidate`
+- [registry.md](../spec/core/registry.md) — `ActionValidator<A>::ready`, the `HasValidate`
   concept, `ActionDispatcher::registerAction`'s runner (the injection point),
   `BRIDGE_REGISTER_VALIDATOR`.
-- [bridge.md](../spec/bridge.md) — the client-side gates this makes symmetric:
+- [bridge.md](../spec/core/bridge.md) — the client-side gates this makes symmetric:
   `tryFireImpl` (reactive) and `ActionExecuteRegistry::execute` (request/reply),
   including the existing precision-reconciliation step.
-- [forms.md](../spec/forms.md) — `allRequiredEngaged`, the readiness predicate typically
+- [forms.md](../spec/forms/forms.md) — `allRequiredEngaged`, the readiness predicate typically
   used as an action's `validate()` body; `reconcileDeclaredPrecision`.
-- [backend.md](../spec/backend.md) — the dispatch call sites (`RemoteServer` remote,
+- [backend.md](../spec/core/backend.md) — the dispatch call sites (`RemoteServer` remote,
   `LocalBackend` local) and the strand `catch` that turns the throw into an `err`.
 - [security.md](../spec/security.md) — why validation is *not* authorization and where
   the two enforcement seams sit relative to each other.

@@ -14,7 +14,7 @@
 /// the REPL — which dispatches it through the same type-erased
 /// `ActionDispatcher` seam `RemoteServer` uses — and read the model's reply.
 
-#include <morph/bridge.hpp>
+#include <morph/core/bridge.hpp>
 
 #include <exception>
 #include <fstream>

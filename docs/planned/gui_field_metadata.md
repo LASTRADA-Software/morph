@@ -2,7 +2,7 @@
 
 > **Status: planned — not yet implemented.** This spec extends the GUI program
 > umbrella ([gui_overview.md](gui_overview.md)) and the schema-generation spine
-> ([forms.md](../spec/forms.md)). It is a Tier-1 richer-forms feature: purely
+> ([forms.md](../spec/forms/forms.md)). It is a Tier-1 richer-forms feature: purely
 > additive presentation metadata on a single action's flat form. See
 > [todo.md](../todo.md).
 
@@ -12,7 +12,7 @@ Today `morph::forms::schemaJson<A>()` emits enough for a renderer to *place* and
 *type* a field — `x-order` for layout order, `x-decimalPlaces` / `x-unitAlternatives`
 for `Quantity`, `x-optionsAction` / `x-optionValue` / `x-optionLabel` for `Choice`,
 plus glaze's `type`/bounds/`format` and any `description` from a `glz::json_schema<A>`
-specialisation ([forms.md](../spec/forms.md), "Renderer contract"). What it does
+specialisation ([forms.md](../spec/forms/forms.md), "Renderer contract"). What it does
 **not** provide, short of hand-authoring a `glz::json_schema<A>` block, is
 per-field *presentation* metadata:
 
@@ -29,7 +29,7 @@ per-field *presentation* metadata:
 The forms layer already establishes the pattern for the fix: metadata that is a
 compile-time property of the action belongs *in the type or a `static constexpr`
 declaration*, surfaced through the schema as `x-*` keys — exactly how `Choice`
-carries its options source ([choice.md](../spec/choice.md)) and how
+carries its options source ([choice.md](../spec/forms/choice.md)) and how
 `optionalFields` (verified in `forms.hpp`) opts a field out of `required`.
 
 ## Goal
@@ -111,7 +111,7 @@ inferred title.
 `mergeSchemaExtras<A>` (verified in `forms.hpp`) gains a pass that, for each
 reflected member (via `forEachNamedMember`, verified), looks up any matching
 `FieldMeta` and patches the property node — the same property node that already
-carries `x-order` and the `Choice`/`Quantity` keys ([forms.md](../spec/forms.md),
+carries `x-order` and the `Choice`/`Quantity` keys ([forms.md](../spec/forms/forms.md),
 "Where the keys physically land"). Label maps onto the standard JSON-Schema
 `title`; help maps onto standard `description` (so a renderer that already reads
 glaze's `description` needs no change); the rest are `x-*` extensions:
@@ -125,7 +125,7 @@ glaze's `description` needs no change); the rest are `x-*` extensions:
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all. Emitted only when `true`. The renderer omits the control but the field remains part of the action payload (submitted at its default/current value). |
 
 All five keys are **additive and non-breaking**: they extend the
-[forms.md](../spec/forms.md) contract table without renaming or retyping any
+[forms.md](../spec/forms/forms.md) contract table without renaming or retyping any
 existing key, exactly as [gui_overview.md](gui_overview.md)'s versioning stance
 requires. A renderer that ignores them **falls back to today's behaviour** — it
 shows the raw wire key as the caption, no helper/placeholder text, and every
@@ -154,10 +154,10 @@ This is illustrative of *one* renderer; the contract stays renderer-agnostic.
 - **`x-hidden` / `x-readonly` are not security controls.** Both keys are
   presentation only — the field still travels in the payload and a hand-built
   wire envelope can set it freely. Enforcement stays server-side
-  ([validation.md](validation.md), [forms.md](../spec/forms.md)'s trust
+  ([validation.md](validation.md), [forms.md](../spec/forms/forms.md)'s trust
   boundary). A truly secret field must not be a member of the action at all.
 - **No i18n.** Labels and help are baked into the one cached schema per type
-  ([forms.md](../spec/forms.md), "no localisation"). Translated captions are
+  ([forms.md](../spec/forms/forms.md), "no localisation"). Translated captions are
   [gui_i18n.md](gui_i18n.md): a renderer-side catalog over stable message keys
   (`FieldMeta` gains an optional `i18nKey` override there), never a per-locale
   schema. The `label`/`help`/`placeholder` declared here are that mechanism's
@@ -198,11 +198,11 @@ This is illustrative of *one* renderer; the contract stays renderer-agnostic.
 
 - [gui_overview.md](gui_overview.md) — the infer-by-default / declare-to-override
   principle and the additive-`x-*` versioning stance this feature obeys.
-- [forms.md](../spec/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
+- [forms.md](../spec/forms/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
   `forEachNamedMember`, the `optionalFields` convention this mirrors, the
   property-node vs `$def` placement rule, and the renderer-contract table these
   keys extend.
-- [choice.md](../spec/choice.md) — the pattern of carrying field metadata in the
+- [choice.md](../spec/forms/choice.md) — the pattern of carrying field metadata in the
   type / declaration and surfacing it through property-level `x-*` keys.
 - [gui_layout_grouping.md](gui_layout_grouping.md) — visual structure (sections,
   tabs, spans) that composes with these per-field labels.

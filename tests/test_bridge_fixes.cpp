@@ -17,13 +17,13 @@
 //           their declared precision so the stored value matches the schema's
 //           advertised x-decimalPlaces.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/forms.hpp>
-#include <morph/quantity.hpp>
-#include <morph/rational.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
+#include <morph/core/registry.hpp>
 
 #include <array>
 #include <atomic>

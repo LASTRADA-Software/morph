@@ -3,8 +3,8 @@
 
 // WASM shadow of include/bank/models/card_model.hpp (in-memory backend).
 
-#include <morph/registry.hpp>
-#include <morph/bridge.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/bridge.hpp>
 
 #include "bank/dto/card_dto.hpp"
 #include "bank/dto/common.hpp"

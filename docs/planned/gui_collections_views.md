@@ -2,26 +2,26 @@
 
 > **Status: planned — not yet implemented.** This spec introduces the first
 > **view-schema** document — a descriptor *above* the per-action form schema of
-> [forms.md](../spec/forms.md) that composes a *set* of related actions (a query,
+> [forms.md](../spec/forms/forms.md) that composes a *set* of related actions (a query,
 > an edit, a delete) into a list/table or master-detail **screen**. It sits in
 > Tier 2 of [gui_overview.md](gui_overview.md) and builds on
-> [choice.md](../spec/choice.md) (a query action serving rows) and
-> [bridge.md](../spec/bridge.md) (per-action dispatch). It extends nothing in the
+> [choice.md](../spec/forms/choice.md) (a query action serving rows) and
+> [bridge.md](../spec/core/bridge.md) (per-action dispatch). It extends nothing in the
 > action schema — it is a new, additive top-level document. See
 > [todo.md](../todo.md).
 
 ## The gap
 
 The current surface is **one action → one flat form**
-([forms.md](../spec/forms.md)). A renderer builds a form from `schemaJson<A>()`
+([forms.md](../spec/forms/forms.md)). A renderer builds a form from `schemaJson<A>()`
 and fires that one action. There is no concept of a *collection*: nothing says
 "run query action `ListSamples`, show its rows as a table, let a row open the
 edit form for action `EditSample`, and let a button run `DeleteSample`." Every
 real CRUD screen — a list you can drill into and edit — must be hand-wired today,
 even though all three actions are already registered
-([registry.md](../spec/registry.md)) and each already generates its own form.
+([registry.md](../spec/core/registry.md)) and each already generates its own form.
 
-`Choice` ([choice.md](../spec/choice.md)) already proves the smaller version of
+`Choice` ([choice.md](../spec/forms/choice.md)) already proves the smaller version of
 this: a query action, executed with an empty body, serves rows the renderer maps
 to `{value, label}`. A view generalises that one pattern — *a query action
 serves rows* — from a combo box to a full table with per-row actions.
@@ -80,7 +80,7 @@ parallel to the action schema's `x-*`):
 |---|---|---|---|
 | `v-kind` | top-level | string | `"collection"` (list/table) or `"master-detail"` (list + inline/side editor). The one required discriminator. |
 | `v-title` | top-level | string | Human title for the screen. Optional; defaults to `v-query`. |
-| `v-query` | top-level | string | Type-id of the registered **query action** whose result rows populate the list. Executed with an empty body — the same contract `Choice`'s options action obeys ([choice.md](../spec/choice.md)). |
+| `v-query` | top-level | string | Type-id of the registered **query action** whose result rows populate the list. Executed with an empty body — the same contract `Choice`'s options action obeys ([choice.md](../spec/forms/choice.md)). |
 | `v-rowKey` | top-level | string | Wire field name that uniquely identifies a row (default `"id"`). Used to correlate a row with the edit/delete it opens. |
 | `v-columns` | top-level | array | Ordered column descriptors. **Optional** — omitted means "derive every column from the row shape" (below). |
 | ↳ `field` | column | string | Wire field name in the query result row. |
@@ -110,14 +110,14 @@ the same way the form does.
 
 `v-columns` is the **declare-to-override** escape hatch: supply it to reorder,
 relabel, hide, or subset the derived columns. This mirrors `optionalFields` in
-[forms.md](../spec/forms.md) — inference is the default, a small typed
+[forms.md](../spec/forms/forms.md) — inference is the default, a small typed
 declaration overrides it.
 
 ### How a view is declared in C++ (proposed)
 
 A view is a compile-time descriptor over already-registered action types, so its
 references are checked the way `Choice`'s are (i.e. names are opaque NTTPs,
-validated at runtime — see [choice.md](../spec/choice.md)'s author obligations):
+validated at runtime — see [choice.md](../spec/forms/choice.md)'s author obligations):
 
 ```cpp
 // namespace morph::views — NEW.
@@ -135,7 +135,7 @@ BRIDGE_REGISTER_VIEW(SamplesView, "SamplesView");     // NEW macro, parallels
 ```
 
 The **NEW** `BRIDGE_REGISTER_VIEW` macro (parallel to `BRIDGE_REGISTER_ACTION`,
-[registry.md](../spec/registry.md)) specialises a `ViewTraits<V>` with a
+[registry.md](../spec/core/registry.md)) specialises a `ViewTraits<V>` with a
 `typeId()` and the `viewSchemaJson<V>()` body, and registers the view id so a
 controller can enumerate views the way `Main.qml` enumerates schemas today. No
 new dispatch path is introduced — the view descriptor is metadata only.
@@ -146,12 +146,12 @@ A collection screen performs three ordinary dispatches, each already fully
 specified:
 
 1. **Populate** — execute `v-query` with an empty body via the normal execute
-   path ([bridge.md](../spec/bridge.md)); read rows from the result exactly as
+   path ([bridge.md](../spec/core/bridge.md)); read rows from the result exactly as
    `Choice` does. The query action is a pure read, so it declares
-   `Loggable::No` ([registry.md](../spec/registry.md)) — a table refresh is not
+   `Loggable::No` ([registry.md](../spec/core/registry.md)) — a table refresh is not
    an audit event.
 2. **Edit** — activating a row builds the `v-rowAction` action's form
-   ([forms.md](../spec/forms.md)) with fields prefilled from `bind`, then fires
+   ([forms.md](../spec/forms/forms.md)) with fields prefilled from `bind`, then fires
    it through the same `execute<Action>` / reactive `set<>` path as any form.
 3. **Delete** — a `scope: "row"` action fires its bound action (e.g.
    `DeleteSample{ id }`), guarded by `confirm`.
@@ -177,8 +177,8 @@ not mandate the split.
   action-forms. Multi-screen navigation, menus, and cross-screen flow live in
   [gui_workflows_navigation.md](gui_workflows_navigation.md), not here.
 - **No new dispatch path or wire change.** Populate/edit/delete are ordinary
-  action executes over the existing path ([bridge.md](../spec/bridge.md),
-  [backend.md](../spec/backend.md)); the view document is metadata a renderer
+  action executes over the existing path ([bridge.md](../spec/core/bridge.md),
+  [backend.md](../spec/core/backend.md)); the view document is metadata a renderer
   consumes, never a payload.
 - **No server-side "query language."** `v-query` names a registered action that
   returns whatever rows it returns. There is no filtering/sorting/paging protocol
@@ -189,10 +189,10 @@ not mandate the split.
   scope (it would need a subscription channel morph does not have).
 - **No nested/joined views.** A view references flat action row shapes, matching
   the flat-actions-only scope of schema generation
-  ([forms.md](../spec/forms.md)). A row that is itself a collection is not a
+  ([forms.md](../spec/forms/forms.md)). A row that is itself a collection is not a
   documented path.
 - **Membership/staleness not enforced.** Exactly as with `Choice`
-  ([choice.md](../spec/choice.md)), a row key bound into an edit/delete may be
+  ([choice.md](../spec/forms/choice.md)), a row key bound into an edit/delete may be
   stale by the time the action fires; the handler must re-check, since the wire
   carries only the bound value.
 
@@ -220,15 +220,15 @@ not mandate the split.
 - [gui_overview.md](gui_overview.md) — Tier 2; the "view/app schema layer above
   the action schema" this document opens, and the infer-by-default/declare-to-
   override principle the column derivation follows.
-- [forms.md](../spec/forms.md) — the per-action schema each screen composes; the
+- [forms.md](../spec/forms/forms.md) — the per-action schema each screen composes; the
   `x-order` / `ExtUnits` / `x-decimalPlaces` reused for derived columns and the
   flat-actions-only scope inherited here.
-- [choice.md](../spec/choice.md) — the "a query action serves rows" pattern
+- [choice.md](../spec/forms/choice.md) — the "a query action serves rows" pattern
   generalised from a combo box to a table, including the empty-body query
   contract and the stale-value caveat.
-- [bridge.md](../spec/bridge.md) — the execute / reactive `set<>` path the
+- [bridge.md](../spec/core/bridge.md) — the execute / reactive `set<>` path the
   populate/edit/delete dispatches use unchanged.
-- [registry.md](../spec/registry.md) — `ActionTraits::typeId()` (the ids the view
+- [registry.md](../spec/core/registry.md) — `ActionTraits::typeId()` (the ids the view
   references), `Loggable::No` for the query action, and the
   `BRIDGE_REGISTER_ACTION` pattern the proposed `BRIDGE_REGISTER_VIEW` mirrors.
 - [gui_workflows_navigation.md](gui_workflows_navigation.md) — the next tier up:

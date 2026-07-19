@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "session.hpp"
+#include "../session/session.hpp"
 
 namespace morph::wire {
 

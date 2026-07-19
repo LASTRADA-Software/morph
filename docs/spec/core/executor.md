@@ -399,9 +399,9 @@ These are honest, known gaps — accepted trade-offs, not bugs:
   results land on the right thread.
 - `error_handling.md` — the framework-wide error-propagation story that the
   per-task logging here plugs into (currently also summarised under
-  *Error propagation* in `../ARCHITECTURE.md`).
+  *Error propagation* in `../../ARCHITECTURE.md`).
 - `concurrency_and_lifetimes.md` — the broader threading and teardown-ordering
   model; the "destroy strand before base pool" rule above is a concrete instance
-  of it (see also *Thread safety* in `../ARCHITECTURE.md`).
+  of it (see also *Thread safety* in `../../ARCHITECTURE.md`).
 - [`bridge.md`](bridge.md) — the bridge wires backends to a GUI executor and a
   strand-backed dispatcher; it is the primary consumer of these types.

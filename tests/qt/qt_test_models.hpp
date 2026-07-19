@@ -8,8 +8,8 @@
 // (`bridge_model_reg_##M`) which can't accept `::` in the type name.
 
 #pragma once
-#include <morph/registry.hpp>
-#include <morph/bridge.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/bridge.hpp>
 #include <stdexcept>
 
 struct ProcTestEchoAction {

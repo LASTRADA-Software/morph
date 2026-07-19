@@ -3,7 +3,7 @@
 > **Status: planned — not yet implemented.** This spec is part of the GUI
 > enhancement program ([gui_overview.md](gui_overview.md), Tier 1) and depends on
 > the planned server-side validator in [validation.md](validation.md). It extends
-> the `x-*` vocabulary and readiness model of [forms.md](../spec/forms.md) with a
+> the `x-*` vocabulary and readiness model of [forms.md](../spec/forms/forms.md) with a
 > **closed, typed rule vocabulary** that one declaration drives onto the schema,
 > the client submit gate, *and* the server check with no drift. The same
 > vocabulary carries the **presentation rules** (`visibleWhen` / `readonlyWhen`)
@@ -14,7 +14,7 @@
 ## The gap
 
 Today an action's readiness is a single flat predicate: `allRequiredEngaged<A>()`
-([forms.md](../spec/forms.md)) checks that every required empty-capable field is
+([forms.md](../spec/forms/forms.md)) checks that every required empty-capable field is
 engaged, and that is the whole of the framework's declarative validation. Any
 condition that spans **two or more fields** — "end date must be after start
 date", "supply either an email or a phone but not both", "discount is required
@@ -57,7 +57,7 @@ as today; this feature does not try to replace it.
 ### Single source of truth: one declaration → three consumers
 
 An action opts in by declaring `static constexpr` rules, next to the existing
-`optionalFields` opt-out ([forms.md](../spec/forms.md)):
+`optionalFields` opt-out ([forms.md](../spec/forms/forms.md)):
 
 ```cpp
 // NEW — proposed vocabulary in namespace morph::forms::rules
@@ -87,13 +87,13 @@ struct BookRoom {
 - **`formRules`** is the declaration the whole feature keys on: a
   `static constexpr` value of a `RuleList<...>` type (NEW). The engine detects it
   with a `HasFormRules<A>` concept (NEW), mirroring how `HasOptionalFields<A>`
-  detects `optionalFields` ([forms.md](../spec/forms.md)).
+  detects `optionalFields` ([forms.md](../spec/forms/forms.md)).
 - **`allRulesSatisfied<A>(action)`** (NEW) is the shared evaluator — the single
   function that walks `A::formRules` and returns `true` only when every rule
   holds. `allRequiredEngaged` stays exactly as it is; the author `&&`s the two
   (or the framework does, when a rule list is present — see below).
 - Field references are **pointer-to-member NTTPs**, recovered via the existing
-  `MemberPointerTraits` ([bridge.md](../spec/bridge.md)), so a rule names real,
+  `MemberPointerTraits` ([bridge.md](../spec/core/bridge.md)), so a rule names real,
   type-checked members — a renamed or deleted field is a compile error, unlike the
   opaque string names a `Choice` carries.
 
@@ -132,8 +132,8 @@ not fire spuriously while the form is still being filled.
 ### Numeric comparisons reuse exact `Rational` arithmetic
 
 When both operands are `Quantity` (or otherwise numeric), the comparison is
-performed on the exact `math::Rational` payload ([rational.md](../spec/rational.md)),
-after `reconcileDeclaredPrecision` ([forms.md](../spec/forms.md)) has normalised
+performed on the exact `math::Rational` payload ([rational.md](../spec/util/rational.md)),
+after `reconcileDeclaredPrecision` ([forms.md](../spec/forms/forms.md)) has normalised
 each operand to its declared precision — never on a lossy `double`. `Quantity`
 already exposes `operator*` for its `Rational` payload and comparison over
 `Rational` is exact, so `greater`/`less` are exact and give the identical result
@@ -142,7 +142,7 @@ on client and server. A literal in `equals`/a comparison is likewise carried as 
 
 ### The `x-rules` schema emission
 
-`mergeSchemaExtras` ([forms.md](../spec/forms.md)) gains a step that walks
+`mergeSchemaExtras` ([forms.md](../spec/forms/forms.md)) gains a step that walks
 `A::formRules` and emits a **top-level** `x-rules` array on the schema object,
 alongside the existing `required` array. Each element is a self-describing JSON
 object a renderer (or the server) can evaluate without any C++ type information:
@@ -162,7 +162,7 @@ Field names in `x-rules` are the **wire (JSON) field names** the members
 serialise as — resolved from the pointer-to-member the same way `x-order` is
 derived — so they line up with the property keys a renderer already indexes.
 
-New keys this spec adds to the [forms.md](../spec/forms.md) renderer-contract
+New keys this spec adds to the [forms.md](../spec/forms/forms.md) renderer-contract
 table (all additive, all optional):
 
 | Key | Where | JSON type | Meaning / renderer obligation |
@@ -171,7 +171,7 @@ table (all additive, all optional):
 | ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the table above (or a condition id: `engaged`, `notEngaged`, `equals`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
 | ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). |
 | ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on: for `requiredWhen`, when the listed `fields` become required; for the presentation kinds, when they are shown / made read-only. Present only on these condition-bearing kinds. |
-| ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}` (see [rational.md](../spec/rational.md)), never a `double`. |
+| ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}` (see [rational.md](../spec/util/rational.md)), never a `double`. |
 
 ### Server-side: the same list, evaluated in the dispatcher
 
@@ -179,7 +179,7 @@ This is the crux of no-drift. [validation.md](validation.md) injects
 `ActionValidator<A>::ready(action)` into the dispatcher runner after `fromJson`
 and precision reconciliation. Because the author's `validate()` body calls
 `allRulesSatisfied(*this)`, and `ActionValidator<A>::ready` auto-detects
-`validate()` via the `HasValidate` concept ([registry.md](../spec/registry.md)),
+`validate()` via the `HasValidate` concept ([registry.md](../spec/core/registry.md)),
 **the server evaluates the exact same rule list the client did** — the same typed
 nodes over the same reconciled values — with zero extra server code. A hand-built
 envelope that violates a rule is rejected with the `ValidationError` that
@@ -193,7 +193,7 @@ server.
 
 ### Client-side: live gate on the reactive path
 
-On the `set<>` reactive draft path ([bridge.md](../spec/bridge.md)), the
+On the `set<>` reactive draft path ([bridge.md](../spec/core/bridge.md)), the
 `ActionValidator<A>::ready(snapshot)` check that already gates each fire now
 transitively runs `allRulesSatisfied`, so the action does not fire until every
 cross-field rule holds — the live gate and the submit gate become the same
@@ -238,7 +238,7 @@ implies the other.
 
 Every key here is an additive, optional `x-*` (or the always-safe extension of
 the existing `required` array), consistent with the unversioned-schema stance of
-[forms.md](../spec/forms.md) and [gui_overview.md](gui_overview.md). An action
+[forms.md](../spec/forms/forms.md) and [gui_overview.md](gui_overview.md). An action
 that declares no `formRules` emits no `x-rules` and behaves exactly as today.
 A renderer that does not understand `x-rules` still produces a usable form: it
 honours the per-field `required` array and lets the **server** reject any
@@ -255,7 +255,7 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
   `validate()`/`execute` and is **not** reflected into `x-rules` — the same
   division [validation.md](validation.md) draws between field-level readiness and
   model invariants.
-- **Not nested-action rules.** Like all of [forms.md](../spec/forms.md), rules
+- **Not nested-action rules.** Like all of [forms.md](../spec/forms/forms.md), rules
   range only over an action's own **flat, top-level** members. Sub-members of a
   nested aggregate are not addressable.
 - **Not authorization.** Rules answer "is this action internally consistent?", not
@@ -263,13 +263,13 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
   ([security.md](../spec/security.md)), exactly as [validation.md](validation.md)
   states.
 - **Not option-membership validation.** Whether a `Choice` value is a *current*
-  option is still unchecked at both ends ([choice.md](../spec/choice.md)); a rule
+  option is still unchecked at both ends ([choice.md](../spec/forms/choice.md)); a rule
   can require a `Choice` be engaged, not that its value is a live option.
 - **No localisation of rule messages.** `x-rules` carries structure, not
   human-readable text; a renderer builds its violation messages itself and
   localises them through [gui_i18n.md](gui_i18n.md)'s catalog
   (`<action>.rule.<index>` keys), for the same reason the schema is
-  un-localised ([forms.md](../spec/forms.md)).
+  un-localised ([forms.md](../spec/forms/forms.md)).
 
 ## Testing (planned)
 
@@ -308,16 +308,16 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
 - [validation.md](validation.md) — the server-side validator this shares its
   single declaration with; `ValidationError`, the dispatcher injection point, and
   the precision-reconciliation-before-validate order this rule engine relies on.
-- [forms.md](../spec/forms.md) — the `required` array, `allRequiredEngaged`,
+- [forms.md](../spec/forms/forms.md) — the `required` array, `allRequiredEngaged`,
   `mergeSchemaExtras`, `optionalFields`, and the renderer-contract table this
   `x-rules` block extends; `reconcileDeclaredPrecision`.
-- [registry.md](../spec/registry.md) — `ActionValidator<A>::ready`, the
+- [registry.md](../spec/core/registry.md) — `ActionValidator<A>::ready`, the
   `HasValidate` concept that picks up the author's `validate()`, and
   `BRIDGE_REGISTER_VALIDATOR` as the alternative plug-in point.
-- [bridge.md](../spec/bridge.md) — the reactive `set<>`/`tryFireImpl` gate the
+- [bridge.md](../spec/core/bridge.md) — the reactive `set<>`/`tryFireImpl` gate the
   live rule check runs on, and `MemberPointerTraits` used to name rule fields.
-- [rational.md](../spec/rational.md) — the exact `Rational` arithmetic numeric
+- [rational.md](../spec/util/rational.md) — the exact `Rational` arithmetic numeric
   comparisons and literals use, so client and server compare identical values.
-- [choice.md](../spec/choice.md) — `Choice` engagement, which a rule may reference
+- [choice.md](../spec/forms/choice.md) — `Choice` engagement, which a rule may reference
   but whose option-membership remains unchecked.
 - [todo.md](../todo.md) — execution order within the GUI program.

@@ -11,7 +11,7 @@
 //   keys (last-wins); there is no option to enable rejection. These tests pin
 //   the actual, documented behavior so the spec claim stays honest.
 
-#include <morph/wire.hpp>
+#include <morph/core/wire.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <string>

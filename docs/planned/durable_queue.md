@@ -1,7 +1,7 @@
 # Durable offline queue & cross-restart dead-lettering (planned)
 
 > **Status: planned — not yet implemented.** This spec extends
-> [offline.md](../spec/offline.md). It closes the "retry counter is in-memory and resets
+> [offline.md](../spec/offline/offline.md). It closes the "retry counter is in-memory and resets
 > on restart" and "dead-lettering is log-only" limitations documented there. See
 > [todo.md](../todo.md).
 
@@ -159,11 +159,11 @@ them.
 
 ## Cross-references
 
-- [offline.md](../spec/offline.md) — `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`,
+- [offline.md](../spec/offline/offline.md) — `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`,
   `SyncWorker`, the `setIdempotencyKey` hook this mirrors, and the two Failure
   modes ("retry counter resets on restart", "dead-lettering is log-only") this
   closes.
-- [journal.md](../spec/journal.md) — the permanent audit trail, distinct from the
+- [journal.md](../spec/journal/journal.md) — the permanent audit trail, distinct from the
   transient queue; `idempotencyKey` is the shared token that lets a replay
   consumer dedup across both.
 - [error_handling.md](../spec/error_handling.md) — the swallow-and-treat-as-failure

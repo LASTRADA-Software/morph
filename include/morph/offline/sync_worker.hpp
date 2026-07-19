@@ -8,7 +8,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "logger.hpp"
+#include "../core/logger.hpp"
 #include "offline_queue.hpp"
 
 namespace morph::offline {

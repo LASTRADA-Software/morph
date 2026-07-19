@@ -13,8 +13,6 @@ which action to call and which result fields to use without hardcoding anything.
 
 ## Contents
 
-- [FixedString — NTTP string](#fixedstring--an-nttp-compile-time-string)
-- [FixedString notes](#fixedstring-notes)
 - [Choice — structure](#choice--structure)
 - [Empty state](#empty-state)
 - [Wire and schema](#wire-and-schema)
@@ -26,59 +24,7 @@ which action to call and which result fields to use without hardcoding anything.
 - [Failure modes](#failure-modes)
 - [Limitations](#limitations)
 - [Cross-references](#cross-references)
-
-## FixedString — an NTTP compile-time string
-
-`morph::forms::FixedString<N>` is a structural type that can appear as a
-non-type template parameter. It stores `N` characters (including the terminating
-null) in a `std::array<char, N>` and is constructed `consteval` from a string
-literal.
-
-It is an **alias** for the single shared definition `morph::detail::FixedString`
-(`include/morph/detail/fixed_string.hpp`). The units layer's `NamedQuantity`
-(see [quantity_type.md](quantity_type.md)) uses the *same* underlying type via
-its own `morph::units::detail::FixedString` alias, so there is exactly one
-`FixedString` definition in the codebase, not two look-alikes. `morph::forms::`
-and `morph::units::detail::` are kept as names for source compatibility and
-layer-local readability.
-
-| Member | Signature | Notes |
-|---|---|---|
-| `data` | `std::array<char, N> data{}` | Null-terminated storage. |
-| ctor | `consteval FixedString(const char (&literal)[N]) noexcept` | From a string literal of the same length. |
-| `view()` | `[[nodiscard]] constexpr std::string_view view() const noexcept` | Excludes the null terminator — length is `N - 1`. |
-
-The `consteval` constructor guarantees that `FixedString` is only ever
-initialised from a compile-time literal, so every template instantiation is
-visible to the compiler at the point of use.
-
-## FixedString notes
-
-A few subtleties matter because `FixedString` is the vehicle that carries the
-options metadata into the type system:
-
-- **`N` counts the terminating null.** The literal `"id"` is `const char[3]`,
-  so `FixedString<3>`; `view()` returns `{data.data(), N - 1}` — a two-char
-  view `"id"` that stops before the null. The null is stored but never part of
-  the string.
-- **An empty literal yields a zero-length name.** `""` is `const char[1]`, so
-  `FixedString<1>` and `view()` is a length-0 `string_view`. Nothing rejects
-  this — an empty action name or field name compiles and simply produces an
-  empty `x-option*` annotation that no client can act on.
-- **Type identity depends on structural NTTP equality.** `FixedString` is a
-  *structural type* (only public, non-mutable data members: the `std::array`),
-  so it is usable as a non-type template parameter and two `FixedString`
-  values compare member-wise. Two separate `"id"` literals therefore produce
-  the *same* `FixedString<3>` value, so `Choice<T, "A", "id", "name">` written
-  in two translation units is one and the same type. This is what makes
-  `Choice` type identity stable across the codebase and what lets `glz::meta`
-  and `isChoice` match on the instantiation.
-- **`FixedString` is public only as an NTTP vehicle.** It exists so a string
-  literal can travel as a template parameter; it is not a general-purpose
-  string type and is not intended for direct use in application code. The
-  only supported way to produce one is a string literal in a `Choice`
-  template-argument position.
-
+  
 ## Choice — structure
 
 ```cpp
@@ -293,12 +239,12 @@ and nothing more. That leaves gaps neither the client nor the server closes:
   `EmptyCapableField` concept plus the not-`std::optional`/not-`optionalFields`
   rule), and where `mergeSchemaExtras` emits the `x-optionsAction` /
   `x-optionValue` / `x-optionLabel` property annotations.
-- **[quantity_type.md](quantity_type.md)** and **[datetime.md](datetime.md)** —
+- **[quantity_type.md](../util/quantity_type.md)** and **[datetime.md](../util/datetime.md)** —
   `Quantity` and `Timestamp` share the *one kind of empty* pattern: the blank
   state lives inside the value as `std::optional`, `hasValue()` reports
   engagement, and a non-optional member is required. `Choice` is the third
   member of that family.
-- **[security.md](security.md)** — the options metadata and any
+- **[security.md](../security.md)** — the options metadata and any
   membership expectation are enforced (if at all) only on the client; the
   server sees a bare nullable value. This is the client-only-validation trust
   boundary — never trust a submitted `Choice` value to be a current, valid

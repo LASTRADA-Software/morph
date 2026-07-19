@@ -5,11 +5,11 @@
 > store that implements the `QueueItem::attempts` / `setAttempts` persistence
 > contract that spec defines (and thereby makes its `SyncWorker`-side
 > `DeadLetterSink` fire across restarts) — and extends
-> [offline.md](../spec/offline.md). See [todo.md](../todo.md).
+> [offline.md](../spec/offline/offline.md). See [todo.md](../todo.md).
 
 ## The gap
 
-Only `InMemoryOfflineQueue` ships. [offline.md](../spec/offline.md) is blunt about
+Only `InMemoryOfflineQueue` ships. [offline.md](../spec/offline/offline.md) is blunt about
 it: "`InMemoryOfflineQueue` loses everything on exit. A durable/SQL-backed
 `IOfflineQueue` is the caller's to write (the interface is designed for it, but no
 implementation is provided here)."
@@ -32,7 +32,7 @@ not from an `IOfflineQueue`.)
 
 Ship one reference durable `IOfflineQueue` that persists `payload`,
 `idempotencyKey`, and `attempts` across process restarts, correctly implementing
-the [offline.md](../spec/offline.md) queue contract and the
+the [offline.md](../spec/offline/offline.md) queue contract and the
 [durable_queue.md](durable_queue.md) `setAttempts` write-back — so B1's
 cross-restart dead-lettering actually works without every host re-implementing
 the store. It is an **optional** component: `InMemoryOfflineQueue` stays the
@@ -77,7 +77,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
 - `id` is `AUTOINCREMENT`, so ids are never reused and a re-opened queue
   re-presents each row under its **stored** `id` (stable across restarts in this
   implementation). It remains **queue-local** — the
-  [offline.md](../spec/offline.md) contract ("Queue-local — not a
+  [offline.md](../spec/offline/offline.md) contract ("Queue-local — not a
   cross-subsystem key") allows but never promises stability, so callers must not
   rely on it. Cross-restart identity is carried by `idempotency_key`, not `id`.
 - The partial unique index on a non-empty `idempotency_key` gives the insert-time
@@ -87,7 +87,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
   re-enqueue of the same key is a no-op (`INSERT ... ON CONFLICT DO NOTHING`)
   that returns the existing row's id. This is a deliberate, implementation-
   specific strengthening: the base `IOfflineQueue` contract only *stores* the
-  key and never enforces uniqueness ([offline.md](../spec/offline.md)). Empty
+  key and never enforces uniqueness ([offline.md](../spec/offline/offline.md)). Empty
   keys (the default) are exempt, so keyless items behave exactly as the
   in-memory queue does.
 
@@ -115,14 +115,14 @@ protected:
 
 - **Crash-safety matches the interface contract.** `drain()` never deletes, so a
   crash between `drain()` and `markDone()` loses nothing — items reappear on the
-  next `drain()` ([offline.md](../spec/offline.md)'s "`drain` is non-destructive"
+  next `drain()` ([offline.md](../spec/offline/offline.md)'s "`drain` is non-destructive"
   decision). Each write (`enqueue`, `markDone`, `setAttempts`,
   `setIdempotencyKey`) is a committed transaction; SQLite's WAL provides the
   durability.
 - **Thread-safety matches `InMemoryOfflineQueue`.** All operations serialise on an
   internal mutex around the connection, so it is safe to share between the
   application's enqueue-on-failure write path and `SyncWorker`'s drain/replay read
-  path ([offline.md](../spec/offline.md)'s "Ownership: who enqueues").
+  path ([offline.md](../spec/offline/offline.md)'s "Ownership: who enqueues").
 
 ### A plain-file variant
 
@@ -136,7 +136,7 @@ over an append-only NDJSON file (mirroring `FileActionLog`'s shape,
 - `markDone` and `setAttempts` are recorded as tombstone/update lines and
   compacted on open (last-write-wins per id), so the file is self-healing across
   restarts and tolerates a torn trailing line the same way `FileActionLog` does
-  ([journal.md](../spec/journal.md), "Torn-write tolerance").
+  ([journal.md](../spec/journal/journal.md), "Torn-write tolerance").
 - Same `IOfflineQueue` surface; the choice between SQLite and file is a host
   decision, not a contract difference.
 
@@ -152,7 +152,7 @@ With this queue installed as the `IOfflineQueue` behind `SyncWorker`
 3. `SyncWorker` resumes from the stored count, so the 5-attempt budget is
    cumulative across restarts and the item genuinely dead-letters (invoking the
    `DeadLetterSink`) instead of retrying forever — closing the exact failure mode
-   [offline.md](../spec/offline.md) documents.
+   [offline.md](../spec/offline/offline.md) documents.
 
 ## What this does not do
 
@@ -165,12 +165,12 @@ With this queue installed as the `IOfflineQueue` behind `SyncWorker`
   `InMemoryOfflineQueue` are untouched and dependency-free.
 - **No dedup enforcement beyond insert.** The unique index deduplicates a
   re-enqueue of the same key at write time, but replay-time at-most-once is still
-  the consumer's job via `idempotencyKey` ([offline.md](../spec/offline.md) — "the
+  the consumer's job via `idempotencyKey` ([offline.md](../spec/offline/offline.md) — "the
   queue only *stores* it"). The queue does not become an exactly-once engine.
 - **Not the transactional outbox.** A model with its own store that needs the log
   and its state to commit atomically uses [outbox.md](outbox.md); this queue is
   the *offline write buffer*, a distinct concern.
-- **No conflict resolution.** As [offline.md](../spec/offline.md) states, that
+- **No conflict resolution.** As [offline.md](../spec/offline/offline.md) states, that
   lives in the model's `onBackendChanged()`, not the queue.
 
 ## Testing (planned)
@@ -196,7 +196,7 @@ With this queue installed as the `IOfflineQueue` behind `SyncWorker`
   `setAttempts` write-back hook this queue concretely implements, and the
   `SyncWorker`-side `DeadLetterSink` whose cross-restart dead-lettering it
   makes real.
-- [offline.md](../spec/offline.md) — `IOfflineQueue`, `QueueItem`,
+- [offline.md](../spec/offline/offline.md) — `IOfflineQueue`, `QueueItem`,
   `InMemoryOfflineQueue`, `enqueue`/`drain`/`markDone`/`setIdempotencyKey`, the
   non-destructive-`drain` crash-safety contract, `idempotencyKey` dedup, and the
   "only an in-memory queue ships" limitation this closes.

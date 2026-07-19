@@ -7,7 +7,7 @@
 #include "BankController.hpp"
 
 #ifndef Q_MOC_RUN
-#include <morph/bridge.hpp>
+#include <morph/core/bridge.hpp>
 
 #include "bank/models/account_model.hpp"
 #endif

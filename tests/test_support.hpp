@@ -8,8 +8,8 @@
 // keeps the test code consistent and lets the production API not have to expose
 // test-only utilities.
 
-#include <morph/executor.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/wire.hpp>
 
 #include <atomic>
 #include <chrono>

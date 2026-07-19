@@ -7,15 +7,15 @@
 // runner and Bridge::executeVia's localOp), SessionLog checkpoint/undo, and
 // journal::replay.
 
-#include <morph/action_log.hpp>
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/journal.hpp>
-#include <morph/model.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/session.hpp>
+#include <morph/journal/action_log.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/core/model.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
 
 #include <algorithm>
 #include <atomic>

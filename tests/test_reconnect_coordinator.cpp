@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/logger.hpp>
-#include <morph/reconnect_coordinator.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

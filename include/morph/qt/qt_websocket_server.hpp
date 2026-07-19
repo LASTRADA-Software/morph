@@ -5,7 +5,7 @@
 #include <QSslConfiguration>
 #include <QWebSocket>
 #include <QWebSocketServer>
-#include <morph/remote.hpp>
+#include <morph/core/remote.hpp>
 #include <optional>
 #include <vector>
 

@@ -11,11 +11,11 @@
 //   The conflict checker and resolver are injected at construction so each
 //   test can control the scenario without subclassing.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/core/registry.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

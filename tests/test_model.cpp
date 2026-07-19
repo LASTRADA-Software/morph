@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/model.hpp>
+#include <morph/core/model.hpp>
 #include <cassert>
 #include <catch2/catch_test_macros.hpp>
 

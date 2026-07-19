@@ -7,7 +7,7 @@ caller.
 
 The authentication *mechanism* — signed bearer tokens, `SigningAuthorizer`, and
 the `RemoteServer` enforcement points — lives in
-[security.md](security.md), the primary companion to this spec. This file
+[security.md](../security.md), the primary companion to this spec. This file
 documents the `session` **types and their contracts**; it cross-references
 security.md for the full trust model rather than duplicating it.
 
@@ -42,7 +42,7 @@ verbatim from caller to model.
 | `metadata` | `std::unordered_map<std::string, std::string>` | Free-form bag for feature flags, A/B buckets, app-specific metadata. |
 
 On remote backends the entire `Context` — including `token` — is serialised into
-the wire envelope's `session` field (see [wire.md](wire.md)) so `RemoteServer`
+the wire envelope's `session` field (see [wire.md](../core/wire.md)) so `RemoteServer`
 sees the same values the GUI sent. On the local backend it travels in-memory via
 `ActionCall`.
 
@@ -50,7 +50,7 @@ sees the same values the GUI sent. On the local backend it travels in-memory via
 server *derives* from that credential. See
 [the `authenticate` hook](#the-authenticate-hook--the-authoritative-principal)
 for how the derived principal replaces the client's claim, and
-[security.md](security.md) for the token format and login flow.
+[security.md](../security.md) for the token format and login flow.
 
 ## How a `Context` originates and flows
 
@@ -75,7 +75,7 @@ From the `ActionCall` the session travels backend-specifically:
   dispatch.
 
 The bridge plumbing (`setDefaultSession`/`defaultSession`, the `ActionCall`
-stamp) is specified in [bridge.md](bridge.md); this spec covers only the
+stamp) is specified in [bridge.md](../core/bridge.md); this spec covers only the
 `Context` payload and its server-side handling.
 
 ## IAuthorizer — gate for action dispatch
@@ -127,7 +127,7 @@ calls `authenticate` **after `authorize` has already succeeded**:
   time-of-check/time-of-use gap (a token can pass `authorize` and then expire
   before `authenticate`, whose `nullopt` would otherwise let the client's claim
   survive) and the analogous authorize-only passthrough. See
-  [security.md](security.md).
+  [security.md](../security.md).
 
 This split keeps the two concerns separate: `authorize` answers "is this call
 permitted?" and `authenticate` answers "who is actually making it?". An
@@ -144,7 +144,7 @@ principal regardless.
 
 The full mechanism — token format, verification order, `RemoteServer`'s
 `dispatchExecute` call site, and the login flow — is documented in
-[security.md](security.md). This spec fixes the *contract*: `authenticate`
+[security.md](../security.md). This spec fixes the *contract*: `authenticate`
 is consulted post-`authorize`, its return replaces the principal when present,
 and its `nullopt` clears the principal.
 
@@ -175,7 +175,7 @@ The **default returns `true`**, so `AllowAllAuthorizer` and a plain
 `SigningAuthorizer` impose no per-instance restriction — behaviour is unchanged
 unless an authorizer overrides the hook (typically `ownerPrincipal.empty() ||
 ownerPrincipal == ctx.principal`). The full mechanism, the register-time owner
-recording, and the trust model are in [security.md](security.md)
+recording, and the trust model are in [security.md](../security.md)
 ("The per-instance ownership hook"). This spec fixes the *contract*:
 `authorizeInstance` is consulted per `execute` and per `deregister`, defaults to
 allow, and receives the instance id plus its recorded owner.
@@ -192,7 +192,7 @@ instance when the default is sufficient.
 
 `AllowAllAuthorizer` is **fail-open**: it is convenient for local and simulated
 development and wrong for production. See [Trust boundary](#trust-boundary) and
-[security.md](security.md) ("The default is fail-open") for why an exposed
+[security.md](../security.md) ("The default is fail-open") for why an exposed
 server must replace it.
 
 ## Trust boundary
@@ -210,7 +210,7 @@ input. The rules that govern where trust begins:
 - **The local backend does not authorize at all.** `authorize` is a
   **remote-only gate**: `LocalBackend::execute` installs the session context but
   never consults the authorizer (its sole call site is `RemoteServer`'s
-  `dispatchExecute`, see [backend.md](backend.md)). Any security-critical check
+  `dispatchExecute`, see [backend.md](../core/backend.md)). Any security-critical check
   must therefore be enforced inside the model so it holds in both local and
   remote modes.
 - **The `RemoteServer` default authorizer is fail-open.** An unconfigured server
@@ -222,8 +222,8 @@ input. The rules that govern where trust begins:
   defaults to allow) — or, for logic the framework cannot know, in the model.
 
 The registry that maps those type ids to runners is described in
-[registry.md](registry.md); the enforcement points and the full threat model are
-in [security.md](security.md).
+[registry.md](../core/registry.md); the enforcement points and the full threat model are
+in [security.md](../security.md).
 
 ## Thread safety — `current()` and `ScopedContext`
 
@@ -347,18 +347,18 @@ if (const auto* ctx = morph::session::current(); ctx != nullptr) {
 - **`current()` is dispatch-thread-only.** It returns `nullptr` off the dispatch
   thread; session data needed across a thread boundary must be captured first.
 
-See [security.md](security.md) for the complete threat model and hardening
+See [security.md](../security.md) for the complete threat model and hardening
 checklist (TLS, message-size bounds, control-message authorization, secret
 rotation).
 
 ## Cross-references
 
-- [security.md](security.md) — **the authentication subsystem**: signed bearer
+- [security.md](../security.md) — **the authentication subsystem**: signed bearer
   tokens, `SigningAuthorizer`, the `RemoteServer` enforcement points, the threat
   model, and hardening guidance. The primary companion to this spec.
-- [wire.md](wire.md) — the envelope the `Context` (including `token`) is
+- [wire.md](../core/wire.md) — the envelope the `Context` (including `token`) is
   serialised into on the remote path.
-- [backend.md](backend.md) — `RemoteServer` / `LocalBackend` dispatch, and where
+- [backend.md](../core/backend.md) — `RemoteServer` / `LocalBackend` dispatch, and where
   the authorizer is (and is not) consulted.
-- [registry.md](registry.md) — the model/action type registry behind the type
+- [registry.md](../core/registry.md) — the model/action type registry behind the type
   ids `authorize` receives.

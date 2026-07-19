@@ -9,17 +9,17 @@
 //   6. UnitRelation positivity guard (compile-time; witnessed here at runtime).
 //   7. Log-injection sanitisation in the default sink.
 
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/logger.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/quantity.hpp>
-#include <morph/rational.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/session.hpp>
-#include <morph/session_auth.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <morph/core/wire.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

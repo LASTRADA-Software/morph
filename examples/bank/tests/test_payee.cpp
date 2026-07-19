@@ -2,7 +2,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <morph/bridge.hpp>
+#include <morph/core/bridge.hpp>
 
 #include <atomic>
 #include <filesystem>
