@@ -159,7 +159,7 @@ inline bool constantTimeEquals(std::string_view lhs, std::string_view rhs) {
     }
     uint8_t diff = 0;
     for (std::size_t i = 0; i < lhs.size(); ++i) {
-        diff |= static_cast<uint8_t>(lhs[i]) ^ static_cast<uint8_t>(rhs[i]);
+        diff = uint8_t(diff | (uint8_t(lhs[i]) ^ uint8_t(rhs[i])));
     }
     return diff == 0;
 }

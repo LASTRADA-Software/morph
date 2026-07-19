@@ -88,13 +88,13 @@ BRIDGE_REGISTER_ACTION(FormModel, FlakyAction, "Test_FlakyAction")
 BRIDGE_REGISTER_ACTION(FormModel, MixedAction, "Test_MixedAction")
 BRIDGE_REGISTER_ACTION(FormModel, SlowAction, "Test_SlowAction")
 
-BRIDGE_REGISTER_VALIDATOR(FormAction, [](const FormAction& action) {
-    return action.a != 0.0 && action.b != 0.0 && action.c != 0.0;
+BRIDGE_REGISTER_VALIDATOR(FormAction, [](const FormAction& a) {
+    return a.a != 0.0 && a.b != 0.0 && a.c != 0.0;
 })
-BRIDGE_REGISTER_VALIDATOR(ThrowAction, [](const ThrowAction& action) { return action.trigger != 0; })
-BRIDGE_REGISTER_VALIDATOR(FlakyAction, [](const FlakyAction& action) { return action.mode >= 0; })
-BRIDGE_REGISTER_VALIDATOR(MixedAction, [](const MixedAction& action) {
-    return !action.name.empty() && action.inner.n != 0 && action.count != 0;
+BRIDGE_REGISTER_VALIDATOR(ThrowAction, [](const ThrowAction& a) { return a.trigger != 0; })
+BRIDGE_REGISTER_VALIDATOR(FlakyAction, [](const FlakyAction& a) { return a.mode >= 0; })
+BRIDGE_REGISTER_VALIDATOR(MixedAction, [](const MixedAction& a) {
+    return !a.name.empty() && a.inner.n != 0 && a.count != 0;
 })
 
 using SyncExecutor = morph::testing::InlineExecutor;

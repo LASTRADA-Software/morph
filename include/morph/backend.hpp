@@ -210,8 +210,8 @@ public:
             }
         }
         for (auto& [modelId, holder] : sinks) {
-            _strand.post(modelId, [holder = std::move(holder)]() mutable {
-                auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get());
+            _strand.post(modelId, [h = std::move(holder)]() mutable {
+                auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(h.get());
                 if (sink != nullptr) {
                     sink->onBackendChanged();
                 }

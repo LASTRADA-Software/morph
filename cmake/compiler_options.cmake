@@ -95,7 +95,6 @@ function(apply_warnings target)
                 -Wstringop-truncation
                 -Wstrict-overflow=5
                 -Wsuggest-override
-                -Wnoexcept
                 -Wsubobject-linkage
                 -Wtrampolines
                 -Wconditionally-supported
