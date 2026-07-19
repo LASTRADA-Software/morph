@@ -344,7 +344,7 @@ $(document).ready(function(){initNavTree('d4/d11/forms_8hpp_source.html','../../
 <div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>        <span class="keyword">constexpr</span> <span class="keyword">auto</span> memberCount = glz::reflect&lt;Plain&gt;::size;</div>
 <div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <span class="keyword">auto</span> memberTie = glz::to_tie(action);</div>
 <div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        [&amp;]&lt;std::size_t... I&gt;(std::index_sequence&lt;I...&gt;) {</div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            <span class="keyword">auto</span> retag = [&amp;]&lt;std::size_t Idx&gt;() {</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            [[maybe_unused]] <span class="keyword">auto</span> retag = [&amp;]&lt;std::size_t Idx&gt;() {</div>
 <div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>                <span class="keyword">auto</span>&amp; member = glz::get_member(action, get&lt;Idx&gt;(memberTie));</div>
 <div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>                <span class="keyword">using </span>Member = std::remove_cvref_t&lt;<span class="keyword">decltype</span>(member)&gt;;</div>
 <div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>                <span class="keywordflow">if</span> <span class="keyword">constexpr</span> (units::isQuantity&lt;Member&gt;) {</div>

@@ -160,7 +160,7 @@ $(document).ready(function(){initNavTree('d3/d6a/session__auth_8hpp_source.html'
 <div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>                                    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};</div>
 <div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span> </div>
 <div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>    std::vector&lt;uint8_t&gt; msg(data.begin(), data.end());</div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    <span class="keyword">const</span> uint64_t bitLen = <span class="keyword">static_cast&lt;</span>uint64_t<span class="keyword">&gt;</span>(msg.size()) * 8;</div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>    <span class="keyword">const</span> uint64_t bitLen = msg.size() * 8;</div>
 <div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span>    msg.push_back(0x80);</div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    <span class="keywordflow">while</span> (msg.size() % 64 != 56) {</div>
 <div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>        msg.push_back(0x00);</div>
@@ -265,7 +265,7 @@ $(document).ready(function(){initNavTree('d3/d6a/session__auth_8hpp_source.html'
 <div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>    }</div>
 <div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>    uint8_t diff = 0;</div>
 <div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>    <span class="keywordflow">for</span> (std::size_t i = 0; i &lt; lhs.size(); ++i) {</div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>        diff |= <span class="keyword">static_cast&lt;</span>uint8_t<span class="keyword">&gt;</span>(lhs[i]) ^ <span class="keyword">static_cast&lt;</span>uint8_t<span class="keyword">&gt;</span>(rhs[i]);</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>        diff = uint8_t(diff | (uint8_t(lhs[i]) ^ uint8_t(rhs[i])));</div>
 <div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    }</div>
 <div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    <span class="keywordflow">return</span> diff == 0;</div>
 <div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>}</div>

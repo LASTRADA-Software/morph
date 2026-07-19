@@ -127,14 +127,13 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>RAII helper that installs a default action log for its lifetime and restores the previous one on destruction. </p>
 <p>Mirrors <code><a class="el" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html" title="RAII helper that swaps the global logger and level for the lifetime of the object,...">morph::log::ScopedLoggerOverride</a></code>. Intended for tests (so one test case's sink never leaks into the next) and for applications that need to temporarily redirect auto-attached logging within a scope.</p>
-<dl class="section user"><dt>Example</dt><dd><div class="fragment"><div class="line">{</div>
+<div class="fragment"><div class="line">{</div>
 <div class="line">    <a class="code hl_class" href="../../de/d66/classmorph_1_1journal_1_1ScopedActionLog.html">morph::journal::ScopedActionLog</a> guard{std::make_shared&lt;morph::journal::InMemoryActionLog&gt;()};</div>
 <div class="line">    <span class="comment">// ... models created in this scope auto-attach guard&#39;s log ...</span></div>
 <div class="line">}  <span class="comment">// previous default restored here</span></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1ScopedActionLog_html"><div class="ttname"><a href="../../de/d66/classmorph_1_1journal_1_1ScopedActionLog.html">morph::journal::ScopedActionLog</a></div><div class="ttdoc">RAII helper that installs a default action log for its lifetime and restores the previous one on dest...</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00221">action_log.hpp:221</a></div></div>
-</div><!-- fragment --> </dd></dl>
-
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<div class="ttc" id="aclassmorph_1_1journal_1_1ScopedActionLog_html"><div class="ttname"><a href="../../de/d66/classmorph_1_1journal_1_1ScopedActionLog.html">morph::journal::ScopedActionLog</a></div><div class="ttdoc">RAII helper that installs a default action log for its lifetime and restores the previous one on dest...</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00220">action_log.hpp:220</a></div></div>
+</div><!-- fragment --> 
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00220">220</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a847e6f865936193afec2905161b7448b" name="a847e6f865936193afec2905161b7448b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a847e6f865936193afec2905161b7448b">&#9670;&#160;</a></span>ScopedActionLog()</h2>
@@ -168,7 +167,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00225">225</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -197,7 +196,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Restores the saved default. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00230">230</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

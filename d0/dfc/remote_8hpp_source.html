@@ -221,7 +221,7 @@ $(document).ready(function(){initNavTree('d0/dfc/remote_8hpp_source.html','../..
 <div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>            <span class="comment">// canonical decode-error reply (avoids duplicating that path here).</span></div>
 <div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>        }</div>
 <div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>        std::string reply;</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>        std::function&lt;void(std::string)&gt; capture = [&amp;reply](std::string out) { reply = std::move(out); };</div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>        std::function&lt;void(std::string)&gt; capture = [&amp;reply](std::string out) <span class="keyword">noexcept</span> { reply = std::move(out); };</div>
 <div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>        dispatchMessage(msg, capture);</div>
 <div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>        <span class="keywordflow">return</span> reply;</div>
 <div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    }</div>

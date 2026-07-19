@@ -95,7 +95,7 @@ $(document).ready(function(){initNavTree('d1/d6d/conceptmorph_1_1units_1_1HasUse
 </div><!--header-->
 <div class="contents">
 
-<p>Concept: the application supplied a <code>UnitTraits&lt;E&gt;::convert</code> static for this pair (a non-ratio override, e.g. °C → °F).  
+<p>Concept: the application supplied a <code>UnitTraits&lt;E&gt;::convert</code> static for this pair (a non-ratio override, e.g. °C → °F) (template params <code>From</code>, <code>To</code>).  
 <a href="../../d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>&gt;</code></p>
@@ -104,18 +104,11 @@ $(document).ready(function(){initNavTree('d1/d6d/conceptmorph_1_1units_1_1HasUse
 <div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html">morph::units::HasUserConvert</a> =  <span class="keyword">requires</span>(Quantity&lt;From&gt; from, Quantity&lt;To&gt;&amp; to) {</div>
 <div class="line">    UnitTraits&lt;<span class="keyword">decltype</span>(From)&gt;::convert(from, to);</div>
 <div class="line">}</div>
-<div class="ttc" id="aconceptmorph_1_1units_1_1HasUserConvert_html"><div class="ttname"><a href="../../d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html">morph::units::HasUserConvert</a></div><div class="ttdoc">Concept: the application supplied a UnitTraits&lt;E&gt;::convert static for this pair (a non-ratio override...</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00469">quantity.hpp:469</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1units_1_1HasUserConvert_html"><div class="ttname"><a href="../../d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html">morph::units::HasUserConvert</a></div><div class="ttdoc">Concept: the application supplied a UnitTraits&lt;E&gt;::convert static for this pair (a non-ratio override...</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00461">quantity.hpp:461</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Concept: the application supplied a <code>UnitTraits&lt;E&gt;::convert</code> static for this pair (a non-ratio override, e.g. °C → °F). </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">From</td><td>Source unit enumerator. </td></tr>
-    <tr><td class="paramname">To</td><td>Target unit enumerator. </td></tr>
-  </table>
-  </dd>
-</dl>
+<div class="textblock"><p>Concept: the application supplied a <code>UnitTraits&lt;E&gt;::convert</code> static for this pair (a non-ratio override, e.g. °C → °F) (template params <code>From</code>, <code>To</code>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00469">469</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00461">461</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- start footer part -->

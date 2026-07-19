@@ -130,7 +130,7 @@ Public Member Functions</h2></td></tr>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>RAII helper that swaps the global logger and level for the lifetime of the object, and restores them in the destructor. </p>
 <p>Designed for tests that want to capture log output without leaking the custom sink into other tests. Thread-safe construction and destruction — the global mutex is acquired briefly during each.</p>
-<dl class="section user"><dt>Example</dt><dd><div class="fragment"><div class="line">{</div>
+<div class="fragment"><div class="line">{</div>
 <div class="line">    std::vector&lt;std::string&gt; captured;</div>
 <div class="line">    <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">morph::log::ScopedLoggerOverride</a> guard{</div>
 <div class="line">        [&amp;](morph::log::LogLevel, std::string_view msg) { captured.emplace_back(msg); },</div>
@@ -139,8 +139,7 @@ Public Member Functions</h2></td></tr>
 <div class="line">    <span class="comment">// ... run code that logs ...</span></div>
 <div class="line">}  <span class="comment">// previous sink + level restored here</span></div>
 <div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">morph::log::ScopedLoggerOverride</a></div><div class="ttdoc">RAII helper that swaps the global logger and level for the lifetime of the object,...</div><div class="ttdef"><b>Definition</b> <a href="../../d6/da3/logger_8hpp_source.html#l00234">logger.hpp:234</a></div></div>
-</div><!-- fragment --> </dd></dl>
-
+</div><!-- fragment --> 
 <p class="definition">Definition at line <a class="el" href="../../d6/da3/logger_8hpp_source.html#l00234">234</a> of file <a class="el" href="../../d6/da3/logger_8hpp_source.html">logger.hpp</a>.</p>
 </div><h2 class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac263043b44405ccee942013e8d244a81" name="ac263043b44405ccee942013e8d244a81"></a>

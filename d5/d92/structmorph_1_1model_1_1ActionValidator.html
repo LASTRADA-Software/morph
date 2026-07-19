@@ -118,22 +118,21 @@ struct morph::model::ActionValidator&lt; Action &gt;</div><p>Per-action validato
 <li><b>Default</b> — returns <code>true</code>, matching one-shot semantics (the first <code>set&lt;&gt;</code> lands and the action fires).</li>
 </ol>
 <p>Validation is intentionally a property of the <b>action</b>, not the model: different actions on the same model have different readiness requirements, and keeping the predicate next to the action keeps the GUI side oblivious to model internals.</p>
-<dl class="section user"><dt>Example — member function</dt><dd><div class="fragment"><div class="line"><span class="keyword">struct </span>FormAction {</div>
+<div class="fragment"><div class="line"><span class="keyword">struct </span>FormAction {</div>
 <div class="line">    <span class="keywordtype">double</span> a;</div>
 <div class="line">    <span class="keywordtype">double</span> b;</div>
 <div class="line">    <span class="keywordtype">double</span> c;</div>
 <div class="line">    <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> a != 0.0 &amp;&amp; b != 0.0 &amp;&amp; c != 0.0; }</div>
 <div class="line">};</div>
 <div class="line"><span class="comment">// No macro needed; ActionValidator&lt;FormAction&gt;::ready calls .validate() automatically.</span></div>
-</div><!-- fragment --></dd></dl>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
+</div><!-- fragment --><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Action</td><td>Concrete action type. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 </div><h2 class="groupheader">Member Function Documentation</h2>
 <a id="a3741692227c70903fcc7fa93011f636d" name="a3741692227c70903fcc7fa93011f636d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3741692227c70903fcc7fa93011f636d">&#9670;&#160;</a></span>ready()</h2>
@@ -171,7 +170,7 @@ template&lt;typename Action &gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><code>true</code> if the action should fire, <code>false</code> to keep collecting fields. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00102">102</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
 
 </div>
 </div>
