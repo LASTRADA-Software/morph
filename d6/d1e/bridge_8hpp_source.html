@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph/bridge.hpp Source File</title>
+<title>morph: morph/core/bridge.hpp Source File</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../jquery.js"></script>
 <script type="text/javascript" src="../../dynsections.js"></script>
@@ -117,9 +117,9 @@ $(document).ready(function(){initNavTree('d6/d1e/bridge_8hpp_source.html','../..
 <div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span> </div>
 <div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="preprocessor">#include &quot;backend.hpp&quot;</span></div>
 <div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="preprocessor">#include &quot;completion.hpp&quot;</span></div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;<a class="code" href="../../d4/d11/forms_8hpp.html">forms.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="preprocessor">#include &quot;../forms/forms.hpp&quot;</span></div>
 <div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="preprocessor">#include &quot;registry.hpp&quot;</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;session.hpp&quot;</span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="preprocessor">#include &quot;../session/session.hpp&quot;</span></div>
 <div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span> </div>
 <div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="keyword">namespace </span>morph::bridge {</div>
 <div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment"></span> </div>
@@ -970,7 +970,6 @@ $(document).ready(function(){initNavTree('d6/d1e/bridge_8hpp_source.html','../..
 <div class="ttc" id="aclassmorph_1_1bridge_1_1ActionExecuteRegistry_html_a117beb21e93ba420dbc7dd9692cbac20"><div class="ttname"><a href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a117beb21e93ba420dbc7dd9692cbac20">morph::bridge::ActionExecuteRegistry::registerAction</a></div><div class="ttdeci">void registerAction(std::string_view modelId, std::string_view actionId)</div><div class="ttdoc">Registers the executor for (Model, Action) under the given string ids. Defined out-of-line after Brid...</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d1e/bridge_8hpp_source.html#l00809">bridge.hpp:809</a></div></div>
 <div class="ttc" id="aclassmorph_1_1bridge_1_1ActionExecuteRegistry_html_a1542ecdd46c0ef020869b29e816720b2"><div class="ttname"><a href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a1542ecdd46c0ef020869b29e816720b2">morph::bridge::ActionExecuteRegistry::instance</a></div><div class="ttdeci">static ActionExecuteRegistry &amp; instance()</div><div class="ttdoc">Returns the process-level singleton registry.</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d1e/bridge_8hpp_source.html#l00086">bridge.hpp:86</a></div></div>
 <div class="ttc" id="aclassmorph_1_1bridge_1_1ActionExecuteRegistry_html_abc6521631ae08814323f707f748dbc47"><div class="ttname"><a href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#abc6521631ae08814323f707f748dbc47">morph::bridge::ActionExecuteRegistry::execute</a></div><div class="ttdeci">::morph::async::Completion&lt; std::string &gt; execute(std::string_view modelId, std::string_view actionId, void *handler, std::string_view bodyJson) const</div><div class="ttdoc">Looks up and invokes the executor for (modelId, actionId).</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d1e/bridge_8hpp_source.html#l00067">bridge.hpp:67</a></div></div>
-<div class="ttc" id="aforms_8hpp_html"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html">forms.hpp</a></div><div class="ttdoc">JSON-Forms-style schema generation for morph actions.</div></div>
 <div class="ttc" id="astructmorph_1_1backend_1_1BackendChangedError_html"><div class="ttname"><a href="../../dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html">morph::backend::BackendChangedError</a></div><div class="ttdoc">Thrown to in-flight Completions when Bridge::switchBackend() runs.</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d5e/backend_8hpp_source.html#l00127">backend.hpp:127</a></div></div>
 <div class="ttc" id="astructmorph_1_1backend_1_1BridgeDestroyedError_html"><div class="ttname"><a href="../../db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html">morph::backend::BridgeDestroyedError</a></div><div class="ttdoc">Thrown to in-flight Completions when Bridge is destroyed.</div><div class="ttdef"><b>Definition</b> <a href="../../d6/d5e/backend_8hpp_source.html#l00133">backend.hpp:133</a></div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00023">executor.hpp:23</a></div></div>
@@ -985,7 +984,7 @@ $(document).ready(function(){initNavTree('d6/d1e/bridge_8hpp_source.html','../..
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><b>bridge.hpp</b></li>
+    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../dir_dc1b88453201f4f0afd0f2d336e9acaa.html">core</a></li><li class="navelem"><b>bridge.hpp</b></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
   </ul>
 </div>

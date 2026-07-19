@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['3_20—_20ordered_20coalescing_20identity_20aware_20execution_20history_0',['Action log (issue #3) — ordered, coalescing, identity-aware execution history',['../index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history',1,'']]]
+  ['_5fctx_0',['_ctx',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a9f35cf343d134f71160e664bd7e95cf2',1,'morph::units::Quantity']]]
 ];

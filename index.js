@@ -3,10 +3,6 @@ var index =
     [ "Overview", "index.html#overview", null ],
     [ "Namespace map", "index.html#namespace-map", null ],
     [ "Layer diagram", "index.html#layer-diagram", null ],
-    [ "Header map", "index.html#header-map", [
-      [ "Core headers (<tt>include/morph/</tt>)", "index.html#core-headers-includemorph", null ],
-      [ "Qt integration headers (<tt>include/morph/qt/</tt>)", "index.html#qt-integration-headers-includemorphqt", null ]
-    ] ],
     [ "Deployment topologies", "index.html#deployment-topologies", null ],
     [ "Wire protocol", "index.html#wire-protocol", null ],
     [ "Component detail", "index.html#component-detail", [
@@ -19,7 +15,7 @@ var index =
       [ "Authenticated sessions", "index.html#authenticated-sessions", null ],
       [ "NetworkMonitor", "index.html#networkmonitor", null ],
       [ "IOfflineQueue + InMemoryOfflineQueue", "index.html#iofflinequeue--inmemoryofflinequeue", null ],
-      [ "Action log (issue #3) — ordered, coalescing, identity-aware execution history", "index.html#action-log-issue-3--ordered-coalescing-identity-aware-execution-history", null ],
+      [ "Action log — ordered, coalescing, identity-aware execution history", "index.html#action-log--ordered-coalescing-identity-aware-execution-history", null ],
       [ "SyncWorker", "index.html#syncworker", null ],
       [ "ReconnectCoordinator", "index.html#reconnectcoordinator", null ],
       [ "Conflict Resolution — a domain concern, not a framework concern", "index.html#conflict-resolution--a-domain-concern-not-a-framework-concern", null ]
@@ -36,6 +32,17 @@ var index =
       [ "<tt>morph::units::Quantity<U></tt> — one kind of empty, units as types", "index.html#morphunitsquantityu--one-kind-of-empty-units-as-types", null ],
       [ "<tt>morph::forms</tt> — schemas for auto-built GUIs", "index.html#morphforms--schemas-for-auto-built-guis", null ],
       [ "<tt>morph::time::Timestamp</tt> and <tt>morph::forms::Choice</tt> — dates and combo boxes", "index.html#morphtimetimestamp-and-morphformschoice--dates-and-combo-boxes", null ]
+    ] ],
+    [ "Header map", "index.html#header-map", [
+      [ "Library headers (<tt>include/morph/</tt>)", "index.html#library-headers-includemorph", [
+        [ "<tt>core/</tt> — async core, registry, bridge, backends, wire", "index.html#core--async-core-registry-bridge-backends-wire", null ],
+        [ "<tt>journal/</tt> — ordered, replayable action log", "index.html#journal--ordered-replayable-action-log", null ],
+        [ "<tt>offline/</tt> — connectivity + replay", "index.html#offline--connectivity--replay", null ],
+        [ "<tt>session/</tt> — per-call context + authentication", "index.html#session--per-call-context--authentication", null ],
+        [ "<tt>forms/</tt> — JSON-Schema generation for auto-built GUIs", "index.html#forms--json-schema-generation-for-auto-built-guis", null ],
+        [ "<tt>util/</tt> — exact values, units, time", "index.html#util--exact-values-units-time", null ]
+      ] ],
+      [ "Qt integration headers (<tt>include/morph/qt/</tt>)", "index.html#qt-integration-headers-includemorphqt", null ]
     ] ],
     [ "Known limitations", "index.html#known-limitations", [
       [ "Validators do not run server-side", "index.html#validators-do-not-run-server-side", null ],

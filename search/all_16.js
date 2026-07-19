@@ -5,6 +5,7 @@ var searchData=
   ['value_5for_2',['value_or',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834',1,'morph::units::Quantity']]],
   ['valuefield_3',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a7ee9bd530727b58937656503574eb1a0',1,'morph::forms::Choice']]],
   ['values_20units_20and_20schema_20driven_20forms_4',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
-  ['verify_5',['verify',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492',1,'morph::session::TokenVerifier']]],
-  ['view_6',['view',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aca5e4e24c878f8399dd3c86759549d77',1,'morph::detail::FixedString']]]
+  ['values_20units_20time_5',['&lt;tt&gt;util/&lt;/tt&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
+  ['verify_6',['verify',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492',1,'morph::session::TokenVerifier']]],
+  ['view_7',['view',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aca5e4e24c878f8399dd3c86759549d77',1,'morph::detail::FixedString']]]
 ];

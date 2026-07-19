@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph/quantity.hpp Source File</title>
+<title>morph: morph/util/quantity.hpp Source File</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../jquery.js"></script>
 <script type="text/javascript" src="../../dynsections.js"></script>
@@ -103,7 +103,7 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span> </div>
 <div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="preprocessor">#pragma once</span></div>
 <div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"></span> </div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file quantity.hpp</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file util/quantity.hpp</span></div>
 <div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment">/// @brief Unit-tagged, optionally-empty exact values with a derivation trail.</span></div>
 <div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment">///</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment">/// `morph::units::Quantity&lt;U&gt;` wraps an *optional* `morph::math::Rational` and</span></div>
@@ -160,7 +160,7 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="preprocessor">#include &lt;unordered_map&gt;</span></div>
 <div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="preprocessor">#endif</span></div>
 <div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span> </div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="preprocessor">#include &quot;<a class="code" href="../../d7/d7f/fixed__string_8hpp.html">detail/fixed_string.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="preprocessor">#include &quot;../detail/fixed_string.hpp&quot;</span></div>
 <div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="preprocessor">#include &quot;<a class="code" href="../../d1/de8/rational_8hpp.html">rational.hpp</a>&quot;</span></div>
 <div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span> </div>
 <div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="keyword">namespace </span>morph::units {</div>
@@ -1142,7 +1142,7 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <div class="line"><a id="l00981" name="l00981"></a><span class="lineno">  981</span>}  <span class="comment">// namespace morph::units</span></div>
 <div class="line"><a id="l00982" name="l00982"></a><span class="lineno">  982</span> </div>
 <div class="line"><a id="l00983" name="l00983"></a><span class="lineno">  983</span><span class="preprocessor">#if MORPH_QUANTITY_PROVENANCE</span></div>
-<div class="line"><a id="l00984" name="l00984"></a><span class="lineno">  984</span><span class="preprocessor">#include &quot;<a class="code" href="../../d4/dc4/quantity__equation_8hpp.html">detail/quantity_equation.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00984" name="l00984"></a><span class="lineno">  984</span><span class="preprocessor">#include &quot;../detail/quantity_equation.hpp&quot;</span></div>
 <div class="line"><a id="l00985" name="l00985"></a><span class="lineno">  985</span><span class="preprocessor">#endif</span></div>
 <div class="line"><a id="l00986" name="l00986"></a><span class="lineno">  986</span><span class="comment"></span> </div>
 <div class="line"><a id="l00987" name="l00987"></a><span class="lineno">  987</span><span class="comment">/// @brief Renders value + unit (`5.2kW`, `N/A%`); no `operator&lt;&lt;` is provided.</span></div>
@@ -1226,7 +1226,6 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <div class="ttc" id="aconceptmorph_1_1units_1_1HasUserConvert_html"><div class="ttname"><a href="../../d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html">morph::units::HasUserConvert</a></div><div class="ttdoc">Concept: the application supplied a UnitTraits&lt;E&gt;::convert static for this pair (a non-ratio override...</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00461">quantity.hpp:461</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1units_1_1RatioConvertible_html"><div class="ttname"><a href="../../d5/d86/conceptmorph_1_1units_1_1RatioConvertible.html">morph::units::RatioConvertible</a></div><div class="ttdoc">Concept: the auto-generated ratio convert applies to From → To (template params From,...</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00441">quantity.hpp:441</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1units_1_1UnitEnum_html"><div class="ttname"><a href="../../d6/db7/conceptmorph_1_1units_1_1UnitEnum.html">morph::units::UnitEnum</a></div><div class="ttdoc">Concept: an enum with a UnitTraits specialisation (template param E).</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00247">quantity.hpp:247</a></div></div>
-<div class="ttc" id="afixed__string_8hpp_html"><div class="ttname"><a href="../../d7/d7f/fixed__string_8hpp.html">fixed_string.hpp</a></div><div class="ttdoc">Shared compile-time, NTTP-capable fixed string.</div></div>
 <div class="ttc" id="aquantity_8hpp_html_a0f5a3606dbca547af0c56e9aaa15e97f"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#a0f5a3606dbca547af0c56e9aaa15e97f">morph::units::operator==</a></div><div class="ttdeci">constexpr bool operator==(const Quantity&lt; U, DecA &gt; &amp;lhs, const Quantity&lt; U, DecB &gt; &amp;rhs) noexcept</div><div class="ttdoc">Equality across same-unit quantities of any declared precision. Ignores the runtime precision tag; em...</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00770">quantity.hpp:770</a></div></div>
 <div class="ttc" id="aquantity_8hpp_html_a1fdd26720a327aab1239395c055dbdd2"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#a1fdd26720a327aab1239395c055dbdd2">morph::units::operator*</a></div><div class="ttdeci">Quantity&lt; A *B &gt; operator*(const Quantity&lt; A, DecA &gt; &amp;lhs, const Quantity&lt; B, DecB &gt; &amp;rhs)</div><div class="ttdoc">Cross-unit product; the result unit is A * B per the application's consteval unit algebra....</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00865">quantity.hpp:865</a></div></div>
 <div class="ttc" id="aquantity_8hpp_html_a58fa61dc1e60108e7e44631ffe60ce69"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69">morph::units::isQuantity</a></div><div class="ttdeci">constexpr bool isQuantity</div><div class="ttdoc">true when T (cvref-stripped) is a morph::units::Quantity.</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00747">quantity.hpp:747</a></div></div>
@@ -1234,7 +1233,6 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <div class="ttc" id="aquantity_8hpp_html_a84a433ffcee6be7bd3aa3deb5107f327"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#a84a433ffcee6be7bd3aa3deb5107f327">morph::units::operator/</a></div><div class="ttdeci">Quantity&lt; A/B &gt; operator/(const Quantity&lt; A, DecA &gt; &amp;lhs, const Quantity&lt; B, DecB &gt; &amp;rhs)</div><div class="ttdoc">Cross-unit quotient; the result unit is A / B per the application's consteval unit algebra....</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00882">quantity.hpp:882</a></div></div>
 <div class="ttc" id="aquantity_8hpp_html_a8566e003abe50f30af8f28c7d6954ee5"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#a8566e003abe50f30af8f28c7d6954ee5">morph::units::operator+</a></div><div class="ttdeci">Quantity&lt; U &gt; operator+(const Quantity&lt; U, DecA &gt; &amp;lhs, const Quantity&lt; U, DecB &gt; &amp;rhs)</div><div class="ttdoc">Same-unit sum across any declared precisions.</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00801">quantity.hpp:801</a></div></div>
 <div class="ttc" id="aquantity_8hpp_html_ac6333f923fa45288c3385091318bca26"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html#ac6333f923fa45288c3385091318bca26">morph::units::convert</a></div><div class="ttdeci">void convert(const Quantity&lt; From &gt; &amp;in, Quantity&lt; To &gt; &amp;out)</div><div class="ttdoc">Auto-generated within-dimension conversion (ratio + chaining).</div><div class="ttdef"><b>Definition</b> <a href="../../d9/db8/quantity_8hpp_source.html#l00753">quantity.hpp:753</a></div></div>
-<div class="ttc" id="aquantity__equation_8hpp_html"><div class="ttname"><a href="../../d4/dc4/quantity__equation_8hpp.html">quantity_equation.hpp</a></div><div class="ttdoc">Quantity::equation() renderer (provenance builds only).</div></div>
 <div class="ttc" id="arational_8hpp_html"><div class="ttname"><a href="../../d1/de8/rational_8hpp.html">rational.hpp</a></div><div class="ttdoc">Exact rational arithmetic for morph model/action values.</div></div>
 <div class="ttc" id="astructmorph_1_1detail_1_1FixedString_html"><div class="ttname"><a href="../../df/d52/structmorph_1_1detail_1_1FixedString.html">morph::detail::FixedString</a></div><div class="ttdoc">A structural, NTTP-capable compile-time string.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d7f/fixed__string_8hpp_source.html#l00029">fixed_string.hpp:29</a></div></div>
 <div class="ttc" id="astructmorph_1_1math_1_1DecimalPlaces_html"><div class="ttname"><a href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">morph::math::DecimalPlaces</a></div><div class="ttdoc">Strong type for a decimal-precision count.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/de8/rational_8hpp_source.html#l00109">rational.hpp:109</a></div></div>
@@ -1287,7 +1285,7 @@ $(document).ready(function(){initNavTree('d9/db8/quantity_8hpp_source.html','../
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../d9/db8/quantity_8hpp.html">quantity.hpp</a></li>
+    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../dir_3fb6632a00b78236ce9a517b905728c7.html">util</a></li><li class="navelem"><a class="el" href="../../d9/db8/quantity_8hpp.html">quantity.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
   </ul>
 </div>

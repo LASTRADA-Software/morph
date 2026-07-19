@@ -9,5 +9,7 @@ var searchData=
   ['unitrelation_6',['UnitRelation',['../da/d8f/structmorph_1_1units_1_1UnitRelation.html',1,'morph::units']]],
   ['units_20and_20schema_20driven_20forms_7',['Exact values, units, and schema-driven forms',['../index.html#exact-values-units-and-schema-driven-forms',1,'']]],
   ['units_20as_20types_8',['&lt;tt&gt;morph::units::Quantity&lt;U&gt;&lt;/tt&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
-  ['unittraits_9',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]]
+  ['units_20time_9',['&lt;tt&gt;util/&lt;/tt&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
+  ['unittraits_10',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]],
+  ['util_20tt_20—_20exact_20values_20units_20time_11',['&lt;tt&gt;util/&lt;/tt&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
 ];

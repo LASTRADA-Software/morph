@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph/choice.hpp Source File</title>
+<title>morph: morph/forms/choice.hpp Source File</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../jquery.js"></script>
 <script type="text/javascript" src="../../dynsections.js"></script>
@@ -103,7 +103,7 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp_source.html','../..
 <div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span> </div>
 <div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="preprocessor">#pragma once</span></div>
 <div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"></span> </div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file choice.hpp</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file forms/choice.hpp</span></div>
 <div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment">/// @brief Fields whose value is picked from a list served by another action.</span></div>
 <div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment">///</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment">/// A `morph::forms::Choice&lt;T, &quot;ListPayees&quot;&gt;` member declares, in the type:</span></div>
@@ -142,7 +142,7 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp_source.html','../..
 <div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span><span class="preprocessor">#include &lt;string_view&gt;</span></div>
 <div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span><span class="preprocessor">#include &lt;type_traits&gt;</span></div>
 <div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span> </div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="preprocessor">#include &quot;<a class="code" href="../../d7/d7f/fixed__string_8hpp.html">detail/fixed_string.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span><span class="preprocessor">#include &quot;../detail/fixed_string.hpp&quot;</span></div>
 <div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span> </div>
 <div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span><span class="keyword">namespace </span>morph::forms {</div>
 <div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span><span class="comment"></span> </div>
@@ -241,7 +241,6 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp_source.html','../..
 <div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::string_view name = <span class="stringliteral">&quot;Choice&quot;</span>;</div>
 <div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>};</div>
 <div class="ttc" id="achoice_8hpp_html_af575a12a456b913fe1574808369d48d4"><div class="ttname"><a href="../../d1/d8b/choice_8hpp.html#af575a12a456b913fe1574808369d48d4">morph::forms::isChoice</a></div><div class="ttdeci">constexpr bool isChoice</div><div class="ttdoc">true when T (cvref-stripped) is a morph::forms::Choice.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00126">choice.hpp:126</a></div></div>
-<div class="ttc" id="afixed__string_8hpp_html"><div class="ttname"><a href="../../d7/d7f/fixed__string_8hpp.html">fixed_string.hpp</a></div><div class="ttdoc">Shared compile-time, NTTP-capable fixed string.</div></div>
 <div class="ttc" id="astructmorph_1_1detail_1_1FixedString_html"><div class="ttname"><a href="../../df/d52/structmorph_1_1detail_1_1FixedString.html">morph::detail::FixedString</a></div><div class="ttdoc">A structural, NTTP-capable compile-time string.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d7f/fixed__string_8hpp_source.html#l00029">fixed_string.hpp:29</a></div></div>
 <div class="ttc" id="astructmorph_1_1detail_1_1FixedString_html_aca5e4e24c878f8399dd3c86759549d77"><div class="ttname"><a href="../../df/d52/structmorph_1_1detail_1_1FixedString.html#aca5e4e24c878f8399dd3c86759549d77">morph::detail::FixedString::view</a></div><div class="ttdeci">constexpr std::string_view view() const noexcept</div><div class="ttdoc">A view of the string (without the terminating null).</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d7f/fixed__string_8hpp_source.html#l00045">fixed_string.hpp:45</a></div></div>
 <div class="ttc" id="astructmorph_1_1forms_1_1Choice_html"><div class="ttname"><a href="../../df/d65/structmorph_1_1forms_1_1Choice.html">morph::forms::Choice</a></div><div class="ttdoc">An optionally-empty value selected from options served by another action.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d8b/choice_8hpp_source.html#l00069">choice.hpp:69</a></div></div>
@@ -259,7 +258,7 @@ $(document).ready(function(){initNavTree('d1/d8b/choice_8hpp_source.html','../..
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../d1/d8b/choice_8hpp.html">choice.hpp</a></li>
+    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../dir_f4f834d56fe0f61e6e55d2e865621a21.html">forms</a></li><li class="navelem"><a class="el" href="../../d1/d8b/choice_8hpp.html">choice.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
   </ul>
 </div>

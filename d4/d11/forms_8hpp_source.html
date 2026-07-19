@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.9.8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph/forms.hpp Source File</title>
+<title>morph: morph/forms/forms.hpp Source File</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../jquery.js"></script>
 <script type="text/javascript" src="../../dynsections.js"></script>
@@ -103,7 +103,7 @@ $(document).ready(function(){initNavTree('d4/d11/forms_8hpp_source.html','../../
 <div class="line"><a id="l00002" name="l00002"></a><span class="lineno">    2</span> </div>
 <div class="line"><a id="l00003" name="l00003"></a><span class="lineno">    3</span><span class="preprocessor">#pragma once</span></div>
 <div class="line"><a id="l00004" name="l00004"></a><span class="lineno">    4</span><span class="comment"></span> </div>
-<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file forms.hpp</span></div>
+<div class="line"><a id="l00005" name="l00005"></a><span class="lineno">    5</span><span class="comment">/// @file forms/forms.hpp</span></div>
 <div class="line"><a id="l00006" name="l00006"></a><span class="lineno">    6</span><span class="comment">/// @brief JSON-Forms-style schema generation for morph actions.</span></div>
 <div class="line"><a id="l00007" name="l00007"></a><span class="lineno">    7</span><span class="comment">///</span></div>
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span><span class="comment">/// Given an action type `A` (a plain aggregate, as registered with</span></div>
@@ -174,7 +174,7 @@ $(document).ready(function(){initNavTree('d4/d11/forms_8hpp_source.html','../../
 <div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="preprocessor">#include &lt;utility&gt;</span></div>
 <div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span> </div>
 <div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="preprocessor">#include &quot;<a class="code" href="../../d1/d8b/choice_8hpp.html">choice.hpp</a>&quot;</span></div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="preprocessor">#include &quot;<a class="code" href="../../d9/db8/quantity_8hpp.html">quantity.hpp</a>&quot;</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="preprocessor">#include &quot;../util/quantity.hpp&quot;</span></div>
 <div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span> </div>
 <div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="keyword">namespace </span>morph::forms {</div>
 <div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment"></span> </div>
@@ -417,13 +417,12 @@ $(document).ready(function(){initNavTree('d4/d11/forms_8hpp_source.html','../../
 <div class="ttc" id="aforms_8hpp_html_a0a0fb2658d155464d4688af38f09a25e"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a0a0fb2658d155464d4688af38f09a25e">morph::forms::schemaJson</a></div><div class="ttdeci">std::string schemaJson()</div><div class="ttdoc">Generates the JSON Schema for action type A, ready for a client-side form renderer.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00299">forms.hpp:299</a></div></div>
 <div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00268">forms.hpp:268</a></div></div>
 <div class="ttc" id="aforms_8hpp_html_a6a9c6b0f07868b9478b18542088f5003"><div class="ttname"><a href="../../d4/d11/forms_8hpp.html#a6a9c6b0f07868b9478b18542088f5003">morph::forms::reconcileDeclaredPrecision</a></div><div class="ttdeci">constexpr void reconcileDeclaredPrecision(A &amp;action)</div><div class="ttdoc">Retags every Quantity member of action to its declared precision, so a stored value matches the preci...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00232">forms.hpp:232</a></div></div>
-<div class="ttc" id="aquantity_8hpp_html"><div class="ttname"><a href="../../d9/db8/quantity_8hpp.html">quantity.hpp</a></div><div class="ttdoc">Unit-tagged, optionally-empty exact values with a derivation trail.</div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../d4/d11/forms_8hpp.html">forms.hpp</a></li>
+    <li class="navelem"><a class="el" href="../../dir_eb464775cdc72640eeef67e4a8df0b41.html">morph</a></li><li class="navelem"><a class="el" href="../../dir_f4f834d56fe0f61e6e55d2e865621a21.html">forms</a></li><li class="navelem"><a class="el" href="../../d4/d11/forms_8hpp.html">forms.hpp</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.9.8 </li>
   </ul>
 </div>
