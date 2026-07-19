@@ -62,4 +62,7 @@ if(AF_COVERAGE)
 endif()
 
 include(Catch)
-catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST)
+# Every test is sub-second in practice; cap each at 120s so a hung/deadlocked
+# test fails fast instead of stalling the whole CI job (observed: a single test
+# hanging blocked a Windows runner for over half an hour).
+catch_discover_tests(morph_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)

@@ -26,19 +26,13 @@ function(apply_warnings target)
             /w14928     # illegal copy-initialization
             /wd4068     # suppress: unknown pragma (e.g. clang pragmas in shared headers)
         >
-        # ── clang-cl (clang on Windows, MSVC ABI) ────────────────────────────
-        $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
-            -Wno-c++98-compat
-            -Wno-c++98-compat-pedantic
-            -Wno-pre-c++17-compat
-            -Wno-ctad-maybe-unsupported
-            -Wno-exit-time-destructors
-            -Wno-global-constructors
-            -Wno-shadow-uncaptured-local
-            -Wno-unused-command-line-argument
-        >>
-        # ── GNU / Clang (common baseline) ────────────────────────────────────
-        $<$<CXX_COMPILER_ID:GNU,Clang>:
+        # ── Clang: -Weverything, then subtract the noise ─────────────────────
+        # Enable every warning Clang has (Linux clang and clang-cl alike), so a
+        # compiler upgrade opts us into new diagnostics automatically. The
+        # suppressions below are the *only* categories we turn back off; anything
+        # not listed stays an error under -Werror.
+        $<$<CXX_COMPILER_ID:Clang>:-Weverything>
+        $<$<CXX_COMPILER_ID:GNU>:
             -Wall
             -Wextra
             -Wpedantic
@@ -51,20 +45,52 @@ function(apply_warnings target)
             -Wconversion
             -Wsign-conversion
             -Wmisleading-indentation
-            -Wnull-dereference
             -Wimplicit-fallthrough
         >
+        # -Wnull-dereference: Clang gets it free via -Weverything. On GCC the
+        # optimizer emits false positives from inside libstdc++ (std::function)
+        # at -O2+, and the diagnostic leaks out of the system header (it runs
+        # post-inlining) where -isystem cannot suppress it, and it is a no-op at
+        # -O0 — so it is left off for GCC entirely.
     )
 
-    # ── clang-cl suppressions (must come *after* -Wall/-Wextra which re-enable them) ──
+    # ── Clang -Weverything suppressions (must come *after* -Weverything) ─────
     target_compile_options(${target} PRIVATE
-        $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
-            -Wno-covered-switch-default
-            -Wno-documentation-unknown-command
-            -Wno-padded
-            -Wno-unique-object-duplication
-            -Wno-c2y-extensions
+        $<$<CXX_COMPILER_ID:Clang>:
+            # (a) Back-compat warnings — irrelevant: we target C++23, so being
+            #     "incompatible with C++98/14/17/20" is the whole point.
+            -Wno-c++98-compat
+            -Wno-c++98-compat-pedantic
+            -Wno-pre-c++14-compat
+            -Wno-pre-c++17-compat
+            -Wno-pre-c++17-compat-pedantic
+            -Wno-pre-c++20-compat
+            -Wno-pre-c++20-compat-pedantic
+            # (b) Inherent to a header-only, templated library.
+            -Wno-weak-vtables               # vtable emitted per TU for inline-virtual classes
+            -Wno-ctad-maybe-unsupported     # CTAD on types without explicit deduction guides
+            -Wno-padded                     # struct tail/inter-member padding
+            -Wno-exit-time-destructors      # function-local statics with non-trivial dtors
+            -Wno-global-constructors        # non-trivial namespace-scope initializers
+            # (c) Stylistic / opinionated noise, not defects.
             -Wno-missing-noreturn
+            -Wno-nrvo                       # not eliding a trivial-type copy on return
+            -Wno-shadow-uncaptured-local    # lambda param shadowing an uncaptured local
+            -Wno-documentation-unknown-command
+            -Wno-unsafe-buffer-usage        # flags all pointer arithmetic; needs a hardened API
+            -Wno-unsafe-buffer-usage-in-libc-call
+            -Wno-float-equal                # exact == is intentional in the value/rational tests
+            # (d) Conflicts with a warning we deliberately keep.
+            -Wno-covered-switch-default     # collides with -Wswitch-enum + -Wswitch-default
+            # (e) Third-party test macros.
+            -Wno-c2y-extensions             # Catch2 TEST_CASE expands __COUNTER__
+            -Wno-unused-member-function     # Catch2/test-fixture helper members
+            -Wno-unneeded-member-function
+        >
+        # clang-cl only: driver noise from the MSVC-mode command line.
+        $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
+            -Wno-unique-object-duplication
+            -Wno-unused-command-line-argument
         >>
     )
 
@@ -74,8 +100,11 @@ function(apply_warnings target)
         target_compile_options(${target} PRIVATE
             $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
             $<$<CXX_COMPILER_ID:MSVC>:/WX>
-            # ── GNU / Clang (common strict) ──────────────────────────────────
-            $<$<CXX_COMPILER_ID:GNU,Clang>:
+            # Clang needs no extra named flags here — -Weverything (above) already
+            # supersets every one of these. This block is the GCC equivalent of
+            # "-Weverything": the widest practical set, since GCC has no such flag.
+            $<$<CXX_COMPILER_ID:GNU>:
+                # Diagnostics also carried on Clang via -Weverything.
                 -Wcast-qual
                 -Wformat=2
                 -Wredundant-decls
@@ -91,35 +120,54 @@ function(apply_warnings target)
                 -Wformat-nonliteral
                 -Wmissing-declarations
                 -Warray-bounds
-            >
-
-            # ── GCC-only (strict) ────────────────────────────────────────────
-            $<$<CXX_COMPILER_ID:GNU>:
+                # GCC-specific analyses.
                 -Wduplicated-cond
                 -Wduplicated-branches
                 -Wlogical-op
                 -Wuseless-cast
                 -Walloc-zero
                 -Wstringop-truncation
-                -Wstrict-overflow=5
                 -Wsuggest-override
                 -Wsubobject-linkage
                 -Wtrampolines
                 -Wconditionally-supported
-            >
-
-            # ── Clang-only (strict) ──────────────────────────────────────────
-            $<$<CXX_COMPILER_ID:Clang>:
-                -Wheader-hygiene
-                -Wdocumentation
-                -Wcomma
-                -Wdeprecated
-                -Wshorten-64-to-32
+                # Widened set (max diagnostics).
+                -Wstrict-overflow=2
+                -Wformat-overflow=2
+                -Wformat-truncation=2
+                -Wformat-signedness
+                -Wshift-overflow=2
+                -Wstringop-overflow=4
+                # -Wnoexcept is intentionally omitted: it leaks out of libstdc++
+                # <type_traits> when Catch2's (potentially-throwing) test lambdas
+                # are passed to std::is_nothrow_invocable, which is noise from
+                # third-party code, not a defect in ours.
+                -Wnoexcept-type
+                -Wredundant-tags
+                -Wmismatched-tags
+                -Wvolatile
+                -Wzero-as-null-pointer-constant
+                -Wextra-semi
+                -Wsign-promo
+                -Wcatch-value=3
+                -Wplacement-new=2
+                -Wunused-const-variable=2
+                -Wdisabled-optimization
+                -Wenum-conversion
+                -Warith-conversion
+                -Wdate-time
+                -Wattribute-alias=2
+                -Wcast-align=strict
+                -Wunsafe-loop-optimizations
             >
         )
     endif()
+    # ${MSVC} is true for both cl and clang-cl (any compiler targeting the MSVC
+    # runtime), so clang-cl also gets _CRT_SECURE_NO_WARNINGS — its CXX_COMPILER_ID
+    # is "Clang", which the CXX_COMPILER_ID:MSVC genex would miss, leaving CRT
+    # functions like fopen flagged as deprecated under -Werror.
     target_compile_definitions(${target} PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+        $<$<BOOL:${MSVC}>:_CRT_SECURE_NO_WARNINGS>
     )
 endfunction()
 

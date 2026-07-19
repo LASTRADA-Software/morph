@@ -44,4 +44,5 @@ cmake_path(GET _qt_core_dll PARENT_PATH _qt_bin_dir)
 catch_discover_tests(morph_qt_tests
     DISCOVERY_MODE POST_BUILD
     DL_PATHS "${_qt_bin_dir}"
+    PROPERTIES TIMEOUT 120
 )

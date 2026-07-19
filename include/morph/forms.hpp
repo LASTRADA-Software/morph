@@ -240,7 +240,7 @@ constexpr void reconcileDeclaredPrecision(A& action) {
         constexpr auto memberCount = glz::reflect<Plain>::size;
         auto memberTie = glz::to_tie(action);
         [&]<std::size_t... I>(std::index_sequence<I...>) {
-            auto retag = [&]<std::size_t Idx>() {
+            [[maybe_unused]] auto retag = [&]<std::size_t Idx>() {
                 auto& member = glz::get_member(action, get<Idx>(memberTie));
                 using Member = std::remove_cvref_t<decltype(member)>;
                 if constexpr (units::isQuantity<Member>) {

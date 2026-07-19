@@ -518,7 +518,7 @@ struct Context {
 #if MORPH_QUANTITY_PROVENANCE
 #define MORPH_Q_NODE(quantity) (quantity)._ctx.node
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode)         \
-    {                                                                                        \
+    do {                                                                                     \
         auto morphProvNode = std::make_shared<::morph::units::detail::ASTNode>();            \
         morphProvNode->current.operation = (op);                                             \
         morphProvNode->current.lhs = (lhsValue);                                             \
@@ -527,13 +527,13 @@ struct Context {
         morphProvNode->left = (leftNode);                                                    \
         morphProvNode->right = (rightNode);                                                  \
         (out)._ctx.node = std::move(morphProvNode);                                          \
-    }
+    } while (0)
 
 #else
 
 #define MORPH_Q_NODE(quantity) nullptr
 #define MORPH_Q_BUILD(out, op, lhsValue, rhsValue, resultValue, leftNode, rightNode) \
-    {}
+    do { } while (0)
 
 #endif
 /// @endcond
