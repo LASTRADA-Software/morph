@@ -10,16 +10,15 @@
 //           it to onError, instead of letting it escape the callback executor
 //           (which would hang the completion or terminate the Qt loop).
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/registry.hpp>
-
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <exception>
 #include <functional>
 #include <memory>
+#include <morph/backend.hpp>
+#include <morph/bridge.hpp>
+#include <morph/executor.hpp>
+#include <morph/registry.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -86,9 +85,7 @@ public:
     }
     void notifyBackendChanged() override { _target->notifyBackendChanged(); }
     void cancelPending(const std::exception_ptr& exc) override { _target->cancelPending(exc); }
-    void setReconnectHandler(const std::function<void()>& handler) override {
-        _target->setReconnectHandler(handler);
-    }
+    void setReconnectHandler(const std::function<void()>& handler) override { _target->setReconnectHandler(handler); }
 
 private:
     std::shared_ptr<FakeReconnectBackend> _target;
@@ -154,7 +151,12 @@ struct morph::model::ActionTraits<ThrowAction> {
 
 // ── FIX 2 ────────────────────────────────────────────────────────────────────
 
-TEST_CASE("~Bridge clears the reconnect handler so a later reconnect is a safe no-op",
+// NOTE: the case name must not begin with a Catch2 test-spec operator (e.g. a
+// leading '~'). catch_discover_tests passes each case name to the binary as a
+// filter, and Catch2 reads a leading '~' as an *exclusion*, so a "~Bridge ..."
+// case would run the whole suite minus itself in one process — masking the real
+// result and, on some platforms, tripping latent cross-test crashes/hangs.
+TEST_CASE("Bridge destructor clears the reconnect handler so a later reconnect is a safe no-op",
           "[bridge][lifetime]") {
     auto shared = std::make_shared<FakeReconnectBackend>();
     {
@@ -190,8 +192,7 @@ TEST_CASE("reconnect handler guards on the bridge liveness token", "[bridge][lif
 
 // ── FIX 4 ────────────────────────────────────────────────────────────────────
 
-TEST_CASE("executeVia routes a throwing result move to onError instead of hanging",
-          "[bridge][completion]") {
+TEST_CASE("executeVia routes a throwing result move to onError instead of hanging", "[bridge][completion]") {
     morph::bridge::Bridge bridge{std::make_unique<PrebuiltResultBackend>()};
     morph::testing::InlineExecutor cbExec;
 
