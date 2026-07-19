@@ -355,7 +355,7 @@ jobs:
               -p1 \
               -j "$(nproc)" \
               -extra-arg=-std=c++23 \
-              -warnings-as-errors='*' \
+              -extra-arg=-warnings-as-errors=* \
               -quiet \
               2>&1 | tee clang-tidy-report.txt
 

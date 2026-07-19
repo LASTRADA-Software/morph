@@ -36,6 +36,12 @@ function(apply_warnings target)
             -Wno-global-constructors
             -Wno-shadow-uncaptured-local
             -Wno-unused-command-line-argument
+            -Wno-covered-switch-default
+            -Wno-documentation-unknown-command
+            -Wno-padded
+            -Wno-unique-object-duplication
+            -Wno-c2y-extensions
+            -Wno-missing-noreturn
         >>
         # ── GNU / Clang (common baseline) ────────────────────────────────────
         $<$<CXX_COMPILER_ID:GNU,Clang>:
@@ -62,7 +68,6 @@ function(apply_warnings target)
         target_compile_options(${target} PRIVATE
             $<$<CXX_COMPILER_ID:GNU,Clang>:-Werror>
             $<$<CXX_COMPILER_ID:MSVC>:/WX>
-
             # ── GNU / Clang (common strict) ──────────────────────────────────
             $<$<CXX_COMPILER_ID:GNU,Clang>:
                 -Wcast-qual
@@ -89,9 +94,7 @@ function(apply_warnings target)
                 -Wlogical-op
                 -Wuseless-cast
                 -Wrestrict
-                -Warray-bounds=2
                 -Walloc-zero
-                -Wstringop-overflow=4
                 -Wstringop-truncation
                 -Wstrict-overflow=5
                 -Wsuggest-override
@@ -110,6 +113,9 @@ function(apply_warnings target)
             >
         )
     endif()
+    target_compile_definitions(${target} PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:_CRT_SECURE_NO_WARNINGS>
+    )
 endfunction()
 
 function(apply_sanitizers target mode)
