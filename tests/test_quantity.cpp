@@ -56,8 +56,8 @@ struct morph::units::UnitTraits<qt::U> {
             case qt::U::tonne: return {"t", "t", 3};
             case qt::U::celsius: return {"celsius", "C", 1};
             case qt::U::fahrenheit: return {"fahrenheit", "F", 1};
+            default:               return {"?", "?", 3};
         }
-        return {"?", "?", 3};
     }
 
     static constexpr std::array<morph::units::UnitRelation<qt::U>, 3> relations{{

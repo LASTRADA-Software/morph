@@ -211,7 +211,6 @@ inline void setActionLog(std::shared_ptr<IActionLog> log) {
 /// case's sink never leaks into the next) and for applications that need to
 /// temporarily redirect auto-attached logging within a scope.
 ///
-/// @par Example
 /// @code
 /// {
 ///     morph::journal::ScopedActionLog guard{std::make_shared<morph::journal::InMemoryActionLog>()};

@@ -41,8 +41,9 @@ constexpr std::string_view levelName(LogLevel level) noexcept {
             return "ERROR";
         case LogLevel::off:
             return "OFF  ";
+        default:
+            return "?    ";
     }
-    return "?    ";
 }
 
 /// @brief Sink function type used internally for log output.
@@ -52,11 +53,11 @@ using Logger = std::function<void(LogLevel, std::string_view)>;
 ///        lines (log injection).
 ///
 /// A message is a single logical record; the default sink emits it as one line.
-/// User-controlled text containing `\n`, `\r`, or other C0 control bytes could
+/// User-controlled text containing \n, \r, or other C0 control bytes could
 /// otherwise splice a forged `[ERROR] ...` line into the stream or corrupt a
 /// line-oriented log parser. This replaces CR/LF/TAB with their C-style escapes
-/// (`\n`, `\r`, `\t`) and any remaining control byte (`< 0x20`, or `0x7f` DEL)
-/// with a `\xHH` escape, leaving printable text (including non-ASCII UTF-8
+/// (\n, \r, \t) and any remaining control byte (< 0x20, or 0x7f DEL)
+/// with a \xHH escape, leaving printable text (including non-ASCII UTF-8
 /// continuation bytes `>= 0x80`) untouched. It is a cheap single pass with no
 /// per-byte escaping work on the common (clean) path (just one string copy).
 /// @param msg Raw message to sanitize.
@@ -220,7 +221,6 @@ void logError(std::format_string<Args...> fmt, Args&&... args) {
 /// custom sink into other tests. Thread-safe construction and destruction —
 /// the global mutex is acquired briefly during each.
 ///
-/// @par Example
 /// @code
 /// {
 ///     std::vector<std::string> captured;

@@ -58,7 +58,7 @@ inline std::string sha256(std::string_view data) {
                                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
 
     std::vector<uint8_t> msg(data.begin(), data.end());
-    const uint64_t bitLen = static_cast<uint64_t>(msg.size()) * 8;
+    const uint64_t bitLen = msg.size() * 8;
     msg.push_back(0x80);
     while (msg.size() % 64 != 56) {
         msg.push_back(0x00);
@@ -159,7 +159,7 @@ inline bool constantTimeEquals(std::string_view lhs, std::string_view rhs) {
     }
     uint8_t diff = 0;
     for (std::size_t i = 0; i < lhs.size(); ++i) {
-        diff |= static_cast<uint8_t>(lhs[i]) ^ static_cast<uint8_t>(rhs[i]);
+        diff = uint8_t(diff | (uint8_t(lhs[i]) ^ uint8_t(rhs[i])));
     }
     return diff == 0;
 }

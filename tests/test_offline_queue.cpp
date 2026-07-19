@@ -97,7 +97,7 @@ namespace {
 struct MinimalQueue : morph::offline::IOfflineQueue {
     uint64_t enqueue(std::string payload) override {
         const uint64_t itemId = ++nextId;
-        items.push_back(morph::offline::QueueItem{.id = itemId, .payload = std::move(payload)});
+        items.push_back(morph::offline::QueueItem{.id = itemId, .payload = std::move(payload), .idempotencyKey = {}});
         return itemId;
     }
     std::vector<morph::offline::QueueItem> drain() override { return items; }

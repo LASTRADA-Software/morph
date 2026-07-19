@@ -3,6 +3,13 @@
 # Run from repo root after: cmake --build --preset clang-coverage && ctest --preset clang-coverage
 set -euo pipefail
 
+# Match the toolchain to the Clang the coverage build used. CI exports
+# CLANG_VERSION (e.g. 22) so we pick llvm-profdata-22 / llvm-cov-22; locally,
+# with CLANG_VERSION unset, fall back to the unversioned tools on PATH.
+SUFFIX="${CLANG_VERSION:+-${CLANG_VERSION}}"
+LLVM_PROFDATA="llvm-profdata${SUFFIX}"
+LLVM_COV="llvm-cov${SUFFIX}"
+
 OUT="build/clang-coverage"
 TEST_EXE="$OUT/tests/morph_tests"
 MERGED="$OUT/merged.profdata"
@@ -20,10 +27,10 @@ if [ -z "$PROFILES" ]; then
     exit 1
 fi
 
-llvm-profdata-20 merge -sparse $PROFILES -o "$MERGED"
+${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
 mkdir -p "$REPORT_DIR"
-llvm-cov-20 show "$TEST_EXE" \
+${LLVM_COV} show "$TEST_EXE" \
     -instr-profile="$MERGED" \
     -format=html \
     -output-dir="$REPORT_DIR" \
@@ -31,11 +38,11 @@ llvm-cov-20 show "$TEST_EXE" \
 
 echo "Coverage report: $REPORT_DIR/index.html"
 
-llvm-cov-20 report "$TEST_EXE" \
+${LLVM_COV} report "$TEST_EXE" \
     -instr-profile="$MERGED" \
     "$SOURCES"
 
-llvm-cov-20 export "$TEST_EXE" \
+${LLVM_COV} export "$TEST_EXE" \
     -instr-profile="$MERGED" \
     -format=lcov \
     "$SOURCES" \
@@ -47,7 +54,7 @@ llvm-cov-20 export "$TEST_EXE" \
 # header-only templated code. Collapse them to one record per source branch,
 # matching the aggregate that `llvm-cov report` already prints above. Branch
 # coverage is preserved (not skipped); only the per-instantiation noise is removed.
-llvm-cov-20 export "$TEST_EXE" \
+${LLVM_COV} export "$TEST_EXE" \
     -instr-profile="$MERGED" \
     "$SOURCES" \
     > "$OUT/coverage.json"

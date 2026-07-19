@@ -44,8 +44,8 @@ struct morph::units::UnitTraits<QFUnit> {
             case QFUnit::m3:        return {.id = "m3", .display = "m³", .defaultDecimals = 3};
             case QFUnit::kg_per_m3: return {.id = "kg_per_m3", .display = "kg/m³", .defaultDecimals = 1};
             case QFUnit::g:         return {.id = "g", .display = "g", .defaultDecimals = 1};
+            default:                return {.id = "?", .display = "?", .defaultDecimals = 3};
         }
-        return {.id = "?", .display = "?", .defaultDecimals = 3};
     }
 
     static constexpr std::array<morph::units::UnitRelation<QFUnit>, 1> relations{

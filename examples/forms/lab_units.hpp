@@ -46,8 +46,8 @@ struct morph::units::UnitTraits<lab::Unit> {
             case lab::Unit::g:         return {"g", "g", 1};
             case lab::Unit::t:         return {"t", "t", 4};
             case lab::Unit::l:         return {"l", "L", 1};
+            default:                   return {"?", "?", 3};
         }
-        return {"?", "?", 3};
     }
 
     /// @brief Within-dimension conversion ratios (mass g/t ↔ kg, volume L ↔ m³).

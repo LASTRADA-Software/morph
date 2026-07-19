@@ -8,3 +8,4 @@
 *.user
 *.suo
 .vs/
+bv-clang/

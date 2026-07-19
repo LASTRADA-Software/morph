@@ -74,11 +74,14 @@ struct IOfflineQueue {
     /// @param payload        Serialised action to persist.
     /// @param idempotencyKey Stable dedup token for the logical op; may be empty.
     /// @return A stable id that can be passed to `markDone()`.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Woverloaded-virtual"
     virtual uint64_t enqueue(std::string payload, std::string idempotencyKey) {
         const uint64_t itemId = enqueue(std::move(payload));
         setIdempotencyKey(itemId, std::move(idempotencyKey));
         return itemId;
     }
+#pragma GCC diagnostic pop
 
     /// @brief Returns all pending items in enqueue order without removing them.
     ///
