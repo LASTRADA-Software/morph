@@ -5,8 +5,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 // This test compares floats with == intentionally; -Wfloat-equal is a false positive here.
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wfloat-equal"
+#if defined(__clang__)
+#    pragma clang diagnostic push
+#    pragma clang diagnostic ignored "-Wfloat-equal"
+#endif
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfloat-equal"
 
@@ -63,5 +65,7 @@ TEST_CASE("morph::exec::detail::ModelId equality and hash", "[model]") {
     // Different values should (almost always) hash differently
     REQUIRE(hasher(idA) != hasher(idC));
 }
+#if defined(__clang__)
 #pragma clang diagnostic pop
+#endif
 #pragma GCC diagnostic pop

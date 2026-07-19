@@ -301,12 +301,12 @@ template <>
 struct from<JSON, morph::time::DateTime> {
     template <auto Opts>
     static void op(auto&& value, is_context auto&& ctx, auto&& iter, auto end) {
-        std::string text{};
-        parse<JSON>::op<Opts>(text, ctx, iter, end);
+        std::string str{};
+        parse<JSON>::op<Opts>(str, ctx, iter, end);
         if (bool(ctx.error)) [[unlikely]] {
             return;
         }
-        if (auto parsed = morph::time::DateTime::fromIso8601(text); parsed.has_value()) {
+        if (auto parsed = morph::time::DateTime::fromIso8601(str); parsed.has_value()) {
             value = *parsed;
             return;
         }

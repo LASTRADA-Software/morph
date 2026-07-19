@@ -59,7 +59,7 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
             }
         });
 
-    handler.execute(FailingAction{}).then([](int) {});
+    handler.execute(FailingAction{}).then([](int) noexcept {});
 
     gui.runFor(std::chrono::milliseconds(500));
     std::cout << "[main] " << successCount.load() << " increments completed\n";

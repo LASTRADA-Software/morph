@@ -112,7 +112,7 @@ public:
             // canonical decode-error reply (avoids duplicating that path here).
         }
         std::string reply;
-        std::function<void(std::string)> capture = [&reply](std::string out) { reply = std::move(out); };
+        std::function<void(std::string)> capture = [&reply](std::string out) noexcept { reply = std::move(out); };
         dispatchMessage(msg, capture);
         return reply;
     }
