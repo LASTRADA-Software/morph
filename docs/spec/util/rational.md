@@ -343,8 +343,8 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Spec | Relationship |
 |---|---|
 | [`quantity_type.md`](quantity_type.md) | `Rational` is the **runtime substrate** for `Quantity`. A `Quantity`'s declared precision and the forms layer's `x-decimalPlaces` schema annotation both resolve, at runtime, to a `Rational`'s `DecimalPlaces` tag — the `dp` value carried on the wire and propagated through arithmetic here is exactly the precision a `Quantity` declares. The overflow envelope and `INT64_MIN` hazards documented above therefore bound `Quantity` too. |
-| [`forms.md`](forms.md) | The form generator reads `x-decimalPlaces` (and the `Rational` wire shape `{"num","den","dp"}`) to build precision-aware numeric inputs; a form value is a `Rational` under the hood, so its display uses `toDouble`/formatting and its exact value uses the wire codec. |
-| [`security.md`](security.md) | `setWire` performs the untrusted-wire **clamping** (`den == 0 → 1`, out-of-range `dp` → `[1, 18]`, `INT64_MIN` → `-INT64_MAX`). This is the boundary defence that keeps a hostile payload from reaching the UB-prone negation/overflow sites; see the clamping semantics discussion there. |
+| [`forms.md`](../forms/forms.md) | The form generator reads `x-decimalPlaces` (and the `Rational` wire shape `{"num","den","dp"}`) to build precision-aware numeric inputs; a form value is a `Rational` under the hood, so its display uses `toDouble`/formatting and its exact value uses the wire codec. |
+| [`security.md`](../security.md) | `setWire` performs the untrusted-wire **clamping** (`den == 0 → 1`, out-of-range `dp` → `[1, 18]`, `INT64_MIN` → `-INT64_MAX`). This is the boundary defence that keeps a hostile payload from reaching the UB-prone negation/overflow sites; see the clamping semantics discussion there. |
 | [`datetime.md`](datetime.md) | Contrast case for wire-decode policy: the `DateTime` codec is **strict** (rejects malformed input) whereas `Rational::setWire` is **lenient/clamping** (silently repairs it). See [Limitations](#limitations) for why the difference matters. |
 
 ## Limitations

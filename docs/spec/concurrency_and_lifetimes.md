@@ -227,7 +227,7 @@ posting to the pool — posting would deadlock if the pool were saturated by the
 in-flight action. `handleInline` **rejects `execute`**: an `execute` reply is
 produced asynchronously on the model strand, *after* `handleInline` has returned
 and destroyed the local reply buffer the deferred callback would write into — a
-dangling-write hazard. See [backend.md](backend.md) for the exact wiring.
+dangling-write hazard. See [backend.md](core/backend.md) for the exact wiring.
 
 ### `cancelPending` — snapshot-then-deliver, weak-ptr tracked
 
@@ -460,21 +460,21 @@ One-liners to remember:
 
 ## Cross-references
 
-- [`executor.md`](executor.md) — `IExecutor`, `ThreadPoolExecutor`,
+- [`executor.md`](core/executor.md) — `IExecutor`, `ThreadPoolExecutor`,
   `StrandExecutor`, `ModelId`; the "destroy strand before base pool" rule in
   detail.
-- [`completion.md`](completion.md) — `Completion<T>` / `CompletionState<T>`
+- [`completion.md`](core/completion.md) — `Completion<T>` / `CompletionState<T>`
   internals and orphan-error logging.
-- [`bridge.md`](bridge.md) — `Bridge`, `BridgeHandler`, `switchBackend`,
+- [`bridge.md`](core/bridge.md) — `Bridge`, `BridgeHandler`, `switchBackend`,
   `executeVia`, the liveness token.
-- [`backend.md`](backend.md) — `LocalBackend`, `RemoteServer`,
+- [`backend.md`](core/backend.md) — `LocalBackend`, `RemoteServer`,
   `SimulatedRemoteBackend`, `cancelPending`, the `make_shared` requirement.
-- [`offline.md`](offline.md) — `NetworkMonitor`, `ReconnectCoordinator`,
+- [`offline.md`](offline/offline.md) — `NetworkMonitor`, `ReconnectCoordinator`,
   `SyncWorker` wiring and the reconnect ordering guarantee.
-- [`registry.md`](registry.md) — `ActionDispatcher` / `ModelRegistryFactory` and
+- [`registry.md`](core/registry.md) — `ActionDispatcher` / `ModelRegistryFactory` and
   the static-init registration model.
-- [`logger.md`](logger.md) — the logging fast path and sink contract.
-- [`session.md`](session.md) — `Context`, the thread-local, and `IAuthorizer`.
+- [`logger.md`](core/logger.md) — the logging fast path and sink contract.
+- [`session.md`](session/session.md) — `Context`, the thread-local, and `IAuthorizer`.
 - [`security.md`](security.md) — where the authoritative principal comes from and
   the `RemoteServer` enforcement points.
 - `error_handling.md` — the framework-wide error-propagation story that the

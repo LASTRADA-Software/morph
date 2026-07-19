@@ -2,8 +2,8 @@
 
 > **Status: planned — not yet implemented.** This spec is part of the GUI
 > enhancement program ([gui_overview.md](gui_overview.md), Tier 1). It extends the
-> `x-*` vocabulary of [forms.md](../spec/forms.md) and builds on the reactive
-> `subscribe`/`set<>` draft path of [bridge.md](../spec/bridge.md). It describes
+> `x-*` vocabulary of [forms.md](../spec/forms/forms.md) and builds on the reactive
+> `subscribe`/`set<>` draft path of [bridge.md](../spec/core/bridge.md). It describes
 > the intended behavior; the code does not implement it yet. See
 > [todo.md](../todo.md).
 
@@ -25,7 +25,7 @@ total must either:
 Neither is right. The derivation is a first-class property of the action, the
 renderer should show it **live but locked**, and the server must recompute it
 **authoritatively** and never trust the client's copy. The reactive engine
-already recomputes on every `set<>` ([bridge.md](../spec/bridge.md)); what is
+already recomputes on every `set<>` ([bridge.md](../spec/core/bridge.md)); what is
 missing is a way to *declare* the derivation so the schema exposes it and both
 ends compute the same value.
 
@@ -41,7 +41,7 @@ sibling fields. From that single declaration:
    arrived on the wire — the computed field is never trusted from the client.
 
 Where the computation is numeric it reuses the exact `Rational`/`Quantity`
-arithmetic ([rational.md](../spec/rational.md), [quantity_type.md](../spec/quantity_type.md))
+arithmetic ([rational.md](../spec/util/rational.md), [quantity_type.md](../spec/util/quantity_type.md))
 already in the library, so the client's displayed value and the server's stored
 value are identical to the last digit.
 
@@ -51,7 +51,7 @@ value are identical to the last digit.
 
 An action opts in with a `static constexpr` map from a computed member to a pure
 function of the action, declared next to `optionalFields`
-([forms.md](../spec/forms.md)):
+([forms.md](../spec/forms/forms.md)):
 
 ```cpp
 struct LineItem {
@@ -73,11 +73,11 @@ struct LineItem {
 - **`computed(dst, {inputs...}, fn)`** (NEW) binds a destination member, its input
   members, and a **pure** derivation `fn(const A&) -> ValueOfDst`. Members are
   pointer-to-member NTTPs recovered via `MemberPointerTraits`
-  ([bridge.md](../spec/bridge.md)), so a renamed field is a compile error and the
+  ([bridge.md](../spec/core/bridge.md)), so a renamed field is a compile error and the
   input list is type-checked.
 - **`computeList(...)`** composes the entries into a `ComputeList<...>` value the
   framework detects with a `HasComputedFields<A>` concept (NEW), mirroring
-  `HasOptionalFields<A>` ([forms.md](../spec/forms.md)).
+  `HasOptionalFields<A>` ([forms.md](../spec/forms/forms.md)).
 - **`recomputeAll<A>(action)`** (NEW) is the single evaluator: it applies every
   entry's `fn` and writes the result into the destination member in place. This is
   the exact same function the client and the server call — no second copy of the
@@ -93,9 +93,9 @@ server-only computation — is **not** a computed field and stays in the model's
 
 When the inputs and destination are `Quantity`, `fn` is written in ordinary
 `Quantity` arithmetic — `s.qty * s.price` uses `Quantity::operator*`, whose result
-unit is deduced from the operands ([quantity_type.md](../spec/quantity_type.md))
-and whose value is an exact `math::Rational` ([rational.md](../spec/rational.md)).
-Before evaluation, `reconcileDeclaredPrecision` ([forms.md](../spec/forms.md))
+unit is deduced from the operands ([quantity_type.md](../spec/util/quantity_type.md))
+and whose value is an exact `math::Rational` ([rational.md](../spec/util/rational.md)).
+Before evaluation, `reconcileDeclaredPrecision` ([forms.md](../spec/forms/forms.md))
 has already normalised the inputs to their declared precision, and the result is
 retagged to the destination field's declared precision afterward. So the client's
 displayed total and the server's stored total are computed from identical inputs
@@ -105,11 +105,11 @@ unit-conversion path already guarantees.
 An empty (unengaged) input propagates: if any declared input has
 `hasValue() == false`, the destination is left **unengaged** rather than computed
 from a missing operand, consistent with how `allRequiredEngaged` treats
-empty-capable fields ([forms.md](../spec/forms.md)).
+empty-capable fields ([forms.md](../spec/forms/forms.md)).
 
 ### Schema emission — `x-computed` and `x-readonly`
 
-`mergeSchemaExtras` ([forms.md](../spec/forms.md)) gains a step that walks
+`mergeSchemaExtras` ([forms.md](../spec/forms/forms.md)) gains a step that walks
 `A::computedFields` and patches each destination **property node** (sibling of its
 `$ref`, exactly like `x-order`) with `x-computed` and `x-readonly`. The property
 still appears in the schema so the renderer can display it; the annotations tell
@@ -131,7 +131,7 @@ engages it, or leaves it empty when an input is empty.) Input names in
 pointer-to-member the same way `x-order` is derived, so a renderer that wants to
 recompute optimistically knows which sibling changes should trigger a redisplay.
 
-New keys this spec adds to the [forms.md](../spec/forms.md) renderer-contract
+New keys this spec adds to the [forms.md](../spec/forms/forms.md) renderer-contract
 table (all additive, all optional):
 
 | Key | Where | JSON type | Meaning / renderer obligation |
@@ -148,10 +148,10 @@ server-returned value. Either way the *authority* is the server's recomputation.
 
 ### Client-side: live recompute on the reactive path
 
-On the `set<>` reactive draft path ([bridge.md](../spec/bridge.md)), each accepted
+On the `set<>` reactive draft path ([bridge.md](../spec/core/bridge.md)), each accepted
 field update runs `recomputeAll` on the draft snapshot **before** the readiness
 check and fire. Because `set<>` already re-fires on every ready patch with
-coalescing ([bridge.md](../spec/bridge.md)), the computed field is refreshed live
+coalescing ([bridge.md](../spec/core/bridge.md)), the computed field is refreshed live
 as the user edits its inputs, with no extra machinery — the engine "already
 recomputes on `set<>`," and this step is what makes the derived value part of that
 recomputation. A computed member is never a `set<>` target itself (it has no
@@ -163,7 +163,7 @@ by the next `recomputeAll`.
 The crux: the server **never trusts** a client-sent computed value. On the
 dispatcher path, immediately after `fromJson` and `reconcileDeclaredPrecision`
 and before the validator/`Model::execute` ([validation.md](validation.md),
-[bridge.md](../spec/bridge.md)), the runner calls `recomputeAll<A>(action)`,
+[bridge.md](../spec/core/bridge.md)), the runner calls `recomputeAll<A>(action)`,
 **overwriting** every computed member from its declared inputs. Whatever the wire
 carried in `total` is discarded and replaced by `qty * price` computed from the
 (reconciled) inputs the server received. Consequences:
@@ -175,7 +175,7 @@ carried in `total` is discarded and replaced by `qty * price` computed from the
   computed field evaluates on the server's own number, not the client's.
 - It is a **no-op** for actions with no `computedFields` — zero behaviour change,
   backward compatible — mirroring how `reconcileDeclaredPrecision` no-ops for
-  actions with no `Quantity` members ([forms.md](../spec/forms.md)).
+  actions with no `Quantity` members ([forms.md](../spec/forms/forms.md)).
 
 Because the same `recomputeAll` runs on both ends over inputs normalised the same
 way, the field the client shows and the field the server stores agree by
@@ -185,7 +185,7 @@ of the single rule declaration in [gui_cross_field_rules.md](gui_cross_field_rul
 ## Additivity and renderer fallback
 
 `x-computed` and `x-readonly` are additive, optional `x-*` keys, consistent with
-the unversioned-schema stance of [forms.md](../spec/forms.md) and
+the unversioned-schema stance of [forms.md](../spec/forms/forms.md) and
 [gui_overview.md](gui_overview.md). An action that declares no `computedFields`
 emits neither key and behaves exactly as today. A renderer that ignores them
 still produces a usable form — it just renders the computed field as an ordinary
@@ -199,7 +199,7 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   action's own fields only. A value that needs model state, a database lookup, or
   the current time is computed in the model's `execute`, not declared here.
 - **Not nested / cross-action derivation.** Like all of
-  [forms.md](../spec/forms.md), inputs and destinations are an action's own flat,
+  [forms.md](../spec/forms/forms.md), inputs and destinations are an action's own flat,
   top-level members; a computed field cannot draw from a sibling action or a
   sub-member of a nested aggregate.
 - **Not a formula language on the wire.** `x-computed` names inputs, not an
@@ -211,7 +211,7 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   [gui_cross_field_rules.md](gui_cross_field_rules.md), evaluated after
   `recomputeAll`.
 - **No localisation.** `x-computed`/`x-readonly` carry structure, not display
-  text, for the same reason the schema is un-localised ([forms.md](../spec/forms.md));
+  text, for the same reason the schema is un-localised ([forms.md](../spec/forms/forms.md));
   a computed field's caption is translated like any other field's, via
   [gui_i18n.md](gui_i18n.md)'s catalog.
 
@@ -224,7 +224,7 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   leaves the destination unengaged; the result is retagged to the destination's
   declared precision.
 - Client reactive path: `set<&qty>`/`set<&price>` refresh `total` live via the
-  existing coalescing fire ([bridge.md](../spec/bridge.md)).
+  existing coalescing fire ([bridge.md](../spec/core/bridge.md)).
 - **Server distrust:** an envelope carrying a tampered `total` is overwritten by
   `recomputeAll` in the dispatcher runner before `Model::execute` on
   `SimulatedRemoteBackend`, the Qt WebSocket transport, and `LocalBackend`; the
@@ -240,19 +240,19 @@ value is the true derivation) never depends on the client honouring `x-readonly`
 
 - [gui_overview.md](gui_overview.md) — the umbrella program; this is its Tier-1
   computed-fields feature.
-- [bridge.md](../spec/bridge.md) — the reactive `subscribe`/`set<>`/`tryFireImpl`
+- [bridge.md](../spec/core/bridge.md) — the reactive `subscribe`/`set<>`/`tryFireImpl`
   draft path (with coalescing) the live client recompute rides on, and
   `MemberPointerTraits` used to name the destination and inputs.
-- [forms.md](../spec/forms.md) — `mergeSchemaExtras`, the property-node `x-*`
+- [forms.md](../spec/forms/forms.md) — `mergeSchemaExtras`, the property-node `x-*`
   placement, `required` derivation (computed fields are excluded),
   `optionalFields`, and `reconcileDeclaredPrecision` (the normalisation both
   recomputes build on); the renderer-contract table this extends.
 - [validation.md](validation.md) — the dispatcher runner where the authoritative
   server-side `recomputeAll` slots in, alongside precision reconciliation and the
   `ready()` check.
-- [quantity_type.md](../spec/quantity_type.md) — `Quantity` arithmetic
+- [quantity_type.md](../spec/util/quantity_type.md) — `Quantity` arithmetic
   (`operator*`/`operator/`, result-unit deduction) numeric derivations use.
-- [rational.md](../spec/rational.md) — the exact `Rational` payload that makes the
+- [rational.md](../spec/util/rational.md) — the exact `Rational` payload that makes the
   client-displayed and server-stored values bit-identical.
 - [gui_cross_field_rules.md](gui_cross_field_rules.md) — rules that may reference a
   computed field, evaluated on the server's authoritative value.

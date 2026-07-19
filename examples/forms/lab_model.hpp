@@ -10,11 +10,11 @@
 ///   - required fields        -> member types + `optionalFields` opt-out
 ///   - readiness (validate)   -> morph::forms::allRequiredEngaged
 
-#include <morph/choice.hpp>
-#include <morph/datetime.hpp>
-#include <morph/forms.hpp>
-#include <morph/registry.hpp>
-#include <morph/bridge.hpp>
+#include <morph/forms/choice.hpp>
+#include <morph/util/datetime.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/bridge.hpp>
 
 #include <array>
 #include <cstdint>

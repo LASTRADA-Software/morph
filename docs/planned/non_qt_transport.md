@@ -1,18 +1,18 @@
 # A non-Qt / transport-agnostic reference transport (planned)
 
 > **Status: planned — not yet implemented.** This spec extends
-> [backend.md](../spec/backend.md) (the `IBackend` contract and `RemoteServer`
-> handling) and [wire.md](../spec/wire.md) (the `Envelope`). It provides a
+> [backend.md](../spec/core/backend.md) (the `IBackend` contract and `RemoteServer`
+> handling) and [wire.md](../spec/core/wire.md) (the `Envelope`). It provides a
 > reference transport that does not depend on Qt, so a server or client can run
 > without a Qt event loop. See [todo.md](../todo.md).
 
 ## The gap
 
-The only network transport is Qt. [backend.md](../spec/backend.md)'s Limitations
+The only network transport is Qt. [backend.md](../spec/core/backend.md)'s Limitations
 name it: "`QtWebSocketBackend` must live on the Qt event loop thread; there is no
 way to drive it from a plain worker thread ... WebSocket transport is
 single-threaded and Qt-bound." `RemoteServer` itself is transport-agnostic (it
-"receives JSON envelopes ... from any transport," [backend.md](../spec/backend.md)),
+"receives JSON envelopes ... from any transport," [backend.md](../spec/core/backend.md)),
 but the only concrete client `IBackend` and the only concrete server front are
 `QtWebSocketBackend` / `QtWebSocketServer`.
 
@@ -35,7 +35,7 @@ for Qt apps.
 ### The contract it must satisfy (all EXISTING)
 
 The reference client backend implements every method of
-`detail::IBackend` ([backend.md](../spec/backend.md)), matching the semantics the
+`detail::IBackend` ([backend.md](../spec/core/backend.md)), matching the semantics the
 existing transports already establish:
 
 | Method | Reference behavior (mirrors `QtWebSocketBackend`) |
@@ -49,9 +49,9 @@ existing transports already establish:
 | `setReconnectHandler(handler)` | Stores it; invoked on each *subsequent* connect so `Bridge` re-registers live bindings. |
 
 It reuses the existing typed error hierarchy — `DisconnectedError`,
-`BackendChangedError`, `BridgeDestroyedError` ([backend.md](../spec/backend.md)) —
+`BackendChangedError`, `BridgeDestroyedError` ([backend.md](../spec/core/backend.md)) —
 unchanged, and the existing `callId` multiplexing so concurrent in-flight
-executes work (`RemoteServer` echoes the request `callId`, [wire.md](../spec/wire.md)).
+executes work (`RemoteServer` echoes the request `callId`, [wire.md](../spec/core/wire.md)).
 
 ### The threading model is the key difference
 
@@ -76,14 +76,14 @@ public:
   frames incoming messages and routes them by `callId` to the pending map (guarded
   by a mutex, since replies arrive on the I/O thread and `execute`/`cancelPending`
   can be called from `Bridge` on another thread — the same locking `QtWebSocketBackend`
-  applies to `_pending`, [backend.md](../spec/backend.md)).
+  applies to `_pending`, [backend.md](../spec/core/backend.md)).
 - **Synchronous control via condition variable.** `registerModel` sends and waits
   on a `std::condition_variable` for the correlated reply (or a disconnect
   wakeup), replacing the nested `QEventLoop`. The disconnect path wakes a parked
   waiter so a register whose reply never arrives fails with `"disconnected"`
   rather than hanging — the same hardening `sendSync` has today.
 - **Callbacks still marshal via `cbExec`.** Completion `.then`/`.onError` deliver
-  on the `IExecutor*` passed to `execute` ([completion.md](../spec/completion.md)),
+  on the `IExecutor*` passed to `execute` ([completion.md](../spec/core/completion.md)),
   so a non-Qt host uses a `ThreadPoolExecutor`/`MainThreadExecutor`
   ([ARCHITECTURE.md](../ARCHITECTURE.md)) as `cbExec` instead of `QtExecutor`.
 
@@ -107,13 +107,13 @@ public:
 
 - For each accepted connection it reads framed text messages and calls
   `RemoteServer::handle(msg, reply)` (async, posts to the server pool) — identical
-  to how `QtWebSocketServer::onTextMessage` forwards ([backend.md](../spec/backend.md)).
+  to how `QtWebSocketServer::onTextMessage` forwards ([backend.md](../spec/core/backend.md)).
 - The `reply` callback writes back to the originating socket; if the socket is
   gone before the reply is ready, the reply is dropped (mirroring the Qt front's
   weak-`QPointer` behavior).
 - It honours the same lifetime rule: it holds `RemoteServer& _server` by
   reference, so the server's owning `shared_ptr` must outlive it
-  ([backend.md](../spec/backend.md)'s Lifetime & ownership).
+  ([backend.md](../spec/core/backend.md)'s Lifetime & ownership).
 - TLS and peer verification are the transport's responsibility, per
   [security.md](../spec/security.md); the reference front documents the same
   verify-the-peer default as [tls_peer_verification.md](tls_peer_verification.md)
@@ -165,13 +165,13 @@ decision recorded at build time.
 
 ## Cross-references
 
-- [backend.md](../spec/backend.md) — the full `IBackend` contract
+- [backend.md](../spec/core/backend.md) — the full `IBackend` contract
   (`registerModel`/`registerModelWithContext`/`deregisterModel`/`execute`/
   `notifyBackendChanged`/`cancelPending`/`setReconnectHandler`) this implements,
   the `RemoteServer::handle`/`handleInline` forwarding it drives, the typed error
   hierarchy it reuses, and the `QtWebSocketBackend`/`QtWebSocketServer` behavior it
   mirrors without Qt.
-- [wire.md](../spec/wire.md) — the `Envelope`, `kind` discriminator, and `callId`
+- [wire.md](../spec/core/wire.md) — the `Envelope`, `kind` discriminator, and `callId`
   correlation both transports share, and `kMaxEnvelopeBytes`.
 - [security.md](../spec/security.md) — transport confidentiality/peer
   authentication is the transport's job; the reference front must supply TLS.
@@ -179,5 +179,5 @@ decision recorded at build time.
   default the non-Qt front documents rather than an insecure example.
 - [transport_limits.md](transport_limits.md) — the connection-level limits any
   transport (Qt or not) should carry; the reference front's `Config` mirrors them.
-- [completion.md](../spec/completion.md) — `Completion`/`cbExec` callback delivery
+- [completion.md](../spec/core/completion.md) — `Completion`/`cbExec` callback delivery
   a non-Qt host wires to a `ThreadPoolExecutor` instead of `QtExecutor`.

@@ -8,7 +8,7 @@
 // Hidden from moc: moc follows includes and its parser trips on the heavy
 // morph/Lightweight headers. The compiler still sees them.
 #ifndef Q_MOC_RUN
-#include <morph/bridge.hpp>
+#include <morph/core/bridge.hpp>
 
 #include "bank/models/auth_model.hpp"
 #endif

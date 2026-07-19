@@ -3,7 +3,7 @@
 > **Status: planned — not yet implemented.** This spec is part of the GUI
 > enhancement program ([gui_overview.md](gui_overview.md), Tier 1,
 > cross-cutting). It supplies the "different mechanism entirely" that
-> [forms.md](../spec/forms.md) defers when it rules out localised schemas, and
+> [forms.md](../spec/forms/forms.md) defers when it rules out localised schemas, and
 > that [gui_field_metadata.md](gui_field_metadata.md),
 > [gui_computed_fields.md](gui_computed_fields.md), and
 > [gui_cross_field_rules.md](gui_cross_field_rules.md) all point at from their
@@ -18,7 +18,7 @@ The GUI program is about to mint user-visible text with no translation story:
 - **The schema cannot carry per-locale text.** Each type's schema is memoised
   once, process-wide (`schemaJson<A>()`'s function-local static), which
   "precludes localised / i18n schemas … a translated form would need a
-  different mechanism entirely" ([forms.md](../spec/forms.md), "One cached
+  different mechanism entirely" ([forms.md](../spec/forms/forms.md), "One cached
   schema per type — no localisation"). That design is deliberate and stays.
 - **The program's display text is multiplying anyway.** Tier 1 emits `title` /
   `description` / `x-placeholder` per field
@@ -32,10 +32,10 @@ The GUI program is about to mint user-visible text with no translation story:
   is baked or renderer-invented, and none is translatable.
 - **The locale hook exists but nothing consumes it.**
   `session::Context::locale` is a BCP-47 tag on every call
-  ([session.md](../spec/session.md)) — plumbed, documented, unused.
+  ([session.md](../spec/session/session.md)) — plumbed, documented, unused.
 - **Locale formatting is unspecified.** Decimal comma vs point for `Rational`
   entry, local-time display of a strictly-UTC `Timestamp`
-  ([datetime.md](../spec/datetime.md) excludes time-zone conversion) — today
+  ([datetime.md](../spec/util/datetime.md) excludes time-zone conversion) — today
   each renderer improvises with no contract to conform to.
 
 Deferring this past Tier 1 gets expensive: `fieldMetadata` declarations and
@@ -124,16 +124,16 @@ Display formatting is the renderer's duty; the wire stays canonical:
 
 - **Numbers.** A locale may render and accept `1.050,25`; the payload is the
   canonical exact `{num, den, dp}` regardless
-  ([rational.md](../spec/rational.md)). The renderer converts at the control
+  ([rational.md](../spec/util/rational.md)). The renderer converts at the control
   edge; the exact digit routines are locale-free.
 - **Timestamps.** The wire value is strict UTC ISO-8601
-  ([datetime.md](../spec/datetime.md)); displaying and editing in the user's
+  ([datetime.md](../spec/util/datetime.md)); displaying and editing in the user's
   zone/format is the control's duty, and a locale-formatted entry must
   round-trip to the identical canonical wire value.
 - **Choice option labels are data, not chrome.** Option rows come from
-  executing the options action ([choice.md](../spec/choice.md)); the catalog
+  executing the options action ([choice.md](../spec/forms/choice.md)); the catalog
   never sees them. A model that wants localised rows reads
-  `session::current()->locale` server-side ([session.md](../spec/session.md))
+  `session::current()->locale` server-side ([session.md](../spec/session/session.md))
   — the one place server-side locale participates.
 
 ### 4. Conformance fixtures ([gui_renderer_toolkit.md](gui_renderer_toolkit.md))
@@ -148,7 +148,7 @@ non-UTC display zone round-trips unchanged.
 
 - **No per-locale schema variants.** `schemaJson<A>()` keeps its one cached,
   un-localised schema; no locale parameter is added anywhere in
-  [forms.md](../spec/forms.md)'s surface.
+  [forms.md](../spec/forms/forms.md)'s surface.
 - **No translation storage format.** Qt `.ts`/`.qm`, gettext, JSON, a
   database — the provider signature is the whole contract.
 - **No server-side message localisation.** Canonical error strings are
@@ -179,7 +179,7 @@ non-UTC display zone round-trips unchanged.
 
 ## Cross-references
 
-- [forms.md](../spec/forms.md) — the cached, un-localised schema this spec
+- [forms.md](../spec/forms/forms.md) — the cached, un-localised schema this spec
   works with rather than against; the deferred "different mechanism" this is.
 - [gui_field_metadata.md](gui_field_metadata.md) /
   [gui_layout_grouping.md](gui_layout_grouping.md) /
@@ -190,11 +190,11 @@ non-UTC display zone round-trips unchanged.
   renderer turns into localised violation messages.
 - [gui_renderer_toolkit.md](gui_renderer_toolkit.md) — where the
   `TranslationProvider` seam lives and the conformance fixtures run.
-- [session.md](../spec/session.md) — `Context::locale`, the server-side hook
+- [session.md](../spec/session/session.md) — `Context::locale`, the server-side hook
   for data (not chrome) localisation.
-- [datetime.md](../spec/datetime.md) / [rational.md](../spec/rational.md) —
+- [datetime.md](../spec/util/datetime.md) / [rational.md](../spec/util/rational.md) —
   the canonical wire forms display formatting must round-trip to.
-- [choice.md](../spec/choice.md) — option labels as data, out of catalog
+- [choice.md](../spec/forms/choice.md) — option labels as data, out of catalog
   scope.
 - [drift_guard.md](drift_guard.md) — why canonical server strings stay
   untranslated.

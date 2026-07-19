@@ -313,15 +313,15 @@ accordingly.
 
 ## Cross-references
 
-- [`completion.md`](completion.md) — `Completion<T>` / `CompletionState<T>`, orphan logging, single-shot callbacks.
-- [`executor.md`](executor.md) — `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor`, and the strand.
-- [`backend.md`](backend.md) — `IBackend`, `LocalBackend`, `cancelPending`, the three backend error types.
-- [`wire.md`](wire.md) — the `Envelope` protocol and `encode`/`decode`.
-- [`registry.md`](registry.md) — `ActionDispatcher`, `ModelRegistryFactory`, `ParseError`, the codec macros.
-- [`journal.md`](journal.md) — `LogEntry`, `SerializationError`, `replay`, `SessionLog`.
-- [`rational.md`](rational.md) — `Rational`, `RationalError`, the clamping wire codec.
-- [`quantity_type.md`](quantity_type.md) — `Quantity<U, Dec>`, empty-propagation arithmetic, the ordering `logic_error`.
-- [`datetime.md`](datetime.md) — `DateTime` and its strict, rejecting ISO-8601 codec.
-- [`session.md`](session.md) / [`security.md`](security.md) — `Context`, `IAuthorizer`, `AuthError`, `SigningAuthorizer`.
-- [`logger.md`](logger.md) — `morph::log`, `setLogger`, log levels.
+- [`completion.md`](core/completion.md) — `Completion<T>` / `CompletionState<T>`, orphan logging, single-shot callbacks.
+- [`executor.md`](core/executor.md) — `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor`, and the strand.
+- [`backend.md`](core/backend.md) — `IBackend`, `LocalBackend`, `cancelPending`, the three backend error types.
+- [`wire.md`](core/wire.md) — the `Envelope` protocol and `encode`/`decode`.
+- [`registry.md`](core/registry.md) — `ActionDispatcher`, `ModelRegistryFactory`, `ParseError`, the codec macros.
+- [`journal.md`](journal/journal.md) — `LogEntry`, `SerializationError`, `replay`, `SessionLog`.
+- [`rational.md`](util/rational.md) — `Rational`, `RationalError`, the clamping wire codec.
+- [`quantity_type.md`](util/quantity_type.md) — `Quantity<U, Dec>`, empty-propagation arithmetic, the ordering `logic_error`.
+- [`datetime.md`](util/datetime.md) — `DateTime` and its strict, rejecting ISO-8601 codec.
+- [`session.md`](session/session.md) / [`security.md`](security.md) — `Context`, `IAuthorizer`, `AuthError`, `SigningAuthorizer`.
+- [`logger.md`](core/logger.md) — `morph::log`, `setLogger`, log levels.
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md#error-propagation) — the "Error propagation" overview this spec expands.

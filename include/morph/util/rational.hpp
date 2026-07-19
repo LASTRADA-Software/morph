@@ -2,7 +2,7 @@
 
 #pragma once
 
-/// @file rational.hpp
+/// @file util/rational.hpp
 /// @brief Exact rational arithmetic for morph model/action values.
 ///
 /// `morph::math::Rational` is a small, value-semantic, trivially-copyable

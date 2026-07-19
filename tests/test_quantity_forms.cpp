@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/bridge.hpp>
-#include <morph/choice.hpp>
-#include <morph/datetime.hpp>
-#include <morph/forms.hpp>
-#include <morph/quantity.hpp>
-#include <morph/rational.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/forms/choice.hpp>
+#include <morph/util/datetime.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
+#include <morph/core/registry.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -230,7 +230,7 @@ than trusting the raw wire body:
   (`Quantity<U, Dec>::declaredDecimals`), so the stored value's precision matches
   the schema's advertised `x-decimalPlaces` instead of whatever runtime `dp` the
   client sent. It is a no-op for actions with no `Quantity` members and for
-  actions whose type glaze cannot reflect. See [forms.md](forms.md).
+  actions whose type glaze cannot reflect. See [forms.md](../forms/forms.md).
 - **Validator enforcement.** `ActionValidator<Action>::ready(action)` is checked;
   if it returns `false` the executor throws `std::invalid_argument` and the
   completion resolves through `onError` (a proper error reply upstream) — the
@@ -520,9 +520,9 @@ make teardown order-independent.)
 - [`backend.md`](backend.md) — `IBackend`, `LocalBackend`,
   `SimulatedRemoteBackend`, `registerModelWithContext`, `cancelPending`,
   `BackendChangedError`/`BridgeDestroyedError`, reconnect handlers.
-- [`session.md`](session.md) — `session::Context` attached to every
+- [`session.md`](../session/session.md) — `session::Context` attached to every
   `executeVia` call via the default session.
-- [`security.md`](security.md) — how the session principal drives
+- [`security.md`](../security.md) — how the session principal drives
   authorization on the execute path.
 - [`wire.md`](wire.md) — the `register` envelope carrying `contextKey` and the
   action call/result serialization used by remote backends.
@@ -531,5 +531,5 @@ make teardown order-independent.)
 - [`registry.md`](registry.md) — `ModelTraits`, `ActionTraits`,
   `ActionValidator`, `Loggable`, `BRIDGE_REGISTER_ACTION`, and the server-side
   `ActionDispatcher` counterpart.
-- [`concurrency_and_lifetimes.md`](concurrency_and_lifetimes.md) — the broader
+- [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the broader
   mutex-ordering and object-lifetime rules this type participates in.

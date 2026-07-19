@@ -13,9 +13,9 @@
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QSslKey>
-#include <morph/executor.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
-#include <morph/remote.hpp>
+#include <morph/core/remote.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>

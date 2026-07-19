@@ -7,8 +7,8 @@
 #include <typeindex>
 #include <typeinfo>
 
-#include "action_log.hpp"
-#include "session.hpp"
+#include "../journal/action_log.hpp"
+#include "../session/session.hpp"
 #include "strand.hpp"
 
 namespace morph::model::detail {

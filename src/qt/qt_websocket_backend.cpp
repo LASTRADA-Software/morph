@@ -4,7 +4,7 @@
 #include <QTimer>
 #include <algorithm>
 #include <morph/qt/qt_websocket_backend.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/wire.hpp>
 #include <cctype>
 #include <stdexcept>
 #include <utility>

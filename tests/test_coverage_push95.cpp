@@ -4,18 +4,18 @@
 // file:line range it exercises so future readers understand why an unusual
 // edge case lives here. Companion to test_coverage_gaps.cpp / test_coverage_extra.cpp.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/completion.hpp>
-#include <morph/executor.hpp>
-#include <morph/logger.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/reconnect_coordinator.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/session.hpp>
-#include <morph/sync_worker.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
+#include <morph/offline/sync_worker.hpp>
+#include <morph/core/wire.hpp>
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

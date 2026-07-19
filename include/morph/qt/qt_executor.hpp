@@ -3,7 +3,7 @@
 #pragma once
 #include <QCoreApplication>
 #include <QMetaObject>
-#include <morph/executor.hpp>
+#include <morph/core/executor.hpp>
 #include <functional>
 
 namespace morph::qt {

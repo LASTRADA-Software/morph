@@ -7,10 +7,10 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <morph/bridge.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/registry.hpp>
-#include <morph/sync_worker.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/offline/sync_worker.hpp>
 
 #include <filesystem>
 #include <string>

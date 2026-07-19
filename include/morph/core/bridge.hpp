@@ -16,9 +16,9 @@
 
 #include "backend.hpp"
 #include "completion.hpp"
-#include "forms.hpp"
+#include "../forms/forms.hpp"
 #include "registry.hpp"
-#include "session.hpp"
+#include "../session/session.hpp"
 
 namespace morph::bridge {
 

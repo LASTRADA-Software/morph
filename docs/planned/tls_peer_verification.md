@@ -106,7 +106,7 @@ struct QtWebSocketServerConfig {
 The guard uses only `morph::log` (the existing replaceable sink) and the
 `SecureMode`/`NonSecureMode` distinction the server already tracks from its
 `std::optional<QSslConfiguration> tls` constructor argument
-([backend.md](../spec/backend.md)). It adds no dependency and does not touch
+([backend.md](../spec/core/backend.md)). It adds no dependency and does not touch
 `RemoteServer`.
 
 > If this spec lands alongside [transport_limits.md](transport_limits.md)'s
@@ -167,13 +167,13 @@ The guard uses only `morph::log` (the existing replaceable sink) and the
 - [security.md](../spec/security.md) — the trust model, the token-replay risk this
   closes, the `VerifyNone` limitation, the "Use TLS and verify the peer"
   hardening-checklist item, and the `tests/certs/` throwaway material.
-- [backend.md](../spec/backend.md) — `QtWebSocketBackend`/`QtWebSocketServer`, the
+- [backend.md](../spec/core/backend.md) — `QtWebSocketBackend`/`QtWebSocketServer`, the
   `std::optional<QSslConfiguration> tls` constructor arguments, `SecureMode`, and
   `listen()`/`port()` where the guard lands.
 - [transport_limits.md](transport_limits.md) — the sibling `QtWebSocketServerConfig`
   connection-level knobs (`handshakeTimeout`, `maxConnections`) this config merges
   with; TLS handshake timeout is enforced there.
-- [logger.md](../spec/logger.md) — the `LogLevel::error` sink the exposure guard
+- [logger.md](../spec/core/logger.md) — the `LogLevel::error` sink the exposure guard
   logs through.
 - [non_qt_transport.md](non_qt_transport.md) — a transport that is not Qt must
   supply its own equivalent TLS + verification story; this spec is Qt-specific.

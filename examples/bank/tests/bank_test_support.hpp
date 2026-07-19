@@ -2,8 +2,8 @@
 #pragma once
 
 #include <Lightweight/Lightweight.hpp>
-#include <morph/completion.hpp>
-#include <morph/executor.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
 
 #include <atomic>
 #include <chrono>

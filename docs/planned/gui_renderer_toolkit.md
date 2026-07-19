@@ -4,10 +4,10 @@
 > the GUI program ([gui_overview.md](gui_overview.md)). It turns the reference
 > renderer from an *example* into a *shipped, reusable* component, adds a
 > **conformance test kit** that formalises the "normative" renderer contract of
-> [forms.md](../spec/forms.md), and defines a **theming / component-override**
+> [forms.md](../spec/forms/forms.md), and defines a **theming / component-override**
 > registry so an app swaps one field's control without forking the renderer. It
 > consumes — and does not change — the `x-*` action schema
-> ([forms.md](../spec/forms.md)) and the `v-*` / `w-*` / `app-*` view schemas
+> ([forms.md](../spec/forms/forms.md)) and the `v-*` / `w-*` / `app-*` view schemas
 > ([gui_collections_views.md](gui_collections_views.md),
 > [gui_workflows_navigation.md](gui_workflows_navigation.md)). See
 > [todo.md](../todo.md).
@@ -15,7 +15,7 @@
 ## The gap
 
 The only renderer is `examples/forms/gui_qml` — a ~425-line `DynamicForm.qml`
-plus `Main.qml` ([forms.md](../spec/forms.md)). It is an **example**, not a
+plus `Main.qml` ([forms.md](../spec/forms/forms.md)). It is an **example**, not a
 component: an app that wants schema-driven forms copies and forks it. Three
 things are missing:
 
@@ -24,7 +24,7 @@ things are missing:
   the options fetch) lives in an example directory, so every consumer
   re-implements or vendors it. It is a reference implementation trapped as demo
   code.
-- **No conformance kit.** [forms.md](../spec/forms.md) calls its `x-*` vocabulary
+- **No conformance kit.** [forms.md](../spec/forms/forms.md) calls its `x-*` vocabulary
   **normative** ("the normative list of every key a renderer must understand"),
   but nothing lets a *new* renderer (web, ImGui) prove it honors that contract.
   Correctness of a renderer is currently "read the prose and hope."
@@ -108,7 +108,7 @@ must produce, proposed as a `morph::conformance` description the harness drives:
 
 - Fields render in `x-order`, not JSON key order.
 - Submission is blocked until every `required` field is engaged, and enabled once
-  they are (`allRequiredEngaged` parity, [forms.md](../spec/forms.md)).
+  they are (`allRequiredEngaged` parity, [forms.md](../spec/forms/forms.md)).
 - A `Quantity` payload is emitted as `{num,den,dp}` **exactly** (the corpus pins
   expected `num`/`den` for a given typed decimal), and a unit switch recomputes
   the entry exactly with no float drift.
@@ -203,7 +203,7 @@ schema directly.
   itself ships and maintains the QML reference, not a web or ImGui renderer.
 - **No server involvement.** The renderer, kit, and slot registry are client-side.
   Nothing here touches dispatch, the wire, or `RemoteServer`
-  ([backend.md](../spec/backend.md)); the server still only sees action payloads.
+  ([backend.md](../spec/core/backend.md)); the server still only sees action payloads.
 - **The kit does not test look.** It asserts *contract behavior* (order, gating,
   exact payloads, options fetch), never pixels or styling — those are
   renderer-specific and out of scope.
@@ -234,11 +234,11 @@ schema directly.
 - [gui_overview.md](gui_overview.md) — the ecosystem layer this document
   occupies; the "renderer-agnostic contract, QML reference" and
   "escape-hatch/override" principles the three deliverables realise.
-- [forms.md](../spec/forms.md) — the **normative** `x-*` vocabulary and renderer
+- [forms.md](../spec/forms/forms.md) — the **normative** `x-*` vocabulary and renderer
   contract (the `$ref` dual-read, `x-order`, `ExtUnits`, `x-decimalPlaces`,
   `x-unitAlternatives`, `x-optionsAction`) the reference renderer consumes and the
   conformance kit formalises into executable assertions.
-- [choice.md](../spec/choice.md) — the options-fetch / `optionRows` behavior the
+- [choice.md](../spec/forms/choice.md) — the options-fetch / `optionRows` behavior the
   renderer implements and the kit asserts.
 - [gui_i18n.md](gui_i18n.md) — the `TranslationProvider` seam the shipped
   renderer hosts, and the locale fixtures the kit runs (including under the
@@ -247,7 +247,7 @@ schema directly.
   [gui_workflows_navigation.md](gui_workflows_navigation.md) — the `v-*` / `w-*` /
   `app-*` view schemas the shipped renderer also consumes and the kit's collection
   / wizard / app fixtures exercise.
-- [bridge.md](../spec/bridge.md) — the `set<>` / auto-fire path a slot override
+- [bridge.md](../spec/core/bridge.md) — the `set<>` / auto-fire path a slot override
   participates in, unchanged.
-- [backend.md](../spec/backend.md) — unchanged; the renderer, kit, and registry
+- [backend.md](../spec/core/backend.md) — unchanged; the renderer, kit, and registry
   are client-side and never touch dispatch or the wire.

@@ -303,7 +303,7 @@ of its own state. Because the drain is posted (asynchronous), it completes some
 time *after* `switchBackend` returns; a test or host that must observe the
 drained result waits for it (the conflict-resolution tests poll a model counter)
 rather than assuming it finished synchronously. See
-[bridge.md](bridge.md)'s `switchBackend` for the exact posting mechanism.
+[bridge.md](../core/bridge.md)'s `switchBackend` for the exact posting mechanism.
 
 The two paths are mutually exclusive per queue — a queue drained inside
 `onBackendChanged()` and also handed to a `SyncWorker::run()` would be

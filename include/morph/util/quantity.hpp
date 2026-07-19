@@ -2,7 +2,7 @@
 
 #pragma once
 
-/// @file quantity.hpp
+/// @file util/quantity.hpp
 /// @brief Unit-tagged, optionally-empty exact values with a derivation trail.
 ///
 /// `morph::units::Quantity<U>` wraps an *optional* `morph::math::Rational` and
@@ -59,7 +59,7 @@
 #include <unordered_map>
 #endif
 
-#include "detail/fixed_string.hpp"
+#include "../detail/fixed_string.hpp"
 #include "rational.hpp"
 
 namespace morph::units {
@@ -981,7 +981,7 @@ struct NamedQuantity : Quantity<U> {
 }  // namespace morph::units
 
 #if MORPH_QUANTITY_PROVENANCE
-#include "detail/quantity_equation.hpp"
+#include "../detail/quantity_equation.hpp"
 #endif
 
 /// @brief Renders value + unit (`5.2kW`, `N/A%`); no `operator<<` is provided.

@@ -2,7 +2,7 @@
 
 #pragma once
 
-/// @file datetime.hpp
+/// @file util/datetime.hpp
 /// @brief UTC timestamps for morph actions.
 ///
 /// Two types, mirroring the `Rational`/`Quantity` split:

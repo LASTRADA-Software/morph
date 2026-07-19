@@ -14,13 +14,13 @@
 //   6. All queue items were replayed and removed.
 //   7. Execute on the handler still works, confirming the new backend is live.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/network_monitor.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/registry.hpp>
-#include <morph/sync_worker.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

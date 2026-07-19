@@ -3,14 +3,14 @@
 > **Status: planned — not yet implemented.** This spec covers the
 > denial-of-service bounds `morph` deliberately delegates to the transport today,
 > and the design for the pieces that should ship with the Qt transport (and any
-> future one). It extends [security.md](../spec/security.md) and [wire.md](../spec/wire.md). See
+> future one). It extends [security.md](../spec/security.md) and [wire.md](../spec/core/wire.md). See
 > [todo.md](../todo.md).
 
 ## The gap
 
 `RemoteServer` is transport-agnostic and sees only decoded envelopes. The one
 wire-layer bound that exists is `wire::kMaxEnvelopeBytes` (8 MiB per message,
-checked before parsing — see [wire.md](../spec/wire.md)). Everything else is explicitly
+checked before parsing — see [wire.md](../spec/core/wire.md)). Everything else is explicitly
 the transport's job and, in the shipped Qt transport, **absent**:
 
 - **No per-request timeout.** A slow or stalled dispatch leaves the client's
@@ -129,7 +129,7 @@ that actually owns sockets.
   contract). A model that can run unboundedly long must bound *itself*.
 - **Not a replacement for an upstream WAF / reverse proxy.** For public exposure,
   a hardened proxy (rate limiting, connection management, request
-  canonicalization for the duplicate-key caveat in [wire.md](../spec/wire.md)) is still
+  canonicalization for the duplicate-key caveat in [wire.md](../spec/core/wire.md)) is still
   recommended in front of `RemoteServer`; these knobs are defence-in-depth and
   the baseline for the shipped transport, not a full edge stack.
 - **No global (cross-connection) rate limit in the transport.** `messagesPerSecond`
@@ -157,14 +157,14 @@ that actually owns sockets.
 - [security.md](../spec/security.md) — the hardening checklist item ("Bound message size
   and add timeouts in the transport") this implements; the threat model that
   motivates it.
-- [wire.md](../spec/wire.md) — `kMaxEnvelopeBytes`, the one always-on bound, and the
+- [wire.md](../spec/core/wire.md) — `kMaxEnvelopeBytes`, the one always-on bound, and the
   `body` double-parse and duplicate-key caveats a front proxy still handles.
-- [backend.md](../spec/backend.md) — `RemoteServer` register/execute paths where the
+- [backend.md](../spec/core/backend.md) — `RemoteServer` register/execute paths where the
   server-side `LimitPolicy` checks live; `QtWebSocketServer` where the
   connection-level config applies; the `handle()` reply-exactly-once contract
   the timeout path must preserve.
 - [instance_authorization.md](instance_authorization.md) — `maxLiveModels`
   complements `authorizeRegister`: one bounds *how many* instances the server
   will hold, the other bounds *who* may create them.
-- [completion.md](../spec/completion.md) — the idempotent `setValue`/`setException` that
+- [completion.md](../spec/core/completion.md) — the idempotent `setValue`/`setException` that
   makes a late or duplicate resolution harmless on the client side.

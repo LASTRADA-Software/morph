@@ -3,9 +3,9 @@
 > **Status: planned — not yet implemented.** This spec gives a server an
 > orderly way to stop: refuse new work, finish what is in flight, tell clients
 > properly, then tear down. It extends `RemoteServer` and `QtWebSocketServer`
-> ([backend.md](../spec/backend.md)), addresses at the server layer the
+> ([backend.md](../spec/core/backend.md)), addresses at the server layer the
 > "no graceful drain / `waitIdle`" limitation
-> [executor.md](../spec/executor.md) documents, and integrates with
+> [executor.md](../spec/core/executor.md) documents, and integrates with
 > [observability.md](observability.md)'s readiness signal and
 > [transport_limits.md](transport_limits.md)'s in-flight accounting. See
 > [todo.md](../todo.md).
@@ -21,7 +21,7 @@ Stopping a morph server today is abrupt at every layer:
 - **Nothing stops new work first.** There is no way to make `RemoteServer`
   refuse new `register`/`execute` envelopes while letting started work finish;
   work keeps arriving until the process is torn down under it.
-  [executor.md](../spec/executor.md) is explicit that `~ThreadPoolExecutor`
+  [executor.md](../spec/core/executor.md) is explicit that `~ThreadPoolExecutor`
   drains already-queued tasks but "tasks posted concurrently with or after
   destruction may be lost" and there is "no graceful drain / `waitIdle`" —
   the caller must synchronise teardown externally, and has no primitive to do
@@ -70,7 +70,7 @@ void beginShutdown();
   ([concurrency_and_lifetimes.md](../spec/concurrency_and_lifetimes.md))
   apply unchanged — but now trivially, because every queue is empty. This
   spec deliberately adds **no** `waitIdle` to `IExecutor`
-  ([executor.md](../spec/executor.md)'s limitation stands for raw executor
+  ([executor.md](../spec/core/executor.md)'s limitation stands for raw executor
   users): the drain condition morph can define precisely — "every accepted
   execute has replied" — lives at the server layer, where the work is
   counted.
@@ -104,10 +104,10 @@ The existing abrupt `close()` remains unchanged for tests and emergencies;
 - In-flight calls complete normally during the drain window.
 - New calls fail fast with `"server shutting down"` — for hosts using the
   offline stack, an ordinary failure the queue retries after the restart
-  ([offline.md](../spec/offline.md), [durable_queue.md](durable_queue.md)).
+  ([offline.md](../spec/offline/offline.md), [durable_queue.md](durable_queue.md)).
 - The socket then closes with `going away` rather than dying. The Qt client
   backend's auto-reconnect behaves per its existing config
-  ([backend.md](../spec/backend.md)) and finds the restarted server;
+  ([backend.md](../spec/core/backend.md)) and finds the restarted server;
   differentiated client handling of the close reason is a possible later
   refinement, not part of this spec.
 
@@ -124,7 +124,7 @@ The existing abrupt `close()` remains unchanged for tests and emergencies;
   connection draining at the LB, DNS, or mesh layer is the deployment's job.
 - **Not crash safety.** A power cut still interrupts mid-flight work — that
   is what the durability track ([outbox.md](outbox.md),
-  [journal.md](../spec/journal.md)) exists for. This spec makes *intentional*
+  [journal.md](../spec/journal/journal.md)) exists for. This spec makes *intentional*
   stops clean, nothing more.
 - **Does not change local mode.** `LocalBackend` lives and dies with the
   application; there is no server to drain.
@@ -147,9 +147,9 @@ The existing abrupt `close()` remains unchanged for tests and emergencies;
 
 ## Cross-references
 
-- [backend.md](../spec/backend.md) — `RemoteServer` dispatch and reply paths;
+- [backend.md](../spec/core/backend.md) — `RemoteServer` dispatch and reply paths;
   `QtWebSocketServer::close()`, today's abrupt stop.
-- [executor.md](../spec/executor.md) — the drain-on-destruction semantics and
+- [executor.md](../spec/core/executor.md) — the drain-on-destruction semantics and
   the "no graceful drain / `waitIdle`" limitation this addresses one layer
   up.
 - [concurrency_and_lifetimes.md](../spec/concurrency_and_lifetimes.md) — the

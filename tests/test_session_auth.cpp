@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/session_auth.hpp>
+#include <morph/session/session_auth.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

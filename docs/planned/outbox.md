@@ -1,14 +1,14 @@
 # Transactional outbox — journal + store atomicity (planned)
 
 > **Status: planned — not yet implemented.** This spec extends
-> [journal.md](../spec/journal.md). It closes the "no transactional outbox" limitation:
+> [journal.md](../spec/journal/journal.md). It closes the "no transactional outbox" limitation:
 > the action log and a model's own durable store commit as two independent
 > writes and can diverge on a crash. See [todo.md](../todo.md).
 
 ## The gap
 
 `morph::journal` records every loggable action to an `IActionLog` after the
-action succeeds (`recordIfAttached`, see [journal.md](../spec/journal.md)). A model that
+action succeeds (`recordIfAttached`, see [journal.md](../spec/journal/journal.md)). A model that
 *also* owns a durable store (a SQL database, a file) therefore performs **two
 independent writes** per action:
 
@@ -167,15 +167,15 @@ crash-consistent) log.
 
 ## Cross-references
 
-- [journal.md](../spec/journal.md) — `LogEntry`, `IActionLog`, `recordIfAttached`, the
+- [journal.md](../spec/journal/journal.md) — `LogEntry`, `IActionLog`, `recordIfAttached`, the
   two recording call sites, `SessionLog`/`replay`, and the "no transactional
   outbox" limitation this closes.
 - [durable_queue.md](durable_queue.md) — the `idempotencyKey` dedup contract the
   outbox relay reuses; both are producers into the same at-most-once mechanism.
-- [offline.md](../spec/offline.md) — `QueueItem::idempotencyKey` (the original dedup
+- [offline.md](../spec/offline/offline.md) — `QueueItem::idempotencyKey` (the original dedup
   token) and the injected-side-effect pattern (`ReconnectCoordinator::Deps`,
   `SyncWorker`) that `OutboxRelay` follows.
-- [registry.md](../spec/registry.md) — `ActionDispatcher`'s runner and
+- [registry.md](../spec/core/registry.md) — `ActionDispatcher`'s runner and
   `IModelHolder::attachActionLog`/`recordIfAttached`, where the auto-append
   suppression opt-out lives.
 - `examples/bank` — the concrete two-write divergence this pattern fixes.

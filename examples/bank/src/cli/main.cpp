@@ -5,13 +5,13 @@
 // to show that the model code and call sites are identical regardless of where
 // the models actually execute.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
-#include <morph/file_action_log.hpp>
-#include <morph/journal.hpp>
-#include <morph/remote.hpp>
-#include <morph/session.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/journal/journal.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
 
 #include <atomic>
 #include <chrono>

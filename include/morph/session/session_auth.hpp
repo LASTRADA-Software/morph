@@ -15,7 +15,7 @@
 
 #include "session.hpp"
 
-/// @file session_auth.hpp
+/// @file session/session_auth.hpp
 /// @brief Opt-in authenticated sessions: signed bearer tokens and a verifying
 ///        `IAuthorizer` so a `RemoteServer` can trust the caller's identity.
 ///

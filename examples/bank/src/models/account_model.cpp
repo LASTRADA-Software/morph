@@ -3,7 +3,7 @@
 #include "bank/models/account_model.hpp"
 
 #include <Lightweight/Lightweight.hpp>
-#include <morph/registry.hpp>
+#include <morph/core/registry.hpp>
 
 #include <random>
 #include <string>

@@ -1,7 +1,7 @@
 # Protocol / action-schema versioning & negotiation (planned)
 
 > **Status: planned — not yet implemented.** This spec extends
-> [wire.md](../spec/wire.md) (the `Envelope` and its forward-compatible decode) and
+> [wire.md](../spec/core/wire.md) (the `Envelope` and its forward-compatible decode) and
 > [security.md](../spec/security.md). It adds a negotiated protocol version on
 > connect and a documented action-evolution policy, on top of the passive
 > forward-compatibility the wire layer already gives. See [todo.md](../todo.md).
@@ -13,17 +13,17 @@ The wire has *passive* forward compatibility but no *negotiated* version:
 - **Unknown keys are ignored.** `wire::decode` reads with
   `glz::read<{.error_on_unknown_keys = false}>`, so "a newer peer may add a field
   an older peer does not know (and vice versa) without breaking the parse — this
-  is the wire's forward-compatibility contract" ([wire.md](../spec/wire.md)). A
+  is the wire's forward-compatibility contract" ([wire.md](../spec/core/wire.md)). A
   new `Envelope` field is absorbed silently by an old peer.
 - **But there is no version field and no handshake.** Neither the `Envelope`
-  ([wire.md](../spec/wire.md) API reference lists `kind`, `callId`, `typeId`,
+  ([wire.md](../spec/core/wire.md) API reference lists `kind`, `callId`, `typeId`,
   `contextKey`, `modelId`, `modelType`, `actionType`, `body`, `message`,
   `session` — no version) nor the connect flow carries a protocol version. A
   peer cannot discover *whether* the other side speaks a compatible protocol; it
   can only find out by a request failing in some field-specific way.
 - **No action-evolution policy.** An action struct (the JSON inside the opaque
   `body`) can change shape between a client build and a server build. Because
-  `body` is re-parsed by the action codec ([wire.md](../spec/wire.md)'s "body
+  `body` is re-parsed by the action codec ([wire.md](../spec/core/wire.md)'s "body
   double-parse"), a removed or retyped field is a per-action decode failure with
   no framework-level story for it. There is no written rule that keeps action
   evolution additive-only, and no deprecation window.
@@ -61,7 +61,7 @@ struct Envelope {
 
 - `protocolVersion` defaults to `0`, which decodes for **every existing peer**
   (an old encoder never sets it; `decode` leaves absent keys at their default per
-  [wire.md](../spec/wire.md)). `0` means "legacy / unspecified" and is treated
+  [wire.md](../spec/core/wire.md)). `0` means "legacy / unspecified" and is treated
   exactly as today's unversioned behavior — full backward compatibility.
 - Because unknown keys are ignored, a new client sending `protocolVersion` to an
   old server is harmless (the field is dropped), and an old client omitting it is
@@ -83,7 +83,7 @@ Introduce a `"hello"` control `kind` exchanged once per connection, before any
 - The **client** (`QtWebSocketBackend`, `SimulatedRemoteBackend`) sends `"hello"`
   with `kProtocolVersion` immediately after connect (over the existing synchronous
   control path — `handleInline` for the simulated backend, the nested-loop
-  `sendSync` for Qt, per [backend.md](../spec/backend.md)).
+  `sendSync` for Qt, per [backend.md](../spec/core/backend.md)).
 - The **server** (`RemoteServer`) answers with its supported `{min, max}` range.
   If the client's version is outside the range, it replies `err` and the client
   refuses to proceed (surfaces a clear "protocol version unsupported" rather than
@@ -92,7 +92,7 @@ Introduce a `"hello"` control `kind` exchanged once per connection, before any
   client) behaves exactly as today — `"hello"` is opt-in and its absence is the
   `protocolVersion == 0` legacy path. A legacy server that does not understand
   `"hello"` replies `err "unknown envelope kind: hello"` (the existing
-  unrecognised-kind path, [backend.md](../spec/backend.md)); the client treats
+  unrecognised-kind path, [backend.md](../spec/core/backend.md)); the client treats
   that specific error as "peer is unversioned / legacy" and continues without
   negotiation.
 
@@ -136,7 +136,7 @@ This policy lives in `wire.md` (rewritten on implementation) and is the contract
   exchange. `forms::schemaJson<A>()` already lets a client discover an action's
   current shape; this spec does not add a second mechanism.
 - **Not automatic migration of stored data.** The journal's `LogEntry` payloads
-  ([journal.md](../spec/journal.md)) are historical facts; replaying an old
+  ([journal.md](../spec/journal/journal.md)) are historical facts; replaying an old
   action across a version boundary is the host's concern, bounded by the same
   additive-only policy. No transform layer ships.
 - **Not a break in the forward-compat contract.** Unknown keys stay ignored;
@@ -161,11 +161,11 @@ This policy lives in `wire.md` (rewritten on implementation) and is the contract
 
 ## Cross-references
 
-- [wire.md](../spec/wire.md) — the `Envelope`, the `kind` discriminator, the
+- [wire.md](../spec/core/wire.md) — the `Envelope`, the `kind` discriminator, the
   `error_on_unknown_keys = false` forward-compat contract this builds on, the
   `body` double-parse that makes action evolution a per-action decode concern, and
   `kMaxEnvelopeBytes`.
-- [backend.md](../spec/backend.md) — `RemoteServer` control-message handling
+- [backend.md](../spec/core/backend.md) — `RemoteServer` control-message handling
   (`handleInline`, the unrecognised-`kind` error path the legacy-detection reuses)
   and the client control paths (`QtWebSocketBackend` `sendSync`,
   `SimulatedRemoteBackend`) the `"hello"` exchange rides on.

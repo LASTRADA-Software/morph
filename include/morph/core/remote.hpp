@@ -12,9 +12,9 @@
 #include <utility>
 #include <vector>
 
-#include "action_log.hpp"
+#include "../journal/action_log.hpp"
 #include "backend.hpp"
-#include "session.hpp"
+#include "../session/session.hpp"
 #include "wire.hpp"
 
 namespace morph::backend {

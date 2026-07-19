@@ -2,9 +2,9 @@
 
 > **Status: planned — not yet implemented.** This spec closes the "no
 > connection-scoped cleanup — orphaned models leak" limitation documented in
-> [backend.md](../spec/backend.md): models registered over a connection that
+> [backend.md](../spec/core/backend.md): models registered over a connection that
 > dies stay registered on the server forever. It extends `RemoteServer` and
-> `QtWebSocketServer` ([backend.md](../spec/backend.md)) with an **opt-in
+> `QtWebSocketServer` ([backend.md](../spec/core/backend.md)) with an **opt-in
 > connection scope**, and complements
 > [transport_limits.md](transport_limits.md) and
 > [instance_authorization.md](instance_authorization.md). See
@@ -13,7 +13,7 @@
 ## The gap
 
 `RemoteServer` is connection-blind by design: `handle()` takes a message and a
-reply callback, nothing more ([backend.md](../spec/backend.md),
+reply callback, nothing more ([backend.md](../spec/core/backend.md),
 [transport_limits.md](transport_limits.md)). Models it creates on `register`
 live in `_models` until an explicit `deregister` arrives. Nothing ever arrives
 for a connection that dies:
@@ -24,7 +24,7 @@ for a connection that dies:
   stays live until process exit.
 - **The client cannot reliably clean up either.** `QtWebSocketBackend`'s
   `deregisterModel` is deliberately fire-and-forget (no nested event loop in a
-  destructor — [backend.md](../spec/backend.md) design decisions), and a
+  destructor — [backend.md](../spec/core/backend.md) design decisions), and a
   crashed or power-cut client never sends anything at all. The header itself
   warns: "an undelivered or lost `deregister` leaves the model registered on
   the server indefinitely."
@@ -39,7 +39,7 @@ for a connection that dies:
 The client side already treats model ids as connection-scoped: on disconnect
 `QtWebSocketBackend` cancels its pending calls, and after a reconnect the
 `Bridge` re-registers every live handler through the reconnect handler
-([backend.md](../spec/backend.md)) — fresh registrations, fresh ids. Old ids
+([backend.md](../spec/core/backend.md)) — fresh registrations, fresh ids. Old ids
 are never reused by a correct client. Only the server side pretends they are
 still meaningful.
 
@@ -130,7 +130,7 @@ it merely prevents *new* lookups, exactly like an explicit `deregister`.
   reclaims the connection's instances.
 - **[instance_authorization.md](instance_authorization.md):** opaque id
   generation is orthogonal; the recorded owner is erased with the instance.
-- **`RemoteServer::LogProvider` logs ([journal.md](../spec/journal.md)):**
+- **`RemoteServer::LogProvider` logs ([journal.md](../spec/journal/journal.md)):**
   erasing the holder releases its reference to the attached `IActionLog`; the
   log object itself is shared and host-owned, so recorded history survives —
   consistent with "entries are never removed by the framework".
@@ -142,7 +142,7 @@ it merely prevents *new* lookups, exactly like an explicit `deregister`.
 
 - **No session resumption.** Model ids stay connection-scoped; a reconnecting
   client re-registers and gets fresh ids — that is the *existing* contract
-  (`Bridge` re-registration on reconnect, [backend.md](../spec/backend.md)),
+  (`Bridge` re-registration on reconnect, [backend.md](../spec/core/backend.md)),
   which this spec makes the server honour rather than changes. A host that
   wants ids to survive reconnects must keep using the unscoped path.
 - **No lease/TTL expiry.** Unscoped registrations (embedded hosts,
@@ -177,7 +177,7 @@ it merely prevents *new* lookups, exactly like an explicit `deregister`.
 
 ## Cross-references
 
-- [backend.md](../spec/backend.md) — the documented limitation this closes;
+- [backend.md](../spec/core/backend.md) — the documented limitation this closes;
   `RemoteServer` register/deregister/execute paths; the fire-and-forget
   `deregisterModel` design decision; the reconnect-handler re-registration
   contract the cleanup relies on.

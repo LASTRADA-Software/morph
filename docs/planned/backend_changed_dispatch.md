@@ -1,7 +1,7 @@
 # Compile-time `onBackendChanged` dispatch (planned)
 
 > **Status: planned — not yet implemented.** This spec extends
-> [backend.md](../spec/backend.md) and [bridge.md](../spec/bridge.md). It removes the RTTI
+> [backend.md](../spec/core/backend.md) and [bridge.md](../spec/core/bridge.md). It removes the RTTI
 > `dynamic_cast` sweep in `LocalBackend::notifyBackendChanged` documented as a
 > limitation in `backend.md`. See [todo.md](../todo.md).
 
@@ -140,14 +140,14 @@ interaction is identical.
 
 ## Cross-references
 
-- [backend.md](../spec/backend.md) — `LocalBackend::notifyBackendChanged`, the
+- [backend.md](../spec/core/backend.md) — `LocalBackend::notifyBackendChanged`, the
   `IBackendChangedSink` limitation ("uses RTTI over every model under the
   registry lock") this removes, and register/deregister where `_changeAware` is
   maintained.
-- [bridge.md](../spec/bridge.md) — `switchBackend` → `notifyBackendChanged`, and the
+- [bridge.md](../spec/core/bridge.md) — `switchBackend` → `notifyBackendChanged`, and the
   posted-to-strand `onBackendChanged` contract this preserves.
 - [concurrency_and_lifetimes.md](../spec/concurrency_and_lifetimes.md) — the
   strand-serialised, fires-once, on-the-new-instance guarantees that are
   unchanged by this refactor.
-- [registry.md](../spec/registry.md) — `ModelHolder<M>`, `BackendChangedNotifiable`, the
+- [registry.md](../spec/core/registry.md) — `ModelHolder<M>`, `BackendChangedNotifiable`, the
   `BackendChangedMixin` compile-time detection reused here.

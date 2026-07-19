@@ -5,7 +5,7 @@
 > confidence in the §A hardening milestone ([validation.md](validation.md),
 > [instance_authorization.md](instance_authorization.md),
 > [transport_limits.md](transport_limits.md)) and exercises the untrusted-input
-> boundaries in [wire.md](../spec/wire.md) and [backend.md](../spec/backend.md).
+> boundaries in [wire.md](../spec/core/wire.md) and [backend.md](../spec/core/backend.md).
 > See [todo.md](../todo.md).
 
 ## The gap
@@ -17,13 +17,13 @@ lists real hardening tests — `test_wire_hardening.cpp`, `test_server_limits.cp
 single-shot, in-process, deterministic unit test. Missing:
 
 - **No fuzzing.** `wire::decode` is the untrusted-input boundary
-  ([wire.md](../spec/wire.md)) and the action codec re-parses the opaque `body` a
+  ([wire.md](../spec/core/wire.md)) and the action codec re-parses the opaque `body` a
   second time, yet nothing throws *randomised, malformed, adversarial* input at
   either. `test_server_limits.cpp` checks a *fixed* 5000-deep nesting and a lone
   continuation byte — hand-picked cases, not a coverage-guided search.
 - **No soak test.** `switchBackend`, reconnect backoff, and
-  `ReconnectCoordinator`/`SyncWorker` churn ([offline.md](../spec/offline.md),
-  [backend.md](../spec/backend.md)) are tested for a single transition, not for
+  `ReconnectCoordinator`/`SyncWorker` churn ([offline.md](../spec/offline/offline.md),
+  [backend.md](../spec/core/backend.md)) are tested for a single transition, not for
   thousands of cycles over hours where a slow leak, a missed `cancelPending`, or a
   strand backlog would surface.
 - **No load/throughput benchmark.** There is no measurement of dispatch latency
@@ -73,9 +73,9 @@ Targets:
 - **`wire::decode`** — the outer parse. The invariant under fuzzing: every input
   either decodes to an `Envelope` or throws `std::runtime_error`; it never
   crashes, hangs, or exhibits UB. The `kMaxEnvelopeBytes` cap
-  ([wire.md](../spec/wire.md)) bounds the input the harness need supply.
+  ([wire.md](../spec/core/wire.md)) bounds the input the harness need supply.
 - **The inner `body` re-parse** — feed a decoded `body` through a representative
-  action's `ActionTraits::fromJson`, since [wire.md](../spec/wire.md) warns the
+  action's `ActionTraits::fromJson`, since [wire.md](../spec/core/wire.md) warns the
   inner parse "needs its own limits" and the outer parse never walks `body`. This
   is where the double-parse hazard would detonate; the fuzzer proves it detonates
   *safely* (defined error, no crash).
@@ -95,9 +95,9 @@ cycles the backend and connectivity machinery under continuous execute load:
   `SimulatedRemoteBackend`/`QtWebSocketBackend` while executes are in flight, asserting
   every in-flight `Completion` resolves (via result or `BackendChangedError`) and
   none leak — exercising the stage-all-then-commit atomicity and `cancelPending`
-  ([backend.md](../spec/backend.md), [ARCHITECTURE.md](../ARCHITECTURE.md)).
+  ([backend.md](../spec/core/backend.md), [ARCHITECTURE.md](../ARCHITECTURE.md)).
 - Drive `NetworkMonitor` → `ReconnectCoordinator` → `SyncWorker` through thousands
-  of offline/online flaps ([offline.md](../spec/offline.md)), asserting the
+  of offline/online flaps ([offline.md](../spec/offline/offline.md)), asserting the
   offline queue drains, attempt counts behave, and no unbounded growth occurs.
 - Measured for **resource stability**: RSS, live `ModelId` count, pending-map size,
   and strand queue depth must be flat across the run (a leak or a stuck strand
@@ -125,7 +125,7 @@ Extend the cross-process TLS test ([security.md](../spec/security.md)'s
 `test_qt_websocket.cpp`) with a *hostile* client process that: sends oversized
 frames (past `kMaxEnvelopeBytes` and past a tighter transport cap), floods
 connections/messages (exercising [transport_limits.md](transport_limits.md)),
-sends duplicate-key envelopes ([wire.md](../spec/wire.md)'s smuggling caveat), and
+sends duplicate-key envelopes ([wire.md](../spec/core/wire.md)'s smuggling caveat), and
 opens-then-stalls connections. The server must stay up and serving honest clients
 throughout — the concrete demonstration that the limits and the wire bounds hold
 against a real adversary, not just a unit assertion.
@@ -162,9 +162,9 @@ This spec *is* the testing plan; its own acceptance criteria are:
 
 ## Cross-references
 
-- [wire.md](../spec/wire.md) — `decode`, `kMaxEnvelopeBytes`, the `body`
+- [wire.md](../spec/core/wire.md) — `decode`, `kMaxEnvelopeBytes`, the `body`
   double-parse and duplicate-key caveats the fuzzers target.
-- [backend.md](../spec/backend.md) — `RemoteServer::handle`/`dispatchExecute`, the
+- [backend.md](../spec/core/backend.md) — `RemoteServer::handle`/`dispatchExecute`, the
   `switchBackend`/`cancelPending` lifecycle the soak test churns, and the
   transports the load benchmark drives.
 - [security.md](../spec/security.md) — the existing hardening tests

@@ -2,7 +2,7 @@
 
 #pragma once
 
-/// @file choice.hpp
+/// @file forms/choice.hpp
 /// @brief Fields whose value is picked from a list served by another action.
 ///
 /// A `morph::forms::Choice<T, "ListPayees">` member declares, in the type:
@@ -41,7 +41,7 @@
 #include <string_view>
 #include <type_traits>
 
-#include "detail/fixed_string.hpp"
+#include "../detail/fixed_string.hpp"
 
 namespace morph::forms {
 

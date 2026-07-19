@@ -6,16 +6,16 @@
 // callback executor identity, atomic-once delivery, orphan logging, atomic
 // backend swap under load, monitor reentrancy, and mid-replay cancellation.
 
-#include <morph/backend.hpp>
-#include <morph/bridge.hpp>
-#include <morph/completion.hpp>
-#include <morph/executor.hpp>
-#include <morph/logger.hpp>
-#include <morph/network_monitor.hpp>
-#include <morph/offline_queue.hpp>
-#include <morph/registry.hpp>
-#include <morph/strand.hpp>
-#include <morph/sync_worker.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/strand.hpp>
+#include <morph/offline/sync_worker.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

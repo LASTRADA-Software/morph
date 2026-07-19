@@ -15,7 +15,7 @@
 #include "completion.hpp"
 #include "model.hpp"
 #include "registry.hpp"
-#include "session.hpp"
+#include "../session/session.hpp"
 #include "strand.hpp"
 
 namespace morph::backend {

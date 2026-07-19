@@ -332,7 +332,7 @@ ownerPrincipal)` hook on every `execute` and `deregister`. The hook **defaults
 to allow**, so this registry's type-keyed behaviour is unchanged unless a
 deployer installs an authorizer that overrides it. The type registry maps type
 ids only; instance ownership lives one layer up in `RemoteServer`. See
-[session.md](session.md) and [security.md](security.md).
+[session.md](../session/session.md) and [security.md](../security.md).
 
 ### `ActionExecuteRegistry`
 
@@ -598,14 +598,14 @@ testing obligation, not a compile-time guarantee.
   for any TU using `BRIDGE_REGISTER_ACTION` (`registerActionExecutorOnce` is only
   *defined* there) and the parallel executor path this spec's
   `ActionExecuteRegistry` section summarises.
-- **[journal.md](journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
+- **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the
   durable log, and provides the scoped-install pattern the registries lack.
 - **[backend.md](backend.md)** — backends store `IModelHolder`s in a single map
   and drive `IBackendChangedSink` / `BackendChangedMixin`; the model instances
   created by `ModelRegistryFactory` land here.
-- **[security.md](security.md)** — the `session::current()` principal stamped onto
+- **[security.md](../security.md)** — the `session::current()` principal stamped onto
   every logged entry by `recordIfAttached`, and the trust boundary of the
   string-keyed remote dispatch surface.
 - **Error handling** — the `detail::ParseError` / `std::runtime_error` taxonomy

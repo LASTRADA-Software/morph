@@ -169,12 +169,12 @@ rather than a literal — which is the only contract the ids ever guaranteed.
 - [security.md](../spec/security.md) — the trust model this extends; the shipped
   `authorize`/`authenticate`/`authorizeInstance` seam and the explicit "register
   is unauthorized / ids are guessable" limitations this spec closes.
-- [backend.md](../spec/backend.md) — `RemoteServer` register/execute/deregister handling,
+- [backend.md](../spec/core/backend.md) — `RemoteServer` register/execute/deregister handling,
   `_nextId`, the `LogProvider`/owner recording, and the `make_shared` lifetime
   rule the new hooks slot into.
-- [session.md](../spec/session.md) — `IAuthorizer`, `Context`, `authenticate`; the new
+- [session.md](../spec/session/session.md) — `IAuthorizer`, `Context`, `authenticate`; the new
   `authorizeRegister` is declared alongside them.
-- [wire.md](../spec/wire.md) — the `register` envelope (`typeId`, `contextKey`)
+- [wire.md](../spec/core/wire.md) — the `register` envelope (`typeId`, `contextKey`)
   and the envelope-level `session` the gate reads (wire.md documents `session`
   for `execute`; the register path already reads it for owner recording — see
   [security.md](../spec/security.md)); ids stay `uint64_t` so the envelope is

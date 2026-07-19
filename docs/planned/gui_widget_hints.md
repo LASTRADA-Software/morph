@@ -2,8 +2,8 @@
 
 > **Status: planned — not yet implemented.** This spec extends the GUI program
 > umbrella ([gui_overview.md](gui_overview.md)) and the schema-generation spine
-> ([forms.md](../spec/forms.md)), following the type-derived-metadata pattern of
-> [choice.md](../spec/choice.md). It is a Tier-1 richer-forms feature: control
+> ([forms.md](../spec/forms/forms.md)), following the type-derived-metadata pattern of
+> [choice.md](../spec/forms/choice.md). It is a Tier-1 richer-forms feature: control
 > selection for a single action's fields, additive and opt-in. See
 > [todo.md](../todo.md).
 
@@ -13,7 +13,7 @@ A renderer today picks a control almost entirely from the JSON-Schema `type` and
 morph's existing `x-*` keys: a `Choice` (`x-optionsAction`) becomes a combo box,
 a `Quantity` becomes a numeric input with a unit selector, a `Timestamp`
 (`"format": "date-time"`) becomes a date-time picker, a `bool` a checkbox, a
-`string` a single-line text field ([forms.md](../spec/forms.md), "Renderer
+`string` a single-line text field ([forms.md](../spec/forms/forms.md), "Renderer
 contract"). That covers the typed field palette but leaves real control choices
 unexpressed:
 
@@ -53,7 +53,7 @@ Unannotated plain types keep their current controls unchanged.
 In the spirit of `Choice`/`Quantity` — a thin wrapper whose *wire form is its
 payload* and whose rendering intent lives in the C++ type — the following NEW
 wrappers are proposed. Each serialises through glaze `meta` as its bare payload
-(the `Choice` pattern, [choice.md](../spec/choice.md)) so the wire is unchanged;
+(the `Choice` pattern, [choice.md](../spec/forms/choice.md)) so the wire is unchanged;
 each carries a `noexcept` `hasValue()` where it can be empty so it satisfies
 `EmptyCapableField` and gates `allRequiredEngaged` (verified in `forms.hpp`)
 exactly like `Choice`:
@@ -82,7 +82,7 @@ struct Ranged {
 ```
 
 These follow the same three properties `Choice` established
-([choice.md](../spec/choice.md)): the control intent is a compile-time property
+([choice.md](../spec/forms/choice.md)): the control intent is a compile-time property
 of the type, the wire carries only the value, and the schema bridges the gap via
 a property-level `x-*` key. A renderer needs no new wire handling — only to
 honour the emitted `x-widget`.
@@ -118,10 +118,10 @@ range subfields for a `Ranged`:
 | `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `FieldMeta::widget` override wins; else the field type's `widget()`. **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper nor an override supplies one. |
 | `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound); `x-min` is the *control track* start. A renderer without a slider ignores it. |
 | `x-max` | property node (sibling of `$ref`) | number | Slider upper bound, from `Ranged::max()`. Emitted only for a `Ranged` field. |
-| `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` ([forms.md](../spec/forms.md)); `x-step` is not emitted for `Quantity`. |
+| `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` ([forms.md](../spec/forms/forms.md)); `x-step` is not emitted for `Quantity`. |
 
 All keys are **additive and non-breaking**: they extend the
-[forms.md](../spec/forms.md) contract table with no change to any existing key,
+[forms.md](../spec/forms/forms.md) contract table with no change to any existing key,
 per [gui_overview.md](gui_overview.md)'s versioning stance. Because `x-widget` is
 **advisory**, a renderer that ignores it **falls back to exactly today's
 behaviour** — it selects the control from `type` and the existing keys, so a
@@ -168,7 +168,7 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 - **No option-count-driven auto radio/combo.** Whether a small `Choice` renders
   as radios is an explicit `x-widget` decision, not inferred from a live option
   count — the option count is a runtime property of the options action
-  ([choice.md](../spec/choice.md)), not known at schema-generation time.
+  ([choice.md](../spec/forms/choice.md)), not known at schema-generation time.
 
 ## Testing (planned)
 
@@ -194,11 +194,11 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
 - [gui_overview.md](gui_overview.md) — the derive-from-type-first principle, the
   wrapper-type family (`Quantity`/`Choice`) this extends, and the additive-`x-*`
   versioning stance.
-- [forms.md](../spec/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
+- [forms.md](../spec/forms/forms.md) — `schemaJson<A>()`, `mergeSchemaExtras`,
   `forEachNamedMember`, `EmptyCapableField` / `required` derivation the new
   wrappers plug into, the `x-decimalPlaces` entry-granularity precedent, and the
   renderer-contract table these keys extend.
-- [choice.md](../spec/choice.md) — the type-carries-intent / wire-carries-value
+- [choice.md](../spec/forms/choice.md) — the type-carries-intent / wire-carries-value
   pattern (`glz::meta` reflecting the payload) the new wrappers follow.
 - [gui_field_metadata.md](gui_field_metadata.md) — the `FieldMeta` descriptor
   that also carries the `x-widget` override, keeping one per-field surface.

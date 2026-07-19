@@ -11,8 +11,8 @@
 #include <vector>
 
 #include "action_log.hpp"
-#include "model.hpp"
-#include "registry.hpp"
+#include "../core/model.hpp"
+#include "../core/registry.hpp"
 
 namespace morph::journal {
 

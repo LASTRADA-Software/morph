@@ -17,8 +17,8 @@
 #include <QSslSocket>
 #include <QTimer>
 #include <QUrl>
-#include <morph/bridge.hpp>
-#include <morph/executor.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <atomic>

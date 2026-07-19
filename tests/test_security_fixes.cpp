@@ -7,12 +7,12 @@
 //           unauthenticated identity is never presented to the model.
 // (FIX 2 / FIX 4 live in test_bridge_lifetime.cpp; FIX 3 is Qt-only.)
 
-#include <morph/executor.hpp>
-#include <morph/registry.hpp>
-#include <morph/remote.hpp>
-#include <morph/session.hpp>
-#include <morph/session_auth.hpp>
-#include <morph/wire.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <morph/core/wire.hpp>
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>

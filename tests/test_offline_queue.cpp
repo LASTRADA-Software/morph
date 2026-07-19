@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/offline_queue.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 #include <thread>

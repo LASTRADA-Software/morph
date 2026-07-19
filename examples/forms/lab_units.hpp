@@ -11,7 +11,7 @@
 /// never `kgm3`). The `id` strings become schema/wire vocabulary: append new
 /// enumerators, never renumber or rename existing ones.
 
-#include <morph/quantity.hpp>
+#include <morph/util/quantity.hpp>
 
 #include <array>
 #include <cstdint>

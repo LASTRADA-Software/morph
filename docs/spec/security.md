@@ -6,9 +6,9 @@ session layer (`session.hpp` `Context`/`IAuthorizer`, `session_auth.hpp`
 `RemoteServer` enforcement points in `remote.hpp`). Read this before deploying a
 `RemoteServer` on anything but a trusted local socket.
 
-Related specs: [session.md](session.md) (the `Context`/`IAuthorizer` types),
-[wire.md](wire.md) (the envelope the `session` travels in),
-[backend.md](backend.md) (`RemoteServer`/`LocalBackend` dispatch),
+Related specs: [session.md](session/session.md) (the `Context`/`IAuthorizer` types),
+[wire.md](core/wire.md) (the envelope the `session` travels in),
+[backend.md](core/backend.md) (`RemoteServer`/`LocalBackend` dispatch),
 [error_handling.md](error_handling.md) (how a rejected request surfaces). The
 shipped `morph::qt` WebSocket transport supplies the TLS layer discussed below.
 
@@ -29,19 +29,19 @@ application. Be explicit about the boundary:
   defined outcome rather than undefined behaviour.
 - A wire-layer message-size cap: `wire::decode` rejects any envelope larger than
   `wire::kMaxEnvelopeBytes` (8 MiB) before parsing, bounding a single message's
-  allocation and parse cost (see [wire.md](wire.md)). This is a coarse
+  allocation and parse cost (see [wire.md](core/wire.md)). This is a coarse
   per-message backstop only — not a rate limit, timeout, or inner-`body` bound.
 
 **morph does NOT provide (the application/transport must):**
 - **Wire-layer transport security.** The `wire` envelope carries no encryption
-  and no per-request timeout (see [wire.md](wire.md)). `RemoteServer` itself is
+  and no per-request timeout (see [wire.md](core/wire.md)). `RemoteServer` itself is
   transport-agnostic and sees only decoded envelopes; confidentiality and
   timeouts are the transport's job. The shipped Qt transport *does* offer TLS
   (see below), but a transport that does not is plaintext. Run `RemoteServer`
   behind a transport that provides TLS.
   There **is** now one wire-layer bound: `wire::decode` rejects any envelope
   whose serialized form exceeds `wire::kMaxEnvelopeBytes` (8 MiB) before parsing
-  (see [wire.md](wire.md) — "Parsing guarantees and hardening"). This caps the
+  (see [wire.md](core/wire.md) — "Parsing guarantees and hardening"). This caps the
   peak allocation and parse cost of a single message — including deeply-nested
   JSON smuggled inside the opaque `body` string, which the double-parse would
   otherwise only surface on the inner re-parse. It is a coarse per-message
@@ -54,7 +54,7 @@ application. Be explicit about the boundary:
   Without transport-level TLS a stolen token can be replayed.
 - **Type-level `register` authorization.** The `register` envelope is **not**
   passed through `authorize`, and model ids are guessable sequential integers
-  assigned from a single counter (see [backend.md](backend.md),
+  assigned from a single counter (see [backend.md](core/backend.md),
   `RemoteServer::_nextId`). Any client that can send envelopes can register
   models. **Per-instance ownership on `execute`/`deregister` *is* now
   enforceable** via the optional `IAuthorizer::authorizeInstance` hook (see
@@ -380,7 +380,7 @@ responsibility:
 - **Bound message size and add timeouts in the transport.** The wire layer now
   caps a single message at `wire::kMaxEnvelopeBytes` (8 MiB) but imposes **no**
   per-request timeout and **no** per-connection rate or count limit (see
-  [wire.md](wire.md)); `QtWebSocketServer` adds no cap beyond `QWebSocket`'s
+  [wire.md](core/wire.md)); `QtWebSocketServer` adds no cap beyond `QWebSocket`'s
   default. A hostile client can still exhaust memory with many sub-cap messages
   or leave `Completion`s pending forever, so the transport must add its own
   size/rate bounds and timeouts.
