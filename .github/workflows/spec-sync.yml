@@ -1,0 +1,72 @@
+name: Spec sync
+
+# Enforces that a change to a header sub-domain (include/morph/<sub>/**) is
+# accompanied by a change to the matching design-spec folder (docs/spec/<sub>/**),
+# so the specs cannot silently drift behind the code they describe.
+#
+# The gate is skipped when the PR carries the label "no docs update" — a visible,
+# reviewable opt-out for changes that genuinely need no spec update.
+
+on:
+  pull_request:
+    branches:
+      - master
+    # `labeled`/`unlabeled` so adding or removing the escape-hatch label re-runs
+    # the gate instead of leaving a stale result.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  spec-sync:
+    name: Header ↔ spec sync
+    runs-on: ubuntu-24.04
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no docs update') }}
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enforce header ↔ spec synchronization
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -euo pipefail
+
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          base="$(git merge-base HEAD "origin/$BASE_REF")"
+          echo "Comparing against merge-base $base (origin/$BASE_REF)"
+
+          changed="$(git diff --name-only "$base" HEAD)"
+          echo "── Changed files ──"
+          echo "$changed"
+          echo "───────────────────"
+
+          # Sub-domains that have a mirrored spec folder. include/morph/detail/**
+          # and include/morph/qt/** have no specs and are intentionally exempt.
+          subdomains="core journal offline session forms util"
+
+          missing=""
+          for sub in $subdomains; do
+            if echo "$changed" | grep -qE "^include/morph/$sub/"; then
+              if ! echo "$changed" | grep -qE "^docs/spec/$sub/"; then
+                missing="$missing $sub"
+              fi
+            fi
+          done
+
+          if [ -n "$missing" ]; then
+            echo ""
+            echo "::error::Header changes without a matching spec update in:$missing"
+            for sub in $missing; do
+              echo "  - include/morph/$sub/** changed but docs/spec/$sub/** did not."
+            done
+            echo ""
+            echo "Update the design spec(s) for the affected sub-domain(s), or add the"
+            echo "label 'no docs update' to this PR if no spec change is warranted."
+            exit 1
+          fi
+
+          echo "Spec sync OK: every touched header sub-domain has a matching spec change."
