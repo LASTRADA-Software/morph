@@ -900,6 +900,116 @@ TEST_CASE(
     REQUIRE(gotTimeoutError.load());
 }
 
+// ── Connection-scoped cleanup tests ──────────────────────────────────────────
+
+TEST_CASE("QtWebSocketServer reclaims every model a dropped client registered", "[qt][ws][connection-scope]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    QWebSocket registrant;
+    registrant.open(url);
+    pumpUntil([&] { return registrant.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(registrant.state() == QAbstractSocket::ConnectedState);
+
+    // Register two models over the same connection (N > 1, to prove the whole
+    // scope is reclaimed, not just one instance).
+    auto reg1 = morph::wire::decode(sendRawAndAwaitReply(
+        registrant, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reg1.kind == "ok");
+    auto reg2 = morph::wire::decode(sendRawAndAwaitReply(
+        registrant, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reg2.kind == "ok");
+    REQUIRE(reg1.modelId != reg2.modelId);
+
+    // Simulate a crash/drop: abort the socket rather than a clean close, so no
+    // deregister is ever sent for either model.
+    registrant.abort();
+    pumpUntil([] { return false; }, 100);
+
+    // A second, independent client asks the server whether the old ids are still live.
+    QWebSocket checker;
+    checker.open(url);
+    pumpUntil([&] { return checker.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(checker.state() == QAbstractSocket::ConnectedState);
+
+    for (auto modelId : {reg1.modelId, reg2.modelId}) {
+        morph::wire::Envelope execReq;
+        execReq.kind = "execute";
+        execReq.modelId = modelId;
+        execReq.modelType = "WsEchoModel";
+        execReq.actionType = "WsEchoAction";
+        execReq.body = R"({"value":1})";
+        auto execReply =
+            morph::wire::decode(sendRawAndAwaitReply(checker, QString::fromStdString(morph::wire::encode(execReq))));
+        REQUIRE(execReply.kind == "err");
+        REQUIRE(execReply.message == "model not found");
+    }
+
+    checker.close();
+    pumpUntil([&] { return checker.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("QtWebSocketServer::close() reclaims every client's scope", "[qt][ws][connection-scope]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+
+    QWebSocket clientA;
+    clientA.open(url);
+    pumpUntil([&] { return clientA.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(clientA.state() == QAbstractSocket::ConnectedState);
+    auto regA = morph::wire::decode(sendRawAndAwaitReply(
+        clientA, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regA.kind == "ok");
+
+    QWebSocket clientB;
+    clientB.open(url);
+    pumpUntil([&] { return clientB.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(clientB.state() == QAbstractSocket::ConnectedState);
+    auto regB = morph::wire::decode(sendRawAndAwaitReply(
+        clientB, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regB.kind == "ok");
+
+    // Orderly shutdown must reclaim every live client's models too.
+    wsServer->close();
+    wsServer.reset();
+    pumpUntil([] { return false; }, 100);
+
+    // The RemoteServer outlives the transport (owned separately, per
+    // Lifetime & ownership), so it can still be asked directly.
+    for (auto modelId : {regA.modelId, regB.modelId}) {
+        morph::wire::Envelope execReq;
+        execReq.kind = "execute";
+        execReq.modelId = modelId;
+        execReq.modelType = "WsEchoModel";
+        execReq.actionType = "WsEchoAction";
+        execReq.body = R"({"value":1})";
+
+        std::atomic<bool> replied{false};
+        morph::wire::Envelope execResult;
+        server->handle(morph::wire::encode(execReq), [&](const std::string& raw) {
+            execResult = morph::wire::decode(raw);
+            replied.store(true);
+        });
+        pumpUntil([&] { return replied.load(); }, 50);
+        REQUIRE(replied.load());
+        REQUIRE(execResult.kind == "err");
+        REQUIRE(execResult.message == "model not found");
+    }
+
+    clientA.abort();
+    clientB.abort();
+}
+
 // ── TLS WebSocket tests ──────────────────────────────────────────────────────
 
 TEST_CASE("morph::qt::QtWebSocketBackend TLS: action result delivered via then", "[qt][wss]") {

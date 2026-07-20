@@ -55,6 +55,7 @@ void QtWebSocketServer::close() {
     // during the abort/deleteLater sequence below.
     for (auto& [socket, state] : _clients) {
         socket->disconnect(this);
+        _server.closeConnection(state.cid);
         if (state.handshakeTimer) {
             state.handshakeTimer->stop();
             state.handshakeTimer->deleteLater();
@@ -83,6 +84,7 @@ void QtWebSocketServer::onNewConnection() {
     state.tokens = static_cast<double>(_cfg.messagesPerSecond);  // full bucket: an immediate burst is allowed
     state.lastRefill = std::chrono::steady_clock::now();
     state.lastActivity = state.lastRefill;
+    state.cid = _server.openConnection();
 
     if (_cfg.handshakeTimeout.count() > 0) {
         auto* timer = new QTimer(this);
@@ -148,16 +150,19 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     }
 
     QPointer<QWebSocket> weakSocket{socket};
-    _server.handle(message.toStdString(), [weakSocket](const std::string& reply) {
-        QMetaObject::invokeMethod(
-            QCoreApplication::instance(),
-            [weakSocket, reply]() {
-                if (weakSocket) {
-                    weakSocket->sendTextMessage(QString::fromStdString(reply));
-                }
-            },
-            Qt::QueuedConnection);
-    });
+    _server.handle(
+        message.toStdString(),
+        [weakSocket](const std::string& reply) {
+            QMetaObject::invokeMethod(
+                QCoreApplication::instance(),
+                [weakSocket, reply]() {
+                    if (weakSocket) {
+                        weakSocket->sendTextMessage(QString::fromStdString(reply));
+                    }
+                },
+                Qt::QueuedConnection);
+        },
+        state.cid);
 }
 
 void QtWebSocketServer::onDisconnected() {
@@ -167,6 +172,7 @@ void QtWebSocketServer::onDisconnected() {
     }
     auto iter = _clients.find(socket);
     if (iter != _clients.end()) {
+        _server.closeConnection(iter->second.cid);
         if (iter->second.handshakeTimer) {
             iter->second.handshakeTimer->stop();
             iter->second.handshakeTimer->deleteLater();

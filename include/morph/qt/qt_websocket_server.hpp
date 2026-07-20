@@ -167,6 +167,11 @@ private:
         /// @brief One-shot timer enforcing `handshakeTimeout`; `nullptr` once cancelled by the
         ///        first frame, or if `handshakeTimeout == 0`.
         QTimer* handshakeTimer = nullptr;
+
+        /// @brief Connection scope `RemoteServer::openConnection()` assigned this
+        ///        client at accept time, so its disconnect can reclaim every model
+        ///        it registered (see `RemoteServer::closeConnection`).
+        ::morph::backend::ConnectionId cid = 0;
     };
 
     /// @brief Refills @p state's token bucket for elapsed time, then consumes one
