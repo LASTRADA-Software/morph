@@ -4,25 +4,24 @@
 // file:line range it exercises so future readers understand why an unusual
 // edge case lives here. Companion to test_coverage_gaps.cpp / test_coverage_extra.cpp.
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/completion.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/logger.hpp>
-#include <morph/offline/offline_queue.hpp>
-#include <morph/offline/reconnect_coordinator.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/session/session.hpp>
-#include <morph/offline/sync_worker.hpp>
-#include <morph/core/wire.hpp>
-
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/offline/offline_queue.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/offline/sync_worker.hpp>
+#include <morph/session/session.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -69,9 +68,9 @@ struct ControllableBackend : ::morph::backend::detail::IBackend {
         return ::morph::exec::detail::ModelId{nextId.fetch_add(1)};
     }
     void deregisterModel(::morph::exec::detail::ModelId /*mid*/) override {}
-    ::morph::async::Completion<std::shared_ptr<void>> execute(
-        ::morph::exec::detail::ModelId /*mid*/, ::morph::backend::detail::ActionCall /*call*/,
-        ::morph::exec::IExecutor* /*cbExec*/) override {
+    ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId /*mid*/,
+                                                              ::morph::backend::detail::ActionCall /*call*/,
+                                                              ::morph::exec::IExecutor* /*cbExec*/) override {
         return {};
     }
     void notifyBackendChanged() override {}
@@ -127,8 +126,7 @@ TEST_CASE("morph::bridge::Bridge: reconnect handler re-registers live bindings a
 
 // ── bridge.hpp:293 — reconnect handler ignores a stale backend ───────────────
 
-TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is a no-op",
-          "[coverage][bridge]") {
+TEST_CASE("morph::bridge::Bridge: reconnect handler from a superseded backend is a no-op", "[coverage][bridge]") {
     // Grab the handler installed on backend A, then switch to backend B. The
     // switch releases A, so the handler's weak_ptr can no longer be locked:
     // `!pinned` is true → early return (293 true arm). Safe to invoke because the
@@ -165,9 +163,7 @@ TEST_CASE("morph::bridge::Bridge: constructed with a null backend and destroyed"
     // installReconnectHandler sees a null backend and returns early (283-285);
     // the destructor's `if (auto active = loadBackend())` takes its null/false
     // arm (92) because the backend is still null at destruction.
-    REQUIRE_NOTHROW([] {
-        ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}};
-    }());
+    REQUIRE_NOTHROW([] { ::morph::bridge::Bridge bridge{std::unique_ptr<::morph::backend::detail::IBackend>{}}; }());
 }
 
 // ── bridge.hpp:184,190 — switchBackend from a null backend ───────────────────
@@ -258,8 +254,8 @@ TEST_CASE("morph::backend::RemoteServer: execute is rejected when the authorizer
 TEST_CASE("morph::backend::RemoteServer: null authorizer falls back to allow-all", "[coverage][remote]") {
     // The authorizer-taking ctor's `if (!_authorizer)` fallback (remote.hpp:67-69).
     ::morph::exec::ThreadPoolExecutor pool{2};
-    auto server = std::make_shared<::morph::backend::RemoteServer>(
-        pool, std::shared_ptr<::morph::session::IAuthorizer>{});
+    auto server =
+        std::make_shared<::morph::backend::RemoteServer>(pool, std::shared_ptr<::morph::session::IAuthorizer>{});
 
     // A register still works because the fallback allow-all authorizer is in place.
     ::morph::testing::WaitReply reply;
@@ -504,7 +500,7 @@ TEST_CASE("morph::offline::ReconnectCoordinator: onOnline reconnects and shouldC
     }
 }
 
-// ── sync_worker.hpp:99-105 — dead-letter after kMaxAttempts (=5) ─────────────
+// ── sync_worker.hpp:132-152 — dead-letter after kMaxAttempts (=5), no-sink branch ──
 
 TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAttempts", "[coverage][sync]") {
     LogGuard guard;  // silence the "dropping payload" error log
@@ -515,7 +511,8 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     ::morph::offline::SyncWorker worker{queue, [](const std::string&) { return false; }};
 
     // kMaxAttempts is 5. Attempts 1-4 keep the item (failed); the 5th trips the
-    // `attempts >= kMaxAttempts` branch (99 true arm) and dead-letters it.
+    // `counter >= kMaxAttempts` branch (132 true arm, no DeadLetterSink set) and
+    // dead-letters it via the default log-and-drop path.
     ::morph::offline::SyncResult result;
     for (int i = 0; i < 5; ++i) {
         result = worker.run();
