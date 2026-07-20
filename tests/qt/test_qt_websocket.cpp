@@ -663,6 +663,95 @@ TEST_CASE("morph::qt::QtWebSocketServer: default config behaves exactly as befor
     REQUIRE(result.load() == 5);
 }
 
+TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on one connection", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.messagesPerSecond = 5;  // bucket capacity 5, refills at 5/s
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    // Register once (consumes 1 token) so subsequent frames target a valid modelId.
+    auto regReply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regReply.kind == "ok");
+
+    // Fire 20 execute frames back-to-back. The bucket started at capacity 5 and
+    // lost 1 token to the register above, so at most ~4 of these should be
+    // admitted before the bucket empties; the rest are dropped at the transport,
+    // never reaching RemoteServer, so no reply arrives for them.
+    std::atomic<int> replies{0};
+    auto conn =
+        QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString&) { replies.fetch_add(1); });
+    for (int idx = 0; idx < 20; ++idx) {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = static_cast<uint64_t>(idx + 1);
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = R"({"value":1})";
+        sock.sendTextMessage(QString::fromStdString(morph::wire::encode(req)));
+    }
+    // Give the admitted replies a moment to arrive, then a further moment to
+    // confirm no additional (wrongly-admitted) replies trickle in.
+    pumpUntil([&] { return replies.load() >= 1; }, 100);
+    pumpUntil([] { return false; }, 30);
+    QObject::disconnect(conn);
+
+    REQUIRE(replies.load() >= 1);
+    REQUIRE(replies.load() < 20);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond == 0 never drops frames (regression)", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};  // default cfg: messagesPerSecond == 0
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto regReply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regReply.kind == "ok");
+
+    std::atomic<int> replies{0};
+    auto conn =
+        QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString&) { replies.fetch_add(1); });
+    constexpr int total = 20;
+    for (int idx = 0; idx < total; ++idx) {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = static_cast<uint64_t>(idx + 1);
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = R"({"value":1})";
+        sock.sendTextMessage(QString::fromStdString(morph::wire::encode(req)));
+    }
+    pumpUntil([&] { return replies.load() >= total; }, 200);
+    QObject::disconnect(conn);
+    REQUIRE(replies.load() == total);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
 // ── TLS WebSocket tests ──────────────────────────────────────────────────────
 
 TEST_CASE("morph::qt::QtWebSocketBackend TLS: action result delivered via then", "[qt][wss]") {

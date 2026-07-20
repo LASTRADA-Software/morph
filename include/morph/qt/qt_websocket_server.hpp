@@ -9,7 +9,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <optional>
-#include <vector>
+#include <unordered_map>
 
 namespace morph::qt {
 
@@ -135,11 +135,30 @@ public:
     Q_SLOT void onDisconnected();
 
 private:
+    /// @brief Per-connection state tracked between accept and disconnect.
+    struct ClientState {
+        /// @brief The connection this state belongs to (for symmetry with the map key; unused for lookup).
+        QWebSocket* socket = nullptr;
+
+        /// @brief Current token-bucket balance for `messagesPerSecond`.
+        double tokens = 0.0;
+
+        /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).
+        std::chrono::steady_clock::time_point lastRefill{};
+    };
+
+    /// @brief Refills @p state's token bucket for elapsed time, then consumes one
+    ///        token if available.
+    /// @param state Per-connection state to update.
+    /// @return `true` if a token was available (the frame is admitted), `false` if
+    ///         the bucket was empty (the frame must be dropped).
+    bool consumeToken(ClientState& state);
+
     ::morph::backend::RemoteServer& _server;
     quint16 _requestedPort;
     QtWebSocketServerConfig _cfg;
     QWebSocketServer _wsServer;
-    std::vector<QWebSocket*> _clients;
+    std::unordered_map<QWebSocket*, ClientState> _clients;
 };
 
 }  // namespace morph::qt

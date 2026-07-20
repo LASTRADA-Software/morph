@@ -35,7 +35,7 @@ void QtWebSocketServer::close() {
     _wsServer.close();
     // Disconnect the onDisconnected slot first to prevent re-entrant modification of _clients
     // during the abort/deleteLater sequence below.
-    for (QWebSocket* socket : _clients) {
+    for (auto& [socket, state] : _clients) {
         socket->disconnect(this);
         socket->abort();
         socket->deleteLater();
@@ -49,15 +49,34 @@ void QtWebSocketServer::onNewConnection() {
         return;
     }
     if (_cfg.maxConnections != 0 && _clients.size() >= _cfg.maxConnections) {
-        // Over the connection cap: refuse before wiring any signal, so this
-        // socket is never tracked and never reaches RemoteServer.
         socket->close();
         socket->deleteLater();
         return;
     }
     connect(socket, &QWebSocket::textMessageReceived, this, &QtWebSocketServer::onTextMessage);
     connect(socket, &QWebSocket::disconnected, this, &QtWebSocketServer::onDisconnected);
-    _clients.push_back(socket);
+
+    ClientState state;
+    state.socket = socket;
+    state.tokens = static_cast<double>(_cfg.messagesPerSecond);  // full bucket: an immediate burst is allowed
+    state.lastRefill = std::chrono::steady_clock::now();
+    _clients.emplace(socket, state);
+}
+
+bool QtWebSocketServer::consumeToken(ClientState& state) {
+    if (_cfg.messagesPerSecond == 0) {
+        return true;  // unbounded (today's behavior)
+    }
+    auto const now = std::chrono::steady_clock::now();
+    double const elapsedSeconds = std::chrono::duration<double>(now - state.lastRefill).count();
+    state.lastRefill = now;
+    double const capacity = static_cast<double>(_cfg.messagesPerSecond);
+    state.tokens = std::min(capacity, state.tokens + elapsedSeconds * capacity);
+    if (state.tokens < 1.0) {
+        return false;
+    }
+    state.tokens -= 1.0;
+    return true;
 }
 
 void QtWebSocketServer::onTextMessage(const QString& message) {
@@ -65,10 +84,24 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
     if (!socket) {
         return;
     }
+    auto iter = _clients.find(socket);
+    if (iter == _clients.end()) {
+        return;  // disconnected/untracked socket; drop
+    }
+    ClientState& state = iter->second;
 
     if (static_cast<std::size_t>(message.toUtf8().size()) > _cfg.maxMessageBytes) {
         socket->sendTextMessage(
             QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes"))));
+        return;
+    }
+
+    if (!consumeToken(state)) {
+        // Over the per-connection rate limit: drop the frame silently rather
+        // than reply or close the connection (see docs/spec/core/backend.md,
+        // QtWebSocketServerConfig::messagesPerSecond). A pending client
+        // Completion for a dropped `execute` will not resolve on its own; pair
+        // messagesPerSecond with LimitPolicy::executeTimeout for a bounded wait.
         return;
     }
 
@@ -90,7 +123,7 @@ void QtWebSocketServer::onDisconnected() {
     if (!socket) {
         return;
     }
-    auto iter = std::find(_clients.begin(), _clients.end(), socket);
+    auto iter = _clients.find(socket);
     if (iter != _clients.end()) {
         _clients.erase(iter);
         socket->deleteLater();
