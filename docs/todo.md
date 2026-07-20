@@ -30,13 +30,12 @@ Legend: **[spec]** = full design spec exists (implement against it, then flip it
 idle/handshake timeouts) are implemented, all opt-in/default-off. See
 `spec/security.md`'s hardening checklist for the deployment recommendation.
 
-### A4 — TLS + peer verification as the enforced default · P0 · [spec: `planned/tls_peer_verification.md`]
-The shipped Qt client documents `QSslSocket::VerifyNone` for self-signed certs,
-which encrypts but does not authenticate the server (MITM-vulnerable). Bearer
-tokens are not bound to a connection, so without real TLS a stolen token replays.
-*Work:* make peer verification the documented/default production path (CA or
-pinned cert), add an example, and a startup guard/warning when a server is
-exposed beyond loopback without TLS. *Touches:* `qt/qt_websocket_*`, `security.md`.
+### A4 — TLS + peer verification as the enforced default · P0 · shipped — folded into [`spec/security.md`](spec/security.md#transport-security-the-qt-websocket-transport) and [`spec/core/backend.md`](spec/core/backend.md#qtwebsocketserver--server-side-websocket-transport)
+`qt_tls.hpp` ships `tlsVerifyingConfig()`/`tlsPinnedConfig()`/`tlsInsecureNoVerify()`
+as the documented client-side path, `examples/qt_tls_client/` demonstrates pinned-cert
+acceptance and MITM rejection end to end, and `QtWebSocketServerConfig::bindAddress`/
+`allowPlaintextExposure` make `QtWebSocketServer::listen()` refuse a silent
+non-loopback plaintext bind unless explicitly overridden.
 
 ### A5 — Inject a vetted HMAC for production · P1 · [spec: `planned/vetted_hmac.md`]
 The reference `hmacSha256` is correct but not side-channel-hardened beyond a

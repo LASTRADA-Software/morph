@@ -375,10 +375,13 @@ server assigns fresh ones on the new connection (cross-ref bridge.md).
 connects or the timeout elapses; returns the current `_connected` flag. Intended
 to be called once after construction on the Qt thread.
 
-**TLS.** Pass a `QSslConfiguration` to enable `wss://`. For self-signed
-certificates, set `QSslSocket::VerifyNone` on the configuration before passing
-it in. A plain `ws://` client against a `wss://` server never connects (and vice
-versa).
+**TLS.** Pass a `QSslConfiguration` to enable `wss://`. Build it with
+`tlsVerifyingConfig()` (CA-verified, the recommended production default) or
+`tlsPinnedConfig(cert)` (pinned-certificate, for self-signed deployments) —
+both in `qt_tls.hpp`. `tlsInsecureNoVerify()` (`QSslSocket::VerifyNone`)
+disables peer verification and is for local development and tests only (see
+[security.md](../security.md), "Transport security"). A plain `ws://` client
+against a `wss://` server never connects (and vice versa).
 
 **Destruction.** The destructor sets `_shuttingDown`, stops the reconnect timer,
 disconnects all `QWebSocket` signals (so no slot touches members mid-teardown),
@@ -394,12 +397,17 @@ real listening socket. It does not own the `RemoteServer` — it holds
 `RemoteServer& _server` by reference, so the server's owning `shared_ptr` must
 outlive the transport (see Lifetime & ownership).
 
-**Flow.** `listen()` binds to the requested TCP port on `QHostAddress::LocalHost`
-and starts accepting; `port()` returns the bound port (useful when constructed
-with port `0` to let the OS assign a free one); `close()` (and the destructor)
-stops accepting and aborts/`deleteLater`s every client socket. Each accepted
-`QWebSocket` is tracked in `_clients`; on its `disconnected` signal it is removed
-from `_clients` and `deleteLater`d.
+**Flow.** `listen()` binds to the requested TCP port on `cfg.bindAddress`
+(`QtWebSocketServerConfig`, default `QHostAddress::LocalHost` — today's
+behavior, unchanged) and starts accepting — unless `cfg.bindAddress` is
+non-loopback, no TLS configuration was passed to the constructor, and
+`cfg.allowPlaintextExposure` is `false`, in which case `listen()` refuses: it
+returns `false` without binding and logs at `morph::log::LogLevel::error` (see
+[security.md](../security.md), "Transport security"). `port()` returns the
+bound port (useful when constructed with port `0` to let the OS assign a free
+one); `close()` (and the destructor) stops accepting and aborts/`deleteLater`s
+every client socket. Each accepted `QWebSocket` is tracked in `_clients`; on its
+`disconnected` signal it is removed from `_clients` and `deleteLater`d.
 
 **Message handling.** For every text frame from a client, `onTextMessage` calls
 `RemoteServer::handle(msg, reply)` (asynchronous — dispatched to the server's
@@ -431,10 +439,8 @@ reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
 | `messagesPerSecond` | `0` (unbounded) | A per-connection token bucket (capacity = `messagesPerSecond`, refilled continuously). A frame that finds an empty bucket is dropped silently — not replied to, not queued. |
 | `handshakeTimeout` | `0` (disabled) | A one-shot timer per connection; if no frame arrives before it fires, the socket is closed. Cancelled on the first frame. Because `QWebSocketServer::newConnection()` only fires after the WS (and TLS, in `SecureMode`) opening handshake completes, this in practice bounds time-to-first-frame after that point, not the handshake itself. |
 | `idleTimeout` | `0` (disabled) | A shared ~1-second housekeeping sweep closes any connection whose last frame is older than `idleTimeout`; the actual close can lag the configured value by up to the sweep interval. |
-
-`QtWebSocketServerConfig` is also where the independent TLS/peer-verification
-hardening work (see the "planned" note left in the header at implementation
-time) adds `bindAddress`/`allowPlaintextExposure` — both efforts share one struct.
+| `bindAddress` | `QHostAddress::LocalHost` | The address `listen()` binds to (see "Flow" above). |
+| `allowPlaintextExposure` | `false` | Deliberate opt-out of the exposure guard: set `true` only to knowingly serve plaintext on a non-loopback `bindAddress` (see "Flow" above). |
 
 ## Lifetime & ownership
 
@@ -622,12 +628,30 @@ onto the Qt thread before `sendTextMessage`.
 | `cancelPending(exc)` | Drains `_pending` under `_pendingMtx`, delivers `exc` to each state. |
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
 
+### `QtWebSocketServerConfig` (namespace `morph::qt`)
+
+| Member | Type | Default |
+|---|---|---|
+| `maxConnections` | `std::size_t` | `0` (unbounded) |
+| `maxMessageBytes` | `std::size_t` | `wire::kMaxEnvelopeBytes` |
+| `messagesPerSecond` | `std::size_t` | `0` (unbounded) |
+| `handshakeTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
+| `idleTimeout` | `std::chrono::milliseconds` | `0` (disabled) |
+| `bindAddress` | `QHostAddress` | `QHostAddress::LocalHost` |
+| `allowPlaintextExposure` | `bool` | `false` |
+
+`listen()` refuses (returns `false`, logs at `morph::log::LogLevel::error`) when
+`bindAddress` is not loopback, no TLS configuration was passed to the
+constructor, and `allowPlaintextExposure` is `false`. Loopback binds and any
+bind with a TLS configuration are unaffected — this is a new, additive guard,
+not a behavior change to the existing loopback-only default.
+
 ### `QtWebSocketServer` (namespace `morph::qt`)
 
 | Method | Notes |
 |---|---|
-| `QtWebSocketServer(server, port = 0, tls = nullopt, cfg = Config{}, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. `cfg` bounds per-connection resources (see above). Does not start listening. |
-| `listen()` | Binds to `LocalHost:port` and starts accepting; returns success. |
+| `QtWebSocketServer(server, port = 0, tls = nullopt, cfg = QtWebSocketServerConfig{}, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. `cfg` bounds per-connection resources (see above). Does not start listening. |
+| `listen()` | Binds to `cfg.bindAddress:port` and starts accepting; returns success. Refuses (returns `false`, logs at error level) a non-loopback `cfg.bindAddress` with no `tls` and `cfg.allowPlaintextExposure == false`. |
 | `port()` | Bound port (OS-assigned when constructed with `0`). |
 | `close()` | Stops accepting; aborts and `deleteLater`s all client sockets. Also run by the destructor. |
 

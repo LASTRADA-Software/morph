@@ -447,16 +447,26 @@ matter in practice:
   Absent a config, both run plaintext (`ws://`). TLS here provides the transport
   confidentiality and peer authentication the wire layer does not — this is the
   intended way to protect bearer tokens against capture and replay.
-- **The server binds to loopback only.** `QtWebSocketServer::listen()` binds
-  `QHostAddress::LocalHost`; the shipped server is not reachable off-host. Exposing
-  it beyond localhost requires changing the bind address *and* adding the
-  authorization the base `RemoteServer` does not enforce (control messages, model
-  ids — see the threat model).
-- **Client peer verification is the deployer's choice.** For self-signed certs
-  the documented pattern sets `QSslSocket::VerifyNone` on the client config, which
-  disables server-identity verification (encrypts but does not authenticate the
-  server, so it is MITM-vulnerable). Production clients must verify the server
-  certificate against a trusted CA or a pinned certificate.
+- **The server binds to loopback by default, and refuses silent plaintext
+  exposure.** `QtWebSocketServerConfig::bindAddress` defaults to
+  `QHostAddress::LocalHost` (unchanged from before). Exposing the server beyond
+  localhost means changing `bindAddress` — and `listen()` now guards that
+  change: binding a non-loopback address with no TLS configuration and
+  `allowPlaintextExposure` left at its default `false` makes `listen()` return
+  `false` and log at `morph::log::LogLevel::error` instead of silently starting
+  a plaintext, off-host-reachable server. Passing a TLS configuration, or
+  explicitly setting `allowPlaintextExposure = true`, allows the bind. This is
+  in addition to the authorization the base `RemoteServer` does not enforce
+  (control messages, model ids — see the threat model).
+- **Client peer verification is the default-safe path.** `qt_tls.hpp` ships three
+  factory helpers: `tlsVerifyingConfig()` (verify against the system/CA trust
+  store — the recommended production default), `tlsPinnedConfig(cert)` (verify
+  against one pinned certificate — the correct choice for a self-signed
+  deployment), and `tlsInsecureNoVerify()` (`QSslSocket::VerifyNone` — encrypts
+  but does not authenticate the server, so it is MITM-vulnerable; local
+  development and tests only, named so it can be grepped for in a security
+  review). Pass the result of one of these as `QtWebSocketBackend`'s `tls`
+  argument. See the worked example in `examples/qt_tls_client/`.
 - **Transport-level resource limits are available, opt-in.** `QtWebSocketServerConfig`
   bounds connection count (`maxConnections`), per-frame size (`maxMessageBytes`,
   defaulting to the wire-layer `kMaxEnvelopeBytes` cap), per-connection message rate
@@ -470,11 +480,14 @@ matter in practice:
 Even with `SigningAuthorizer` installed, the following remain the deployer's
 responsibility:
 
-- **Use TLS and verify the peer.** Bearer tokens and payloads travel in
-  plaintext otherwise, and a captured token can be replayed until it expires.
-  There is no envelope-level confidentiality or replay protection. The Qt
-  transport supports `wss://` (above); enable it and make the client actually
-  verify the server certificate (not `VerifyNone`).
+- **Use TLS and verify the peer — now the documented default.** Bearer tokens
+  and payloads travel in plaintext otherwise, and a captured token can be
+  replayed until it expires. There is no envelope-level confidentiality or
+  replay protection. The Qt transport supports `wss://` (above); build the
+  client's configuration with `tlsVerifyingConfig()` or `tlsPinnedConfig()`
+  (`qt_tls.hpp`) rather than `tlsInsecureNoVerify()`, and rely on
+  `QtWebSocketServer::listen()`'s exposure guard to catch an accidental
+  plaintext off-host bind.
 - **Keep expiry short and rotate the secret.** A leaked secret forges any
   identity; a leaked token is valid until `expiresAtMs`.
 - **Bound message size, rate, and add timeouts — now available, still opt-in.**
@@ -531,11 +544,15 @@ produces zero collisions, and a returned id still round-trips through
 `execute`/`deregister` (the only contract ids ever guaranteed — no test
 asserts a literal id value).
 
-The **test TLS material** in `tests/certs/` (`server.crt`/`server.key`, used
-only by `tests/qt/test_qt_websocket.cpp`) is a throwaway self-signed pair with
-the deliberately loud CN `MORPH-TEST-DO-NOT-USE`. Its private key is committed
-in plaintext and must be assumed public — it grants no trust anywhere and must
-**never** be used in production or copied elsewhere. See `tests/certs/README.md`.
+The **test TLS material** in `tests/certs/` (`server.crt`/`server.key` and
+`mitm.crt`/`mitm.key`, used only by `tests/qt/test_qt_websocket.cpp`) is a pair
+of throwaway self-signed pairs with the deliberately loud CNs
+`MORPH-TEST-DO-NOT-USE` and `MORPH-TEST-MITM-DO-NOT-USE`. Both carry a
+`subjectAltName=IP:127.0.0.1` extension so Qt's hostname check passes when
+connecting to the loopback address the tests use. Their private keys are
+committed in plaintext and must be assumed public — they grant no trust
+anywhere and must **never** be used in production or copied elsewhere. See
+`tests/certs/README.md`.
 
 `tests/test_server_limits.cpp` exercises the untrusted-input hardening claim: a
 1 MiB action payload round-trips intact, a 5000-deep nested-JSON envelope and a
@@ -554,10 +571,15 @@ offers no option to error on duplicates. A per-request timeout and a rate/
 message-count cap are now available via `LimitPolicy` and
 `QtWebSocketServerConfig` (both opt-in — see above).
 
-`tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key`)
-covers the TLS transport: `wss://` request/reply, TLS error propagation,
-refusal of a plaintext client against a `wss://` server, and a cross-process TLS
-handshake.
+`tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key` and
+`tests/certs/mitm.crt`/`mitm.key`) covers the TLS transport: `wss://`
+request/reply, TLS error propagation, refusal of a plaintext client against a
+`wss://` server, a cross-process TLS handshake, `tlsPinnedConfig` accepting the
+real server and rejecting one presenting a different certificate, the exposure
+guard on `QtWebSocketServer::listen()` (non-loopback + no TLS refuses;
+`allowPlaintextExposure` or a TLS configuration allows it; loopback + no TLS is
+unaffected), and `tlsInsecureNoVerify` connecting to both — pinning the
+contrast the "Transport security" section above describes.
 
 `tests/test_limit_policy.cpp` covers `LimitPolicy` (`maxLiveModels`,
 `maxInFlightExecutes`, `executeTimeout` including the once-flag discard of a late
