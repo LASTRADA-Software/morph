@@ -126,6 +126,7 @@ server.
 | `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
+| `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. See [wire.md](wire.md#protocol-version-negotiation). |
 
 **Execute flow (`dispatchExecute`).** In order:
 
@@ -228,6 +229,19 @@ using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
     std::string_view modelType, std::string_view contextKey)>;
 ```
 
+### Protocol-version negotiation
+
+`RemoteServer::setSupportedVersionRange(min, max)` sets the inclusive
+`{min, max}` protocol-version range this server advertises in reply to
+`"hello"` (thread-safe, same pattern as `setLogProvider`/`setLimitPolicy`).
+Defaults to `{kProtocolVersion, kProtocolVersion}` — this build's single
+supported version — so an unconfigured server's behavior only changes for
+clients that opt into sending `"hello"` in the first place. Throws
+`std::invalid_argument` if `min > max`. See [wire.md](wire.md#protocol-version-negotiation)
+for the full negotiation story, including how `SimulatedRemoteBackend` and
+`QtWebSocketBackend` each expose an opt-in `negotiateProtocolVersion()` built
+on their existing synchronous control path.
+
 ### `LimitPolicy` — opt-in resource limits
 
 `RemoteServer::setLimitPolicy(LimitPolicy)` installs an optional, connection-agnostic
@@ -305,6 +319,9 @@ in-process simulation of remote execution.
   control message) — the `factory` argument is ignored because model construction
   is delegated to the server's `ModelRegistryFactory`.
 - `deregisterModel` likewise uses `handleInline`.
+- `negotiateProtocolVersion` sends a `"hello"` via `handleInline` and classifies
+  the reply with `wire::interpretHelloReply` — opt-in, not called automatically
+  (see [wire.md](wire.md#protocol-version-negotiation)).
 - `execute` serialises the action via `call.serializeAction()`, builds an
   `execute` envelope, calls `handle()` (asynchronous), and returns a `Completion`
   that resolves when the server's reply is deserialised via
@@ -419,6 +436,15 @@ server assigns fresh ones on the new connection (cross-ref bridge.md).
 **`waitForConnected(timeoutMs = 5000)`** pumps the Qt event loop until the socket
 connects or the timeout elapses; returns the current `_connected` flag. Intended
 to be called once after construction on the Qt thread.
+
+**`negotiateProtocolVersion()`** sends a `"hello"` synchronously — the same
+nested-`QEventLoop` path `sendSync` uses for `registerModel` — and classifies
+the reply via `wire::interpretHelloReply`. Opt-in: intended to be called once,
+after `waitForConnected()` returns `true` and before any
+`registerModel`/`execute` call, but nothing enforces that ordering and nothing
+calls it automatically. Throws `std::runtime_error` if the server explicitly
+rejects the version or if `sendSync` fails (not connected, or a disconnect
+mid-call). See [wire.md](wire.md#protocol-version-negotiation).
 
 **TLS.** Pass a `QSslConfiguration` to enable `wss://`. Build it with
 `tlsVerifyingConfig()` (CA-verified, the recommended production default) or
@@ -662,6 +688,7 @@ onto the Qt thread before `sendTextMessage`.
 | `closeConnection(cid)` | Erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. Thread-safe. |
 | `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
 | `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
+| `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
 
 ### `SimulatedRemoteBackend`
 
@@ -671,6 +698,7 @@ onto the Qt thread before `sendTextMessage`.
 | `registerModel(typeId, factory)` | Delegates to `registerModelWithContext(typeId, {}, {})`. |
 | `registerModelWithContext(typeId, factory, contextKey)` | Sends `register` envelope via `handleInline`. `factory` ignored. |
 | `deregisterModel(mid)` | Sends `deregister` envelope via `handleInline`. |
+| `negotiateProtocolVersion()` | Opt-in: sends `hello` via `handleInline`, classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection. |
 | `execute(mid, call, cbExec)` | Serialises, sends `execute` via `handle`, returns `Completion` that resolves on reply. |
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
@@ -690,6 +718,7 @@ onto the Qt thread before `sendTextMessage`.
 |---|---|
 | `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. |
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
+| `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
 | `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |
 | `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. |
 | `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. |

@@ -45,13 +45,6 @@ default argument on `TokenIssuer`/`TokenVerifier`/`SigningAuthorizer` so a
 build relying on it fails to compile. See `docs/spec/security.md`,
 "MAC-primitive recommended wiring".
 
-### A6 — Protocol / action-schema versioning · P1 · [spec: `planned/protocol_versioning.md`]
-Unknown envelope/token keys are now ignored (forward-compatible), but there is no
-negotiated protocol version and no migration story for evolving action structs
-across client/server versions. *Work:* a version field + negotiation on connect,
-and a documented action-evolution policy (additive-only, deprecation window).
-*Touches:* `wire.md`, `security.md`, new spec.
-
 ### A7 — Connection-scoped model cleanup · P0 · shipped — folded into [`spec/core/backend.md`](spec/core/backend.md#connection-scopes)
 `RemoteServer` has an opt-in `ConnectionId` scope (`openConnection`/
 `closeConnection` + a scoped `handle(msg, reply, cid)` overload), and
@@ -89,7 +82,8 @@ Persisted NDJSON lines carry no format version, `journal::fromJson` is strict
 where the wire is lenient (any new key is a reader flag-day), and the log file
 grows without bound. Land reader leniency first, then a `v` line-format stamp;
 document the data-at-rest contract (additive-only for as long as journals are
-retained — stronger than A6's deployment window); give `FileActionLog` a
+retained — stronger than the protocol-version deprecation window described in
+[`spec/core/wire.md`](spec/core/wire.md#action-evolution-policy)); give `FileActionLog` a
 `rotate()` seam for host-driven retention. *Touches:* `action_log.hpp`,
 `file_action_log.hpp`.
 

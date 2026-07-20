@@ -9,6 +9,9 @@ carries all request and reply variants, discriminated by a `kind` string field.
 - [Envelope](#envelope)
 - [Factory functions](#factory-functions)
 - [Encode and decode](#encode-and-decode)
+- [Parsing guarantees and hardening](#parsing-guarantees-and-hardening)
+- [Protocol version negotiation](#protocol-version-negotiation)
+- [Action-evolution policy](#action-evolution-policy)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 
@@ -25,7 +28,8 @@ their `kind` needs and leave the rest as default-constructed values.
 | `"register"` | request   | Client requests model creation. | `typeId`, `contextKey` (optional stable identity) |
 | `"deregister"` | request | Client destroys an instance. | `modelId` |
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
-| `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result), `modelId` (for register-replies) |
+| `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
+| `"ok"`       | reply     | Server success. | `callId`, `body` (serialized result, or — for a `"hello"` reply — the server's `ProtocolRange`), `modelId` (for register-replies) |
 | `"err"`      | reply     | Server failure. | `callId`, `message` |
 
 ### `contextKey` — stable identity
@@ -48,13 +52,14 @@ session — they round-trip it verbatim; enforcement lives in the server.
 
 ## Factory functions
 
-Four free functions construct `Envelope` instances with the correct `kind` and
+Five free functions construct `Envelope` instances with the correct `kind` and
 relevant fields. Callers never set `kind` manually.
 
 | Function | `kind` | Parameters |
 |---|---|---|
 | `makeRegister(typeId, contextKey = {})` | `"register"` | Model type id, optional stable identity. |
 | `makeDeregister(modelId)` | `"deregister"` | Instance id to destroy. |
+| `makeHello(protocolVersion = kProtocolVersion)` | `"hello"` | Protocol version the sender speaks. See [Protocol version negotiation](#protocol-version-negotiation). |
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
 | `makeErr(message, callId = 0)` | `"err"` | Error message, optional correlation id. |
 
@@ -130,6 +135,130 @@ duplicate-key rejection as a security boundary; a security-sensitive front proxy
 must canonicalize or reject duplicate keys itself before the envelope reaches
 `decode`.
 
+## Protocol version negotiation
+
+`kProtocolVersion` (currently `1`) is the protocol version this build of morph
+speaks. `Envelope::protocolVersion` carries it; `0` means "unspecified / legacy
+peer" — the value on every envelope an old encoder (unaware of the field)
+produces, and the value an old decoder (unaware of the field) leaves untouched
+on an incoming envelope that omits it. Because `decode` ignores unknown keys
+and `encode` always writes every field, a `protocolVersion`-aware peer talking
+to an unaware one round-trips the field as `0` and nothing else changes.
+
+### The `"hello"` control kind
+
+A dedicated `kind` negotiates the protocol version once, before any
+`"register"`/`"execute"` on the same connection:
+
+| `kind` | Direction | Fields used | Reply |
+|---|---|---|---|
+| `"hello"` | request | `protocolVersion` (the sender's version, from `makeHello()`) | `"ok"` with `body` = the server's `ProtocolRange` (`{min, max}`), or `"err"` |
+
+`RemoteServer::setSupportedVersionRange(min, max)` configures the inclusive
+range a server advertises; it defaults to `{kProtocolVersion, kProtocolVersion}`
+— this build's single supported version. On `"hello"`, `RemoteServer` compares
+the request's `protocolVersion` against that range:
+
+- Inside the range → `"ok"` reply, `body` = `glz::write_json` of a
+  `ProtocolRange{min, max}`.
+- Outside the range → `"err"` reply, `message = "protocol version unsupported"`.
+
+`SimulatedRemoteBackend::negotiateProtocolVersion()` and
+`QtWebSocketBackend::negotiateProtocolVersion()` send a `"hello"` — over the
+same synchronous control path as `registerModel` (`handleInline` for the
+simulated backend, `sendSync` for the Qt backend) — and classify the decoded
+reply through `interpretHelloReply`:
+
+- The peer's `"ok"` → `ProtocolNegotiationResult::Negotiated`.
+- An `"err"` whose `message` is exactly `"unknown envelope kind: hello"` (the
+  generic unrecognised-`kind` message a pre-negotiation `RemoteServer`
+  produces for a `kind` it does not switch on) → `ProtocolNegotiationResult::LegacyPeer`.
+  The caller is not blocked from proceeding — a legacy peer simply never spoke
+  the handshake, exactly as it would have before this feature existed.
+- Any other `"err"` (e.g. `"protocol version unsupported"`) → throws
+  `std::runtime_error`, refusing to proceed rather than surfacing a confusing
+  per-request failure later.
+
+Calling `negotiateProtocolVersion()` is **opt-in** — the application decides
+when (typically once, right after `waitForConnected()` on the Qt backend, or
+right after constructing a `SimulatedRemoteBackend`) and whether to call it at
+all. A caller that never calls it sees exactly today's behavior: no handshake,
+no version check, `protocolVersion` stays `0` on every envelope.
+
+### Backward and forward compatibility
+
+- **New client, old (unmodified) server.** The client's `"hello"` reaches
+  `dispatchMessage`'s final `else` branch (the server does not recognise
+  `"hello"`), producing `err "unknown envelope kind: hello"`. The client's
+  `interpretHelloReply` recognises this exact message and returns `LegacyPeer`
+  rather than throwing — the caller proceeds exactly as it would have before
+  this feature existed.
+- **Old client, new server.** An old client never sends `"hello"`; the server
+  never receives one and behaves exactly as before (register/execute only).
+- **New client, new server, incompatible versions.** `setSupportedVersionRange`
+  lets a server narrow its accepted range (e.g. after a breaking
+  `kProtocolVersion` bump and a deprecation window); a client outside it gets a
+  clear `"protocol version unsupported"` refusal at connect time instead of a
+  confusing failure on the first `execute`.
+
+## Action-evolution policy
+
+The passive forward-compat contract (`error_on_unknown_keys = false` on
+`wire::decode`) covers only the *outer* `Envelope`. The `body` field is opaque
+JSON re-parsed a second time by each action's `ActionTraits::fromJson` (the
+"body double-parse", above) — and that inner parse has its own, independent
+forward-compatibility story:
+
+- **`BRIDGE_REGISTER_ACTION`-generated code is forward-compatible.** The
+  macro's generated `fromJson`/`resultFromJson` read with
+  `glz::read<glz::opts{.error_on_unknown_keys = false}>` — the same convention
+  `wire::decode` and `session_auth.hpp`'s claims parser already use — so a
+  field a newer peer added is silently ignored by an older-compiled action
+  struct. `toJson`/`resultToJson` are unaffected (writing is always
+  exact-shape).
+- **A hand-written `ActionTraits<T>::fromJson`/`resultFromJson` must opt into
+  the same convention explicitly.** Plain `glz::read_json` defaults to
+  `error_on_unknown_keys = true` (glaze's default `opts{}`) and throws
+  `morph::model::detail::ParseError` on an unrecognised field. An action
+  author who hand-writes the codec instead of using `BRIDGE_REGISTER_ACTION`
+  must read with the lenient options to get the same forward compatibility:
+
+  ```cpp
+  static MyAction fromJson(std::string_view json) {
+      MyAction action{};
+      static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+      if (auto err = glz::read<kLenient>(action, json)) {
+          throw morph::model::detail::ParseError{glz::format_error(err, json)};
+      }
+      return action;
+  }
+  ```
+
+With that convention in place (automatic via the macro, opt-in by hand), the
+policy for evolving an action or result struct across client/server versions
+is:
+
+- **Additive-only within a major version.** New fields must be optional (a
+  `std::optional<...>`, an empty-capable `Quantity`/`Timestamp`, or a type with
+  a safe default) so an older peer that omits them decodes cleanly and a newer
+  peer that receives them from an older sender sees the default. This is what
+  the lenient `fromJson` convention above makes actually true, rather than
+  aspirational.
+- **Never renumber or rename protocol vocabulary.** Mirrors the existing unit
+  enum rule ("Unit ids are protocol vocabulary: append enumerators, never
+  renumber or rename," [ARCHITECTURE.md](../../ARCHITECTURE.md)). Renaming a
+  field is a removal plus an addition — a break, not a rename, from the wire's
+  point of view.
+- **Deprecation window.** A field slated for removal is first marked
+  deprecated (kept on the wire, ignored by new code, noted in the type's own
+  spec) for at least one full library release, then removed only at a
+  `kProtocolVersion` bump.
+- **Removals or retypes require a `kProtocolVersion` bump.** Any non-additive
+  change increments `kProtocolVersion`; a server that must keep serving
+  pre-bump clients through their deprecation window widens its
+  `setSupportedVersionRange` accordingly, then narrows it once the window
+  closes.
+
 ## API reference
 
 ### `wire::Envelope`
@@ -146,6 +275,7 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 | `body` | `std::string` | `""` | `"execute"`, `"ok"` — serialized JSON payload. |
 | `message` | `std::string` | `""` | `"err"` — free-text error message. |
 | `session` | `::morph::session::Context` | default | `"execute"` — authorization and routing context. |
+| `protocolVersion` | `uint32_t` | `0` | `"hello"` — protocol version the sender speaks. `0` means unspecified/legacy peer; not otherwise inspected. |
 
 ### Factory functions
 
@@ -153,8 +283,17 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 |---|---|
 | `makeRegister` | `Envelope makeRegister(std::string typeId, std::string contextKey = {})` |
 | `makeDeregister` | `Envelope makeDeregister(uint64_t modelId)` |
+| `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |
 | `makeErr` | `Envelope makeErr(std::string message, uint64_t callId = 0)` |
+
+### Protocol version negotiation types
+
+| Symbol | Signature / shape | Notes |
+|---|---|---|
+| `ProtocolRange` | `struct { uint32_t min = kProtocolVersion; uint32_t max = kProtocolVersion; }` | A server's supported version range; serialized into a `"hello"` `"ok"` reply's `body`. |
+| `ProtocolNegotiationResult` | `enum class : uint8_t { Negotiated, LegacyPeer }` | Outcome of `interpretHelloReply`. |
+| `interpretHelloReply` | `ProtocolNegotiationResult interpretHelloReply(const Envelope& reply)` | Throws `std::runtime_error` if `reply` is an `"err"` other than `"unknown envelope kind: hello"`. |
 
 ### Serialization
 
@@ -168,6 +307,7 @@ must canonicalize or reject duplicate keys itself before the envelope reaches
 | Symbol | Type | Value | Meaning |
 |---|---|---|---|
 | `kMaxEnvelopeBytes` | `std::size_t` | `8 * 1024 * 1024` (8 MiB) | Maximum serialized envelope size `decode` will accept; larger input is rejected before parsing. |
+| `kProtocolVersion` | `std::uint32_t` | `1` | Protocol version this build speaks; see [Protocol version negotiation](#protocol-version-negotiation). |
 
 ## Design decisions
 

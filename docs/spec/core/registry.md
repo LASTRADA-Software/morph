@@ -462,8 +462,12 @@ Expands to:
   `decltype(std::declval<M&>().execute(std::declval<A>()))`, a
   `static constexpr std::string_view typeId()` (no `noexcept`, unlike
   `ModelTraits::typeId()`), a `static constexpr Loggable loggable`, and four JSON
-  codec functions using `glz::write_json` / `glz::read_json` (each throwing
-  `detail::ParseError` on failure).
+  codec functions (each throwing `detail::ParseError` on failure): `toJson`/
+  `resultToJson` use `glz::write_json`; `fromJson`/`resultFromJson` use
+  `glz::read<glz::opts{.error_on_unknown_keys = false}>` — the same
+  forward-compatibility convention `wire::decode` uses (see wire.md,
+  "Action-evolution policy") — so an older-compiled action struct silently
+  ignores an additive field a newer peer sent.
 - A `[[maybe_unused]] const bool` in an anonymous namespace calling
   `detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
   (the model-id argument is the model's registered `typeId()`, not a raw string).

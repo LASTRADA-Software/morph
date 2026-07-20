@@ -31,6 +31,12 @@ application. Be explicit about the boundary:
   `wire::kMaxEnvelopeBytes` (8 MiB) before parsing, bounding a single message's
   allocation and parse cost (see [wire.md](core/wire.md)). This is a coarse
   per-message backstop only — not a rate limit, timeout, or inner-`body` bound.
+- A negotiated protocol-version handshake (`wire::kind == "hello"`), opt-in and
+  exchanged before any `execute`, so an incompatible peer is refused with a
+  clear diagnostic instead of failing per-request later (see
+  [wire.md](core/wire.md), "Protocol version negotiation"). The handshake
+  carries no `session` and predates authorization — it is orthogonal to, not a
+  substitute for, `IAuthorizer`.
 
 **morph does NOT provide (the application/transport must):**
 - **Wire-layer transport security.** The `wire` envelope carries no encryption
