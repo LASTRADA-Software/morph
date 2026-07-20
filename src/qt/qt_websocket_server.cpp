@@ -11,10 +11,12 @@
 namespace morph::qt {
 
 QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, quint16 port,
-                                     std::optional<QSslConfiguration> tls, QObject* parent)
+                                     std::optional<QSslConfiguration> tls, QtWebSocketServerConfig cfg,
+                                     QObject* parent)
     : QObject{parent},
       _server{server},
       _requestedPort{port},
+      _cfg{cfg},
       _wsServer{QStringLiteral("morph"),
                 tls.has_value() ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode, this} {
     if (tls.has_value()) {
@@ -46,6 +48,13 @@ void QtWebSocketServer::onNewConnection() {
     if (!socket) {
         return;
     }
+    if (_cfg.maxConnections != 0 && _clients.size() >= _cfg.maxConnections) {
+        // Over the connection cap: refuse before wiring any signal, so this
+        // socket is never tracked and never reaches RemoteServer.
+        socket->close();
+        socket->deleteLater();
+        return;
+    }
     connect(socket, &QWebSocket::textMessageReceived, this, &QtWebSocketServer::onTextMessage);
     connect(socket, &QWebSocket::disconnected, this, &QtWebSocketServer::onDisconnected);
     _clients.push_back(socket);
@@ -54,6 +63,12 @@ void QtWebSocketServer::onNewConnection() {
 void QtWebSocketServer::onTextMessage(const QString& message) {
     auto* socket = qobject_cast<QWebSocket*>(sender());
     if (!socket) {
+        return;
+    }
+
+    if (static_cast<std::size_t>(message.toUtf8().size()) > _cfg.maxMessageBytes) {
+        socket->sendTextMessage(
+            QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes"))));
         return;
     }
 
