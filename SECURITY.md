@@ -38,10 +38,11 @@ guarantees**, for example:
 - log sanitisation failures that let untrusted input forge log lines.
 
 **Out of scope** are the *documented* limitations, which are known and tracked
-as planned hardening work under `docs/planned/` — among them the reference
-`hmacSha256` not being hardened beyond a constant-time compare
-(`vetted_hmac.md`), the self-signed/`VerifyNone` TLS example
-(`tls_peer_verification.md`), absent rate/resource limits
+as planned hardening work under `docs/planned/` (or, once addressed, folded
+into `docs/spec/`) — among them the reference `hmacSha256` not being hardened
+beyond a constant-time compare unless a vetted `MacFunction` is injected (see
+`spec/security.md`, "MAC-primitive recommended wiring"), the self-signed/
+`VerifyNone` TLS example (`tls_peer_verification.md`), absent rate/resource limits
 (`transport_limits.md`), unauthenticated `register` and sequential model ids
 (`instance_authorization.md`), and server-side model leaks on client
 disconnect (`connection_scoped_cleanup.md`). Reports that a documented

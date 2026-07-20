@@ -156,6 +156,77 @@ morph::session::MacFunction mac =
 morph::session::SigningAuthorizer authz{sharedSecret, mac};
 ```
 
+#### Recommended production wiring: a vetted library (libsodium / OpenSSL)
+
+Two ready-to-copy adapters ship under `examples/vetted_hmac/` (built only when
+`-DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_HMAC_EXAMPLES=ON`, each with its own
+sub-option so a host missing one library can still build the other):
+
+- **libsodium** (`examples/vetted_hmac/libsodium_adapter.hpp`, gated by
+  `MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM`, default `ON` once the parent option is
+  on):
+
+  ```cpp
+  morph::session::MacFunction sodiumHmacSha256 =
+      [](std::string_view key, std::string_view msg) -> std::string {
+          unsigned char out[crypto_auth_hmacsha256_BYTES];
+          crypto_auth_hmacsha256_state st;
+          crypto_auth_hmacsha256_init(&st,
+              reinterpret_cast<const unsigned char*>(key.data()), key.size());
+          crypto_auth_hmacsha256_update(&st,
+              reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
+          crypto_auth_hmacsha256_final(&st, out);
+          return std::string(reinterpret_cast<char*>(out), sizeof out);
+      };
+  ```
+
+- **OpenSSL** (`examples/vetted_hmac/openssl_adapter.hpp`, gated by
+  `MORPH_BUILD_HMAC_EXAMPLE_OPENSSL`):
+
+  ```cpp
+  morph::session::MacFunction opensslHmacSha256 =
+      [](std::string_view key, std::string_view msg) -> std::string {
+          unsigned char out[EVP_MAX_MD_SIZE];
+          unsigned int outLen = 0;
+          HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()),
+               reinterpret_cast<const unsigned char*>(msg.data()), msg.size(), out, &outLen);
+          return std::string(reinterpret_cast<char*>(out), outLen);
+      };
+  ```
+
+Both adapters return the same raw MAC bytes as `hmacSha256` on every RFC 4231
+vector (`examples/vetted_hmac/test_libsodium_adapter.cpp`,
+`test_openssl_adapter.cpp`) and interoperate with it in both directions — a
+token issued with the reference impl verifies under either adapter and vice
+versa — so swapping the injected `MacFunction` is drop-in. Wiring is the same
+constructor argument shown above:
+
+```cpp
+auto authz = std::make_shared<morph::session::SigningAuthorizer>(sharedSecret, sodiumHmacSha256);
+```
+
+#### `MORPH_REQUIRE_VETTED_HMAC` — failing the build on the reference default
+
+`-DMORPH_REQUIRE_VETTED_HMAC=ON` (default `OFF`) removes the `mac = hmacSha256`
+default argument from `TokenIssuer`, `TokenVerifier`, and `SigningAuthorizer`
+(via `#ifdef` in `session_auth.hpp`), so any construction that relied on the
+default fails to compile — the deployer must pass an explicit `MacFunction`
+(e.g. one of the two adapters above). The option is opt-in and keys on a build
+configuration the deployer chooses, not on `CMAKE_BUILD_TYPE`: a zero-dependency
+local/low-stakes deployment can keep shipping the reference impl by leaving it
+off. It has no effect on code that already passes a `MacFunction` explicitly.
+
+Because morph's own test suite (`tests/test_session_auth.cpp`) deliberately
+exercises the reference `hmacSha256` via its default argument, building
+`MORPH_BUILD_TESTS=ON` together with `MORPH_REQUIRE_VETTED_HMAC=ON` fails for
+that file specifically; a production build enabling the guard should configure
+with `-DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF`, matching the
+Doxygen-build recipe already used elsewhere in this repo. The guard's own
+correctness — that it blocks the default, still allows an explicit
+`MacFunction`, and is a no-op when off — is proven at configure time by three
+`try_compile` checks in `tests/CMakeLists.txt` (see "Testing" below), which run
+independently of the top-level option's value.
+
 ### Issuing tokens — the login flow
 
 morph ships no `Login` action; login is an ordinary application action. The app
@@ -490,6 +561,13 @@ responsibility:
   plaintext off-host bind.
 - **Keep expiry short and rotate the secret.** A leaked secret forges any
   identity; a leaked token is valid until `expiresAtMs`.
+- **Inject a vetted HMAC and enable `MORPH_REQUIRE_VETTED_HMAC` in release
+  builds.** The reference `hmacSha256` is correct (RFC 4231/FIPS 180-4
+  test-vector-verified) but is not side-channel-hardened beyond the
+  constant-time MAC compare. Wire in libsodium or OpenSSL via the `MacFunction`
+  seam (see "Recommended production wiring" above) and turn on
+  `MORPH_REQUIRE_VETTED_HMAC` so a build that forgets to inject one fails to
+  compile rather than shipping the reference impl silently.
 - **Bound message size, rate, and add timeouts — now available, still opt-in.**
   `RemoteServer::LimitPolicy` (`executeTimeout`, `maxLiveModels`,
   `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
@@ -587,3 +665,13 @@ strand result and `TimeoutError` surfacing through `SimulatedRemoteBackend`);
 `tests/qt/test_qt_websocket.cpp` covers `QtWebSocketServerConfig`
 (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
 `handshakeTimeout`/`idleTimeout`) and their composition with `LimitPolicy`.
+
+`examples/vetted_hmac/test_libsodium_adapter.cpp` and
+`test_openssl_adapter.cpp` (built only with `MORPH_BUILD_HMAC_EXAMPLES=ON` and
+their respective sub-option) cover the vetted-HMAC adapters: byte-identical
+output to `hmacSha256` on the RFC 4231 vectors, issue/verify interop in both
+directions, and `SigningAuthorizer` authorize/reject parity with the reference
+impl. `tests/CMakeLists.txt` additionally runs three `try_compile` checks
+proving the `MORPH_REQUIRE_VETTED_HMAC` default-argument guard: it blocks a
+construction relying on the default, still allows one with an explicit
+`MacFunction`, and leaves the default working when the option is off.

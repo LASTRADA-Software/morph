@@ -37,13 +37,13 @@ acceptance and MITM rejection end to end, and `QtWebSocketServerConfig::bindAddr
 `allowPlaintextExposure` make `QtWebSocketServer::listen()` refuse a silent
 non-loopback plaintext bind unless explicitly overridden.
 
-### A5 — Inject a vetted HMAC for production · P1 · [spec: `planned/vetted_hmac.md`]
-The reference `hmacSha256` is correct but not side-channel-hardened beyond a
-constant-time compare. Production should inject a vetted library (libsodium,
-OpenSSL) via the existing `MacFunction` seam. *Work:* document the recommended
-wiring, provide an example adapter, and consider a build option that fails if the
-reference impl is used in a release/production configuration. *Touches:*
-`session_auth.hpp` docs, `security.md`, examples.
+### A5 — Inject a vetted HMAC for production · P1 · DONE
+Shipped: `examples/vetted_hmac/` (libsodium and OpenSSL `MacFunction`
+adapters, each with a known-answer + interop test) and the opt-in
+`MORPH_REQUIRE_VETTED_HMAC` build option, which drops the `mac = hmacSha256`
+default argument on `TokenIssuer`/`TokenVerifier`/`SigningAuthorizer` so a
+build relying on it fails to compile. See `docs/spec/security.md`,
+"MAC-primitive recommended wiring".
 
 ### A6 — Protocol / action-schema versioning · P1 · [spec: `planned/protocol_versioning.md`]
 Unknown envelope/token keys are now ignored (forward-compatible), but there is no
