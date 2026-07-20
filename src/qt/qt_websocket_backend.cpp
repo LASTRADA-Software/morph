@@ -132,6 +132,16 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
     throw std::runtime_error("register failed: " + reply.message);
 }
 
+::morph::wire::ProtocolNegotiationResult QtWebSocketBackend::negotiateProtocolVersion() {
+    std::string replyJson;
+    try {
+        replyJson = sendSync(::morph::wire::encode(::morph::wire::makeHello()));
+    } catch (const std::exception& exc) {
+        throw std::runtime_error(std::string{"protocol negotiation failed: "} + exc.what());
+    }
+    return ::morph::wire::interpretHelloReply(::morph::wire::decode(replyJson));
+}
+
 void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     // Fire-and-forget — avoids a nested QEventLoop during destructor which can
     // trigger Qt asserts. The server does no connection-scoped cleanup, so an

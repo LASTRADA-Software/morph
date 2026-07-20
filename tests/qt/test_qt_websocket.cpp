@@ -430,6 +430,32 @@ TEST_CASE("morph::qt::QtWebSocketBackend: register after the server closes fails
     REQUIRE(what.find("register failed") != std::string::npos);
 }
 
+TEST_CASE("morph::qt::QtWebSocketBackend: negotiateProtocolVersion succeeds against a real RemoteServer",
+          "[qt][ws][protocol]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    auto result = backend.negotiateProtocolVersion();
+    REQUIRE(result == morph::wire::ProtocolNegotiationResult::Negotiated);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: negotiateProtocolVersion throws when never connected",
+          "[qt][ws][protocol]") {
+    ensureApp();
+    QUrl url{QString("ws://127.0.0.1:1")};  // reserved port, never listening
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE_FALSE(backend.waitForConnected(200));
+
+    REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
+}
+
 TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected signal", "[qt][ws][lifecycle]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
@@ -505,8 +531,11 @@ TEST_CASE("Server rejects malformed protocol messages", "[qt][ws][protocol]") {
     auto decodeReply = [](const std::string& raw) { return morph::wire::decode(raw); };
 
     SECTION("bare unknown envelope kind") {
+        // "hello" is now a recognised control kind (protocol-version
+        // negotiation, see docs/spec/core/wire.md) — use a string that stays
+        // genuinely unrecognised so this test keeps testing what it says.
         morph::wire::Envelope req;
-        req.kind = "hello";
+        req.kind = "bogus_kind_xyz";
         auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
         REQUIRE(reply.kind == "err");
         REQUIRE(reply.message.find("unknown envelope kind") != std::string::npos);

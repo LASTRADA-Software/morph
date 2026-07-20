@@ -10,6 +10,7 @@
 #include <functional>
 #include <morph/core/backend.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/core/wire.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -82,6 +83,19 @@ public:
     /// @param timeoutMs Maximum time to wait in milliseconds.
     /// @return `true` if connected before the timeout, `false` otherwise.
     bool waitForConnected(int timeoutMs = 5000);
+
+    /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
+    ///
+    /// Synchronous, like `registerModel` — blocks the calling (Qt event loop)
+    /// thread via a nested `QEventLoop` until the reply arrives. Intended to be
+    /// called once, after `waitForConnected()` returns `true` and before any
+    /// `registerModel`/`execute` call; nothing enforces that ordering.
+    ///
+    /// @return `Negotiated` if the server accepted `kProtocolVersion`;
+    ///         `LegacyPeer` if the server does not understand `"hello"`.
+    /// @throws std::runtime_error if the server explicitly rejects the version,
+    ///         or if the socket is not connected (or disconnects mid-call).
+    ::morph::wire::ProtocolNegotiationResult negotiateProtocolVersion();
 
     /// @brief Sends a `register` message to the server and blocks until the reply arrives.
     ///
