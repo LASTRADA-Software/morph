@@ -117,6 +117,24 @@ static QSslConfiguration makeClientTlsConfig() {
     return cfg;
 }
 
+static QSslCertificate loadCertificate(const QString& path) {
+    QFile file{path};
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    return QSslCertificate{&file, QSsl::Pem};
+}
+
+static QSslConfiguration makeMitmServerTlsConfig() {
+    QFile certFile{QStringLiteral(TESTS_CERTS_DIR "/mitm.crt")};
+    QFile keyFile{QStringLiteral(TESTS_CERTS_DIR "/mitm.key")};
+    REQUIRE(certFile.open(QIODevice::ReadOnly));
+    REQUIRE(keyFile.open(QIODevice::ReadOnly));
+
+    QSslConfiguration cfg;
+    cfg.setLocalCertificate(QSslCertificate{&certFile, QSsl::Pem});
+    cfg.setPrivateKey(QSslKey{&keyFile, QSsl::Rsa, QSsl::Pem});
+    return cfg;
+}
+
 // ── Plain WebSocket tests ────────────────────────────────────────────────────
 
 TEST_CASE("morph::qt::QtWebSocketBackend: action result delivered via then", "[qt][ws]") {
@@ -972,6 +990,81 @@ TEST_CASE("morph::qt::tlsPinnedConfig sets VerifyPeer and trusts only the pinned
 TEST_CASE("morph::qt::tlsInsecureNoVerify sets VerifyNone", "[qt][tls-helpers]") {
     QSslConfiguration cfg = morph::qt::tlsInsecureNoVerify();
     REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyNone);
+}
+
+// ── TLS peer-verification integration tests ─────────────────────────────────
+//
+// server.crt/server.key carry a subjectAltName=IP:127.0.0.1 extension so Qt's
+// hostname check (these tests connect to the literal IP "127.0.0.1", which
+// Qt matches only against SAN IP entries, never the CN) passes for the real
+// server. mitm.crt/mitm.key is a second, independently-generated self-signed
+// pair standing in for an attacker who intercepted the TCP connection but
+// cannot present the pinned certificate's private key.
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsPinnedConfig accepts the real server", "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeServerTlsConfig()};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
+    auto pinned = morph::qt::tlsPinnedConfig(loadCertificate(QStringLiteral(TESTS_CERTS_DIR "/server.crt")));
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(), pinned);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
+
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{99}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 99);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsPinnedConfig rejects a server presenting a different certificate",
+          "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeMitmServerTlsConfig()};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
+    // Pinned to server.crt, but the server above presents mitm.crt.
+    auto pinned = morph::qt::tlsPinnedConfig(loadCertificate(QStringLiteral(TESTS_CERTS_DIR "/server.crt")));
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(), pinned);
+    REQUIRE_FALSE(backendPtr->waitForConnected(1000));
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsInsecureNoVerify connects to both the real and mitm servers",
+          "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor realPool{2};
+    auto realServer = std::make_shared<morph::backend::RemoteServer>(realPool);
+    morph::qt::QtWebSocketServer realWs{*realServer, 0, makeServerTlsConfig()};
+    REQUIRE(realWs.listen());
+
+    morph::exec::ThreadPoolExecutor mitmPool{2};
+    auto mitmServer = std::make_shared<morph::backend::RemoteServer>(mitmPool);
+    morph::qt::QtWebSocketServer mitmWs{*mitmServer, 0, makeMitmServerTlsConfig()};
+    REQUIRE(mitmWs.listen());
+
+    auto insecure = morph::qt::tlsInsecureNoVerify();
+
+    QUrl realUrl{QString("wss://127.0.0.1:%1").arg(realWs.port())};
+    morph::qt::QtWebSocketBackend realBackend{realUrl, morph::model::detail::defaultDispatcher(),
+                                              morph::model::detail::defaultRegistry(), insecure};
+    REQUIRE(realBackend.waitForConnected());
+
+    QUrl mitmUrl{QString("wss://127.0.0.1:%1").arg(mitmWs.port())};
+    morph::qt::QtWebSocketBackend mitmBackend{mitmUrl, morph::model::detail::defaultDispatcher(),
+                                              morph::model::detail::defaultRegistry(), insecure};
+    REQUIRE(mitmBackend.waitForConnected());
 }
 
 // ── Process-separation tests ─────────────────────────────────────────────────
