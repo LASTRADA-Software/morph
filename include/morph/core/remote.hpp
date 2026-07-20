@@ -307,6 +307,27 @@ public:
             [self, msg = std::move(msg), reply = std::move(reply)]() mutable { self->dispatchMessage(msg, reply); });
     }
 
+    /// @brief Like `handle(msg, reply)`, but additionally attributes any
+    ///        `register` decoded from @p msg to a connection scope.
+    ///
+    /// A `register` processed under a non-zero @p cid records the new model in
+    /// that connection's scope, so a later `closeConnection(cid)` reclaims it.
+    /// Passing `cid == 0` is exactly the unscoped, two-argument `handle()` —
+    /// nothing is recorded and nothing is ever cleaned up automatically.
+    ///
+    /// Thread-safe. Safe to call before the previous call's reply has been delivered.
+    ///
+    /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @param reply Callback invoked with the JSON-encoded reply envelope.
+    /// @param cid   Connection scope to attribute a `register` in @p msg to;
+    ///              `0` means unscoped.
+    void handle(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
+        auto self = shared_from_this();
+        _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid]() mutable {
+            self->dispatchMessage(msg, reply, cid);
+        });
+    }
+
     /// @brief Synchronously processes a JSON `Envelope` on the calling thread and returns the reply.
     ///
     /// Equivalent to `handle()` but never posts to the worker pool, so it is safe
@@ -430,7 +451,7 @@ public:
     }
 
 private:
-    void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply) {
+    void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
         try {
             env = ::morph::wire::decode(msg);
@@ -499,6 +520,15 @@ private:
                     std::scoped_lock const lock{_regMtx};
                     _models[mid] = std::move(holder);
                     _owners[mid] = std::move(env.session.principal);
+                    // A non-zero cid attributes the new instance to that
+                    // connection's scope, next to _models/_owners under the
+                    // same lock so scope membership can never desync from
+                    // instance existence. cid == 0 (the unscoped default)
+                    // records nothing, matching today's behavior byte-for-byte.
+                    if (cid != 0) {
+                        _connectionScopes[cid].insert(mid);
+                        _modelConnection[mid] = cid;
+                    }
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
@@ -526,6 +556,16 @@ private:
                     std::scoped_lock const lock{_regMtx};
                     _models.erase(mid);
                     _owners.erase(mid);
+                    // Keep the connection scope's membership set in sync: an
+                    // explicit wire deregister removes the id from its scope
+                    // too, so a later closeConnection never double-erases it.
+                    if (auto connIter = _modelConnection.find(mid); connIter != _modelConnection.end()) {
+                        if (auto scopeIter = _connectionScopes.find(connIter->second);
+                            scopeIter != _connectionScopes.end()) {
+                            scopeIter->second.erase(mid);
+                        }
+                        _modelConnection.erase(connIter);
+                    }
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
