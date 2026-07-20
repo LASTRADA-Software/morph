@@ -15,6 +15,7 @@ add_executable(morph_tests
     test_bridge_remote.cpp
     test_bridge_execute_json.cpp
     test_remote_extra.cpp
+    test_action_validation.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
     test_dispatch_di.cpp

@@ -108,6 +108,30 @@ struct ActionValidator {
     }
 };
 
+/// @brief Thrown when a decoded action fails `ActionValidator<Action>::ready(...)`
+///        on a server-side or local execution path, before `Model::execute` runs.
+///
+/// Raised by `morph::model::detail::ActionDispatcher::registerAction`'s runner
+/// (the server dispatch path used by `RemoteServer`, every remote and Qt
+/// WebSocket topology) and by `Bridge::executeVia`'s `localOp` (the in-process
+/// path used by `LocalBackend`) — the two execution sites an in-progress action
+/// reaches without first passing through the reactive `set<>` gate
+/// (`BridgeHandler::tryFireImpl`) or the type-erased `executeJson` gate
+/// (`ActionExecuteRegistry::registerAction`), both of which already enforce
+/// `ready()` themselves. Deriving from `std::runtime_error` means existing
+/// `catch (const std::exception&)` handling — e.g. `RemoteServer::dispatchExecute`'s
+/// strand catch, which turns any thrown exception into an `err` reply — keeps
+/// working unchanged; callers that care can `catch`/`dynamic_cast` the specific
+/// type instead.
+struct ValidationError : std::runtime_error {
+    /// @brief Constructs the error with a message of the form
+    ///        `"action failed validation: <modelType>/<actionType>"`.
+    /// @param modelType  `ModelTraits<Model>::typeId()` of the target model.
+    /// @param actionType `ActionTraits<Action>::typeId()` of the rejected action.
+    ValidationError(std::string_view modelType, std::string_view actionType)
+        : std::runtime_error("action failed validation: " + std::string{modelType} + "/" + std::string{actionType}) {}
+};
+
 /// @brief Whether an action's executions are recorded to an attached action log.
 ///
 /// A strong type instead of a bare `bool` so registration call sites read as
@@ -324,14 +348,13 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param M    Concrete model type.
 /// @param NAME String literal used as the type-id.
-#define BRIDGE_REGISTER_MODEL(M, NAME)                                         \
-    template <>                                                                \
-    struct morph::model::ModelTraits<M> {                                      \
-        static constexpr std::string_view typeId() noexcept { return NAME; }   \
-    };                                                                         \
-    namespace {                                                                \
-    [[maybe_unused]] const bool bridge_model_reg_##M =                         \
-        morph::model::detail::registerModelOnce<M>(NAME);                      \
+#define BRIDGE_REGISTER_MODEL(M, NAME)                                                                   \
+    template <>                                                                                          \
+    struct morph::model::ModelTraits<M> {                                                                \
+        static constexpr std::string_view typeId() noexcept { return NAME; }                             \
+    };                                                                                                   \
+    namespace {                                                                                          \
+    [[maybe_unused]] const bool bridge_model_reg_##M = morph::model::detail::registerModelOnce<M>(NAME); \
     }
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
@@ -361,8 +384,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 /// @param NAME String literal used as the action type-id.
 /// @param ...  Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
 // NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macros are the intended public API
-#define BRIDGE_REGISTER_ACTION(...)                                                                     \
-    BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3)         \
+#define BRIDGE_REGISTER_ACTION(...)                                                              \
+    BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
     (__VA_ARGS__)
 
 /// @cond detail
@@ -370,45 +393,45 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
-#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                   \
-    template <>                                                                                          \
-    struct morph::model::ActionTraits<A> {                                                               \
-        using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                          \
-        static constexpr std::string_view typeId() { return NAME; }                                      \
-        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                 \
-        static std::string toJson(const A& action) {                                                     \
-            std::string out;                                                                             \
-            if (auto errCode = glz::write_json(action, out)) {                                           \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                 \
-            }                                                                                            \
-            return out;                                                                                  \
-        }                                                                                                \
-        static A fromJson(std::string_view jsonStr) {                                                    \
-            A action{};                                                                                  \
-            if (auto errCode = glz::read_json(action, jsonStr)) {                                        \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};             \
-            }                                                                                            \
-            return action;                                                                               \
-        }                                                                                                \
-        static std::string resultToJson(const Result& result) {                                          \
-            std::string out;                                                                             \
-            if (auto errCode = glz::write_json(result, out)) {                                           \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                 \
-            }                                                                                            \
-            return out;                                                                                  \
-        }                                                                                                \
-        static Result resultFromJson(std::string_view jsonStr) {                                         \
-            Result result{};                                                                             \
-            if (auto errCode = glz::read_json(result, jsonStr)) {                                        \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};             \
-            }                                                                                            \
-            return result;                                                                               \
-        }                                                                                                \
-    };                                                                                                   \
-    namespace {                                                                                          \
-    [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                            \
-        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
-    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                       \
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                        \
+    template <>                                                                                               \
+    struct morph::model::ActionTraits<A> {                                                                    \
+        using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                               \
+        static constexpr std::string_view typeId() { return NAME; }                                           \
+        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                      \
+        static std::string toJson(const A& action) {                                                          \
+            std::string out;                                                                                  \
+            if (auto errCode = glz::write_json(action, out)) {                                                \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                      \
+            }                                                                                                 \
+            return out;                                                                                       \
+        }                                                                                                     \
+        static A fromJson(std::string_view jsonStr) {                                                         \
+            A action{};                                                                                       \
+            if (auto errCode = glz::read_json(action, jsonStr)) {                                             \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
+            }                                                                                                 \
+            return action;                                                                                    \
+        }                                                                                                     \
+        static std::string resultToJson(const Result& result) {                                               \
+            std::string out;                                                                                  \
+            if (auto errCode = glz::write_json(result, out)) {                                                \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                      \
+            }                                                                                                 \
+            return out;                                                                                       \
+        }                                                                                                     \
+        static Result resultFromJson(std::string_view jsonStr) {                                              \
+            Result result{};                                                                                  \
+            if (auto errCode = glz::read_json(result, jsonStr)) {                                             \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
+            }                                                                                                 \
+            return result;                                                                                    \
+        }                                                                                                     \
+    };                                                                                                        \
+    namespace {                                                                                               \
+    [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                                 \
+        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);         \
+    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                            \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME); \
     }
 /// @endcond
@@ -420,10 +443,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// @param A  Concrete action type.
 /// @param FN Callable `bool(const A&)`.
-#define BRIDGE_REGISTER_VALIDATOR(A, FN)                                       \
-    template <>                                                                \
-    struct morph::model::ActionValidator<A> {                                  \
-        static bool ready(const A& action) { return (FN)(action); }            \
+#define BRIDGE_REGISTER_VALIDATOR(A, FN)                            \
+    template <>                                                     \
+    struct morph::model::ActionValidator<A> {                       \
+        static bool ready(const A& action) { return (FN)(action); } \
     };
 // NOLINTEND(cppcoreguidelines-macro-usage)
 // NOLINTEND(bugprone-macro-parentheses)
