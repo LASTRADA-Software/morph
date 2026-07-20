@@ -4,6 +4,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QProcess>
 #include <QSslCertificate>
 #include <QSslConfiguration>
@@ -1065,6 +1066,62 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsInsecureNoVerify connects to bo
     morph::qt::QtWebSocketBackend mitmBackend{mitmUrl, morph::model::detail::defaultDispatcher(),
                                               morph::model::detail::defaultRegistry(), insecure};
     REQUIRE(mitmBackend.waitForConnected());
+}
+
+// ── Server exposure guard tests ──────────────────────────────────────────────
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: non-loopback bind without TLS refuses listen()",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;  // not loopback
+    // cfg.allowPlaintextExposure stays false (default) — the guard should refuse.
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE_FALSE(wsServer.listen());
+    REQUIRE(wsServer.port() == 0);  // never actually bound
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: allowPlaintextExposure permits a non-loopback plaintext bind",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;
+    cfg.allowPlaintextExposure = true;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE(wsServer.listen());
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: TLS permits a non-loopback bind", "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;
+    // allowPlaintextExposure stays false — a TLS config is enough on its own.
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeServerTlsConfig(), cfg};
+
+    REQUIRE(wsServer.listen());
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: loopback bind without TLS still listens (regression)",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;  // bindAddress defaults to QHostAddress::LocalHost
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE(wsServer.listen());
 }
 
 // ── Process-separation tests ─────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <QHostAddress>
 #include <QObject>
 #include <QSslConfiguration>
 #include <QTimer>
@@ -14,19 +15,13 @@
 
 namespace morph::qt {
 
-/// @brief Per-connection resource limits enforced by `QtWebSocketServer`.
+/// @brief Per-connection resource limits and bind/exposure policy enforced by
+/// `QtWebSocketServer`.
 ///
 /// Declared outside `QtWebSocketServer` so its default member initialisers are
 /// fully parsed before any constructor default argument that names `Config{}`
 /// is evaluated (same rationale as `morph::qt::QtWebSocketBackendConfig` and
 /// `morph::offline::NetworkMonitorConfig`).
-///
-/// @note This struct is also the target of the independent TLS / peer-verification
-/// hardening work (`docs/planned/tls_peer_verification.md`), which adds
-/// `bindAddress` and `allowPlaintextExposure` fields here. If that work lands in
-/// the same tree as this one, both sets of fields belong on this *same* struct
-/// — whichever change lands second should extend this definition rather than
-/// declaring a second, differently-named config type.
 struct QtWebSocketServerConfig {
     /// @brief Max simultaneous live client connections. `0` = unbounded (today's behavior).
     ///
@@ -65,6 +60,14 @@ struct QtWebSocketServerConfig {
     /// Checked by a periodic housekeeping sweep (roughly once per second), so the
     /// actual close can lag the configured value by up to that sweep interval.
     std::chrono::milliseconds idleTimeout{0};
+
+    /// @brief Address `listen()` binds to. Default `QHostAddress::LocalHost`
+    /// (today's behavior, unchanged).
+    QHostAddress bindAddress = QHostAddress::LocalHost;
+
+    /// @brief Deliberate opt-out of the exposure guard: set `true` only to
+    /// knowingly serve plaintext (no TLS) on a non-loopback `bindAddress`.
+    bool allowPlaintextExposure = false;
 };
 
 /// @brief Qt WebSocket server that bridges incoming connections to a `RemoteServer`.
@@ -81,6 +84,12 @@ struct QtWebSocketServerConfig {
 /// per-connection message rate, and handshake/idle time. All fields default to
 /// unbounded (except `maxMessageBytes`, which defaults to the wire-layer cap),
 /// reproducing today's behavior when omitted.
+///
+/// @par Bind address & plaintext-exposure guard
+/// `listen()` refuses — returns `false` and logs at `morph::log::LogLevel::error`
+/// — when `cfg.bindAddress` is not loopback, no TLS configuration was passed to
+/// the constructor, and `cfg.allowPlaintextExposure` is `false`. See
+/// `QtWebSocketServerConfig` and security.md's "Transport security" section.
 ///
 /// @par Usage
 /// Call `listen()` to start accepting connections, and `port()` to discover the
@@ -111,6 +120,11 @@ public:
     ~QtWebSocketServer() override;
 
     /// @brief Starts listening for incoming WebSocket connections.
+    ///
+    /// Refuses — returns `false` without binding, and logs at
+    /// `morph::log::LogLevel::error` — when the configured `bindAddress` is not
+    /// loopback, no TLS configuration was passed to the constructor, and
+    /// `allowPlaintextExposure` is `false`. See `QtWebSocketServerConfig`.
     ///
     /// @return `true` if the server successfully bound to the requested port.
     bool listen();

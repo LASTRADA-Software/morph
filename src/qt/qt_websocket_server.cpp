@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QString>
 #include <algorithm>
+#include <morph/core/logger.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <vector>
 
@@ -33,7 +34,17 @@ QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, qui
 
 QtWebSocketServer::~QtWebSocketServer() { close(); }
 
-bool QtWebSocketServer::listen() { return _wsServer.listen(QHostAddress::LocalHost, _requestedPort); }
+bool QtWebSocketServer::listen() {
+    const bool hasTls = _wsServer.secureMode() == QWebSocketServer::SecureMode;
+    if (!_cfg.bindAddress.isLoopback() && !hasTls && !_cfg.allowPlaintextExposure) {
+        ::morph::log::logError(
+            "[qt_websocket_server] listen() refused: bindAddress=" + _cfg.bindAddress.toString().toStdString() +
+            " is not loopback and no TLS configuration was supplied. Pass a QSslConfiguration, or set "
+            "QtWebSocketServerConfig::allowPlaintextExposure = true to deliberately serve plaintext off-host.");
+        return false;
+    }
+    return _wsServer.listen(_cfg.bindAddress, _requestedPort);
+}
 
 quint16 QtWebSocketServer::port() const { return _wsServer.serverPort(); }
 
