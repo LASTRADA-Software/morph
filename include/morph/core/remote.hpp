@@ -359,6 +359,16 @@ private:
     }
 
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+        LimitPolicy limits;
+        {
+            std::scoped_lock const lock{_limitsMtx};
+            limits = _limits;
+        }
+        if (limits.maxInFlightExecutes != 0 &&
+            _inFlightExecutes.load(std::memory_order_relaxed) >= limits.maxInFlightExecutes) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("server busy", env.callId)));
+            return;
+        }
         if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
             reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
             return;
@@ -414,6 +424,7 @@ private:
         // external shared_ptr could drop before the strand task executes, leaving
         // `_dispatcher` dangling (use-after-free) or the reply silently lost so a
         // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
+        _inFlightExecutes.fetch_add(1, std::memory_order_relaxed);
         auto self = shared_from_this();
         _strand.post(mid, [self = std::move(self), env = std::move(env), holder = std::move(holder),
                            reply = std::move(reply)]() mutable {
@@ -428,8 +439,10 @@ private:
                 // callId, exactly like any other dispatch failure. See
                 // docs/spec/core/registry.md.
                 auto result = self->_dispatcher.dispatch(env.modelType, env.actionType, *holder, env.body);
+                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
+                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
                 reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
@@ -473,6 +486,7 @@ private:
     LogProvider _logProvider;
     std::mutex _limitsMtx;
     LimitPolicy _limits;
+    std::atomic<std::size_t> _inFlightExecutes{0};
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as

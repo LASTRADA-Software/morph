@@ -4,6 +4,7 @@
 // connection-agnostic resource limits (maxLiveModels, maxInFlightExecutes,
 // executeTimeout). See docs/spec/core/backend.md.
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <morph/core/backend.hpp>
@@ -13,6 +14,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <string>
+#include <thread>
 
 #include "test_support.hpp"
 
@@ -79,4 +81,82 @@ TEST_CASE("LimitPolicy: maxLiveModels rejects register beyond the cap", "[limits
     server->handle(morph::wire::encode(morph::wire::makeRegister("LP_EchoModel")), std::ref(fourth));
     REQUIRE(fourth.await());
     REQUIRE(fourth.env.kind == "ok");
+}
+
+// ── maxInFlightExecutes ───────────────────────────────────────────────────────
+
+namespace {
+std::atomic<int> gLPSlowStarted{0};
+}  // namespace
+
+struct LPSlowAction {
+    int ms = 0;
+};
+struct LPSlowModel {
+    int execute(const LPSlowAction& act) {
+        gLPSlowStarted.fetch_add(1, std::memory_order_relaxed);
+        std::this_thread::sleep_for(std::chrono::milliseconds(act.ms));
+        return act.ms;
+    }
+};
+
+BRIDGE_REGISTER_MODEL(LPSlowModel, "LP_SlowModel")
+BRIDGE_REGISTER_ACTION(LPSlowModel, LPSlowAction, "LP_SlowAction")
+
+TEST_CASE("LimitPolicy: maxInFlightExecutes rejects a second execute while the first is in flight",
+          "[limits][limit-policy]") {
+    gLPSlowStarted.store(0, std::memory_order_relaxed);
+    morph::exec::ThreadPoolExecutor pool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::backend::LimitPolicy policy;
+    policy.maxInFlightExecutes = 1;
+    server->setLimitPolicy(policy);
+
+    morph::testing::WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("LP_SlowModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    auto mid = regReply.env.modelId;
+
+    morph::wire::Envelope slow;
+    slow.kind = "execute";
+    slow.callId = 1;
+    slow.modelId = mid;
+    slow.modelType = "LP_SlowModel";
+    slow.actionType = "LP_SlowAction";
+    slow.body = R"({"ms":150})";
+
+    morph::testing::WaitReply firstExec;
+    server->handle(morph::wire::encode(slow), std::ref(firstExec));
+
+    // Wait until the slow action has actually started running on its strand —
+    // dispatchExecute increments the in-flight counter strictly before posting
+    // to the strand, so by the time the model body runs the counter is
+    // guaranteed to already reflect this call.
+    REQUIRE(morph::testing::waitUntil([] { return gLPSlowStarted.load(std::memory_order_relaxed) >= 1; }));
+
+    morph::wire::Envelope fast;
+    fast.kind = "execute";
+    fast.callId = 2;
+    fast.modelId = mid;
+    fast.modelType = "LP_SlowModel";
+    fast.actionType = "LP_SlowAction";
+    fast.body = R"({"ms":0})";
+
+    morph::testing::WaitReply secondExec;
+    server->handle(morph::wire::encode(fast), std::ref(secondExec));
+    REQUIRE(secondExec.await());
+    REQUIRE(secondExec.env.kind == "err");
+    REQUIRE(secondExec.env.message == "server busy");
+
+    // The first call still completes normally once its sleep elapses.
+    REQUIRE(firstExec.await(2s));
+    REQUIRE(firstExec.env.kind == "ok");
+
+    // Now that the first has finished, a fresh call is admitted again.
+    morph::wire::Envelope again = fast;
+    again.callId = 3;
+    morph::testing::WaitReply thirdExec;
+    server->handle(morph::wire::encode(again), std::ref(thirdExec));
+    REQUIRE(thirdExec.await());
+    REQUIRE(thirdExec.env.kind == "ok");
 }
