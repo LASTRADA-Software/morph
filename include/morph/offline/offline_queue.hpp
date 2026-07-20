@@ -41,6 +41,19 @@ struct QueueItem {
     /// re-enqueued. The queue does not interpret, require, or enforce
     /// uniqueness on it — enforcement is the replay consumer's job.
     std::string idempotencyKey;
+
+    /// @brief Durable retry count for this item, authoritative when the queue
+    ///        persists it.
+    ///
+    /// Defaults to `0`. A queue that overrides `IOfflineQueue::setAttempts()`
+    /// to store this value makes the retry budget survive a process restart:
+    /// `SyncWorker` seeds its own attempt counter from the larger of this
+    /// field and its in-memory count, and writes the updated count back via
+    /// `setAttempts()` after every failed replay. A queue that leaves
+    /// `setAttempts()` as the default no-op never advances this field, so
+    /// `SyncWorker`'s in-memory counter stays authoritative — today's
+    /// process-local retry behavior, unchanged.
+    uint32_t attempts{0};
 };
 
 // ── Interface ─────────────────────────────────────────────────────────────────
@@ -97,6 +110,20 @@ struct IOfflineQueue {
     /// @param itemId Id returned by the corresponding `enqueue()` call.
     virtual void markDone(uint64_t itemId) = 0;
 
+    /// @brief Persists an updated attempt count for an item. Default: no-op.
+    ///
+    /// A durable queue overrides this to store the count so the retry budget
+    /// survives a restart — `SyncWorker` calls it after every failed replay,
+    /// and reads the persisted value back through `QueueItem::attempts` on
+    /// the next `drain()` (this run, or after a restart). `InMemoryOfflineQueue`
+    /// overrides it to update the in-deque item; a queue that leaves it as
+    /// the default no-op keeps the pre-existing process-local retry behavior
+    /// (`SyncWorker`'s own in-memory counter is then always authoritative,
+    /// since `QueueItem::attempts` never advances).
+    /// @param itemId   Id of the item whose attempt count changed.
+    /// @param attempts New cumulative attempt count to persist.
+    virtual void setAttempts([[maybe_unused]] uint64_t itemId, [[maybe_unused]] uint32_t attempts) {}
+
 protected:
     /// @brief Stamps an idempotency key onto an already-enqueued item.
     ///
@@ -106,8 +133,7 @@ protected:
     /// drops it); `InMemoryOfflineQueue` overrides it to record the key.
     /// @param itemId         Id of the item to stamp.
     /// @param idempotencyKey Key to store; ignored by the default no-op.
-    virtual void setIdempotencyKey([[maybe_unused]] uint64_t itemId,
-                                   [[maybe_unused]] std::string idempotencyKey) {}
+    virtual void setIdempotencyKey([[maybe_unused]] uint64_t itemId, [[maybe_unused]] std::string idempotencyKey) {}
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -134,8 +160,8 @@ public:
     uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         uint64_t const itemId = ++_nextId;
-        _items.push_back(QueueItem{
-            .id = itemId, .payload = std::move(payload), .idempotencyKey = std::move(idempotencyKey)});
+        _items.push_back(
+            QueueItem{.id = itemId, .payload = std::move(payload), .idempotencyKey = std::move(idempotencyKey)});
         return itemId;
     }
 
@@ -155,6 +181,23 @@ public:
         auto iter = std::ranges::find_if(_items, [itemId](const QueueItem& item) { return item.id == itemId; });
         if (iter != _items.end()) {
             _items.erase(iter);
+        }
+    }
+
+    /// @brief Updates the persisted attempt count on the in-deque item with
+    ///        @p itemId. No-op if @p itemId is not found. Thread-safe.
+    ///
+    /// `InMemoryOfflineQueue` does not itself survive a process restart, but
+    /// overriding this hook lets a *fresh* `SyncWorker` constructed over the
+    /// same instance observe a durable-style cumulative attempt count — used
+    /// to simulate cross-restart dead-lettering in tests.
+    /// @param itemId   Id of the item to update.
+    /// @param attempts New attempt count to store.
+    void setAttempts(uint64_t itemId, uint32_t attempts) override {
+        std::scoped_lock const lock{_mtx};
+        auto iter = std::ranges::find_if(_items, [itemId](const QueueItem& item) { return item.id == itemId; });
+        if (iter != _items.end()) {
+            iter->attempts = attempts;
         }
     }
 

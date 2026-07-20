@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/offline/offline_queue.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <string>
 #include <thread>
 #include <vector>
-
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue returns a unique id per item", "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
@@ -50,7 +49,8 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone on unknown id is a no-
     REQUIRE(queue.drain().size() == 1);
 }
 
-TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (items survive until markDone)", "[queue]") {
+TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (items survive until markDone)",
+          "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
     queue.enqueue("z");
 
@@ -62,7 +62,8 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: drain does not remove items (it
     REQUIRE(first[0].payload == second[0].payload);
 }
 
-TEST_CASE("morph::offline::InMemoryOfflineQueue: concurrent enqueue from multiple threads is safe", "[queue][threading]") {
+TEST_CASE("morph::offline::InMemoryOfflineQueue: concurrent enqueue from multiple threads is safe",
+          "[queue][threading]") {
     morph::offline::InMemoryOfflineQueue queue;
     constexpr int nThreads = 8;
     constexpr int nPerThread = 100;
@@ -109,7 +110,8 @@ struct MinimalQueue : morph::offline::IOfflineQueue {
 
 }  // namespace
 
-TEST_CASE("morph::offline::IOfflineQueue: default two-arg enqueue delegates and returns the single-arg id", "[queue]") {
+TEST_CASE("morph::offline::IOfflineQueue: default two-arg enqueue delegates and returns the single-arg id",
+          "[queue]") {
     MinimalQueue queue;
     // Call through the base interface: the derived class does not override the
     // two-arg overload, so this resolves to IOfflineQueue's default, which
@@ -139,4 +141,54 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: two-arg enqueue stores the idem
     REQUIRE(items[0].id == id);
     REQUIRE(items[0].payload == "payload");
     REQUIRE(items[0].idempotencyKey == "stable-key-123");
+}
+
+// ── Coverage: QueueItem::attempts / IOfflineQueue::setAttempts ─────────────────
+// These exercise the durable retry-count field and write-back hook that
+// SyncWorker's cross-restart dead-lettering relies on (see sync_worker.hpp and
+// docs/spec/offline/offline.md, "Retry counter is in-memory unless the queue
+// opts into persisting it").
+
+TEST_CASE("morph::offline::QueueItem: attempts defaults to 0 and round-trips through enqueue/drain",
+          "[queue][attempts]") {
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("payload");
+
+    auto items = queue.drain();
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].attempts == 0);
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts updates the in-deque item, visible on next drain",
+          "[queue][attempts]") {
+    morph::offline::InMemoryOfflineQueue queue;
+    auto id = queue.enqueue("payload");
+
+    queue.setAttempts(id, 3);
+
+    auto items = queue.drain();
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].attempts == 3);
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: setAttempts on an unknown id is a no-op", "[queue][attempts]") {
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("payload");
+
+    REQUIRE_NOTHROW(queue.setAttempts(9999, 5));
+
+    auto items = queue.drain();
+    REQUIRE(items.size() == 1);
+    REQUIRE(items[0].attempts == 0);
+}
+
+TEST_CASE("morph::offline::IOfflineQueue: default setAttempts is a no-op", "[queue][attempts]") {
+    MinimalQueue queue;
+    // MinimalQueue (defined above) does not override setAttempts, so this
+    // resolves to IOfflineQueue's default no-op; the item's attempts field
+    // never advances.
+    morph::offline::IOfflineQueue& base = queue;
+    auto id = base.enqueue("p");
+    base.setAttempts(id, 7);
+    REQUIRE(queue.items[0].attempts == 0);
 }
