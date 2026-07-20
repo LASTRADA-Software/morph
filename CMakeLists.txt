@@ -192,6 +192,10 @@ if(MORPH_BUILD_QT)
     if(MORPH_BUILD_TESTS)
         add_subdirectory(tests/qt)
     endif()
+
+    if(MORPH_BUILD_EXAMPLES)
+        add_subdirectory(examples/qt_tls_client)
+    endif()
 endif()
 
 # ── Documentation ───────────────────────────────────────────────────────────
