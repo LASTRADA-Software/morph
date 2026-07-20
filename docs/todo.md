@@ -52,16 +52,13 @@ across client/server versions. *Work:* a version field + negotiation on connect,
 and a documented action-evolution policy (additive-only, deprecation window).
 *Touches:* `wire.md`, `security.md`, new spec.
 
-### A7 — Connection-scoped model cleanup · P0 · [spec: `planned/connection_scoped_cleanup.md`]
-Models registered over a connection outlive it: the server performs no
-connection-scoped cleanup, so every client crash or network drop strands its
-instances until process exit — and once A3's `maxLiveModels` lands, dead
-connections consume the budget until new registers are denied. Add an opt-in
-`ConnectionId` scope to `RemoteServer` (`openConnection`/`closeConnection` + a
-scoped `handle` overload) and have `QtWebSocketServer` clean up on disconnect.
-Cleanup is server housekeeping, not a synthesized wire `deregister` (which
-A2's ownership enforcement would rightly reject).
-*Touches:* `remote.hpp`, `qt/qt_websocket_server.hpp`.
+### A7 — Connection-scoped model cleanup · P0 · shipped — folded into [`spec/core/backend.md`](spec/core/backend.md#connection-scopes)
+`RemoteServer` has an opt-in `ConnectionId` scope (`openConnection`/
+`closeConnection` + a scoped `handle(msg, reply, cid)` overload), and
+`QtWebSocketServer` opts every client into it end to end, so a client crash or
+dropped socket now reclaims its models instead of stranding them until process
+exit. `closeConnection` is server housekeeping — it bypasses `IAuthorizer` by
+design, not a synthesized wire `deregister`.
 
 ---
 

@@ -25,6 +25,7 @@ and react to backend changes.
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
+- [Connection scopes](#connection-scopes)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -200,7 +201,9 @@ boundary — see [security.md](../security.md).
 
 **`handle(msg, reply)`** — asynchronous entry point. Posts to the worker pool,
 calls `dispatchMessage` which decodes, dispatches by `kind`, and calls `reply`
-exactly once.
+exactly once. A three-argument overload, `handle(msg, reply, cid)`, additionally
+attributes any `register` in `msg` to a connection scope — see "Connection
+scopes" below.
 
 **`handleInline(msg)`** — synchronous entry point intended for control messages
 (`register`, `deregister`) only. It runs `dispatchMessage` directly on the
@@ -247,6 +250,46 @@ a single dedicated thread per `RemoteServer` (mirroring `NetworkMonitor`'s
 condition-variable wait loop), lazily started by `setLimitPolicy` the first time
 `executeTimeout` is configured, so a server that never uses the feature pays no
 extra thread.
+
+### Connection scopes
+
+`RemoteServer` can optionally attribute registered models to a
+transport-assigned connection, so a transport can reclaim every model a
+connection created when that connection goes away. `ConnectionId`
+(`morph::backend::ConnectionId`) is a `std::uint64_t` alias; `0` is reserved
+and means *unscoped* — the meaning the two-argument `handle()` and
+`handleInline()` always have. Scoping is strictly opt-in; enabling it changes
+nothing for a caller that never uses it.
+
+- `openConnection()` returns a fresh non-zero `ConnectionId` and opens an empty
+  scope for it. Call once per accepted transport connection.
+- The scoped `handle(msg, reply, cid)` overload attributes any `register`
+  decoded from `msg` to `cid`'s scope: the new `ModelId` is recorded in both a
+  `cid → set<ModelId>` map and a `ModelId → ConnectionId` map, next to
+  `_models`/`_owners` under the same `_regMtx`, so scope membership can never
+  desync from instance existence. A `deregister` (via either entry point)
+  removes the id from its scope as well as from `_models`/`_owners`, so a
+  later `closeConnection` never double-erases it.
+- `closeConnection(cid)` erases every model still recorded in `cid`'s scope
+  (`_models`, `_owners`, and the per-instance connection entry) exactly as the
+  `deregister` path does, then drops the scope itself. Passing `0`, an
+  unknown `cid`, or a `cid` already closed is a no-op — idempotent by
+  construction.
+- **`closeConnection` does not consult `IAuthorizer`.** It is server-side
+  housekeeping triggered by the transport observing its own connection close,
+  not a caller-attributed action — synthesising a `deregister` envelope
+  instead would need a session/token to pass `authorizeInstance`, which an
+  ownership-enforcing authorizer would rightly reject, and would require the
+  transport to parse every `register` reply to learn which ids it owns. Only
+  in-process transport code can reach `closeConnection`, and the transport is
+  already inside the server's trust boundary (see security.md).
+- Cleanup never races a running `execute`: `dispatchExecute` copies the
+  instance's `shared_ptr<IModelHolder>` into the strand task before dispatch,
+  so an in-flight action keeps the holder alive until its task completes;
+  `closeConnection` only removes the registry's reference, preventing *new*
+  lookups (see concurrency_and_lifetimes.md).
+- `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
+  the process itself) — it is unaffected by connection scopes.
 
 ## `SimulatedRemoteBackend` — adapter for testing
 
@@ -313,9 +356,11 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
 - `deregisterModel` — **fire-and-forget**, not synchronous: if `_connected`, it
   sends a `deregister` envelope and returns immediately without waiting for the
   ack; if disconnected, it does nothing. This deliberately avoids a nested
-  `QEventLoop` during a destructor, which can trip Qt asserts. Note there is **no
-  connection-scoped cleanup on the server**: an undelivered or lost `deregister`
-  leaves the model registered on the server indefinitely (see Limitations).
+  `QEventLoop` during a destructor, which can trip Qt asserts. An undelivered or
+  lost `deregister` no longer leaks the model indefinitely when the server side
+  is a `QtWebSocketServer`: its connection scope reclaims every model this
+  client registered at the next disconnect (see "Connection scopes" and
+  Limitations).
 - `execute` — if not connected, resolves the returned `Completion` immediately
   with `DisconnectedError`. Otherwise it assigns a monotonic `callId`
   (`++_nextCallId`), records the completion state + `deserializeResult` +
@@ -397,6 +442,23 @@ real listening socket. It does not own the `RemoteServer` — it holds
 `RemoteServer& _server` by reference, so the server's owning `shared_ptr` must
 outlive the transport (see Lifetime & ownership).
 
+**Connection scope.** `QtWebSocketServer` opts every client into `RemoteServer`'s
+connection scope end to end, so a client crash or dropped socket reclaims its
+models instead of leaking them:
+- **Accept** (`onNewConnection`) calls `_server.openConnection()` and stores the
+  returned `ConnectionId` in the client's `ClientState` (keyed by `QWebSocket*`
+  in `_clients`, alongside the rate-limit/handshake bookkeeping below).
+- **Message** (`onTextMessage`) looks up the sender's `ClientState` and forwards
+  through the scoped `_server.handle(msg, reply, cid)` overload instead of the
+  two-argument one, so any `register` in the frame is attributed to that
+  connection.
+- **Disconnect** (`onDisconnected`) calls `_server.closeConnection(cid)` before
+  removing the socket from `_clients` — the step that reclaims every model the
+  connection registered.
+- **Shutdown** (`close()`, and the destructor that calls it) calls
+  `closeConnection` for every remaining client before aborting its socket, so an
+  orderly server stop also reclaims every client's instances.
+
 **Flow.** `listen()` binds to the requested TCP port on `cfg.bindAddress`
 (`QtWebSocketServerConfig`, default `QHostAddress::LocalHost` — today's
 behavior, unchanged) and starts accepting — unless `cfg.bindAddress` is
@@ -405,14 +467,16 @@ non-loopback, no TLS configuration was passed to the constructor, and
 returns `false` without binding and logs at `morph::log::LogLevel::error` (see
 [security.md](../security.md), "Transport security"). `port()` returns the
 bound port (useful when constructed with port `0` to let the OS assign a free
-one); `close()` (and the destructor) stops accepting and aborts/`deleteLater`s
-every client socket. Each accepted `QWebSocket` is tracked in `_clients`; on its
-`disconnected` signal it is removed from `_clients` and `deleteLater`d.
+one); `close()` (and the destructor) stops accepting, reclaims every remaining
+client's connection scope, and aborts/`deleteLater`s every client socket. Each
+accepted `QWebSocket` is tracked in `_clients` together with its `ConnectionId`;
+on its `disconnected` signal both the scope and the socket are reclaimed and
+removed.
 
 **Message handling.** For every text frame from a client, `onTextMessage` calls
-`RemoteServer::handle(msg, reply)` (asynchronous — dispatched to the server's
-worker pool). The reply callback captures a `QPointer<QWebSocket>` (a *weak*
-handle) and marshals the send back onto the Qt thread via
+the scoped `RemoteServer::handle(msg, reply, cid)` (asynchronous — dispatched to
+the server's worker pool). The reply callback captures a `QPointer<QWebSocket>`
+(a *weak* handle) and marshals the send back onto the Qt thread via
 `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`: the reply is produced on
 a pool thread but `QWebSocket::sendTextMessage` must run on the Qt thread. If the
 client socket was destroyed before the reply is ready, the `QPointer` is null and
@@ -477,7 +541,9 @@ are:
   entry while a task is queued or running only drops the *map's* reference; the
   in-flight task holds its own, so the holder stays alive until the task
   completes. `RemoteServer`'s pool tasks additionally keep the server itself
-  alive via `shared_from_this()`.
+  alive via `shared_from_this()`. `closeConnection` erases the same map entries
+  as an explicit `deregister`, so the same guarantee covers it: it never races a
+  running `execute` into use-after-free, only prevents *new* lookups.
 
 ## Failure modes
 
@@ -589,8 +655,11 @@ onto the Qt thread before `sendTextMessage`.
 |---|---|
 | `RemoteServer(workerPool, dispatcher, registry)` | Allow-all authorizer. |
 | `RemoteServer(workerPool, authorizer, dispatcher, registry)` | Custom authorizer; null → allow-all. |
-| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Thread-safe. |
-| `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. |
+| `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Unscoped (`cid == 0`). Thread-safe. |
+| `handle(msg, reply, cid)` | Like `handle(msg, reply)`, additionally attributing any `register` in `msg` to connection `cid`'s scope. `cid == 0` behaves exactly like the two-argument overload. Thread-safe. |
+| `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. Unscoped. |
+| `openConnection()` | Returns a fresh non-zero `ConnectionId` and opens an empty scope for it. Thread-safe. |
+| `closeConnection(cid)` | Erases every model still recorded in `cid`'s scope (as `deregister` would) and drops the scope. `cid == 0`, unknown, or already-closed is a no-op — idempotent. Bypasses `IAuthorizer` by design. Thread-safe. |
 | `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
 | `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
 
@@ -653,7 +722,7 @@ not a behavior change to the existing loopback-only default.
 | `QtWebSocketServer(server, port = 0, tls = nullopt, cfg = QtWebSocketServerConfig{}, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. `cfg` bounds per-connection resources (see above). Does not start listening. |
 | `listen()` | Binds to `cfg.bindAddress:port` and starts accepting; returns success. Refuses (returns `false`, logs at error level) a non-loopback `cfg.bindAddress` with no `tls` and `cfg.allowPlaintextExposure == false`. |
 | `port()` | Bound port (OS-assigned when constructed with `0`). |
-| `close()` | Stops accepting; aborts and `deleteLater`s all client sockets. Also run by the destructor. |
+| `close()` | Stops accepting; calls `closeConnection` for every remaining client (reclaiming its models) before aborting and `deleteLater`ing its socket. Also run by the destructor. |
 
 ## Design decisions
 
@@ -669,7 +738,8 @@ not a behavior change to the existing loopback-only default.
 | Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
-| WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. The trade-off is accepting that a lost/undelivered deregister leaks the model on the server (there is no connection-scoped cleanup — see Limitations). |
+| WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. A lost/undelivered deregister no longer leaks indefinitely: `QtWebSocketServer`'s connection scope reclaims the model at the next disconnect (see Limitations). |
+| Connection-scoped cleanup bypasses `IAuthorizer` | `closeConnection` never calls `authorize`/`authorizeInstance`/`authenticate` | It is server housekeeping triggered by the transport's own connection-close event, not a caller action; synthesising a `deregister` envelope would need a token to pass ownership checks and would require the transport to learn ids by parsing replies — recording the owning connection at register time is simpler and cannot desync. |
 | `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; control replies carry `0` | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). |
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
@@ -715,14 +785,19 @@ not a behavior change to the existing loopback-only default.
   `authorizeInstance` hook (also allow-all by default) in addition to
   `execute`'s type-level `authorize` step. A hardened multi-tenant deployment
   overrides `authorizeRegister` *and* `authorizeInstance`. See security.md.
-- **No connection-scoped cleanup — orphaned models leak.** There is no
-  mechanism that reclaims a client's models when its connection closes.
-  `QtWebSocketServer::onDisconnected` only removes the socket from `_clients` and
-  calls `deleteLater()`; it never touches the `RemoteServer`, which has no
-  connection concept at all. A model whose `deregister` frame is never sent (a
-  client crash) or is lost in flight (fire-and-forget) stays registered on the
-  server **indefinitely**. Deregistration is the client's responsibility, and an
-  undelivered deregister is an unbounded server-side resource leak.
+- **Connection-scoped cleanup is opt-in, and only `QtWebSocketServer` uses it
+  among the shipped transports.** `RemoteServer` reclaims a connection's models
+  automatically only when the transport participates in the scope contract
+  (`openConnection` / the scoped `handle(msg, reply, cid)` / `closeConnection`
+  — see above). `QtWebSocketServer` opts in end to end, so a WebSocket client
+  crash or drop now reclaims its models instead of leaking them. A transport
+  that never calls `openConnection`/`closeConnection` — or that keeps using the
+  unscoped two-argument `handle()`/`handleInline()` — gets none of this:
+  `SimulatedRemoteBackend` deliberately stays on the unscoped path (its
+  "connection" is the process itself), so its models still live until an
+  explicit `deregister` or process exit, unchanged from before this feature.
+  Deregistration therefore remains the caller's responsibility for any path
+  that does not go through a scope-aware transport.
 - **`notifyBackendChanged` uses RTTI over every model under the registry lock.**
   `LocalBackend::notifyBackendChanged` iterates the entire `_models` map holding
   `_regMtx` and `dynamic_cast`s each holder to `IBackendChangedSink`. This
