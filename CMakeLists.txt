@@ -14,7 +14,13 @@ option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
+option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
 option(MORPH_BUILD_FORMS_QML     "Build the Qt Quick renderer for the forms demo" OFF)
+
+if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
+    message(WARNING "MORPH_BUILD_HMAC_EXAMPLES is ignored: it lives under examples/vetted_hmac, "
+                    "which needs MORPH_BUILD_EXAMPLES=ON.")
+endif()
 
 if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
     message(WARNING "MORPH_BUILD_FORMS_QML is ignored: it lives under the forms example, "
@@ -156,6 +162,10 @@ if(MORPH_BUILD_EXAMPLES)
 
     if(MORPH_BUILD_BANK_EXAMPLE)
         add_subdirectory(examples/bank)
+    endif()
+
+    if(MORPH_BUILD_HMAC_EXAMPLES)
+        add_subdirectory(examples/vetted_hmac)
     endif()
 endif()
 
