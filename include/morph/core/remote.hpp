@@ -4,15 +4,18 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -20,6 +23,7 @@
 #include "../journal/action_log.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
+#include "logger.hpp"
 #include "wire.hpp"
 
 namespace morph::backend {
@@ -50,6 +54,115 @@ struct LimitPolicy {
 };
 
 namespace detail {
+
+/// @brief Background scheduler that invokes a callback once after a delay, unless cancelled first.
+///
+/// `RemoteServer` is transport-agnostic and its `IExecutor` has no delayed-post
+/// primitive, so a single dedicated thread per instance tracks pending
+/// deadlines and fires callbacks when they elapse. Used to enforce
+/// `LimitPolicy::executeTimeout` — see `docs/spec/core/backend.md`.
+class TimeoutScheduler {
+public:
+    /// @brief Opaque identifier for one scheduled callback.
+    using Handle = std::uint64_t;
+
+    /// @brief Starts the background thread.
+    TimeoutScheduler() : _thread{[this] { run(); }} {}
+
+    /// @brief Stops the background thread and joins it.
+    ~TimeoutScheduler() {
+        {
+            std::scoped_lock const lock{_mtx};
+            _stop = true;
+        }
+        _cv.notify_all();
+        _thread.join();
+    }
+
+    TimeoutScheduler(const TimeoutScheduler&) = delete;
+    TimeoutScheduler& operator=(const TimeoutScheduler&) = delete;
+    TimeoutScheduler(TimeoutScheduler&&) = delete;
+    TimeoutScheduler& operator=(TimeoutScheduler&&) = delete;
+
+    /// @brief Schedules @p callback to run after @p delay on the scheduler's
+    ///        background thread, unless cancelled first via `cancel()`.
+    /// @param delay    Time to wait before firing.
+    /// @param callback Invoked on the scheduler thread if not cancelled in time.
+    ///                 Exceptions it throws are logged and swallowed.
+    /// @return Handle usable with `cancel()`.
+    Handle schedule(std::chrono::milliseconds delay, std::function<void()> callback) {
+        auto const deadline = std::chrono::steady_clock::now() + delay;
+        std::scoped_lock const lock{_mtx};
+        Handle const handle = ++_nextHandle;
+        auto iter = _entries.emplace(deadline, Entry{handle, std::move(callback)});
+        _index[handle] = iter;
+        _cv.notify_all();
+        return handle;
+    }
+
+    /// @brief Cancels a previously scheduled callback immediately.
+    ///
+    /// If @p handle has not fired yet, its entry (and anything its callback
+    /// captured) is erased right away — the caller does not have to wait for
+    /// the original deadline for that memory to be released. A no-op if
+    /// @p handle already fired or was already cancelled.
+    /// @param handle Handle returned by a prior `schedule()` call.
+    void cancel(Handle handle) {
+        std::scoped_lock const lock{_mtx};
+        auto found = _index.find(handle);
+        if (found == _index.end()) {
+            return;
+        }
+        _entries.erase(found->second);
+        _index.erase(found);
+    }
+
+private:
+    struct Entry {
+        Handle handle;
+        std::function<void()> callback;
+    };
+
+    void run() {
+        std::unique_lock lock{_mtx};
+        while (!_stop) {
+            if (_entries.empty()) {
+                _cv.wait(lock);
+                continue;
+            }
+            auto const nextDeadline = _entries.begin()->first;
+            _cv.wait_until(lock, nextDeadline);
+            if (_stop) {
+                break;
+            }
+            auto now = std::chrono::steady_clock::now();
+            while (!_entries.empty() && _entries.begin()->first <= now) {
+                auto iter = _entries.begin();
+                Entry entry = std::move(iter->second);
+                _index.erase(entry.handle);
+                _entries.erase(iter);
+                lock.unlock();
+                try {
+                    entry.callback();
+                } catch (const std::exception& exc) {
+                    ::morph::log::logError("[timeout-scheduler] callback threw: " + std::string{exc.what()});
+                } catch (...) {
+                    ::morph::log::logError("[timeout-scheduler] callback threw unknown exception");
+                }
+                lock.lock();
+                now = std::chrono::steady_clock::now();
+            }
+        }
+    }
+
+    std::mutex _mtx;
+    std::condition_variable _cv;
+    std::multimap<std::chrono::steady_clock::time_point, Entry> _entries;
+    std::unordered_map<Handle, std::multimap<std::chrono::steady_clock::time_point, Entry>::iterator> _index;
+    Handle _nextHandle{0};
+    bool _stop{false};
+    std::thread _thread;
+};
 
 /// @brief Keyed 64-bit bijection that turns a monotonic counter into an
 ///        unguessable, non-sequential id.
@@ -247,6 +360,9 @@ public:
     void setLimitPolicy(LimitPolicy policy) {
         std::scoped_lock const lock{_limitsMtx};
         _limits = policy;
+        if (_limits.executeTimeout.count() > 0 && !_timeoutScheduler) {
+            _timeoutScheduler = std::make_unique<detail::TimeoutScheduler>();
+        }
     }
 
 private:
@@ -426,8 +542,33 @@ private:
         // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
         _inFlightExecutes.fetch_add(1, std::memory_order_relaxed);
         auto self = shared_from_this();
-        _strand.post(mid, [self = std::move(self), env = std::move(env), holder = std::move(holder),
-                           reply = std::move(reply)]() mutable {
+        std::uint64_t const callId = env.callId;
+
+        // `finished` fires the caller's `reply` exactly once — whichever of the
+        // timeout path or the strand path gets there first — and always
+        // decrements the in-flight counter exactly once, regardless of which
+        // path won. This preserves handle()'s reply-exactly-once contract even
+        // though two independent paths can now race to resolve the same call.
+        auto finished = std::make_shared<std::atomic_flag>();
+        auto replySlot = std::make_shared<std::function<void(std::string)>>(std::move(reply));
+        auto complete = [self, finished, replySlot](std::string msg) {
+            if (!finished->test_and_set()) {
+                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
+                (*replySlot)(std::move(msg));
+            }
+        };
+
+        detail::TimeoutScheduler::Handle timeoutHandle{};
+        if (limits.executeTimeout.count() > 0) {
+            std::scoped_lock const lock{_limitsMtx};
+            if (_timeoutScheduler) {
+                timeoutHandle = _timeoutScheduler->schedule(limits.executeTimeout, [complete, callId]() mutable {
+                    complete(::morph::wire::encode(::morph::wire::makeErr("timeout", callId)));
+                });
+            }
+        }
+
+        _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
             try {
                 ::morph::session::detail::ScopedContext const scoped{env.session};
                 // `dispatch` (registry.hpp, ActionDispatcher::registerAction's runner)
@@ -439,11 +580,21 @@ private:
                 // callId, exactly like any other dispatch failure. See
                 // docs/spec/core/registry.md.
                 auto result = self->_dispatcher.dispatch(env.modelType, env.actionType, *holder, env.body);
-                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
-                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
+                {
+                    std::scoped_lock const lock{self->_limitsMtx};
+                    if (self->_timeoutScheduler) {
+                        self->_timeoutScheduler->cancel(timeoutHandle);
+                    }
+                }
+                complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
-                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
-                reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
+                {
+                    std::scoped_lock const lock{self->_limitsMtx};
+                    if (self->_timeoutScheduler) {
+                        self->_timeoutScheduler->cancel(timeoutHandle);
+                    }
+                }
+                complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
     }
@@ -487,6 +638,7 @@ private:
     std::mutex _limitsMtx;
     LimitPolicy _limits;
     std::atomic<std::size_t> _inFlightExecutes{0};
+    std::unique_ptr<detail::TimeoutScheduler> _timeoutScheduler;
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
@@ -580,6 +732,8 @@ public:
                                auto reply = ::morph::wire::decode(replyJson);
                                if (reply.kind == "ok") {
                                    state->setValue(deser(reply.body));
+                               } else if (reply.message == "timeout") {
+                                   throw TimeoutError{};
                                } else {
                                    throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
                                }

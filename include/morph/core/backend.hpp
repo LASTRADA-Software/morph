@@ -12,10 +12,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "../session/session.hpp"
 #include "completion.hpp"
 #include "model.hpp"
 #include "registry.hpp"
-#include "../session/session.hpp"
 #include "strand.hpp"
 
 namespace morph::backend {
@@ -60,8 +60,7 @@ struct IBackend {
 
     /// @brief Registers a new model instance and returns its opaque id.
     virtual ::morph::exec::detail::ModelId registerModel(
-        const std::string& typeId,
-        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
 
     /// @brief Registers a new model instance, additionally passing @p contextKey —
     ///        the instance's stable identity (e.g. an account id) — through to
@@ -89,8 +88,9 @@ struct IBackend {
     virtual void deregisterModel(::morph::exec::detail::ModelId mid) = 0;
 
     /// @brief Dispatches @p call against the model identified by @p mid.
-    virtual ::morph::async::Completion<std::shared_ptr<void>> execute(
-        ::morph::exec::detail::ModelId mid, ActionCall call, ::morph::exec::IExecutor* cbExec) = 0;
+    virtual ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                                      ActionCall call,
+                                                                      ::morph::exec::IExecutor* cbExec) = 0;
 
     /// @brief Called by `Bridge::switchBackend()` after all handlers are re-registered.
     virtual void notifyBackendChanged() = 0;
@@ -141,6 +141,21 @@ struct BridgeDestroyedError : std::runtime_error {
 struct DisconnectedError : std::runtime_error {
     /// @brief Constructs the error with a canned diagnostic message.
     DisconnectedError() : std::runtime_error{"transport disconnected before completion resolved"} {}
+};
+
+/// @brief Thrown to a pending `Completion` when the server-side
+///        `morph::backend::LimitPolicy::executeTimeout` elapses before the
+///        model's action replies.
+///
+/// The action keeps running to completion on its strand — morph never
+/// interrupts an in-flight `Model::execute` — but the caller's wait is bounded.
+/// Distinguishes a timeout from any other `err` reply (a generic
+/// `std::runtime_error` on `QtWebSocketBackend` / `SimulatedRemoteBackend`), so
+/// callers can retry or surface a specific "request timed out" message. See
+/// `docs/spec/core/backend.md` (`LimitPolicy`).
+struct TimeoutError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
+    TimeoutError() : std::runtime_error{"execute timed out on the server"} {}
 };
 
 /// @brief In-process backend that executes model actions on a thread pool strand.
@@ -198,8 +213,7 @@ public:
     /// concurrent `deregisterModel` cannot free the model out from under its
     /// pending notification (mirrors `execute`'s holder capture).
     void notifyBackendChanged() override {
-        std::vector<std::pair<::morph::exec::detail::ModelId,
-                              std::shared_ptr<::morph::model::detail::IModelHolder>>>
+        std::vector<std::pair<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>>>
             sinks;
         {
             std::scoped_lock const lock{_regMtx};
@@ -228,9 +242,9 @@ public:
     /// @param call   Bundled action; `localOp` is the only field used here.
     /// @param cbExec Executor for delivering callbacks.
     /// @return Completion that will carry the result or an exception.
-    ::morph::async::Completion<std::shared_ptr<void>> execute(
-        ::morph::exec::detail::ModelId mid, detail::ActionCall call,
-        ::morph::exec::IExecutor* cbExec) override {
+    ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                              detail::ActionCall call,
+                                                              ::morph::exec::IExecutor* cbExec) override {
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 

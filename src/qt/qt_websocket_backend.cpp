@@ -3,9 +3,9 @@
 #include <QCoreApplication>
 #include <QTimer>
 #include <algorithm>
-#include <morph/qt/qt_websocket_backend.hpp>
-#include <morph/core/wire.hpp>
 #include <cctype>
+#include <morph/core/wire.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -115,8 +115,7 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
 }
 
 ::morph::exec::detail::ModelId QtWebSocketBackend::registerModel(
-    const std::string& typeId,
-    std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) {
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) {
     std::string replyJson;
     try {
         replyJson = sendSync(::morph::wire::encode(::morph::wire::makeRegister(typeId)));
@@ -138,14 +137,12 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     // trigger Qt asserts. The server does no connection-scoped cleanup, so an
     // undelivered deregister leaves the model registered there indefinitely.
     if (_connected) {
-        _socket.sendTextMessage(QString::fromStdString(
-            ::morph::wire::encode(::morph::wire::makeDeregister(mid.v))));
+        _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(::morph::wire::makeDeregister(mid.v))));
     }
 }
 
 ::morph::async::Completion<std::shared_ptr<void>> QtWebSocketBackend::execute(
-    ::morph::exec::detail::ModelId mid, ::morph::backend::detail::ActionCall call,
-    ::morph::exec::IExecutor* cbExec) {
+    ::morph::exec::detail::ModelId mid, ::morph::backend::detail::ActionCall call, ::morph::exec::IExecutor* cbExec) {
     auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
     ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 
@@ -186,9 +183,7 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     }
 }
 
-void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handler) {
-    _reconnectHandler = handler;
-}
+void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handler) { _reconnectHandler = handler; }
 
 void QtWebSocketBackend::scheduleReconnect() {
     _reconnectTimer.start(static_cast<int>(_currentReconnectDelay.count()));
@@ -240,6 +235,8 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
             } catch (...) {
                 pending.state->setException(std::current_exception());
             }
+        } else if (env.message == "timeout") {
+            pending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
         } else {
             pending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
         }
