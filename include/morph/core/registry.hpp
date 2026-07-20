@@ -437,7 +437,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                     \
         static A fromJson(std::string_view jsonStr) {                                                         \
             A action{};                                                                                       \
-            if (auto errCode = glz::read_json(action, jsonStr)) {                                             \
+            static constexpr glz::opts kLenientRead{.error_on_unknown_keys = false};                          \
+            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                    \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
             }                                                                                                 \
             return action;                                                                                    \
@@ -451,7 +452,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                     \
         static Result resultFromJson(std::string_view jsonStr) {                                              \
             Result result{};                                                                                  \
-            if (auto errCode = glz::read_json(result, jsonStr)) {                                             \
+            static constexpr glz::opts kLenientRead{.error_on_unknown_keys = false};                          \
+            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                    \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
             }                                                                                                 \
             return result;                                                                                    \

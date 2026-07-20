@@ -9,6 +9,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
@@ -193,4 +194,60 @@ TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: throws when the ser
     morph::backend::SimulatedRemoteBackend backend{*server};
 
     REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
+}
+
+// ── Action-evolution policy: BRIDGE_REGISTER_ACTION is forward-compatible ────
+
+// Deliberately at file scope, not inside an anonymous namespace: glaze's
+// reflection (`get_name`) needs external linkage to mangle a name for the
+// type, matching the established convention for BRIDGE_REGISTER_ACTION
+// fixtures elsewhere in this test suite (see test_action_validation.cpp,
+// test_coverage_gaps.cpp).
+struct PvPolicyResult {
+    int value = 0;
+};
+struct PvPolicyAction {
+    int id = 0;
+};
+struct PvPolicyModel {
+    PvPolicyResult execute(PvPolicyAction a) { return PvPolicyResult{.value = a.id}; }
+};
+
+// Also at file scope for the same reason (see above) — used only by the
+// "strict by default" pin below.
+struct PvPolicyOldShape {
+    int id = 0;
+};
+
+BRIDGE_REGISTER_MODEL(PvPolicyModel, "PV_PolicyModel")
+BRIDGE_REGISTER_ACTION(PvPolicyModel, PvPolicyAction, "PV_PolicyAction")
+
+TEST_CASE("BRIDGE_REGISTER_ACTION fromJson tolerates an unknown field from a newer peer",
+          "[registry][protocol][policy]") {
+    // Simulates a newer client sending an action payload with an additive
+    // field this older-compiled struct does not know about.
+    const std::string newerPeerJson = R"({"id":42,"note":"from a newer client"})";
+    auto action = morph::model::ActionTraits<PvPolicyAction>::fromJson(newerPeerJson);
+    REQUIRE(action.id == 42);
+}
+
+TEST_CASE("BRIDGE_REGISTER_ACTION resultFromJson tolerates an unknown field from a newer peer",
+          "[registry][protocol][policy]") {
+    // Same additive-evolution guarantee on the result side: a newer server
+    // adds a field to the result struct, an older-compiled client still
+    // decodes the fields it knows.
+    const std::string newerPeerJson = R"({"value":99,"extra":"from a newer server"})";
+    auto result = morph::model::ActionTraits<PvPolicyAction>::resultFromJson(newerPeerJson);
+    REQUIRE(result.value == 99);
+}
+
+TEST_CASE("Plain glz::read_json (the pre-existing, non-macro pattern) is strict by default",
+          "[registry][protocol][policy]") {
+    // Pins *why* the macro change in this task matters: the glaze default
+    // (error_on_unknown_keys = true) is what a hand-written fromJson gets if
+    // it calls glz::read_json directly instead of the lenient pattern.
+    const std::string newerPeerJson = R"({"id":42,"note":"from a newer client"})";
+    PvPolicyOldShape older{};
+    auto err = glz::read_json(older, newerPeerJson);
+    REQUIRE(static_cast<bool>(err));
 }
