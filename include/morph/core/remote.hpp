@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -18,6 +21,76 @@
 #include "wire.hpp"
 
 namespace morph::backend {
+
+namespace detail {
+
+/// @brief Keyed 64-bit bijection that turns a monotonic counter into an
+///        unguessable, non-sequential id.
+///
+/// Implements a 4-round Feistel network over two 32-bit halves. A Feistel
+/// network is a bijection over its full domain for *any* round function —
+/// that is what guarantees `RemoteServer` never hands out the same id twice
+/// for two different counter values. What makes the permutation *opaque*
+/// rather than merely "scrambled" is that each round's mixing function folds
+/// in a secret round key drawn once, at construction, from
+/// `std::random_device`: an *unkeyed* public mixing function would be
+/// invertible by anyone reading the source, letting an attacker who observes
+/// one id recover the counter and predict the next; the secret per-round keys
+/// prevent that without needing the mixing function itself to be secret.
+///
+/// This is a self-contained reference construction (no external crypto
+/// dependency), in the same spirit as the hand-rolled HMAC-SHA256 in
+/// `session_auth.hpp`: adequate for the stated defence-in-depth goal (opaque
+/// ids are not the authorization boundary — `IAuthorizer::authorizeInstance`
+/// is), not a cryptographically-audited primitive.
+class OpaqueIdGenerator {
+public:
+    /// @brief Draws four independent 32-bit round keys from `std::random_device`.
+    OpaqueIdGenerator() {
+        std::random_device rd;
+        for (auto& key : _roundKeys) {
+            key = static_cast<uint32_t>(rd());
+        }
+    }
+
+    /// @brief Applies the keyed permutation to @p counter.
+    ///
+    /// Bijective over the full 64-bit domain: distinct @p counter values
+    /// always produce distinct results (the Feistel structure guarantees
+    /// this regardless of the round function), so a monotonically
+    /// increasing, non-repeating @p counter can never yield a collision.
+    /// @param counter Monotonic input, e.g. from an atomic counter.
+    /// @return A 64-bit value that is a bijective function of @p counter.
+    [[nodiscard]] uint64_t permute(uint64_t counter) const noexcept {
+        auto lo = static_cast<uint32_t>(counter & 0xffffffffULL);
+        auto hi = static_cast<uint32_t>(counter >> 32);
+        for (const uint32_t roundKey : _roundKeys) {
+            const uint32_t nextHi = lo;
+            lo = hi ^ mix(lo, roundKey);
+            hi = nextHi;
+        }
+        return (static_cast<uint64_t>(hi) << 32) | static_cast<uint64_t>(lo);
+    }
+
+private:
+    /// @brief Keyed avalanche mix (fmix32-style) used as the Feistel round function.
+    /// @param half Current 32-bit half being folded into the other half.
+    /// @param key  This round's secret key.
+    /// @return A well-mixed 32-bit value depending non-linearly on both @p half and @p key.
+    [[nodiscard]] static uint32_t mix(uint32_t half, uint32_t key) noexcept {
+        uint32_t val = half ^ key;
+        val ^= val >> 16;
+        val *= 0x7feb352dU;
+        val ^= val >> 15;
+        val *= 0x846ca68bU;
+        val ^= val >> 16;
+        return val;
+    }
+
+    std::array<uint32_t, 4> _roundKeys{};
+};
+
+}  // namespace detail
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
 ///
@@ -191,7 +264,7 @@ private:
                 // stamped above (empty if the authorizer does not
                 // authenticate), never the client's raw claim. This is what
                 // lets `authorizeInstance` later deny a different principal.
-                ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
+                ::morph::exec::detail::ModelId const mid{nextOpaqueId()};
                 {
                     std::scoped_lock const lock{_regMtx};
                     _models[mid] = std::move(holder);
@@ -312,6 +385,25 @@ private:
         });
     }
 
+    /// @brief Returns the next opaque model id.
+    ///
+    /// Runs an internal monotonic counter through `detail::OpaqueIdGenerator`,
+    /// so distinct calls never collide (the permutation is a bijection) but
+    /// the returned values are not sequential. Skips the one counter value
+    /// (if any) whose permutation is exactly `0` — `ModelId`'s reserved
+    /// "unbound" sentinel (see `strand.hpp`) — which is possible in principle
+    /// (the permutation is a bijection over the *entire* 64-bit domain, so
+    /// exactly one input maps to `0`) but has probability 1-in-2^64 for a
+    /// random key; guarded defensively rather than ever handed out.
+    /// @return A freshly-generated, non-zero, opaque `ModelId`.
+    [[nodiscard]] ::morph::exec::detail::ModelId nextOpaqueId() {
+        uint64_t id = 0;
+        do {
+            id = _idGen.permute(_nextId.fetch_add(1) + 1);
+        } while (id == 0);
+        return ::morph::exec::detail::ModelId{id};
+    }
+
     ::morph::exec::IExecutor& _pool;
     ::morph::exec::detail::StrandExecutor _strand;
     ::morph::model::detail::ActionDispatcher& _dispatcher;
@@ -326,6 +418,7 @@ private:
     // (same lock as _models); empty string means "no recorded owner".
     std::unordered_map<::morph::exec::detail::ModelId, std::string, ::morph::exec::detail::ModelIdHash> _owners;
     std::atomic<uint64_t> _nextId{0};
+    detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
 };
