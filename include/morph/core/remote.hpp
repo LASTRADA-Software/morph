@@ -17,6 +17,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -232,6 +233,14 @@ private:
 
 }  // namespace detail
 
+/// @brief Opaque id a transport uses to scope model registrations to one
+///        connection so `RemoteServer::closeConnection` can reclaim them.
+///
+/// `0` is reserved and means *unscoped* — the meaning today's two-argument
+/// `RemoteServer::handle()`/`handleInline()` calls always have. Non-zero
+/// values are minted by `RemoteServer::openConnection()`.
+using ConnectionId = std::uint64_t;
+
 /// @brief Server-side message handler that owns model instances and dispatches actions.
 ///
 /// `RemoteServer` receives JSON envelopes (`morph::wire::Envelope`) from any
@@ -327,6 +336,61 @@ public:
         std::function<void(std::string)> capture = [&reply](std::string out) noexcept { reply = std::move(out); };
         dispatchMessage(msg, capture);
         return reply;
+    }
+
+    /// @brief Opens a new connection scope and returns its id.
+    ///
+    /// Call once per accepted transport connection (e.g. from a WebSocket
+    /// server's "new connection" callback). The returned id is never `0`, so
+    /// it can always be distinguished from the reserved "unscoped" value. Pass
+    /// it to the scoped `handle(msg, reply, cid)` overload for every message
+    /// received on that connection, and to `closeConnection(cid)` once the
+    /// connection is gone.
+    ///
+    /// Thread-safe.
+    /// @return A fresh, non-zero `ConnectionId`.
+    [[nodiscard]] ConnectionId openConnection() {
+        ConnectionId const cid{_nextConnectionId.fetch_add(1) + 1};
+        std::scoped_lock const lock{_regMtx};
+        _connectionScopes.try_emplace(cid);
+        return cid;
+    }
+
+    /// @brief Reclaims every model still registered under @p cid, then drops the scope.
+    ///
+    /// Call once the transport observes the connection is gone (disconnect,
+    /// close, error). Erases every surviving model in `cid`'s scope from the
+    /// registry exactly as an explicit `deregister` would (so a later
+    /// `execute` against one of those ids replies `err "model not found"`),
+    /// then drops the scope itself.
+    ///
+    /// Idempotent: `cid == 0`, an unknown `cid`, or a `cid` already closed is a
+    /// no-op. Deliberately does **not** consult `IAuthorizer` — this is the
+    /// server's own housekeeping in reaction to a transport-level event, not
+    /// an action attributable to any caller (see docs/spec/core/backend.md).
+    ///
+    /// Safe to call while a model in the scope has an `execute` in flight: the
+    /// strand task already holds its own `shared_ptr` to the model holder, so
+    /// erasing the registry entry here only prevents *new* lookups (see
+    /// docs/spec/concurrency_and_lifetimes.md).
+    ///
+    /// Thread-safe.
+    /// @param cid Connection scope to close, as returned by `openConnection()`.
+    void closeConnection(ConnectionId cid) {
+        if (cid == 0) {
+            return;
+        }
+        std::scoped_lock const lock{_regMtx};
+        auto scopeIter = _connectionScopes.find(cid);
+        if (scopeIter == _connectionScopes.end()) {
+            return;
+        }
+        for (const auto& mid : scopeIter->second) {
+            _models.erase(mid);
+            _owners.erase(mid);
+            _modelConnection.erase(mid);
+        }
+        _connectionScopes.erase(scopeIter);
     }
 
     /// @brief Callable that supplies the action log to attach to a newly
@@ -631,7 +695,19 @@ private:
     // IAuthorizer::authorizeInstance on execute/deregister. Guarded by _regMtx
     // (same lock as _models); empty string means "no recorded owner".
     std::unordered_map<::morph::exec::detail::ModelId, std::string, ::morph::exec::detail::ModelIdHash> _owners;
+    // Connection-scope bookkeeping (opt-in; see openConnection/closeConnection
+    // and the scoped handle(msg, reply, cid) overload). Guarded by _regMtx —
+    // the same lock as _models/_owners — so scope membership can never desync
+    // from instance existence.
+    std::unordered_map<ConnectionId,
+                       std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash>>
+        _connectionScopes;
+    // Owning connection recorded per scoped instance; absent means unscoped
+    // (registered via the two-argument handle()/handleInline()).
+    std::unordered_map<::morph::exec::detail::ModelId, ConnectionId, ::morph::exec::detail::ModelIdHash>
+        _modelConnection;
     std::atomic<uint64_t> _nextId{0};
+    std::atomic<uint64_t> _nextConnectionId{0};
     detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
