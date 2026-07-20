@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <glaze/glaze.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -24,6 +24,15 @@ namespace morph::wire {
 /// keeping a single message's peak allocation bounded; transports that want a
 /// tighter bound should enforce it before calling `decode`.
 inline constexpr std::size_t kMaxEnvelopeBytes = 8u * 1024u * 1024u;
+
+/// @brief Protocol version this build of `morph` speaks.
+///
+/// Carried in `Envelope::protocolVersion` and announced by `makeHello()`.
+/// Bumped only on a **breaking** wire change (a field removal/retype, or a
+/// control-flow semantic change) — see "Action-evolution policy" in
+/// docs/spec/core/wire.md. A purely additive change (a new optional field on
+/// the envelope or on an action/result struct) does not bump this constant.
+inline constexpr std::uint32_t kProtocolVersion = 1;
 
 /// @brief JSON wire envelope used between any client and `RemoteServer`.
 ///
@@ -77,6 +86,29 @@ struct Envelope {
     /// @brief Session context for authorization and routing. Populated on
     ///        `execute`; ignored on every other kind.
     ::morph::session::Context session;
+
+    /// @brief Protocol version the sender speaks.
+    ///
+    /// `0` means "unspecified / legacy peer" — the value on every envelope an
+    /// old encoder (unaware of this field) produces, and the value an old
+    /// decoder (unaware of this field) leaves untouched when it receives one
+    /// from a newer peer (ignored via `decode`'s `error_on_unknown_keys =
+    /// false`). Populated by `makeHello()` on `"hello"`; not otherwise
+    /// inspected by other `kind`s today.
+    std::uint32_t protocolVersion = 0;
+};
+
+/// @brief Inclusive protocol-version range a server advertises in reply to
+///        `"hello"`.
+///
+/// Serialized as the `"ok"` reply's `body` (JSON) when a server accepts a
+/// `"hello"` — see `RemoteServer::setSupportedVersionRange`.
+struct ProtocolRange {
+    /// @brief Oldest protocol version the server accepts.
+    std::uint32_t min = kProtocolVersion;
+
+    /// @brief Newest protocol version the server accepts.
+    std::uint32_t max = kProtocolVersion;
 };
 
 /// @brief Builds a `register` envelope.
@@ -118,6 +150,18 @@ inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     return env;
 }
 
+/// @brief Builds a `hello` envelope announcing the sender's protocol version.
+///
+/// Exchanged once per connection, before any `register`/`execute`. See
+/// "Protocol version negotiation" in docs/spec/core/wire.md.
+/// @param protocolVersion Protocol version the sender speaks (default: `kProtocolVersion`).
+inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
+    Envelope env;
+    env.kind = "hello";
+    env.protocolVersion = protocolVersion;
+    return env;
+}
+
 /// @brief Encodes @p env as a single JSON line.
 /// @throws std::runtime_error on serialisation failure (should never happen for valid input).
 inline std::string encode(const Envelope& env) {
@@ -149,9 +193,8 @@ inline std::string encode(const Envelope& env) {
 ///         valid envelope.
 inline Envelope decode(std::string_view json) {
     if (json.size() > kMaxEnvelopeBytes) {
-        throw std::runtime_error("envelope decode failed: input exceeds maximum size (" +
-                                 std::to_string(json.size()) + " > " +
-                                 std::to_string(kMaxEnvelopeBytes) + " bytes)");
+        throw std::runtime_error("envelope decode failed: input exceeds maximum size (" + std::to_string(json.size()) +
+                                 " > " + std::to_string(kMaxEnvelopeBytes) + " bytes)");
     }
     Envelope env{};
     // Ignore unknown keys so the envelope is forward-compatible: a newer peer may
@@ -163,6 +206,37 @@ inline Envelope decode(std::string_view json) {
         throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }
     return env;
+}
+
+/// @brief Outcome of a `"hello"` protocol-version negotiation attempt.
+enum class ProtocolNegotiationResult : std::uint8_t {
+    /// @brief The peer understood `"hello"` and accepted the announced version.
+    Negotiated,
+    /// @brief The peer does not understand `"hello"` (a pre-negotiation legacy peer).
+    LegacyPeer,
+};
+
+/// @brief Classifies a decoded reply to a `"hello"` envelope.
+///
+/// @param reply Decoded reply envelope — the result of `decode()` on the
+///        response to a `"hello"` round-trip.
+/// @return `Negotiated` if @p reply's `kind` is `"ok"`; `LegacyPeer` if it is
+///         an `"err"` whose `message` is exactly `"unknown envelope kind:
+///         hello"` — the generic unrecognised-`kind` message a pre-negotiation
+///         `RemoteServer` produces for a `kind` it does not switch on.
+/// @throws std::runtime_error if @p reply is any other `"err"` (e.g.
+///         `"protocol version unsupported"`), so the caller refuses to
+///         proceed instead of silently treating an explicit rejection as a
+///         legacy peer.
+inline ProtocolNegotiationResult interpretHelloReply(const Envelope& reply) {
+    if (reply.kind == "ok") {
+        return ProtocolNegotiationResult::Negotiated;
+    }
+    if (reply.message == "unknown envelope kind: hello") {
+        return ProtocolNegotiationResult::LegacyPeer;
+    }
+    throw std::runtime_error("protocol negotiation failed: " +
+                             (reply.message.empty() ? std::string{"malformed reply"} : reply.message));
 }
 
 }  // namespace morph::wire
