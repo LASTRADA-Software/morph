@@ -12,6 +12,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "../forms/forms.hpp"
 #include "model.hpp"
 
 namespace morph::model {
@@ -205,14 +206,42 @@ public:
     ///
     /// This is the single execution site used by `RemoteServer` (every remote and
     /// Qt WebSocket topology) — `Model::execute()` runs here, on whichever process
-    /// actually owns @p holder. If a `journal::IActionLog` is attached to @p holder
-    /// (via `IModelHolder::attachActionLog`) and `Action` is loggable (the default),
-    /// the executed action is recorded automatically after it succeeds.
+    /// actually owns @p holder. Before `Model::execute` runs, the runner reconciles
+    /// any `Quantity` fields to their declared precision
+    /// (`morph::forms::reconcileDeclaredPrecision`) and enforces
+    /// `ActionValidator<Action>::ready(action)`, throwing `ValidationError` when it
+    /// returns `false` — the same two checks the client bridge dispatch path
+    /// (`ActionExecuteRegistry::registerAction`, `bridge.hpp`) already performs. If a
+    /// `journal::IActionLog` is attached to @p holder (via
+    /// `IModelHolder::attachActionLog`) and `Action` is loggable (the default), the
+    /// executed action is recorded automatically after it succeeds.
+    /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
         Key const key{std::string{modelId}, std::string{actionId}};
         _runners[key] = [](IModelHolder& holder, std::string_view payloadJson) {
             auto action = ActionTraits<Action>::fromJson(payloadJson);
+            // Retag any Quantity fields to their declared precision so a
+            // hand-built wire payload matches the schema's advertised
+            // x-decimalPlaces, exactly as the client bridge dispatch path
+            // (ActionExecuteRegistry::registerAction, bridge.hpp) already does.
+            // No-op for actions with no Quantity members. See
+            // docs/spec/forms/forms.md.
+            ::morph::forms::reconcileDeclaredPrecision(action);
+            // Enforce the action's validator on the server dispatch path — the
+            // one path an untrusted remote client can drive directly with a
+            // hand-built envelope, bypassing the client-side gates
+            // (BridgeHandler::set<>'s tryFireImpl and
+            // ActionExecuteRegistry::registerAction). ActionValidator<Action>::ready
+            // auto-detects a `bool validate() const` member and defaults to
+            // `true` for actions with no validator, so this is a no-op for
+            // unvalidated actions (zero behavior change) and a hard gate for
+            // validated ones. The exception propagates out of this lambda to
+            // ActionDispatcher::dispatch's caller (RemoteServer::dispatchExecute's
+            // strand catch turns it into an `err` reply).
+            if (!ActionValidator<Action>::ready(action)) {
+                throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
+            }
             auto& model = holder.template into<Model>();
             auto result = model.execute(action);
             auto resultJson = ActionTraits<Action>::resultToJson(result);
