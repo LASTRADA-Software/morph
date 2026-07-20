@@ -345,30 +345,37 @@ caller receives.
 
 ### Security / trust boundary
 
-Validation is enforced on the **client bridge dispatch path** but **not** on the
-**server-side wire dispatcher**. Two distinct code paths carry an action to a
-handler:
+Validation is enforced on **every** dispatch path — client bridge, local
+in-process, and the server-side wire dispatcher:
 
 - **`BridgeHandler::executeJson` → `ActionExecuteRegistry`** (the local /
-  client-side path a schema-driven GUI uses). This path **now enforces**
+  client-side path a schema-driven GUI uses). Enforces
   `ActionValidator<Action>::ready` after decoding and before invoking the handler
   (see [bridge.md](../core/bridge.md)): an action that fails `validate()` is rejected with
   an error, never executed. It also retags `Quantity` fields to their declared
-  precision (below). So on this path the schema's `required` array and the
-  handler agree by construction.
+  precision (below).
+- **`Bridge::executeVia`'s `localOp`** (`LocalBackend`, reached by any
+  hand-built `Action` passed to `BridgeHandler<Model>::execute<Action>()`
+  directly). Enforces the same `ready()` check before `Model::execute`,
+  rejecting via `onError` with a `morph::model::ValidationError` (see
+  [bridge.md](../core/bridge.md)).
 - **`RemoteServer` / `ActionDispatcher`** (the server-side wire path, remote
-  mode). This dispatcher runs **no** validators — it does not consult the
-  schema's `required` array and does not call `validate()`. A hand-crafted wire
-  payload that omits or blanks a "required" field reaches the handler unmodified.
+  mode). `ActionDispatcher::registerAction`'s runner reconciles declared
+  `Quantity` precision and enforces `ActionValidator<Action>::ready` before
+  `Model::execute` runs, throwing `morph::model::ValidationError` (a
+  `std::runtime_error` subclass caught by `RemoteServer`'s strand and turned
+  into an `err` reply) when it returns `false` (see [registry.md](../core/registry.md)).
 
-So `required`-ness and `allRequiredEngaged` are a **UX affordance and a
-client-bridge gate, not a wire-level security boundary**. A model that may be
-reached over the remote wire path must therefore still **re-check required
-quantities inside the handler**. The `examples/forms` model does exactly this —
-its `execute(RecordMeasurement)` calls `action.validate()` (the same
-`allRequiredEngaged` predicate) and throws `std::invalid_argument` if it fails,
-so schema, form, and server agree regardless of which dispatch path was used. See
-[security.md](../security.md) for the wire dispatcher's validation stance.
+So the schema's `required` array and `allRequiredEngaged` are enforced
+consistently on every dispatch path — schema, form, local execution, and the
+remote wire path all agree. Validation is **not** authorization, however: a
+validated action can still be rejected by `IAuthorizer`, and vice versa — see
+[security.md](../security.md) for that separate seam. A model may also still
+enforce deeper business rules `validate()` cannot express (cross-entity
+constraints, balance checks); `validate()` only covers field-level readiness,
+which is why the `examples/forms` model additionally calls
+`action.validate()` itself inside `execute(RecordMeasurement)` and throws
+`std::invalid_argument` on failure as a defense-in-depth model-level check.
 
 ### Advertised precision is enforced on dispatch
 
@@ -382,10 +389,11 @@ retags every `Quantity` member of the action to `declaredPrecision()` (an exact
 handler stores is at the precision the schema advertised, not at the client's
 submitted `dp`. This makes `x-decimalPlaces` an enforced contract on that path
 rather than an advisory hint. The reconciliation is a no-op for actions with no
-`Quantity` members and for action types glaze cannot reflect. As with validation,
-this covers the client bridge path only — the server-side wire dispatcher
-(`ActionDispatcher`) does not reconcile precision, so a model reached over the
-remote wire must not assume the incoming `dp` equals its declared precision.
+`Quantity` members and for action types glaze cannot reflect.
+`ActionDispatcher::registerAction`'s runner performs the same reconciliation on
+the server-side wire path (see [registry.md](../core/registry.md)), so
+`x-decimalPlaces` is now an enforced contract on every dispatch path — local,
+client-bridge, and remote wire.
 
 ### One cached schema per type — no localisation
 

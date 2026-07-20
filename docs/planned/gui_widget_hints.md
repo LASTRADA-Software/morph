@@ -155,7 +155,7 @@ Illustrative of *one* renderer; the contract stays renderer-agnostic.
   untouched ([gui_overview.md](gui_overview.md)).
 - **`x-widget` is not validation.** A slider's `x-min` / `x-max` are a *control
   track*, not an enforced range. Value validation stays with glaze's `minimum` /
-  `maximum` and server-side checks ([validation.md](validation.md)); a renderer
+  `maximum` and server-side checks ([validation.md](../spec/core/registry.md)); a renderer
   may present a wider track than the validation bound.
 - **No arbitrary custom widgets.** `x-widget` is a small closed vocabulary of
   well-known control ids, not a plugin hook. App-specific controls are a

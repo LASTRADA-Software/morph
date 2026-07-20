@@ -14,6 +14,7 @@ without knowing their concrete types.
   - [ActionTraits](#actiontraits)
 - [Validation and logging policy](#validation-and-logging-policy)
   - [ActionValidator](#actionvalidator)
+  - [ValidationError](#validationerror)
   - [Loggable](#loggable)
   - [ActionLogPolicy](#actionlogpolicy)
 - [Type-erased holders and factory](#type-erased-holders-and-factory)
@@ -44,7 +45,11 @@ provides:
 - **Traits** — `ModelTraits<M>` and `ActionTraits<A>` that map types to string
   ids and JSON codecs. Users specialise them directly or use macros.
 - **Validators** — `ActionValidator<A>` that decides whether a partially-built
-  action draft is ready to execute.
+  action draft is ready to execute, enforced on every dispatch path: the
+  reactive `set<>` path, the type-erased `executeJson` path, the server dispatch
+  runner (`ActionDispatcher::registerAction`), and the local `Bridge::executeVia`
+  path — the last two throw `ValidationError` on a `false` result instead of
+  running `Model::execute`.
 - **Logging policy** — `ActionLogPolicy<A>` and `Loggable` that control whether
   an action's executions are recorded and how duplicates are coalesced.
 - **Type-erased holders** — `IModelHolder` / `ModelHolder<M>` that own a model
@@ -179,6 +184,50 @@ struct ActionValidator {
 };
 ```
 
+### `ValidationError`
+
+Thrown by the two execution sites that receive an action without first passing
+through a client-side readiness gate: `ActionDispatcher::registerAction`'s
+runner (the server dispatch path `RemoteServer` uses on every remote and Qt
+WebSocket topology) and `Bridge::executeVia`'s `localOp` (the in-process path
+`LocalBackend` uses). Both call `ActionValidator<Action>::ready(action)`
+immediately before `Model::execute` and throw `ValidationError` on `false`,
+instead of executing the action:
+
+```cpp
+struct ValidationError : std::runtime_error {
+    ValidationError(std::string_view modelType, std::string_view actionType);
+    // what(): "action failed validation: <modelType>/<actionType>"
+};
+```
+
+`ActionDispatcher::registerAction`'s runner additionally reconciles every
+`Quantity` field of the decoded action to its declared precision
+(`morph::forms::reconcileDeclaredPrecision`) before the `ready()` check, so a
+hand-built wire payload's `Quantity` values match the schema's advertised
+`x-decimalPlaces` the same way the client bridge dispatch path already
+normalises them (see [forms.md](../forms/forms.md)). `Bridge::executeVia`'s
+`localOp` does not reconcile precision — that path never decodes JSON, so
+there is no wire `dp` to reconcile against.
+
+`ValidationError` derives from `std::runtime_error`, so it is caught by
+existing generic `catch (const std::exception&)` handling on both paths
+without any special-casing: `LocalBackend::execute`'s strand `catch (...)`
+(`backend.hpp`) forwards it into the `Completion`'s `onError` with the concrete
+type intact; `RemoteServer::dispatchExecute`'s strand `catch (const
+std::exception&)` (`remote.hpp`) turns it into an ordinary `err` reply carrying
+`exc.what()` and the `callId` — the client's `Completion` resolves through
+`onError` with a generic `std::runtime_error` carrying that message (the
+concrete type does not cross the wire).
+
+Actions with no validator are unaffected on both paths: `ActionValidator<A>::ready`
+defaults to `true` when neither a `bool validate() const` member nor a
+`BRIDGE_REGISTER_VALIDATOR` specialisation exists, so this is backward
+compatible.
+
+`ValidationError` is **not** an authorization mechanism — see
+[security.md](../security.md) for that separate concern.
+
 ### `Loggable`
 
 A strong enum avoiding bare `bool` arguments at registration sites:
@@ -293,9 +342,12 @@ class ActionDispatcher {
 };
 ```
 
-- `registerAction` registers a runner that deserialises, executes via
-  `Model::execute(action)`, serialises the result, and records to the attached
-  action log when the action is loggable and a log is attached.
+- `registerAction` registers a runner that deserialises, reconciles any
+  `Quantity` fields to their declared precision, enforces
+  `ActionValidator<Action>::ready(action)` (throwing `ValidationError` on
+  `false`, before `Model::execute` runs), executes via `Model::execute(action)`,
+  serialises the result, and records to the attached action log when the
+  action is loggable and a log is attached.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs.
 - `coalesce` returns the `ActionLogPolicy<Action>::coalesce` value for the pair;
@@ -444,6 +496,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | `ModelTraits<M>` | class template | **Customisation point.** Maps model type to `std::string_view typeId()`. |
 | `ActionTraits<A>` | class template | **Customisation point.** Maps action type to id, JSON codec, result type, and `Loggable`. |
 | `ActionValidator<A>` | class template | **Customisation point.** `static bool ready(const A&)` — built-in detection of `bool validate() const`, overridable via specialisation. |
+| `ValidationError` | exception type | Thrown by `ActionDispatcher::registerAction`'s runner and `Bridge::executeVia`'s `localOp` when `ActionValidator<A>::ready` returns `false`. `std::runtime_error` subclass carrying `"action failed validation: <modelType>/<actionType>"`. |
 | `ActionLogPolicy<A>` | class template | **Customisation point.** `static constexpr bool coalesce = false` — checkpoint coalescing policy. |
 | `Loggable` | enum | `{ No, Yes }` — strong boolean for action loggability. |
 
@@ -537,6 +590,7 @@ quiesced with respect to dispatch, before exposing them.
 | Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` does `_runners[key] = ...` and `_coalesce[key] = ...`; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
 | Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
 | `dispatch` / `execute` with an unknown `(modelId, actionId)` | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
+| `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
 | Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. | `registry.hpp` |
@@ -596,8 +650,10 @@ testing obligation, not a compile-time guarantee.
   `ActionExecuteRegistry` class itself (declared in `<morph/bridge.hpp>`, not
   `registry.hpp`). Explains the **hard `#include <morph/bridge.hpp>` requirement**
   for any TU using `BRIDGE_REGISTER_ACTION` (`registerActionExecutorOnce` is only
-  *defined* there) and the parallel executor path this spec's
-  `ActionExecuteRegistry` section summarises.
+  *defined* there), the parallel executor path this spec's
+  `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s
+  `localOp`, which enforces the same `ValidationError` gate as this spec's
+  `ActionDispatcher::registerAction` for the local execution path.
 - **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the

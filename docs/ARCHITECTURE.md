@@ -647,17 +647,6 @@ folder names.
 
 ## Known limitations
 
-### Validators do not run server-side
-
-`ActionValidator`/`validate()` gate only the client side: the fielded
-`set<...>` flow checks readiness before dispatching, and schema-driven form
-renderers disable submit until required fields are filled. The dispatcher
-itself executes whatever payload arrives — a remote client can bypass
-validation entirely. A model that dereferences required quantities must
-therefore enforce its own precondition (the `examples/forms` model throws
-`std::invalid_argument` via the same `validate()` predicate the GUI uses).
-Running validators inside the dispatcher runner is a planned extension.
-
 ### `RemoteServer` must be heap-allocated
 
 `RemoteServer::handle()` captures `shared_from_this()` to prevent a use-after-free if the worker pool outlives the server. This means `RemoteServer` **must** be created via `std::make_shared<morph::backend::RemoteServer>(...)`. Constructing it on the stack and calling `handle()` will throw `std::bad_weak_ptr` at runtime.

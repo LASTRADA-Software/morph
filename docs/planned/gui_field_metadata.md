@@ -154,7 +154,7 @@ This is illustrative of *one* renderer; the contract stays renderer-agnostic.
 - **`x-hidden` / `x-readonly` are not security controls.** Both keys are
   presentation only — the field still travels in the payload and a hand-built
   wire envelope can set it freely. Enforcement stays server-side
-  ([validation.md](validation.md), [forms.md](../spec/forms/forms.md)'s trust
+  ([validation.md](../spec/core/registry.md), [forms.md](../spec/forms/forms.md)'s trust
   boundary). A truly secret field must not be a member of the action at all.
 - **No i18n.** Labels and help are baked into the one cached schema per type
   ([forms.md](../spec/forms/forms.md), "no localisation"). Translated captions are
@@ -208,5 +208,5 @@ This is illustrative of *one* renderer; the contract stays renderer-agnostic.
   tabs, spans) that composes with these per-field labels.
 - [gui_widget_hints.md](gui_widget_hints.md) — control selection, which this
   spec's labels and help decorate.
-- [validation.md](validation.md) — why `x-hidden` / `x-readonly` are not a
+- [validation.md](../spec/core/registry.md) — why `x-hidden` / `x-readonly` are not a
   server-side boundary.

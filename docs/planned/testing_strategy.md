@@ -2,7 +2,7 @@
 
 > **Status: planned — not yet implemented.** This spec defines the load, soak,
 > and fuzz testing that the current unit suite does not cover. It gates
-> confidence in the §A hardening milestone ([validation.md](validation.md),
+> confidence in the §A hardening milestone ([validation.md](../spec/core/registry.md),
 > [instance_authorization.md](instance_authorization.md),
 > [transport_limits.md](transport_limits.md)) and exercises the untrusted-input
 > boundaries in [wire.md](../spec/core/wire.md) and [backend.md](../spec/core/backend.md).
@@ -174,5 +174,5 @@ This spec *is* the testing plan; its own acceptance criteria are:
   benchmark baselines and the adversarial run exercises.
 - [observability.md](observability.md) — the metrics the soak/load runs instrument
   themselves with.
-- [validation.md](validation.md) / [instance_authorization.md](instance_authorization.md)
+- [validation.md](../spec/core/registry.md) / [instance_authorization.md](instance_authorization.md)
   — the §A hardening this testing gates confidence in.

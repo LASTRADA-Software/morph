@@ -22,13 +22,6 @@ Legend: **[spec]** = full design spec exists (implement against it, then flip it
 
 ## A. Remote-mode hardening (do before networked/public/multi-tenant use)
 
-### A1 — Server-side action validation · P0 · [spec: `planned/validation.md`]
-Run `ActionValidator::ready` (+ declared-precision reconciliation) inside the
-dispatcher runner and `Bridge::executeVia`'s `localOp`, before `Model::execute`.
-A hand-built envelope currently reaches the model unvalidated. Add
-`ValidationError`; reject as `err`/`onError`. Backward compatible.
-*Touches:* `registry.hpp`, `bridge.hpp`, `remote.hpp`.
-
 ### A2 — Register authorization & opaque model ids · P0 · [spec: `planned/instance_authorization.md`]
 `register`/`deregister` are unauthenticated and model ids are sequential/guessable.
 Add `IAuthorizer::authorizeRegister` (default allow-all) enforced in `RemoteServer`;
@@ -184,7 +177,7 @@ reference renderer, the schema contract stays renderer-agnostic).
   selection (multiline, slider, radio vs combo), type-derived where possible.
 - **E-G4 — Cross-field rules** · P1 · [spec: `planned/gui_cross_field_rules.md`] —
   typed rule vocabulary evaluated on client **and** server; shares one
-  declaration with [validation.md](planned/validation.md).
+  declaration with [validation.md](spec/core/registry.md).
 - **E-G5 — Computed fields** · P2 · [spec: `planned/gui_computed_fields.md`] —
   derived read-only fields, recomputed live client-side, authoritative server-side.
 - **E-G6 — Dependent choices** · P2 · [spec: `planned/gui_dependent_choices.md`] —

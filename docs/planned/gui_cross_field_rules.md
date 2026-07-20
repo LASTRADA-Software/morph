@@ -2,7 +2,7 @@
 
 > **Status: planned — not yet implemented.** This spec is part of the GUI
 > enhancement program ([gui_overview.md](gui_overview.md), Tier 1) and depends on
-> the planned server-side validator in [validation.md](validation.md). It extends
+> the planned server-side validator in [validation.md](../spec/core/registry.md). It extends
 > the `x-*` vocabulary and readiness model of [forms.md](../spec/forms/forms.md) with a
 > **closed, typed rule vocabulary** that one declaration drives onto the schema,
 > the client submit gate, *and* the server check with no drift. The same
@@ -31,7 +31,7 @@ can only express it inside the model's `validate()` body as arbitrary C++, which
 `allRequiredEngaged` is per-field and membership-blind by design; it is not the
 place to grow comparisons and conditionals. What is missing is a *declarative,
 typed* way to state a cross-field relationship **once** and have the schema, the
-client gate, and the planned server validator ([validation.md](validation.md))
+client gate, and the planned server validator ([validation.md](../spec/core/registry.md))
 all evaluate it identically.
 
 ## Goal
@@ -44,7 +44,7 @@ mutually-exclusive, …). From that single declaration:
    existing `required` array, which keeps carrying unconditional per-field
    requiredness exactly as today) so a renderer can show them and block submit;
 2. the client submit gate and the reactive `set<>` path evaluate them live; and
-3. the planned server-side validator ([validation.md](validation.md)) evaluates
+3. the planned server-side validator ([validation.md](../spec/core/registry.md)) evaluates
    **the same rule list** inside the dispatcher runner.
 
 Because the vocabulary is closed and typed — not arbitrary C++ predicates —
@@ -175,7 +175,7 @@ table (all additive, all optional):
 
 ### Server-side: the same list, evaluated in the dispatcher
 
-This is the crux of no-drift. [validation.md](validation.md) injects
+This is the crux of no-drift. [validation.md](../spec/core/registry.md) injects
 `ActionValidator<A>::ready(action)` into the dispatcher runner after `fromJson`
 and precision reconciliation. Because the author's `validate()` body calls
 `allRulesSatisfied(*this)`, and `ActionValidator<A>::ready` auto-detects
@@ -183,7 +183,7 @@ and precision reconciliation. Because the author's `validate()` body calls
 **the server evaluates the exact same rule list the client did** — the same typed
 nodes over the same reconciled values — with zero extra server code. A hand-built
 envelope that violates a rule is rejected with the `ValidationError` that
-[validation.md](validation.md) defines, on every path (local, simulated-remote,
+[validation.md](../spec/core/registry.md) defines, on every path (local, simulated-remote,
 Qt WebSocket), never reaching `Model::execute`.
 
 The server never trusts the client's *evaluation*; it re-runs the rules itself.
@@ -219,7 +219,7 @@ The evaluator classifies kinds: `allRulesSatisfied<A>()` evaluates the
 validation kinds and **skips presentation kinds by construction** — on the
 client gate and in the planned server run alike. A presentation rule can never
 block a submit, fail a dispatch, or raise a `ValidationError`
-([validation.md](validation.md)). One evaluator, one classification, both
+([validation.md](../spec/core/registry.md)). One evaluator, one classification, both
 sides.
 
 Degradation is therefore safe in both directions. A renderer that does not
@@ -253,14 +253,14 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
   client and server evaluate identically. Logic that does not fit (cross-entity
   lookups, balance checks, anything needing model state) stays in the model's
   `validate()`/`execute` and is **not** reflected into `x-rules` — the same
-  division [validation.md](validation.md) draws between field-level readiness and
+  division [validation.md](../spec/core/registry.md) draws between field-level readiness and
   model invariants.
 - **Not nested-action rules.** Like all of [forms.md](../spec/forms/forms.md), rules
   range only over an action's own **flat, top-level** members. Sub-members of a
   nested aggregate are not addressable.
 - **Not authorization.** Rules answer "is this action internally consistent?", not
   "may this caller do it?" — authorization stays in `IAuthorizer`
-  ([security.md](../spec/security.md)), exactly as [validation.md](validation.md)
+  ([security.md](../spec/security.md)), exactly as [validation.md](../spec/core/registry.md)
   states.
 - **Not option-membership validation.** Whether a `Choice` value is a *current*
   option is still unchecked at both ends ([choice.md](../spec/forms/choice.md)); a rule
@@ -289,7 +289,7 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
 - A renderer that ignores presentation kinds renders the field visible and
   editable (fallback), with no change to submit-ability.
 - **No-drift:** the same violating action rejected on the client gate is rejected
-  by the dispatcher runner via `ValidationError` ([validation.md](validation.md))
+  by the dispatcher runner via `ValidationError` ([validation.md](../spec/core/registry.md))
   over `SimulatedRemoteBackend` and the Qt WebSocket transport, and on
   `LocalBackend` — `Model::execute` is never entered.
 - Numeric comparison uses the exact `Rational` value after
@@ -305,7 +305,7 @@ older renderer treats an unknown `kind` as fail-closed (defers to the server).
 - [gui_overview.md](gui_overview.md) — the umbrella program; this is its Tier-1
   cross-field-rules feature and the concrete realisation of "one rule declaration
   drives schema + client + server."
-- [validation.md](validation.md) — the server-side validator this shares its
+- [validation.md](../spec/core/registry.md) — the server-side validator this shares its
   single declaration with; `ValidationError`, the dispatcher injection point, and
   the precision-reconciliation-before-validate order this rule engine relies on.
 - [forms.md](../spec/forms/forms.md) — the `required` array, `allRequiredEngaged`,

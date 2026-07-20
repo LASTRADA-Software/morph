@@ -162,7 +162,7 @@ by the next `recomputeAll`.
 
 The crux: the server **never trusts** a client-sent computed value. On the
 dispatcher path, immediately after `fromJson` and `reconcileDeclaredPrecision`
-and before the validator/`Model::execute` ([validation.md](validation.md),
+and before the validator/`Model::execute` ([validation.md](../spec/core/registry.md),
 [bridge.md](../spec/core/bridge.md)), the runner calls `recomputeAll<A>(action)`,
 **overwriting** every computed member from its declared inputs. Whatever the wire
 carried in `total` is discarded and replaced by `qty * price` computed from the
@@ -247,7 +247,7 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   placement, `required` derivation (computed fields are excluded),
   `optionalFields`, and `reconcileDeclaredPrecision` (the normalisation both
   recomputes build on); the renderer-contract table this extends.
-- [validation.md](validation.md) — the dispatcher runner where the authoritative
+- [validation.md](../spec/core/registry.md) — the dispatcher runner where the authoritative
   server-side `recomputeAll` slots in, alongside precision reconciliation and the
   `ready()` check.
 - [quantity_type.md](../spec/util/quantity_type.md) — `Quantity` arithmetic

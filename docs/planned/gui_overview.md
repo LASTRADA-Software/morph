@@ -114,7 +114,7 @@ contract.
   `x-*` vocabulary, `allRequiredEngaged`), [choice.md](../spec/forms/choice.md)
   (`Choice`/`FixedString`), [quantity_type.md](../spec/util/quantity_type.md),
   [datetime.md](../spec/util/datetime.md).
-- **Cross-field rules tie into** [validation.md](validation.md): one rule
+- **Cross-field rules tie into** [validation.md](../spec/core/registry.md): one rule
   declaration should drive the schema's `required`/`x-rules`, the client submit
   gate, *and* the planned server-side validator — no drift between them.
 - **Reactive forms build on** the `subscribe`/`set<>` draft mechanism in
@@ -131,7 +131,7 @@ contract.
   dependent-choices and view specs generalise.
 - [bridge.md](../spec/core/bridge.md) — the reactive `subscribe`/`set<>` draft path the
   computed-field and wizard specs build on.
-- [validation.md](validation.md) — the planned server-side validation the
+- [validation.md](../spec/core/registry.md) — the planned server-side validation the
   cross-field rules must share a declaration with.
 - [todo.md](../todo.md) — the program's execution order and where it sits among
   the other planned work.
