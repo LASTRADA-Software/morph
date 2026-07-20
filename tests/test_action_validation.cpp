@@ -208,3 +208,79 @@ TEST_CASE("Bridge::executeVia dispatches an action with no validator unchanged o
     REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
     REQUIRE(observedResult.load() == 12);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// RemoteServer / SimulatedRemoteBackend: same validation, over the wire
+// ─────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("SimulatedRemoteBackend rejects an invalid action with an err reply carrying the ValidationError message",
+          "[bridge][remote][validation]") {
+    gGatedExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> sawError{false};
+    std::string errorMessage;
+    std::atomic<bool> done{false};
+    handler.execute(GatedAction{.payload = 5, .ready = false})
+        .then([&](GatedResult) { done.store(true); })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                errorMessage = exc.what();
+                sawError.store(true);
+            }
+            done.store(true);
+        });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(sawError.load());
+    REQUIRE(errorMessage == "action failed validation: Test_Validation_GatedModel/Test_Validation_GatedAction");
+    REQUIRE(gGatedExecuteCount.load() == 0);
+}
+
+TEST_CASE("SimulatedRemoteBackend dispatches a valid action normally", "[bridge][remote][validation]") {
+    gGatedExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
+
+    std::atomic<int> observedPayload{-1};
+    std::atomic<bool> done{false};
+    handler.execute(GatedAction{.payload = 5, .ready = true})
+        .then([&](GatedResult result) {
+            observedPayload.store(result.payload);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedPayload.load() == 5);
+    REQUIRE(gGatedExecuteCount.load() == 1);
+}
+
+TEST_CASE("SimulatedRemoteBackend dispatches an action with no validator unchanged", "[bridge][remote][validation]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
+
+    std::atomic<int> observedResult{-1};
+    std::atomic<bool> done{false};
+    handler.execute(UngatedAction{.payload = 6})
+        .then([&](int result) {
+            observedResult.store(result);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedResult.load() == 12);
+}

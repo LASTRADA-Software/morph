@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "../journal/action_log.hpp"
-#include "backend.hpp"
 #include "../session/session.hpp"
+#include "backend.hpp"
 #include "wire.hpp"
 
 namespace morph::backend {
@@ -57,10 +57,9 @@ public:
     /// @param authorizer Authorizer consulted for every `execute` envelope.
     /// @param dispatcher Action dispatcher; defaults to the process-level singleton.
     /// @param registry   Model factory registry; defaults to the process-level singleton.
-    RemoteServer(
-        ::morph::exec::IExecutor& workerPool, std::shared_ptr<::morph::session::IAuthorizer> authorizer,
-        ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
-        ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
+    RemoteServer(::morph::exec::IExecutor& workerPool, std::shared_ptr<::morph::session::IAuthorizer> authorizer,
+                 ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
+                 ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry())
         : _pool{workerPool},
           _strand{workerPool},
           _dispatcher{dispatcher},
@@ -122,8 +121,8 @@ public:
     ///
     /// Return `nullptr` to register the instance with no log attached (e.g. for
     /// model types or context keys the host app doesn't want journaled).
-    using LogProvider =
-        std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType, std::string_view contextKey)>;
+    using LogProvider = std::function<std::shared_ptr<::morph::journal::IActionLog>(std::string_view modelType,
+                                                                                    std::string_view contextKey)>;
 
     /// @brief Installs @p provider, consulted on every `register` envelope whose
     ///        `contextKey` is non-empty.
@@ -214,8 +213,7 @@ private:
             } else if (env.kind == "execute") {
                 dispatchExecute(std::move(env), reply);
             } else {
-                reply(::morph::wire::encode(
-                    ::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
+                reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
         } catch (const std::exception& exc) {
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
@@ -283,6 +281,14 @@ private:
                            reply = std::move(reply)]() mutable {
             try {
                 ::morph::session::detail::ScopedContext const scoped{env.session};
+                // `dispatch` (registry.hpp, ActionDispatcher::registerAction's runner)
+                // now throws morph::model::ValidationError when the decoded action
+                // fails ActionValidator<Action>::ready(...), before Model::execute
+                // runs. No special-casing is needed here: ValidationError derives
+                // from std::runtime_error, so it is caught by the handler below and
+                // turned into an ordinary `err` reply carrying its message and
+                // callId, exactly like any other dispatch failure. See
+                // docs/spec/core/registry.md.
                 auto result = self->_dispatcher.dispatch(env.modelType, env.actionType, *holder, env.body);
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
@@ -353,8 +359,8 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
-        auto reply = ::morph::wire::decode(_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey}))));
+        auto reply = ::morph::wire::decode(
+            _server.handleInline(::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey}))));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -401,8 +407,7 @@ public:
                                if (reply.kind == "ok") {
                                    state->setValue(deser(reply.body));
                                } else {
-                                   throw std::runtime_error(
-                                       reply.message.empty() ? "malformed reply" : reply.message);
+                                   throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
                                }
                            } catch (...) {
                                state->setException(std::current_exception());
