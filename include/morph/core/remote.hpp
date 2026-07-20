@@ -450,6 +450,26 @@ public:
         }
     }
 
+    /// @brief Sets the inclusive protocol-version range this server advertises
+    ///        in reply to a `"hello"` envelope.
+    ///
+    /// Defaults to `{::morph::wire::kProtocolVersion, ::morph::wire::kProtocolVersion}`
+    /// — this build's single supported version. Widen the range when a future
+    /// `kProtocolVersion` bump must keep serving older clients through their
+    /// deprecation window (see docs/spec/core/wire.md, "Action-evolution policy").
+    /// Thread-safe.
+    ///
+    /// @param min Oldest protocol version this server accepts.
+    /// @param max Newest protocol version this server accepts.
+    /// @throws std::invalid_argument if `min > max`.
+    void setSupportedVersionRange(std::uint32_t min, std::uint32_t max) {
+        if (min > max) {
+            throw std::invalid_argument("setSupportedVersionRange: min must not exceed max");
+        }
+        _minVersion.store(min);
+        _maxVersion.store(max);
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
@@ -570,6 +590,16 @@ private:
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
                 dispatchExecute(std::move(env), reply);
+            } else if (env.kind == "hello") {
+                const std::uint32_t minV = _minVersion.load();
+                const std::uint32_t maxV = _maxVersion.load();
+                if (env.protocolVersion < minV || env.protocolVersion > maxV) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("protocol version unsupported", env.callId)));
+                } else {
+                    std::string body;
+                    (void)glz::write_json(::morph::wire::ProtocolRange{.min = minV, .max = maxV}, body);
+                    reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
+                }
             } else {
                 reply(::morph::wire::encode(::morph::wire::makeErr("unknown envelope kind: " + env.kind, env.callId)));
             }
@@ -748,6 +778,8 @@ private:
         _modelConnection;
     std::atomic<uint64_t> _nextId{0};
     std::atomic<uint64_t> _nextConnectionId{0};
+    std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};
+    std::atomic<std::uint32_t> _maxVersion{::morph::wire::kProtocolVersion};
     detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;

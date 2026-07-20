@@ -9,8 +9,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <string>
+
+#include "test_support.hpp"
 
 using morph::wire::decode;
 using morph::wire::encode;
@@ -100,4 +105,71 @@ TEST_CASE("interpretHelloReply: any other err throws instead of proceeding", "[w
 TEST_CASE("interpretHelloReply: an empty-message err still throws (does not misclassify)", "[wire][protocol]") {
     auto reply = makeErr("");
     REQUIRE_THROWS_AS(interpretHelloReply(reply), std::runtime_error);
+}
+
+// ── RemoteServer: "hello" handling ────────────────────────────────────────────
+
+TEST_CASE("RemoteServer: hello at kProtocolVersion returns ok with the default range", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello()), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+
+    ProtocolRange range{};
+    REQUIRE_FALSE(glz::read_json(range, waiter.env.body));
+    REQUIRE(range.min == kProtocolVersion);
+    REQUIRE(range.max == kProtocolVersion);
+}
+
+TEST_CASE("RemoteServer: hello echoes callId in its reply", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    Envelope req = makeHello();
+    req.callId = 55;
+    morph::testing::WaitReply waiter;
+    server->handle(encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+    REQUIRE(waiter.env.callId == 55U);
+}
+
+TEST_CASE("RemoteServer: hello outside the supported range is rejected", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(2, 3);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello(1)), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == "protocol version unsupported");
+}
+
+TEST_CASE("RemoteServer: hello inside a widened supported range succeeds", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(1, 2);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello(2)), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+}
+
+TEST_CASE("RemoteServer::setSupportedVersionRange rejects min > max", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    REQUIRE_THROWS_AS(server->setSupportedVersionRange(5, 1), std::invalid_argument);
+}
+
+TEST_CASE("RemoteServer: hello is also handled via handleInline", "[remote][protocol][handleInline]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reply = decode(server->handleInline(encode(makeHello())));
+    REQUIRE(reply.kind == "ok");
 }
