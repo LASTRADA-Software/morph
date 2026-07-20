@@ -45,6 +45,7 @@ add_executable(morph_tests
     test_datetime.cpp
     test_session_auth.cpp
     test_policy_hardening.cpp
+    test_register_authorization.cpp
 )
 
 target_link_libraries(morph_tests

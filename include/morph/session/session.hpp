@@ -70,8 +70,7 @@ struct IAuthorizer {
     /// @return `true` to allow dispatch, `false` to reject with `err|unauthorized`.
     [[nodiscard]] virtual bool authorize(const Context& ctx,
                                          // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-                                         std::string_view modelType,
-                                          std::string_view actionType) const = 0;
+                                         std::string_view modelType, std::string_view actionType) const = 0;
 
     /// @brief Returns the authenticated principal for @p ctx, or `nullopt`.
     ///
@@ -127,6 +126,39 @@ struct IAuthorizer {
                                                  [[maybe_unused]] std::string_view actionType,
                                                  [[maybe_unused]] std::uint64_t modelId,
                                                  [[maybe_unused]] std::string_view ownerPrincipal) const {
+        return true;
+    }
+
+    /// @brief Optional gate on model **creation** — bounds *who may create* an instance.
+    ///
+    /// `authorize` and `authorizeInstance` both act on an already-existing
+    /// instance; neither can answer "may this caller create one at all?".
+    /// `RemoteServer` consults this hook on every `register` envelope, after
+    /// authenticating the caller (so @p ctx carries the *verified* principal,
+    /// not the client's raw claim) and before constructing the instance. A
+    /// `false` return replies `err "unauthorized"` and **no instance is
+    /// created** — `ModelRegistryFactory::create` never runs.
+    ///
+    /// The **default allows everything**, so an authorizer that does not
+    /// override it — including `AllowAllAuthorizer` and a plain
+    /// `SigningAuthorizer` — keeps the pre-existing behaviour exactly (any
+    /// reachable client may register any known model type). A deployer opts
+    /// into bounding registration by overriding this, typically requiring
+    /// authentication and/or restricting @p modelType:
+    /// @code
+    /// bool authorizeRegister(const Context& ctx, std::string_view modelType) const override {
+    ///     return !ctx.principal.empty();  // only authenticated callers may register
+    /// }
+    /// @endcode
+    ///
+    /// @param ctx       Per-call session for the register envelope; its
+    ///                  `principal` is already the verified identity when the
+    ///                  authorizer authenticates (empty otherwise).
+    /// @param modelType String id of the model type being registered.
+    /// @return `true` to allow the registration, `false` to reject with
+    ///         `err "unauthorized"`.
+    [[nodiscard]] virtual bool authorizeRegister([[maybe_unused]] const Context& ctx,
+                                                 [[maybe_unused]] std::string_view modelType) const {
         return true;
     }
 };
@@ -193,8 +225,6 @@ private:
 ///
 /// Models that don't need session data can ignore this entirely. Models that do
 /// can read principal/locale/metadata without changing their `execute()` signature.
-inline const Context* current() noexcept {
-    return detail::tlsCurrent();
-}
+inline const Context* current() noexcept { return detail::tlsCurrent(); }
 
 }  // namespace morph::session

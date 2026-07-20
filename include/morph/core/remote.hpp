@@ -152,6 +152,27 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
                 }
+                // Authenticate the caller and make the verified identity
+                // authoritative, exactly as dispatchExecute does for execute: a
+                // verifying authorizer's returned principal overwrites
+                // env.session.principal; a non-authenticating authorizer
+                // (including allow-all) clears it, so the register decision
+                // below — and the owner recorded from it — never key on the
+                // client's unverified claim.
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    env.session.principal = std::move(*verified);
+                } else {
+                    env.session.principal.clear();
+                }
+                // Bound *who may create* an instance. The default hook allows
+                // all, so an unconfigured server registers any known type
+                // exactly as before; a deployer opts into gating registration
+                // by overriding authorizeRegister. No instance is constructed
+                // on denial.
+                if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
                 auto holder = _registry.create(env.typeId);
                 if (!env.contextKey.empty()) {
                     LogProvider provider;
@@ -165,22 +186,16 @@ private:
                         }
                     }
                 }
-                // Record the owner principal for per-instance authorization. We
-                // derive it from the *verified* identity of the register call
-                // (never the client's raw claim): a verifying authorizer returns
-                // the principal for the register envelope's session; an
-                // authorize-only / allow-all authorizer returns nullopt, so the
-                // instance is recorded as unowned (empty). This is what lets
-                // `authorizeInstance` later deny a different principal.
-                std::string owner;
-                if (auto verified = _authorizer->authenticate(env.session)) {
-                    owner = std::move(*verified);
-                }
+                // Record the owner principal for per-instance authorization:
+                // env.session's principal is already the verified identity
+                // stamped above (empty if the authorizer does not
+                // authenticate), never the client's raw claim. This is what
+                // lets `authorizeInstance` later deny a different principal.
                 ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
                 {
                     std::scoped_lock const lock{_regMtx};
                     _models[mid] = std::move(holder);
-                    _owners[mid] = std::move(owner);
+                    _owners[mid] = std::move(env.session.principal);
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
