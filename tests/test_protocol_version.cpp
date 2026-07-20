@@ -173,3 +173,24 @@ TEST_CASE("RemoteServer: hello is also handled via handleInline", "[remote][prot
     auto reply = decode(server->handleInline(encode(makeHello())));
     REQUIRE(reply.kind == "ok");
 }
+
+// ── SimulatedRemoteBackend::negotiateProtocolVersion ──────────────────────────
+
+TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: Negotiated against a hello-aware server",
+          "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE(backend.negotiateProtocolVersion() == ProtocolNegotiationResult::Negotiated);
+}
+
+TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: throws when the server's range excludes us",
+          "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(2, 3);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
+}

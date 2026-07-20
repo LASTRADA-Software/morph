@@ -847,6 +847,23 @@ public:
         (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)));
     }
 
+    /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
+    ///
+    /// Processed inline on the calling thread via `RemoteServer::handleInline`,
+    /// same as `registerModel`/`deregisterModel`. Intended to be called once,
+    /// typically right after construction and before any
+    /// `registerModel`/`execute` call — nothing enforces that ordering.
+    ///
+    /// @return `Negotiated` if the server accepted `kProtocolVersion`;
+    ///         `LegacyPeer` if the server does not understand `"hello"` (an
+    ///         un-upgraded `RemoteServer`).
+    /// @throws std::runtime_error if the server explicitly rejects the version
+    ///         (e.g. `"protocol version unsupported"`).
+    ::morph::wire::ProtocolNegotiationResult negotiateProtocolVersion() {
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeHello())));
+        return ::morph::wire::interpretHelloReply(reply);
+    }
+
     /// @brief Serialises the action, sends it to the server, and returns a `Completion`.
     ///
     /// The `Completion` resolves when the server's reply is received and
