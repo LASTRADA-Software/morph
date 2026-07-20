@@ -27,6 +27,18 @@ option(MORPH_ENABLE_STRICT_COMPILATION
     "Enable strict compilation: treat all warnings as errors with extra diagnostics"
     ON
 )
+# Opt-in production guard: when ON, session_auth.hpp drops the `mac = hmacSha256`
+# default argument on TokenIssuer/TokenVerifier/SigningAuthorizer, so any
+# construction relying on the reference HMAC's default fails to compile and a
+# vetted MacFunction (see examples/vetted_hmac/) must be injected explicitly.
+# Keys on a build configuration the deployer chooses, not on CMAKE_BUILD_TYPE,
+# so a zero-dependency local/low-stakes deployment can keep the reference impl
+# by leaving this off. See docs/spec/security.md, "MAC-primitive recommended
+# wiring". Off by default: the standard build is unaffected.
+option(MORPH_REQUIRE_VETTED_HMAC
+    "Fail to build if a call site relies on the reference hmacSha256 default; forces an explicit vetted MacFunction"
+    OFF
+)
 
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
@@ -85,6 +97,9 @@ target_include_directories(morph INTERFACE
 target_link_libraries(morph INTERFACE glaze::glaze)
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(morph INTERFACE Threads::Threads)
+endif()
+if(MORPH_REQUIRE_VETTED_HMAC)
+    target_compile_definitions(morph INTERFACE MORPH_REQUIRE_VETTED_HMAC)
 endif()
 
 set_target_properties(morph PROPERTIES
