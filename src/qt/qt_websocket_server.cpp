@@ -7,6 +7,7 @@
 #include <QString>
 #include <algorithm>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <vector>
 
 namespace morph::qt {
 
@@ -18,11 +19,16 @@ QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, qui
       _requestedPort{port},
       _cfg{cfg},
       _wsServer{QStringLiteral("morph"),
-                tls.has_value() ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode, this} {
+                tls.has_value() ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode, this},
+      _housekeepingTimer{this} {
     if (tls.has_value()) {
         _wsServer.setSslConfiguration(*tls);
     }
     connect(&_wsServer, &QWebSocketServer::newConnection, this, &QtWebSocketServer::onNewConnection);
+    if (_cfg.idleTimeout.count() > 0) {
+        connect(&_housekeepingTimer, &QTimer::timeout, this, &QtWebSocketServer::onHousekeepingTick);
+        _housekeepingTimer.start(1000);  // 1s sweep granularity — see ClientState::lastActivity doc comment
+    }
 }
 
 QtWebSocketServer::~QtWebSocketServer() { close(); }
@@ -33,10 +39,15 @@ quint16 QtWebSocketServer::port() const { return _wsServer.serverPort(); }
 
 void QtWebSocketServer::close() {
     _wsServer.close();
+    _housekeepingTimer.stop();
     // Disconnect the onDisconnected slot first to prevent re-entrant modification of _clients
     // during the abort/deleteLater sequence below.
     for (auto& [socket, state] : _clients) {
         socket->disconnect(this);
+        if (state.handshakeTimer) {
+            state.handshakeTimer->stop();
+            state.handshakeTimer->deleteLater();
+        }
         socket->abort();
         socket->deleteLater();
     }
@@ -60,6 +71,20 @@ void QtWebSocketServer::onNewConnection() {
     state.socket = socket;
     state.tokens = static_cast<double>(_cfg.messagesPerSecond);  // full bucket: an immediate burst is allowed
     state.lastRefill = std::chrono::steady_clock::now();
+    state.lastActivity = state.lastRefill;
+
+    if (_cfg.handshakeTimeout.count() > 0) {
+        auto* timer = new QTimer(this);
+        timer->setSingleShot(true);
+        connect(timer, &QTimer::timeout, this, [this, socket] {
+            if (_clients.contains(socket)) {
+                socket->close();
+            }
+        });
+        timer->start(static_cast<int>(_cfg.handshakeTimeout.count()));
+        state.handshakeTimer = timer;
+    }
+
     _clients.emplace(socket, state);
 }
 
@@ -89,6 +114,12 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         return;  // disconnected/untracked socket; drop
     }
     ClientState& state = iter->second;
+    state.lastActivity = std::chrono::steady_clock::now();
+    if (state.handshakeTimer) {
+        state.handshakeTimer->stop();
+        state.handshakeTimer->deleteLater();
+        state.handshakeTimer = nullptr;
+    }
 
     if (static_cast<std::size_t>(message.toUtf8().size()) > _cfg.maxMessageBytes) {
         socket->sendTextMessage(
@@ -125,8 +156,28 @@ void QtWebSocketServer::onDisconnected() {
     }
     auto iter = _clients.find(socket);
     if (iter != _clients.end()) {
+        if (iter->second.handshakeTimer) {
+            iter->second.handshakeTimer->stop();
+            iter->second.handshakeTimer->deleteLater();
+        }
         _clients.erase(iter);
         socket->deleteLater();
+    }
+}
+
+void QtWebSocketServer::onHousekeepingTick() {
+    if (_cfg.idleTimeout.count() <= 0) {
+        return;
+    }
+    auto const now = std::chrono::steady_clock::now();
+    std::vector<QWebSocket*> toClose;
+    for (auto& [socket, state] : _clients) {
+        if (now - state.lastActivity > _cfg.idleTimeout) {
+            toClose.push_back(socket);
+        }
+    }
+    for (auto* socket : toClose) {
+        socket->close();
     }
 }
 

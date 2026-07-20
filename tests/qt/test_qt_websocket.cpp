@@ -71,6 +71,21 @@ struct WsCounterModel {
 BRIDGE_REGISTER_MODEL(WsCounterModel, "WsCounterModel")
 BRIDGE_REGISTER_ACTION(WsCounterModel, WsAddAction, "WsAddAction")
 
+// Sleeps for a caller-specified duration — used to exercise
+// RemoteServer::LimitPolicy::executeTimeout over a real WebSocket connection.
+struct WsSlowAction {
+    int ms = 0;
+};
+struct WsSlowModel {
+    int execute(WsSlowAction action) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(action.ms));
+        return action.ms;
+    }
+};
+
+BRIDGE_REGISTER_MODEL(WsSlowModel, "WsSlowModel")
+BRIDGE_REGISTER_ACTION(WsSlowModel, WsSlowAction, "WsSlowAction")
+
 // ── Poll helper — pumps Qt event loop while waiting ──────────────────────────
 static void pumpUntil(const std::function<bool()>& done, int maxIterations = 50) {
     for (int idx = 0; idx < maxIterations && !done(); ++idx) {
@@ -750,6 +765,119 @@ TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond == 0 never drops fram
 
     sock.close();
     pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: handshakeTimeout closes a silent connection", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.handshakeTimeout = std::chrono::milliseconds{100};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    // Send nothing — wait past the handshake timeout and confirm the server closed it.
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::UnconnectedState);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: sending a frame before handshakeTimeout keeps the connection open",
+          "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.handshakeTimeout = std::chrono::milliseconds{200};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reply.kind == "ok");
+
+    // Outlive the original handshake deadline; the timer should have been
+    // cancelled by the frame above, so the connection must still be alive.
+    pumpUntil([] { return false; }, 40);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: idleTimeout closes a connection that goes silent after activity",
+          "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.idleTimeout = std::chrono::milliseconds{150};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reply.kind == "ok");
+
+    // Go silent past idleTimeout plus the ~1s housekeeping sweep granularity.
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 250);
+    REQUIRE(sock.state() == QAbstractSocket::UnconnectedState);
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketServer + RemoteServer::LimitPolicy compose: a server-side executeTimeout"
+    " surfaces to a real QtWebSocketBackend client as TimeoutError",
+    "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::backend::LimitPolicy policy;
+    policy.executeTimeout = std::chrono::milliseconds{80};
+    server->setLimitPolicy(policy);
+
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    std::atomic<bool> gotTimeoutError{false};
+    handler
+        .execute(WsSlowAction{300})  // well past the 80ms executeTimeout
+        .then([](int) {})
+        .onError([&](const std::exception_ptr& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (const morph::backend::TimeoutError&) {
+                gotTimeoutError.store(true);
+            } catch (...) {
+            }
+        });
+
+    pumpUntil([&] { return gotTimeoutError.load(); }, 150);
+    REQUIRE(gotTimeoutError.load());
 }
 
 // ── TLS WebSocket tests ──────────────────────────────────────────────────────

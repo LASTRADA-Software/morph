@@ -3,6 +3,7 @@
 #pragma once
 #include <QObject>
 #include <QSslConfiguration>
+#include <QTimer>
 #include <QWebSocket>
 #include <QWebSocketServer>
 #include <chrono>
@@ -145,6 +146,13 @@ private:
 
         /// @brief Last time `tokens` was refilled (used to compute elapsed time on the next frame).
         std::chrono::steady_clock::time_point lastRefill{};
+
+        /// @brief Last time any frame was received on this connection (drives `idleTimeout`).
+        std::chrono::steady_clock::time_point lastActivity{};
+
+        /// @brief One-shot timer enforcing `handshakeTimeout`; `nullptr` once cancelled by the
+        ///        first frame, or if `handshakeTimeout == 0`.
+        QTimer* handshakeTimer = nullptr;
     };
 
     /// @brief Refills @p state's token bucket for elapsed time, then consumes one
@@ -154,11 +162,15 @@ private:
     ///         the bucket was empty (the frame must be dropped).
     bool consumeToken(ClientState& state);
 
+    /// @brief Qt slot: periodic sweep that closes any connection idle past `idleTimeout`.
+    Q_SLOT void onHousekeepingTick();
+
     ::morph::backend::RemoteServer& _server;
     quint16 _requestedPort;
     QtWebSocketServerConfig _cfg;
     QWebSocketServer _wsServer;
     std::unordered_map<QWebSocket*, ClientState> _clients;
+    QTimer _housekeepingTimer;
 };
 
 }  // namespace morph::qt
