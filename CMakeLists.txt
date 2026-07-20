@@ -175,6 +175,7 @@ if(MORPH_BUILD_QT)
         BASE_DIRS include
         FILES
             include/morph/qt/qt_executor.hpp
+            include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
     )

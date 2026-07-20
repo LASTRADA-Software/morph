@@ -21,6 +21,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_tls.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <stdexcept>
@@ -948,6 +949,29 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: connection refused when client lac
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
     REQUIRE_FALSE(backendPtr->waitForConnected(500));
+}
+
+// ── TLS peer-verification helper tests ───────────────────────────────────────
+
+TEST_CASE("morph::qt::tlsVerifyingConfig sets VerifyPeer", "[qt][tls-helpers]") {
+    QSslConfiguration cfg = morph::qt::tlsVerifyingConfig();
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyPeer);
+}
+
+TEST_CASE("morph::qt::tlsPinnedConfig sets VerifyPeer and trusts only the pinned cert", "[qt][tls-helpers]") {
+    QFile certFile{QStringLiteral(TESTS_CERTS_DIR "/server.crt")};
+    REQUIRE(certFile.open(QIODevice::ReadOnly));
+    QSslCertificate cert{&certFile, QSsl::Pem};
+
+    QSslConfiguration cfg = morph::qt::tlsPinnedConfig(cert);
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyPeer);
+    REQUIRE(cfg.caCertificates().size() == 1);
+    REQUIRE(cfg.caCertificates().first() == cert);
+}
+
+TEST_CASE("morph::qt::tlsInsecureNoVerify sets VerifyNone", "[qt][tls-helpers]") {
+    QSslConfiguration cfg = morph::qt::tlsInsecureNoVerify();
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyNone);
 }
 
 // ── Process-separation tests ─────────────────────────────────────────────────

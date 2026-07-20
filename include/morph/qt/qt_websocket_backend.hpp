@@ -6,10 +6,10 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
-#include <morph/core/backend.hpp>
-#include <morph/core/registry.hpp>
 #include <chrono>
 #include <functional>
+#include <morph/core/backend.hpp>
+#include <morph/core/registry.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -45,8 +45,11 @@ struct QtWebSocketBackendConfig {
 /// message, and resolves the returned `Completion` when the matching reply arrives.
 ///
 /// @par TLS
-/// Pass a `QSslConfiguration` to enable `wss://`. For self-signed certificates
-/// set `QSslSocket::VerifyNone` on the configuration before passing it in.
+/// Pass a `QSslConfiguration` to enable `wss://`. Build it with `tlsVerifyingConfig()`
+/// (CA-verified — the recommended production default) or `tlsPinnedConfig()`
+/// (pinned-certificate — the correct choice for a self-signed deployment), both in
+/// `qt_tls.hpp`. `tlsInsecureNoVerify()` disables peer verification entirely and is
+/// for local development and tests only — see security.md's "Transport security" section.
 ///
 /// @par Threading
 /// Must be used from the Qt event loop thread. `execute()` and the internal
@@ -67,8 +70,7 @@ public:
         QUrl serverUrl,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
-        std::optional<QSslConfiguration> tls = std::nullopt,
-        Config cfg = Config{});
+        std::optional<QSslConfiguration> tls = std::nullopt, Config cfg = Config{});
 
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
