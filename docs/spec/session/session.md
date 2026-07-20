@@ -18,6 +18,7 @@ security.md for the full trust model rather than duplicating it.
 - [IAuthorizer — gate for action dispatch](#iauthorizer--gate-for-action-dispatch)
 - [The `authenticate` hook — the authoritative principal](#the-authenticate-hook--the-authoritative-principal)
 - [The `authorizeInstance` hook — per-instance ownership](#the-authorizeinstance-hook--per-instance-ownership)
+- [The `authorizeRegister` hook — gating registration](#the-authorizeregister-hook--gating-registration)
 - [AllowAllAuthorizer and `allowAllAuthorizer()`](#allowallauthorizer-and-allowallauthorizer)
 - [Trust boundary](#trust-boundary)
 - [Thread safety — `current()` and `ScopedContext`](#thread-safety--current-and-scopedcontext)
@@ -180,6 +181,46 @@ recording, and the trust model are in [security.md](../security.md)
 `authorizeInstance` is consulted per `execute` and per `deregister`, defaults to
 allow, and receives the instance id plus its recorded owner.
 
+## The `authorizeRegister` hook — gating registration
+
+`IAuthorizer` has a fourth, **optional** virtual that closes the gap neither
+`authorize` nor `authorizeInstance` can: bounding *who may create* a model
+instance in the first place.
+
+```cpp
+[[nodiscard]] virtual bool authorizeRegister(
+    const Context& ctx,
+    std::string_view modelType) const { return true; }   // DEFAULT: allow
+```
+
+`RemoteServer` consults it on every `register` envelope, **after**
+authenticating the caller (so `ctx.principal` is already the verified
+identity — never the client's raw claim — when the hook runs) and **before**
+constructing the instance. A `false` return replies `err "unauthorized"` and
+no instance is created; `ModelRegistryFactory::create` never runs, so the
+rejection costs nothing beyond the authenticate/authorize check.
+
+The **default returns `true`**, so `AllowAllAuthorizer` and a plain
+`SigningAuthorizer` impose no register restriction — an unconfigured server
+registers any known model type exactly as before. A deployer opts into
+bounding registration by overriding the hook, typically requiring
+authentication and/or restricting `modelType`:
+
+```cpp
+struct RegisterGate : morph::session::SigningAuthorizer {
+    using SigningAuthorizer::SigningAuthorizer;
+    bool authorizeRegister(const morph::session::Context& ctx, std::string_view) const override {
+        return !ctx.principal.empty();  // only authenticated callers may register
+    }
+};
+```
+
+`authorizeRegister` composes with `authorizeInstance`: registration decides
+*whether* an instance may be created and *by whom*; the owner recorded from
+that same register call then drives per-instance `execute`/`deregister`
+decisions. The full mechanism and the `handleInline` synchronous path are in
+[security.md](../security.md) ("The register-authorization hook").
+
 ## AllowAllAuthorizer and `allowAllAuthorizer()`
 
 The framework ships a default authorizer that permits every call and performs no
@@ -291,6 +332,7 @@ if (const auto* ctx = morph::session::current(); ctx != nullptr) {
 | `authorize` | `[[nodiscard]] virtual bool authorize(const Context&, std::string_view modelType, std::string_view actionType) const = 0` | Returns `true` to allow dispatch, `false` to reject. Called per `execute` envelope. Sees only type ids. |
 | `authenticate` | `[[nodiscard]] virtual std::optional<std::string> authenticate(const Context&) const` | Optional. Default returns `nullopt`. Called after `authorize` succeeds; a returned value overwrites `Context::principal` (making it authoritative), and `nullopt` clears `Context::principal` so an unverified claim is never presented to the model. Also called at `register` time to record the instance's owner principal. |
 | `authorizeInstance` | `[[nodiscard]] virtual bool authorizeInstance(const Context&, std::string_view modelType, std::string_view actionType, std::uint64_t modelId, std::string_view ownerPrincipal) const` | Optional. Default returns `true` (allow). Consulted per `execute` and per `deregister` with the target instance id and its recorded owner. Override to enforce per-instance ownership; `modelType`/`actionType` are empty for `deregister`. |
+| `authorizeRegister` | `[[nodiscard]] virtual bool authorizeRegister(const Context&, std::string_view modelType) const` | Optional. Default returns `true` (allow). Consulted on every `register`, after authentication, before the instance is constructed. Override to bound *who may create* an instance. |
 
 ### `AllowAllAuthorizer`
 

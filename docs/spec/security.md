@@ -52,18 +52,28 @@ application. Be explicit about the boundary:
 - **Authentication of the transport peer.** A bearer token proves the caller
   holds a validly-signed token; it does not bind the token to a connection.
   Without transport-level TLS a stolen token can be replayed.
-- **Type-level `register` authorization.** The `register` envelope is **not**
-  passed through `authorize`, and model ids are guessable sequential integers
-  assigned from a single counter (see [backend.md](core/backend.md),
-  `RemoteServer::_nextId`). Any client that can send envelopes can register
-  models. **Per-instance ownership on `execute`/`deregister` *is* now
-  enforceable** via the optional `IAuthorizer::authorizeInstance` hook (see
+- **`register` authorization and opaque ids are both opt-in, defaulting to
+  today's permissive behaviour.** The `register` envelope is gated by the
+  optional `IAuthorizer::authorizeRegister` hook (see
+  [The register-authorization hook](#the-register-authorization-hook-authorizeregister)
+  below), consulted after authentication and before the instance is created;
+  its **default allows everything**, so an unconfigured server still lets any
+  client that can send envelopes create model instances. Model ids are no
+  longer sequential — `RemoteServer` assigns them via a keyed 64-bit Feistel
+  permutation over an internal counter (see [backend.md](core/backend.md),
+  `RemoteServer`'s `detail::OpaqueIdGenerator`) — but opaque ids are
+  defence-in-depth, not authorization: a caller who independently learns a
+  valid id can still target it. **Per-instance ownership on
+  `execute`/`deregister` *is* enforceable** via the optional
+  `IAuthorizer::authorizeInstance` hook (see
   [The per-instance ownership hook](#the-per-instance-ownership-hook-authorizeinstance)
   below) — a deployer can bind each instance to the principal that registered it
-  and reject cross-tenant `execute`/`deregister`. The hook **defaults to
-  allow-all**, so an unconfigured server still behaves as a single-trust-domain
-  server: it is not a hardened multi-tenant public-internet server *unless* you
-  install an authorizer that overrides `authorizeInstance`.
+  and reject cross-tenant `execute`/`deregister`. All three hooks
+  (`authorizeRegister`, `authorize`, `authorizeInstance`) **default to
+  allow-all**, so an unconfigured server still behaves as a
+  single-trust-domain server: it is not a hardened multi-tenant
+  public-internet server *unless* you install an authorizer that overrides
+  `authorizeRegister` and `authorizeInstance`.
 - **Local-path authorization.** `LocalBackend::execute` installs the session
   context but never calls the authorizer (the authorizer is a remote-only gate,
   `remote.hpp` `dispatchExecute` is the sole call site). Security-critical checks
@@ -328,6 +338,95 @@ every instance is unowned and the hook (if overridden as above) admits all.
 Register itself remains type-unauthorized — bounding *who may create* instances
 is still the transport's/app's responsibility.
 
+## The register-authorization hook (`authorizeRegister`)
+
+`authorize` and `authorizeInstance` both act on an instance that already
+exists; neither can answer "may this caller create one at all?".
+`IAuthorizer` closes that gap with a fourth optional method:
+
+```cpp
+[[nodiscard]] virtual bool authorizeRegister(
+    const Context& ctx,
+    std::string_view modelType
+) const { return true; }             // DEFAULT: allow
+```
+
+### Enforcement order in `RemoteServer`
+
+On every `register` envelope, in order:
+
+1. Reject an empty `typeId` (`err "register requires a typeId"`) — unchanged,
+   checked before any authorization.
+2. **Authenticate.** `_authorizer->authenticate(env.session)` runs and its
+   result is stamped onto `env.session.principal` — a verified value
+   overwrites it, `nullopt` clears it — exactly as `dispatchExecute` does for
+   `execute`. So `authorizeRegister` (and the owner recorded below) key on the
+   *verified* identity, never the client's raw claim.
+3. **`authorizeRegister(env.session, typeId)`.** A `false` return replies
+   `err "unauthorized"` (with the request's `callId`) and **no instance is
+   created** — `ModelRegistryFactory::create` never runs.
+4. Only on `true` does the server construct the instance and record
+   `env.session.principal` (already verified) as its owner, exactly as before.
+
+`handleInline` — the synchronous control path `SimulatedRemoteBackend` uses for
+`register` — runs through the same `dispatchMessage` code path, so the gate
+holds identically on both entry points.
+
+### Composing with `authorizeInstance`
+
+`authorizeRegister` and `authorizeInstance` answer different questions:
+registration decides *whether an instance may be created and by whom*; the
+owner recorded at that same register call then drives per-instance
+`execute`/`deregister` decisions. A deployer typically installs both on one
+authorizer subclassing `SigningAuthorizer`:
+
+```cpp
+struct TenantAuthorizer : morph::session::SigningAuthorizer {
+    using SigningAuthorizer::SigningAuthorizer;
+    bool authorizeRegister(const morph::session::Context& ctx, std::string_view) const override {
+        return !ctx.principal.empty();  // only authenticated callers may register
+    }
+    bool authorizeInstance(const morph::session::Context& ctx, std::string_view, std::string_view,
+                           std::uint64_t, std::string_view ownerPrincipal) const override {
+        return ownerPrincipal.empty() || ownerPrincipal == ctx.principal;
+    }
+};
+```
+
+### Backward compatibility
+
+The default returns `true`. `AllowAllAuthorizer` and a plain `SigningAuthorizer`
+(neither overrides `authorizeRegister`) impose no register restriction, so an
+unconfigured server registers any known model type exactly as before. Register
+over the **local** path is unaffected — there is no authorizer on
+`LocalBackend`; its factory closure constructs the instance directly.
+
+## Opaque model ids
+
+`RemoteServer` no longer assigns model ids from a bare sequential counter.
+Each id is now the result of running an internal monotonic counter through
+`morph::backend::detail::OpaqueIdGenerator` — a 4-round Feistel network over
+the 64-bit space, keyed once at construction from `std::random_device` (see
+[backend.md](core/backend.md) for the construction). Two properties matter:
+
+- **Uniqueness is unconditional.** A Feistel network is a bijection over its
+  full domain for *any* round function, so distinct counter values always
+  produce distinct ids — there is no collision risk short of the
+  practically-unreachable 2^64 counter wraparound.
+- **Opacity depends on the key, not on the algorithm being secret.** The
+  per-round keys are drawn once from `std::random_device` and never exposed;
+  without them, an observed id cannot be inverted to recover the counter or
+  predict the next one. An *unkeyed* public mixing function would not have
+  this property — anyone who reads the (public) source could invert it.
+
+Opaque ids are **defence-in-depth, not the authorization boundary**. They
+remove cheap sequential *enumeration* (`1, 2, 3, …`) as an attack, but a caller
+who independently learns a valid id — its own prior register, a leaked log
+line, a referrer header — can still target it; `authorizeInstance` (above) is
+what actually decides whether that targeting is allowed. A deployer relying on
+id opacity *instead of* an ownership-enforcing authorizer has not closed the
+cross-tenant gap, only made it more expensive to find.
+
 ## The default is fail-open — change it in production
 
 `RemoteServer`'s ordinary constructor defaults to `allowAllAuthorizer()`, and the
@@ -387,11 +486,13 @@ responsibility:
 - **Do not rely on the authorizer for correctness inside models.** It runs only
   on the remote path and only for `execute`. Enforce invariants in the model so
   they also hold locally and for control messages.
-- **Per-instance ownership is opt-in.** `execute`/`deregister` can be bound to
-  the registering principal via `authorizeInstance` (above), but the default
-  allows all. `register` remains type-unauthorized regardless. Treat
-  `RemoteServer` as single-trust-domain unless you install an authorizer that
-  overrides `authorizeInstance` *and* bound who may `register` at the transport.
+- **All three authorization hooks are opt-in.** `execute`/`deregister` can be
+  bound to the registering principal via `authorizeInstance`, and `register`
+  itself can be bounded via `authorizeRegister` (both above) — but every hook
+  **defaults to allow-all**. Treat `RemoteServer` as single-trust-domain unless
+  you install an authorizer that overrides `authorizeRegister` *and*
+  `authorizeInstance`. Opaque model ids (above) reduce the value of guessing an
+  id but are not a substitute for either hook.
 
 ## Testing
 
@@ -409,6 +510,24 @@ non-canonical trailing bits, and a token with a mutated trailing signature
 character fails; and, with an ownership authorizer installed, principal B cannot
 `execute` or `deregister` principal A's instance while A can, whereas with the
 default authorizer any principal can (backward compatible).
+
+`tests/test_register_authorization.cpp` covers `authorizeRegister`: an
+authorizer denying a specific model type (or an unauthenticated caller)
+receives `err "unauthorized"` on `register` and creates no instance — a
+subsequent `execute` against an arbitrary id still reports `err "model not
+found"`; the default authorizer and a plain `SigningAuthorizer` (neither
+overrides the hook) continue to register any known type, unchanged from
+before.
+
+`tests/test_opaque_model_ids.cpp` covers the id-opacity change directly: unit
+tests on `morph::backend::detail::OpaqueIdGenerator` confirm it is a bijection
+(20000 counters → 20000 distinct outputs), that its output is not sequential,
+and that two independently-constructed instances (independent random keys)
+disagree on the same counter; integration tests against `RemoteServer` confirm
+two successive registers return non-adjacent ids, a 2000-round register churn
+produces zero collisions, and a returned id still round-trips through
+`execute`/`deregister` (the only contract ids ever guaranteed — no test
+asserts a literal id value).
 
 The **test TLS material** in `tests/certs/` (`server.crt`/`server.key`, used
 only by `tests/qt/test_qt_websocket.cpp`) is a throwaway self-signed pair with

@@ -120,7 +120,7 @@ server.
 
 | `kind` | Request fields | Reply | Notes |
 |---|---|---|---|
-| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Creates a model via the `ModelRegistryFactory` and records its owner from `_authorizer->authenticate(env.session)` (empty/unowned when the authorizer returns `nullopt`, e.g. allow-all). Empty `typeId` → `err "register requires a typeId"`. If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. |
+| `register` | `typeId`, `[contextKey]` | `ok` with `modelId` (body empty) | Authenticates the caller (`_authorizer->authenticate(env.session)`), stamping the verified principal onto `env.session.principal` (clearing it when unauthenticated) exactly as `execute` does, then consults `_authorizer->authorizeRegister(env.session, typeId)` — a `false` reply is `err "unauthorized"` and **no instance is created**. Only then creates the model via the `ModelRegistryFactory` and records the (already-verified) principal as its owner. Empty `typeId` → `err "register requires a typeId"` (checked before authorization). If `contextKey` is non-empty, consults the `LogProvider` (if set) and, when it returns a non-null log, calls `holder->attachActionLog(log, contextKey)`. The assigned `modelId` is an **opaque** (non-sequential) value — see below. |
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 
@@ -176,6 +176,25 @@ exception's message. An unrecognised `kind` produces `err "unknown envelope
 kind: <kind>"`. Any `std::exception` thrown while handling a decoded envelope is
 caught and returned as an `err` reply carrying `exc.what()` and the request's
 `callId`.
+
+**Opaque model ids.** `RemoteServer` assigns each new instance's id by running
+an internal monotonic counter through `detail::OpaqueIdGenerator` — a keyed,
+4-round Feistel permutation over the 64-bit space, keyed once at construction
+from `std::random_device`. The Feistel structure guarantees the mapping is a
+bijection, so two different counter values never collide (uniqueness holds for
+the server's whole lifetime, short of the practically-unreachable 2^64
+wraparound); the per-round secret keys are what make the *output* opaque
+rather than merely "scrambled" — an attacker who observes one id cannot invert
+a public, unkeyed mixing function to recover the counter and predict the next
+one. `ModelId`'s reserved sentinel `0` ("unbound", see `strand.hpp`) is
+actively skipped: `RemoteServer` draws a fresh counter value and re-permutes
+if the result is ever `0` (a 1-in-2^64 event for a random key). Ids remain
+plain `std::uint64_t` on the wire — the `Envelope` and its `modelId` field are
+unchanged; only the assigned *values* are no longer sequential. This is
+defence-in-depth, not a substitute for `authorizeInstance`: a caller who
+independently learns a valid id (from its own register, or a leak) can still
+target it, so per-instance ownership remains the actual authorization
+boundary — see [security.md](../security.md).
 
 **`handle(msg, reply)`** — asynchronous entry point. Posts to the worker pool,
 calls `dispatchMessage` which decodes, dispatches by `kind`, and calls `reply`
@@ -582,6 +601,7 @@ onto the Qt thread before `sendTextMessage`.
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
 | Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
+| Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
 | WebSocket `deregisterModel` is fire-and-forget | Send-only, no nested event loop | A synchronous deregister would need a nested `QEventLoop`, which is typically driven from a destructor (`~BridgeHandler`) and can trip Qt asserts. The trade-off is accepting that a lost/undelivered deregister leaks the model on the server (there is no connection-scoped cleanup — see Limitations). |
 | `callId`-multiplexed replies | `execute` replies carry a non-zero `callId`; control replies carry `0` | Lets `QtWebSocketBackend` run many concurrent async executes over one socket and match each reply to its `Completion`, while still supporting the parked-nested-loop synchronous `register` path (which uses `callId == 0`). |
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
@@ -593,7 +613,7 @@ onto the Qt thread before `sendTextMessage`.
 | Spec | Relationship |
 |---|---|
 | bridge.md | `Bridge` owns one `IBackend` and swaps it via `switchBackend()`; `BridgeHandler`/`HandlerBinding` carry the `contextKey` that reaches `registerModelWithContext`. `executeVia` builds the `ActionCall`. |
-| session.md | `Context`, `IAuthorizer::authorize`/`authenticate`, `ScopedContext`, `session::current()`. The principal-overwrite contract is specified there and enforced here. |
+| session.md | `Context`, `IAuthorizer::authorize`/`authenticate`/`authorizeInstance`/`authorizeRegister`, `ScopedContext`, `session::current()`. The principal-overwrite contract is specified there and enforced here. |
 | security.md | Threat model for `RemoteServer`: authorization coverage, the untrusted client principal, and what `register`/`deregister` do *not* check. |
 | wire.md | `Envelope`, `encode`/`decode`, `makeOk`/`makeErr`/`makeRegister`/`makeDeregister`, and the `kind` discriminator the server switches on. |
 | registry.md | `ModelRegistryFactory::create` (remote model construction, `BRIDGE_REGISTER_MODEL`), `ActionDispatcher::dispatch` (the remote execute call site), and the `Loggable` policy. |
@@ -613,15 +633,19 @@ onto the Qt thread before `sendTextMessage`.
   `err "unknown model type: ..."` (or fail to compile the registration if it is
   not default-constructible). Parity between the two paths is a property of the
   model, not something the framework guarantees.
-- **Remote model ids are guessable and `register` is type-unauthorized.**
-  `RemoteServer` assigns model ids from a sequential `std::atomic<uint64_t>`
-  counter (`_nextId + 1`), so ids are trivially guessable. `register` performs no
-  type-level authorization gate: any client that can reach the transport can
-  create model instances (it does call `authenticate` to *record* the owner, so
-  ownership is established for later per-instance checks, but creation itself is
-  not denied). `execute` and `deregister` are gated by the optional
-  `authorizeInstance` hook — which defaults to allow-all — in addition to
-  `execute`'s type-level `authorize` step. See security.md.
+- **`register` authorization and id opacity are both opt-in.** `RemoteServer`
+  assigns model ids by running a monotonic counter through a keyed 64-bit
+  Feistel permutation (`detail::OpaqueIdGenerator`), so ids are no longer
+  sequential/trivially guessable — but this narrows *enumeration*, it does not
+  replace authorization: a caller who independently learns a valid id can
+  still target it. `register` is now gated by the optional
+  `IAuthorizer::authorizeRegister` hook, consulted after authentication and
+  before instance creation; its **default allows everything**, so an
+  unconfigured server still lets any reachable client create instances of any
+  known type. `execute` and `deregister` remain gated by the optional
+  `authorizeInstance` hook (also allow-all by default) in addition to
+  `execute`'s type-level `authorize` step. A hardened multi-tenant deployment
+  overrides `authorizeRegister` *and* `authorizeInstance`. See security.md.
 - **No connection-scoped cleanup — orphaned models leak.** There is no
   mechanism that reclaims a client's models when its connection closes.
   `QtWebSocketServer::onDisconnected` only removes the socket from `_clients` and

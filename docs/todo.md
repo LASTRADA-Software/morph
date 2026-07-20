@@ -22,11 +22,7 @@ Legend: **[spec]** = full design spec exists (implement against it, then flip it
 
 ## A. Remote-mode hardening (do before networked/public/multi-tenant use)
 
-### A2 — Register authorization & opaque model ids · P0 · [spec: `planned/instance_authorization.md`]
-`register`/`deregister` are unauthenticated and model ids are sequential/guessable.
-Add `IAuthorizer::authorizeRegister` (default allow-all) enforced in `RemoteServer`;
-replace `_nextId` with opaque (random, non-sequential) id generation. Both opt-in.
-*Touches:* `session.hpp`, `remote.hpp`.
+### A2 — Register authorization & opaque model ids · P0 · **Implemented** — see `security.md` ("The register-authorization hook", "Opaque model ids") and `core/backend.md`.
 
 ### A3 — Transport-level resource limits · P0 · [spec: `planned/transport_limits.md`]
 No per-request timeout, no rate limit, no per-connection model cap, no connection
