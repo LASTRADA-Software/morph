@@ -24,12 +24,11 @@ Legend: **[spec]** = full design spec exists (implement against it, then flip it
 
 ### A2 — Register authorization & opaque model ids · P0 · **Implemented** — see `security.md` ("The register-authorization hook", "Opaque model ids") and `core/backend.md`.
 
-### A3 — Transport-level resource limits · P0 · [spec: `planned/transport_limits.md`]
-No per-request timeout, no rate limit, no per-connection model cap, no connection
-cap — only the 8 MiB message-size bound. Add a server-side `LimitPolicy`
-(execute timeout, max live models, max in-flight) and Qt-transport per-connection
-config (max connections, rate, idle/handshake timeouts). All default off.
-*Touches:* `remote.hpp`, `qt/qt_websocket_server.hpp`; new `TimeoutError`.
+### A3 — Transport-level resource limits · P0 · shipped — folded into [`spec/core/backend.md`](spec/core/backend.md#limitpolicy--opt-in-resource-limits)
+`RemoteServer::LimitPolicy` (execute timeout, max live models, max in-flight) and
+`QtWebSocketServerConfig` (max connections, per-frame size, per-connection rate,
+idle/handshake timeouts) are implemented, all opt-in/default-off. See
+`spec/security.md`'s hardening checklist for the deployment recommendation.
 
 ### A4 — TLS + peer verification as the enforced default · P0 · [spec: `planned/tls_peer_verification.md`]
 The shipped Qt client documents `QSslSocket::VerifyNone` for self-signed certs,

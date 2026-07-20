@@ -24,6 +24,7 @@ and react to backend changes.
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
+- [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
@@ -67,13 +68,14 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 
 ## Error types
 
-Three exception types are thrown into in-flight `Completion`s:
+Four exception types are thrown into in-flight `Completion`s:
 
 | Type | Trigger | Purpose |
 |---|---|---|
 | `BackendChangedError` | `Bridge::switchBackend()` runs | GUI can retry on the new backend or surface a "backend changed" message. |
 | `BridgeDestroyedError` | `Bridge` is destroyed | In-flight completions are cancelled because the bridge is gone. |
 | `DisconnectedError` | Transport drops mid-call (e.g. WebSocket disconnect) | Framework retries the call on reconnect if the backend supports it; otherwise the GUI's `.onError(...)` runs. |
+| `TimeoutError` | Server-side `LimitPolicy::executeTimeout` elapses | Distinguishes a bounded-wait timeout from any other `err` reply, so callers can retry or surface a specific "request timed out" message. |
 
 ## `LocalBackend` — in-process execution
 
@@ -222,6 +224,29 @@ capture the server-side log. Thread-safe.
 using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
     std::string_view modelType, std::string_view contextKey)>;
 ```
+
+### `LimitPolicy` — opt-in resource limits
+
+`RemoteServer::setLimitPolicy(LimitPolicy)` installs an optional, connection-agnostic
+resource policy (thread-safe, same pattern as `setLogProvider`). Every field
+defaults to `0` ("unbounded"), so an unconfigured server's behavior is unchanged:
+
+| Field | Default | Enforcement |
+|---|---|---|
+| `executeTimeout` | `0` (disabled) | A timer arms when `execute` dispatches to the model's strand. If it fires first, the server replies `err "timeout"` and the eventual strand result (if the model finishes later) is discarded via a shared once-flag — `handle()`'s reply-exactly-once contract holds regardless of which path resolves first. The model keeps running to completion on its strand; morph never interrupts `Model::execute`. |
+| `maxLiveModels` | `0` (unbounded) | Checked under `_regMtx` before `register` constructs a new instance; over the cap → `err "too many models"`. The check and the eventual insert are two separate critical sections (to avoid constructing an instance that will be rejected), so a burst of concurrent registers can overshoot the cap by a small, bounded amount — a soft, defense-in-depth limit, not a hard invariant. |
+| `maxInFlightExecutes` | `0` (unbounded) | An atomic counter, incremented when `execute` is admitted for dispatch (before the strand task is posted) and decremented when its reply is sent (success, exception, or timeout — whichever resolves the call first); over the cap → `err "server busy"`, no dispatch. |
+
+A server-side execute timeout surfaces to a caller as `morph::backend::TimeoutError`
+(alongside `BackendChangedError`/`BridgeDestroyedError`/`DisconnectedError`) rather
+than a generic `std::runtime_error`, on both `SimulatedRemoteBackend` and
+`QtWebSocketBackend`.
+
+The background timer that enforces `executeTimeout` is `detail::TimeoutScheduler` —
+a single dedicated thread per `RemoteServer` (mirroring `NetworkMonitor`'s
+condition-variable wait loop), lazily started by `setLimitPolicy` the first time
+`executeTimeout` is configured, so a server that never uses the feature pays no
+extra thread.
 
 ## `SimulatedRemoteBackend` — adapter for testing
 
@@ -395,6 +420,22 @@ pool threads and are each marshalled back to their originating socket.
 **TLS.** Constructing with a `QSslConfiguration` puts the `QWebSocketServer` into
 `SecureMode` (`wss://`); without one it runs in `NonSecureMode`.
 
+**Resource limits.** `QtWebSocketServerConfig` (aliased `QtWebSocketServer::Config`,
+declared outside the class for the same "fully-parsed-before-default-argument"
+reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
+
+| Field | Default | Enforcement |
+|---|---|---|
+| `maxConnections` | `0` (unbounded) | A connection accepted beyond this count is closed immediately in `onNewConnection`, before any signal is wired or the socket is tracked. |
+| `maxMessageBytes` | `wire::kMaxEnvelopeBytes` | Checked against the UTF-8 byte length of every incoming frame before it reaches `RemoteServer::handle()`; an oversized frame gets an immediate `err` reply and is never dispatched. |
+| `messagesPerSecond` | `0` (unbounded) | A per-connection token bucket (capacity = `messagesPerSecond`, refilled continuously). A frame that finds an empty bucket is dropped silently — not replied to, not queued. |
+| `handshakeTimeout` | `0` (disabled) | A one-shot timer per connection; if no frame arrives before it fires, the socket is closed. Cancelled on the first frame. Because `QWebSocketServer::newConnection()` only fires after the WS (and TLS, in `SecureMode`) opening handshake completes, this in practice bounds time-to-first-frame after that point, not the handshake itself. |
+| `idleTimeout` | `0` (disabled) | A shared ~1-second housekeeping sweep closes any connection whose last frame is older than `idleTimeout`; the actual close can lag the configured value by up to the sweep interval. |
+
+`QtWebSocketServerConfig` is also where the independent TLS/peer-verification
+hardening work (see the "planned" note left in the header at implementation
+time) adds `bindAddress`/`allowPlaintextExposure` — both efforts share one struct.
+
 ## Lifetime & ownership
 
 The backends hold *references*, not owning pointers, to the resources they run
@@ -523,6 +564,7 @@ onto the Qt thread before `sendTextMessage`.
 | `BackendChangedError` | `std::runtime_error` | `"backend changed before completion resolved"` |
 | `BridgeDestroyedError` | `std::runtime_error` | `"bridge destroyed before completion resolved"` |
 | `DisconnectedError` | `std::runtime_error` | `"transport disconnected before completion resolved"` |
+| `TimeoutError` | `std::runtime_error` | `"execute timed out on the server"` |
 
 ### `LocalBackend`
 
@@ -544,6 +586,7 @@ onto the Qt thread before `sendTextMessage`.
 | `handle(msg, reply)` | Async: posts to pool, decodes, dispatches, calls `reply` once. Thread-safe. |
 | `handleInline(msg)` | Sync: runs `dispatchMessage` on the calling thread and returns the reply JSON; intended for `register`/`deregister` only. **Rejects `execute`** — returns an `err` reply without dispatching, because an `execute` reply is produced asynchronously after this call returns. |
 | `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
+| `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
 
 ### `SimulatedRemoteBackend`
 
@@ -583,7 +626,7 @@ onto the Qt thread before `sendTextMessage`.
 
 | Method | Notes |
 |---|---|
-| `QtWebSocketServer(server, port = 0, tls = nullopt, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. Does not start listening. |
+| `QtWebSocketServer(server, port = 0, tls = nullopt, cfg = Config{}, parent = nullptr)` | Fronts `RemoteServer& server`. `tls` non-null → `SecureMode`. `cfg` bounds per-connection resources (see above). Does not start listening. |
 | `listen()` | Binds to `LocalHost:port` and starts accepting; returns success. |
 | `port()` | Bound port (OS-assigned when constructed with `0`). |
 | `close()` | Stops accepting; aborts and `deleteLater`s all client sockets. Also run by the destructor. |
@@ -607,6 +650,8 @@ onto the Qt thread before `sendTextMessage`.
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
+| `executeTimeout` implementation | A dedicated, lazily-started background thread (`detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
+| `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill, drop (not close) on empty | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Dropping (vs. closing) keeps a transient burst from taking down the connection — pair with `LimitPolicy::executeTimeout` if bounded caller-side waiting is also needed. |
 
 ## Cross-references
 

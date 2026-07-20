@@ -96,6 +96,7 @@ allocation and parse cost a single message can impose. `encode` does not cap
 output; a server that constructs an `"ok"` reply larger than the cap produces a
 message its own `decode` would reject, so keep result payloads within the bound.
 Transports that want a tighter limit should enforce it before calling `decode`.
+The shipped Qt transport does exactly this: `morph::qt::QtWebSocketServerConfig::maxMessageBytes` (default: this same constant) rejects an oversized frame before it reaches `RemoteServer::handle()` — see [backend.md](backend.md#qtwebsocketserver--server-side-websocket-transport).
 
 ### The `body` double-parse hazard
 

@@ -457,12 +457,13 @@ matter in practice:
   disables server-identity verification (encrypts but does not authenticate the
   server, so it is MITM-vulnerable). Production clients must verify the server
   certificate against a trusted CA or a pinned certificate.
-- **No transport-level message-size check.** `QtWebSocketServer` forwards each
-  text frame to `RemoteServer::handle()` with no size check of its own; the bounds
-  are `QWebSocket`'s default frame/message limit and the wire-layer 8 MiB
-  `kMaxEnvelopeBytes` cap that `wire::decode` enforces before parsing (which
-  covers the whole envelope, including `body`). There is no per-connection request
-  rate limit and no cap on the number of models a connection may register.
+- **Transport-level resource limits are available, opt-in.** `QtWebSocketServerConfig`
+  bounds connection count (`maxConnections`), per-frame size (`maxMessageBytes`,
+  defaulting to the wire-layer `kMaxEnvelopeBytes` cap), per-connection message rate
+  (`messagesPerSecond`, token bucket), and handshake/idle time
+  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled, so an
+  unconfigured server behaves exactly as before. See
+  [backend.md](core/backend.md#qtwebsocketserver--server-side-websocket-transport).
 
 ## Residual limitations & hardening checklist
 
@@ -476,13 +477,14 @@ responsibility:
   verify the server certificate (not `VerifyNone`).
 - **Keep expiry short and rotate the secret.** A leaked secret forges any
   identity; a leaked token is valid until `expiresAtMs`.
-- **Bound message size and add timeouts in the transport.** The wire layer now
-  caps a single message at `wire::kMaxEnvelopeBytes` (8 MiB) but imposes **no**
-  per-request timeout and **no** per-connection rate or count limit (see
-  [wire.md](core/wire.md)); `QtWebSocketServer` adds no cap beyond `QWebSocket`'s
-  default. A hostile client can still exhaust memory with many sub-cap messages
-  or leave `Completion`s pending forever, so the transport must add its own
-  size/rate bounds and timeouts.
+- **Bound message size, rate, and add timeouts — now available, still opt-in.**
+  `RemoteServer::LimitPolicy` (`executeTimeout`, `maxLiveModels`,
+  `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
+  (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
+  `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out.
+  Both default to unbounded/off, so **installing neither changes anything** — a
+  deployer exposing `RemoteServer` publicly should configure both. See
+  [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
 - **Do not rely on the authorizer for correctness inside models.** It runs only
   on the remote path and only for `execute`. Enforce invariants in the model so
   they also hold locally and for control messages.
@@ -548,10 +550,18 @@ an oversized one (including one whose bulk is deeply-nested JSON inside the
 opaque `body` string) with `std::runtime_error` before parsing, and — pinning
 the honest, non-guaranteed behavior — accepts duplicate JSON keys (top-level and
 nested `session`) with last-wins rather than rejecting them, since glaze 7.2.1
-offers no option to error on duplicates. There remains **no** per-request
-timeout and **no** rate or message-count cap (see above).
+offers no option to error on duplicates. A per-request timeout and a rate/
+message-count cap are now available via `LimitPolicy` and
+`QtWebSocketServerConfig` (both opt-in — see above).
 
 `tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key`)
 covers the TLS transport: `wss://` request/reply, TLS error propagation,
 refusal of a plaintext client against a `wss://` server, and a cross-process TLS
 handshake.
+
+`tests/test_limit_policy.cpp` covers `LimitPolicy` (`maxLiveModels`,
+`maxInFlightExecutes`, `executeTimeout` including the once-flag discard of a late
+strand result and `TimeoutError` surfacing through `SimulatedRemoteBackend`);
+`tests/qt/test_qt_websocket.cpp` covers `QtWebSocketServerConfig`
+(`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
+`handshakeTimeout`/`idleTimeout`) and their composition with `LimitPolicy`.
