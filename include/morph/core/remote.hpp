@@ -3,6 +3,8 @@
 #pragma once
 #include <array>
 #include <atomic>
+#include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -21,6 +23,31 @@
 #include "wire.hpp"
 
 namespace morph::backend {
+
+/// @brief Opt-in, connection-agnostic resource limits enforced by `RemoteServer`.
+///
+/// Every field defaults to `0`, meaning "unbounded" — installing no policy (or
+/// installing a default-constructed one) reproduces today's behavior exactly.
+/// Install via `RemoteServer::setLimitPolicy()`. See `docs/spec/core/backend.md`.
+struct LimitPolicy {
+    /// @brief Max wall-clock time a single `execute` may take before the server
+    ///        sends an `err "timeout"` reply and discards the eventual strand
+    ///        result. `0` = no timeout (today's behavior).
+    ///
+    /// The model action itself is never interrupted — it keeps running to
+    /// completion on its strand. This bounds the *caller's wait*, not the model.
+    std::chrono::milliseconds executeTimeout{0};
+
+    /// @brief Max models this `RemoteServer` will hold live at once, across all
+    ///        callers. A `register` beyond this cap replies `err "too many
+    ///        models"`. `0` = unbounded (today's behavior).
+    std::size_t maxLiveModels{0};
+
+    /// @brief Max concurrent in-flight `execute` calls this server will accept
+    ///        before replying `err "server busy"` instead of dispatching.
+    ///        `0` = unbounded (today's behavior).
+    std::size_t maxInFlightExecutes{0};
+};
 
 namespace detail {
 
@@ -211,6 +238,17 @@ public:
         _logProvider = std::move(provider);
     }
 
+    /// @brief Installs @p policy, consulted by every subsequent `register` and
+    ///        `execute`. Thread-safe.
+    ///
+    /// All-zero fields (the default-constructed value) mean "unbounded" — the
+    /// server behaves exactly as it did before this method was ever called.
+    /// @param policy Resource limits to apply from this call onward.
+    void setLimitPolicy(LimitPolicy policy) {
+        std::scoped_lock const lock{_limitsMtx};
+        _limits = policy;
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply) {
         ::morph::wire::Envelope env;
@@ -224,6 +262,18 @@ private:
             if (env.kind == "register") {
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
+                }
+                LimitPolicy limits;
+                {
+                    std::scoped_lock const lock{_limitsMtx};
+                    limits = _limits;
+                }
+                if (limits.maxLiveModels != 0) {
+                    std::scoped_lock const lock{_regMtx};
+                    if (_models.size() >= limits.maxLiveModels) {
+                        reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+                        return;
+                    }
                 }
                 // Authenticate the caller and make the verified identity
                 // authoritative, exactly as dispatchExecute does for execute: a
@@ -421,6 +471,8 @@ private:
     detail::OpaqueIdGenerator _idGen;
     std::mutex _logProviderMtx;
     LogProvider _logProvider;
+    std::mutex _limitsMtx;
+    LimitPolicy _limits;
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as

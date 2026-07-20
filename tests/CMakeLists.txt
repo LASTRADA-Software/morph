@@ -37,6 +37,7 @@ add_executable(morph_tests
     test_coverage_push95.cpp
     test_server_limits.cpp
     test_wire_hardening.cpp
+    test_limit_policy.cpp
     test_action_log.cpp
     test_action_log_phase2.cpp
     test_rational.cpp
