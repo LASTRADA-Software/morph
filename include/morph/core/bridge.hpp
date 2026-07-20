@@ -14,11 +14,11 @@
 #include <utility>
 #include <vector>
 
+#include "../forms/forms.hpp"
+#include "../session/session.hpp"
 #include "backend.hpp"
 #include "completion.hpp"
-#include "../forms/forms.hpp"
 #include "registry.hpp"
-#include "../session/session.hpp"
 
 namespace morph::bridge {
 
@@ -65,7 +65,7 @@ public:
     /// @return Completion that resolves with the JSON-encoded action result.
     /// @throws std::runtime_error if no executor was registered for that pair.
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
-                                                                    void* handler, std::string_view bodyJson) const {
+                                                                  void* handler, std::string_view bodyJson) const {
         auto iter = _executors.find(Key{std::string{modelId}, std::string{actionId}});
         if (iter == _executors.end()) {
             throw std::runtime_error("unknown action for executeJson: " + std::string{modelId} + "/" +
@@ -361,16 +361,24 @@ public:
     /// the old backend still exists (its `shared_ptr` refcount is > 0) and the
     /// call either succeeds or fails with "model not found" — both are safe.
     ///
+    /// On `LocalBackend`, the `localOp` this method builds enforces
+    /// `morph::model::ActionValidator<Action>::ready(action)` before calling
+    /// `Model::execute`, mirroring `ActionDispatcher::registerAction`'s runner
+    /// (`registry.hpp`) for the in-process path. A `false` result resolves the
+    /// returned `Completion` through `onError` with a `morph::model::ValidationError`
+    /// instead of executing the action — see docs/spec/core/registry.md.
+    ///
     /// @tparam Model  Model type that owns the handler.
     /// @tparam Action Action type to dispatch.
     /// @param binding Binding returned by `registerHandler<Model>()`.
     /// @param action  Action to execute (moved in).
     /// @param cbExec  Executor on which the `Completion` callbacks are posted.
-    /// @return Completion that resolves with the typed result or an exception.
+    /// @return Completion that resolves with the typed result or an exception
+    ///         (including `ValidationError` on `LocalBackend` when the action
+    ///         fails its validator).
     template <typename Model, typename Action>
-    ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result>
-    executeVia(const std::shared_ptr<detail::HandlerBinding>& binding, Action action,
-               ::morph::exec::IExecutor* cbExec) {
+    ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> executeVia(
+        const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec) {
         using R = ::morph::model::ActionTraits<Action>::Result;
 
         auto backend = loadBackend();
@@ -391,6 +399,24 @@ public:
             return std::make_shared<R>(::morph::model::ActionTraits<Action>::resultFromJson(jsonStr));
         };
         call.localOp = [sharedAction](::morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+            // Enforce the action's validator on the local execution path too, so
+            // a caller that constructs an Action by hand and calls
+            // BridgeHandler<Model>::execute<Action>() directly — bypassing the
+            // reactive set<>/tryFireImpl gate that already checks ready() — is
+            // rejected the same way a hand-built wire envelope is rejected by
+            // ActionDispatcher::registerAction's runner (registry.hpp). No JSON is
+            // involved on this path, so there is no declared-precision
+            // reconciliation step here (that only applies to decoded wire
+            // payloads); the Quantity fields carry whatever precision the caller
+            // constructed them with. ActionValidator<Action>::ready defaults to
+            // `true` for actions with no validator, so this is a no-op for
+            // unvalidated actions (zero behavior change). The thrown exception is
+            // caught by LocalBackend::execute's strand task (backend.hpp) and
+            // resolves this Completion through onError.
+            if (!::morph::model::ActionValidator<Action>::ready(*sharedAction)) {
+                throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
+                                                      ::morph::model::ActionTraits<Action>::typeId()};
+            }
             auto& model = holder.template into<Model>();
             auto result = std::make_shared<R>(model.execute(*sharedAction));
             // Local mode has no client/server split, so this is the same execution
@@ -491,7 +517,8 @@ private:
                 if (!binding) {
                     continue;
                 }
-                auto newId = pinned->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
+                auto newId =
+                    pinned->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey);
                 binding->currentId.store(newId.v);
             }
         });
@@ -547,8 +574,7 @@ public:
     /// @param bridge   The bridge to register on.
     /// @param guiExec  Executor for callback delivery.
     /// @param binding  Pre-built binding whose factory captures injected dependencies.
-    BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec,
-                  std::shared_ptr<detail::HandlerBinding> binding)
+    BridgeHandler(Bridge& bridge, ::morph::exec::IExecutor* guiExec, std::shared_ptr<detail::HandlerBinding> binding)
         : _bridge{bridge},
           _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
@@ -603,9 +629,9 @@ public:
     /// @return Completion resolving with the JSON-encoded result.
     /// @throws std::runtime_error if `actionType` was never registered for `Model`.
     [[nodiscard]] ::morph::async::Completion<std::string> executeJson(std::string_view actionType,
-                                                                        std::string_view bodyJson) {
-        return ActionExecuteRegistry::instance().execute(
-            std::string{::morph::model::ModelTraits<Model>::typeId()}, actionType, this, bodyJson);
+                                                                      std::string_view bodyJson) {
+        return ActionExecuteRegistry::instance().execute(std::string{::morph::model::ModelTraits<Model>::typeId()},
+                                                         actionType, this, bodyJson);
     }
 
     /// @brief The executor used to deliver this handler's `Completion` callbacks.
@@ -619,9 +645,7 @@ public:
     template <typename Action>
     void subscribe(std::function<void(typename ::morph::model::ActionTraits<Action>::Result)> cb) {
         using R = ::morph::model::ActionTraits<Action>::Result;
-        auto wrapper = [cb = std::move(cb)](const std::any& boxed) {
-            cb(std::any_cast<const R&>(boxed));
-        };
+        auto wrapper = [cb = std::move(cb)](const std::any& boxed) { cb(std::any_cast<const R&>(boxed)); };
         std::scoped_lock lock{_subs->mtx};
         _subs->entries[::morph::model::ActionTraits<Action>::typeId()].sink = std::move(wrapper);
     }
@@ -833,7 +857,8 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 throw std::invalid_argument{"action failed validation: " +
                                             std::string{::morph::model::ActionTraits<Action>::typeId()}};
             }
-            handler->template execute<Action>(std::move(action))
+            handler
+                ->template execute<Action>(std::move(action))
                 // NOLINTNEXTLINE(performance-unnecessary-value-param) — lambda captures the result by value
                 .then([resultState](auto result) {
                     // Guard the JSON forwarding for the same reason as executeVia:

@@ -136,3 +136,75 @@ TEST_CASE("ActionDispatcher::registerAction runner reconciles declared Quantity 
     auto const result = morph::model::ActionTraits<PrecisionAction>::resultFromJson(resultJson);
     REQUIRE(result.observedDecimalPlaces == 2);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bridge::executeVia's localOp: validation on LocalBackend
+// ─────────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Bridge::executeVia rejects an invalid action on LocalBackend via onError with ValidationError",
+          "[bridge][local][validation]") {
+    gGatedExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> sawValidationError{false};
+    std::atomic<bool> done{false};
+    handler.execute(GatedAction{.payload = 3, .ready = false})
+        .then([&](GatedResult) { done.store(true); })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const morph::model::ValidationError&) {
+                sawValidationError.store(true);
+            } catch (...) {
+            }
+            done.store(true);
+        });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(sawValidationError.load());
+    REQUIRE(gGatedExecuteCount.load() == 0);
+}
+
+TEST_CASE("Bridge::executeVia dispatches a valid action normally on LocalBackend", "[bridge][local][validation]") {
+    gGatedExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<GatedModel> handler{bridge, &cbExec};
+
+    std::atomic<int> observedPayload{-1};
+    std::atomic<bool> done{false};
+    handler.execute(GatedAction{.payload = 3, .ready = true})
+        .then([&](GatedResult result) {
+            observedPayload.store(result.payload);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedPayload.load() == 3);
+    REQUIRE(gGatedExecuteCount.load() == 1);
+}
+
+TEST_CASE("Bridge::executeVia dispatches an action with no validator unchanged on LocalBackend",
+          "[bridge][local][validation]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<UngatedModel> handler{bridge, &cbExec};
+
+    std::atomic<int> observedResult{-1};
+    std::atomic<bool> done{false};
+    handler.execute(UngatedAction{.payload = 6})
+        .then([&](int result) {
+            observedResult.store(result);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedResult.load() == 12);
+}
