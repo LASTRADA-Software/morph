@@ -52,3 +52,33 @@ if(MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM)
         endif()
     endif()
 endif()
+
+# ── OpenSSL adapter ──────────────────────────────────────────────────────────
+if(MORPH_BUILD_HMAC_EXAMPLE_OPENSSL)
+    find_package(OpenSSL REQUIRED)
+
+    add_executable(morph_vetted_hmac_openssl_demo openssl_adapter_demo.cpp)
+    target_link_libraries(morph_vetted_hmac_openssl_demo PRIVATE morph::morph OpenSSL::Crypto)
+    # Deliberately NOT calling apply_warnings() here — OpenSSL's public
+    # headers are not -Weverything/-Werror clean and would fail the strict
+    # build (same rationale as examples/bank/CMakeLists.txt's ORM headers).
+
+    if(MORPH_BUILD_TESTS)
+        # See the matching comment in the libsodium block above: this
+        # directory is processed before the top-level MORPH_BUILD_TESTS block
+        # resolves Catch2, so its `Catch` CMake module isn't on
+        # CMAKE_MODULE_PATH yet here.
+        find_package(Catch2 3 CONFIG QUIET)
+        if(NOT Catch2_FOUND)
+            message(WARNING "Catch2 not found; OpenSSL HMAC adapter tests will not be built.")
+        else()
+            add_executable(morph_vetted_hmac_openssl_tests test_openssl_adapter.cpp)
+            target_link_libraries(morph_vetted_hmac_openssl_tests
+                PRIVATE morph::morph OpenSSL::Crypto Catch2::Catch2WithMain)
+
+            list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
+            include(Catch)
+            catch_discover_tests(morph_vetted_hmac_openssl_tests DISCOVERY_MODE PRE_TEST)
+        endif()
+    endif()
+endif()
