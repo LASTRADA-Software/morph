@@ -501,11 +501,10 @@ public:
     ///        `health()` snapshot, and again whenever readiness changes.
     ///
     /// Thread-safe. Pass `nullptr` to remove a previously installed handler
-    /// (clearing does not itself invoke anything). `RemoteServer` has no
-    /// internal path that flips `HealthStatus::ready` to `false` yet — that
-    /// arrives with a future shutdown sequence — so today the handler only ever
-    /// observes `ready == true`, but is retained so that sequence can fire it
-    /// without any change to this API. A deployment's transport (e.g.
+    /// (clearing does not itself invoke anything). `beginShutdown()` is
+    /// currently the only internal path that flips `HealthStatus::ready` to
+    /// `false`; it re-invokes this handler (if installed) with the
+    /// post-shutdown snapshot. A deployment's transport (e.g.
     /// `QtWebSocketServer`) can expose `health()`/this handler over an
     /// HTTP/probe endpoint; `morph` does not embed an HTTP server.
     /// @param handler Callback invoked with the current `HealthStatus`.
@@ -521,6 +520,34 @@ public:
         }
     }
 
+    /// @brief Enters shutdown: from now on, `register` and `execute` envelopes
+    ///        are rejected with `err "server shutting down"`. `deregister` is
+    ///        still served so clients can tear down cleanly.
+    ///
+    /// Idempotent — safe to call more than once, and safe to call while
+    /// `handle()`/`handleInline()` calls are concurrently in flight on other
+    /// threads. There is no way back: a restarted service constructs a fresh
+    /// `RemoteServer` rather than un-shutting-down this one.
+    ///
+    /// Also flips `health().ready` to `false` and, if a handler is installed
+    /// via `setHealthHandler()`, re-invokes it with the post-shutdown
+    /// snapshot — the same "invoked again whenever readiness changes"
+    /// contract `setHealthHandler` documents. This is what lets an
+    /// orchestrator stop routing to this server while `drainedWithin()`'s
+    /// drain runs.
+    void beginShutdown() {
+        _shuttingDown.store(true, std::memory_order_release);
+        _ready.store(false, std::memory_order_release);
+        std::function<void(const HealthStatus&)> handler;
+        {
+            std::scoped_lock const lock{_healthMtx};
+            handler = _healthHandler;
+        }
+        if (handler) {
+            handler(health());
+        }
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
@@ -528,6 +555,14 @@ private:
             env = ::morph::wire::decode(msg);
         } catch (const std::exception& exc) {
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));
+            return;
+        }
+        // Once shutdown has begun, new work is rejected fast — before any of
+        // the existing register/execute validation runs — while `deregister`
+        // (and any other kind) still flows through unchanged, so a client can
+        // still tear its models down cleanly during the drain window.
+        if ((env.kind == "register" || env.kind == "execute") && _shuttingDown.load(std::memory_order_acquire)) {
+            reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
         try {
@@ -880,9 +915,12 @@ private:
     // inFlight field: one counter, never double-counted.
     std::atomic<std::size_t> _inFlightExecutes{0};
     std::unique_ptr<detail::TimeoutScheduler> _timeoutScheduler;
-    // Readiness flag for health(). Always true today: nothing in this file
-    // flips it — a future beginShutdown() (docs/planned/graceful_shutdown.md)
-    // is expected to be the first caller that sets it false.
+    // Set once by beginShutdown() and never cleared — there is no
+    // un-shutdown. Checked at the top of dispatchMessage() for register and
+    // execute envelopes only; deregister and any other kind are unaffected.
+    std::atomic<bool> _shuttingDown{false};
+    // Readiness flag for health(). Flipped to false exactly once, by
+    // beginShutdown() — there is no un-shutdown, so once false it stays false.
     std::atomic<bool> _ready{true};
     std::mutex _healthMtx;
     std::function<void(const HealthStatus&)> _healthHandler;

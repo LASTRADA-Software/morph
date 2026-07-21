@@ -52,6 +52,7 @@ add_executable(morph_tests
     test_policy_hardening.cpp
     test_register_authorization.cpp
     test_opaque_model_ids.cpp
+    test_graceful_shutdown.cpp
 )
 
 target_link_libraries(morph_tests
