@@ -60,6 +60,8 @@ set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::offline::detail::*"
     "morph::qt::detail"
     "morph::qt::detail::*"
+    "morph::net::detail"
+    "morph::net::detail::*"
     "morph::math::detail"
     "morph::math::detail::*"
     "morph::units::detail"

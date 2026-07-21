@@ -27,6 +27,7 @@ if(MORPH_BUILD_FORMS_QML AND EMSCRIPTEN)
                     "non-Emscripten toolchain.")
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
+option(MORPH_BUILD_NET           "Build the morph::net raw-socket WebSocket transport (POSIX only; see docs/spec/core/backend.md)" OFF)
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
 # Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
@@ -301,6 +302,29 @@ if(MORPH_BUILD_QT)
 
     if(MORPH_BUILD_EXAMPLES)
         add_subdirectory(examples/qt_tls_client)
+    endif()
+endif()
+
+# ── morph::net raw-socket WebSocket transport (optional, POSIX only) ───────
+if(MORPH_BUILD_NET)
+    if(WIN32)
+        message(WARNING "MORPH_BUILD_NET is ignored on Windows: morph::net is POSIX-only "
+                        "(BSD sockets) today; Winsock2 support is documented future work.")
+    else()
+        add_library(morph_net INTERFACE)
+        add_library(morph::net ALIAS morph_net)
+        target_link_libraries(morph_net INTERFACE morph)
+        target_sources(morph_net
+            INTERFACE
+            FILE_SET HEADERS
+            BASE_DIRS include
+            FILES
+                include/morph/net/detail/base64.hpp
+        )
+
+        if(MORPH_BUILD_TESTS)
+            add_subdirectory(tests/net)
+        endif()
     endif()
 endif()
 
