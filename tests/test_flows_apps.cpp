@@ -11,6 +11,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/forms/app.hpp>
 #include <morph/forms/flows.hpp>
 #include <stdexcept>
 #include <string>
@@ -206,4 +207,33 @@ TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError o
     // cleanly against the new backend.
     flow.set<&FlowStepOne::label>(std::string{"racing again"});
     REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+}
+
+// ---------------------------------------------------------------------------
+// App shell
+// ---------------------------------------------------------------------------
+
+using DemoApp = morph::app::App<"Demo app", std::tuple<morph::app::MenuEntry<"Flow", "flow">>,
+                                std::tuple<morph::app::WizardScreen<"flow", DemoWizard>>>;
+
+BRIDGE_REGISTER_APP(DemoApp, "FlowsTest_DemoApp")
+
+TEST_CASE("App::AppSchemaJson emits title, menu, and screens", "[app]") {
+    auto const schema = morph::app::appSchemaJson<DemoApp>();
+    REQUIRE_FALSE(schema.empty());
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    CHECK(schema.contains(R"("app-title":"Demo app")"));
+    CHECK(schema.contains(R"("label":"Flow")"));
+    CHECK(schema.contains(R"("screen":"flow")"));
+    CHECK(schema.contains(R"("kind":"wizard")"));
+    CHECK(schema.contains(R"("ref":"FlowsTest_DemoWizard")"));
+}
+
+TEST_CASE("App::FormScreen::ref resolves to the registered action's type-id", "[app]") {
+    using DensityScreen = morph::app::FormScreen<"density", FlowStepOne>;
+    CHECK(DensityScreen::kind() == "form");
+    CHECK(DensityScreen::ref() == "FlowsTest_FlowStepOne");
 }
