@@ -40,10 +40,15 @@ struct ComputeDryDensity {
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
-/// @brief One selectable sample (a row of `ListSamples`' result).
+/// @brief One selectable sample (a row of `ListSamples`' result), and the
+///        row type `SamplesView` (lab_schemas.hpp) composes its columns from.
 struct SampleInfo {
     std::int64_t id = 0;
     std::string name;
+    /// A nominal reference mass per sample — present purely so the derived
+    /// SamplesView table has one Quantity column to format (ExtUnits /
+    /// x-decimalPlaces), exercising the same path a Quantity form field uses.
+    Mass referenceMass{};
 };
 
 /// @brief Result of `ListSamples`.
@@ -52,8 +57,34 @@ struct SampleList {
 };
 
 /// @brief Options provider for `RecordMeasurement.sampleId` — a pure query
-///        the form renderers execute to populate the sample combo box.
+///        the form renderers execute to populate the sample combo box — and
+///        `SamplesView`'s `v-query` (lab_schemas.hpp).
 struct ListSamples {};
+
+/// @brief Renames an existing sample. `SamplesView`'s `v-rowAction`
+///        (lab_schemas.hpp): activating a row opens this form, prefilled
+///        with the row's current id via `bind`.
+struct EditSample {
+    std::int64_t id = 0;
+    std::string name;
+    [[nodiscard]] bool validate() const { return id != 0 && !name.empty(); }
+};
+
+/// @brief Removes an existing sample. `SamplesView`'s row-scope, confirm-guarded
+///        `v-actions` entry.
+struct DeleteSample {
+    std::int64_t id = 0;
+    [[nodiscard]] bool validate() const { return id != 0; }
+};
+
+/// @brief Result of `DeleteSample`.
+struct DeleteSampleAck {
+    std::int64_t id = 0;
+};
+
+/// @brief Adds a new sample. `SamplesView`'s collection-scope `v-actions`
+///        entry — fired with an empty body.
+struct CreateSample {};
 
 /// @brief Record a measured density (moisture and note are optional).
 struct RecordMeasurement {
@@ -171,12 +202,48 @@ public:
     /// @brief The unit algebra runs in real model code: kg / m³ -> kg/m³.
     Density execute(const ComputeDryDensity& action) { return action.massDry / action.volume; }
 
-    /// @brief Serves the sample combo-box options (a pure query).
+    /// @brief Serves the sample combo-box options (a pure query) and
+    ///        `SamplesView`'s table rows.
     SampleList execute(const ListSamples& action) {
         static_cast<void>(action);
-        return SampleList{.samples = {{.id = 1, .name = "Proctor A"},
-                                      {.id = 2, .name = "Proctor B"},
-                                      {.id = 7, .name = "Crushed aggregate 0/32"}}};
+        return SampleList{.samples = _samples};
+    }
+
+    /// @brief Renames the sample named by `action.id`. Re-checks `validate()`
+    ///        (the dispatcher does not run validators server-side over the
+    ///        remote wire path — docs/spec/forms/forms.md, "Security / trust
+    ///        boundary" — same guard `RecordMeasurement` already uses below).
+    SampleInfo execute(const EditSample& action) {
+        if (!action.validate()) {
+            throw std::invalid_argument{"EditSample: id and name are required"};
+        }
+        for (auto& sample : _samples) {
+            if (sample.id == action.id) {
+                sample.name = action.name;
+                return sample;
+            }
+        }
+        throw std::invalid_argument{std::format("EditSample: no sample with id {}", action.id)};
+    }
+
+    /// @brief Removes the sample named by `action.id`.
+    DeleteSampleAck execute(const DeleteSample& action) {
+        if (!action.validate()) {
+            throw std::invalid_argument{"DeleteSample: id is required"};
+        }
+        auto const before = _samples.size();
+        std::erase_if(_samples, [&](SampleInfo const& sample) { return sample.id == action.id; });
+        if (_samples.size() == before) {
+            throw std::invalid_argument{std::format("DeleteSample: no sample with id {}", action.id)};
+        }
+        return DeleteSampleAck{.id = action.id};
+    }
+
+    /// @brief Appends a new sample with an auto-assigned id and a default name.
+    SampleInfo execute(const CreateSample&) {
+        SampleInfo created{.id = _nextSampleId++, .name = "New sample"};
+        _samples.push_back(created);
+        return created;
     }
 
     /// @brief Serves the country combo-box options (a pure query,
@@ -227,6 +294,17 @@ public:
                 .cityId = *action.city,
                 .summary = std::format("ship to city {} in country {}", *action.city, *action.country)};
     }
+
+private:
+    // Serial per-model execution (docs/spec/core/bridge.md: each model runs
+    // on its own strand) makes plain, unsynchronised mutation of these two
+    // members safe.
+    std::vector<SampleInfo> _samples{
+        {.id = 1, .name = "Proctor A"},
+        {.id = 2, .name = "Proctor B"},
+        {.id = 7, .name = "Crushed aggregate 0/32"},
+    };
+    std::int64_t _nextSampleId = 100;
 };
 
 }  // namespace lab
@@ -253,6 +331,9 @@ struct glz::json_schema<lab::ShippingAddress> {
 };
 
 using lab::ComputeDryDensity;
+using lab::CreateSample;
+using lab::DeleteSample;
+using lab::EditSample;
 using lab::LabModel;
 using lab::ListCities;
 using lab::ListCountries;
@@ -267,3 +348,6 @@ BRIDGE_REGISTER_ACTION(LabModel, ListSamples, "ListSamples", morph::model::Logga
 BRIDGE_REGISTER_ACTION(LabModel, ListCountries, "ListCountries", morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(LabModel, ListCities, "ListCities", morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(LabModel, ShippingAddress, "ShippingAddress")
+BRIDGE_REGISTER_ACTION(LabModel, EditSample, "EditSample")
+BRIDGE_REGISTER_ACTION(LabModel, DeleteSample, "DeleteSample")
+BRIDGE_REGISTER_ACTION(LabModel, CreateSample, "CreateSample")
