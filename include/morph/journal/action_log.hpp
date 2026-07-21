@@ -99,10 +99,19 @@ inline std::string toJson(const LogEntry& entry) {
 }
 
 /// @brief Decodes @p json into a `LogEntry`.
-/// @throws SerializationError if @p json is not a valid `LogEntry`.
+///
+/// Reads leniently: `glz::read<glz::opts{.error_on_unknown_keys = false}>`,
+/// the same stance `morph::wire::decode` takes (`include/morph/core/wire.hpp`) —
+/// an unknown/extra JSON key (e.g. an additive field written by a newer morph
+/// build) is ignored rather than rejected. Same duplicate-key caveat as
+/// `wire::decode`: last-wins, not a security boundary (glaze offers no reject
+/// option). Syntactically malformed JSON still throws.
+/// @throws SerializationError if @p json is not valid JSON, or does not decode
+///         into a `LogEntry`.
 inline LogEntry fromJson(std::string_view json) {
     LogEntry entry{};
-    detail::throwOnGlazeError(glz::read_json(entry, json), json);
+    static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+    detail::throwOnGlazeError(glz::read<kLenient>(entry, json), json);
     return entry;
 }
 
