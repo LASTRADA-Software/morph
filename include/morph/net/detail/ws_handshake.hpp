@@ -11,6 +11,7 @@
 
 #include "base64.hpp"
 #include "sha1.hpp"
+#include "tcp_socket.hpp"
 
 namespace morph::net::detail {
 
@@ -249,6 +250,72 @@ inline void verifyServerHandshakeResponse(std::string_view headerBlock, std::str
     if (accept != expected) {
         throw std::runtime_error("verifyServerHandshakeResponse: Sec-WebSocket-Accept mismatch");
     }
+}
+
+/// @brief The result of reading an HTTP header block up through `\r\n\r\n`.
+struct HandshakeReadResult {
+    /// @brief Header lines, joined by `\r\n`, **not** including the final `\r\n\r\n`.
+    std::string header;
+    /// @brief Any bytes read past the header terminator (belong to the first
+    ///        WebSocket frame(s), if the peer pipelined them with the handshake).
+    std::string leftover;
+};
+
+/// @brief Reads bytes from @p socket until the `\r\n\r\n` header terminator.
+/// @param socket Connected socket to read from.
+/// @return The header text and any leftover bytes read past the terminator.
+/// @throws std::runtime_error if the peer closes before completing the header,
+///         or if the header exceeds a 64 KiB safety cap.
+inline HandshakeReadResult readHttpHeaderBlock(TcpSocket& socket) {
+    std::string buf;
+    char chunk[4096];
+    for (;;) {
+        auto pos = buf.find("\r\n\r\n");
+        if (pos != std::string::npos) {
+            HandshakeReadResult result;
+            result.header = buf.substr(0, pos);
+            result.leftover = buf.substr(pos + 4);
+            return result;
+        }
+        if (buf.size() > 64u * 1024u) {
+            throw std::runtime_error("readHttpHeaderBlock: header exceeds maximum size (64 KiB)");
+        }
+        std::size_t got = socket.recvSome(chunk, sizeof(chunk));
+        if (got == 0) {
+            throw std::runtime_error("readHttpHeaderBlock: peer closed connection during handshake");
+        }
+        buf.append(chunk, got);
+    }
+}
+
+/// @brief Performs the client side of the WebSocket handshake over @p socket.
+/// @param socket Already-connected socket.
+/// @param url    Parsed target URL (host/port/path) to send in the request.
+/// @return Leftover bytes read past the response header — feed these into a
+///         `WsFrameReader` before reading further from the socket.
+/// @throws std::runtime_error if the server's response is not a valid 101
+///         Switching Protocols with a matching `Sec-WebSocket-Accept`.
+inline std::string performClientHandshake(TcpSocket& socket, const ParsedWsUrl& url) {
+    std::string key = generateClientKey();
+    std::string request = buildClientHandshakeRequest(url, key);
+    socket.sendAll(request.data(), request.size());
+    HandshakeReadResult result = readHttpHeaderBlock(socket);
+    verifyServerHandshakeResponse(result.header, key);
+    return result.leftover;
+}
+
+/// @brief Performs the server side of the WebSocket handshake over @p socket.
+/// @param socket Freshly accepted socket.
+/// @return Leftover bytes read past the request header — feed these into a
+///         `WsFrameReader` before reading further from the socket.
+/// @throws std::runtime_error if the client's request is malformed or missing
+///         the required headers.
+inline std::string performServerHandshake(TcpSocket& socket) {
+    HandshakeReadResult result = readHttpHeaderBlock(socket);
+    ClientHandshakeRequest req = parseClientHandshakeRequest(result.header);
+    std::string response = buildServerHandshakeResponse(req.key);
+    socket.sendAll(response.data(), response.size());
+    return result.leftover;
 }
 
 }  // namespace morph::net::detail
