@@ -42,6 +42,7 @@ Frame {
     // its schema literal, exactly as today.
     property var catalog: null
     property string displayLocale: "C"
+    property var qtLocale: Qt.locale(displayLocale)
 
     // --- schema helpers -----------------------------------------------------
 
@@ -223,6 +224,56 @@ Frame {
 
     // --- draft state --------------------------------------------------------
 
+    // --- locale numeric formatting (mirrors morph::render::locale_format.hpp)
+    // The payload's exact digit routines below stay entirely locale-free —
+    // this is the one control-edge conversion step, applied once per entry.
+
+    function normalizeLocaleNumber(text, decimalSeparator, groupSeparator) {
+        let stripped = ""
+        for (let i = 0; i < text.length; ++i) {
+            if (groupSeparator !== "" && text[i] === groupSeparator)
+                continue
+            stripped += text[i]
+        }
+        let canonical = ""
+        let sawDecimal = false
+        for (let i = 0; i < stripped.length; ++i) {
+            const ch = stripped[i]
+            if (ch === decimalSeparator) {
+                if (sawDecimal)
+                    return null
+                sawDecimal = true
+                canonical += "."
+            } else if (ch === "-") {
+                if (i !== 0)
+                    return null
+                canonical += ch
+            } else if (ch >= "0" && ch <= "9") {
+                canonical += ch
+            } else {
+                return null
+            }
+        }
+        if (canonical === "" || canonical === "-")
+            return null
+        return canonical
+    }
+
+    function formatCanonicalNumber(text, decimalSeparator, groupSeparator) {
+        const neg = text.startsWith("-")
+        const magnitude = neg ? text.slice(1) : text
+        const dot = magnitude.indexOf(".")
+        const wholePart = dot === -1 ? magnitude : magnitude.slice(0, dot)
+        const fracPart = dot === -1 ? "" : magnitude.slice(dot + 1)
+        let grouped = ""
+        for (let i = 0; i < wholePart.length; ++i) {
+            if (groupSeparator !== "" && i !== 0 && (wholePart.length - i) % 3 === 0)
+                grouped += groupSeparator
+            grouped += wholePart[i]
+        }
+        return (neg ? "-" : "") + grouped + (fracPart !== "" ? decimalSeparator + fracPart : "")
+    }
+
     // --- exact digit-string arithmetic (QML JS has no reliable BigInt) -----
 
     // digits * factor, both non-negative; factor stays well under 2^26 so the
@@ -327,19 +378,20 @@ Frame {
                 parts.push(JSON.stringify(f.name) + ":"
                            + JSON.stringify((text.length === 16 ? text + ":00" : text) + "Z"))
             } else if (f.isQuantity) {
-                if (!/^-?\d+(\.\d+)?$/.test(text)) { ok = false; continue }
+                const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator)
+                if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText)) { ok = false; continue }
                 const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
                 // Reject more decimals than the current unit's precision
                 // instead of silently rounding them away.
-                const fracLen = (text.split(".")[1] || "").length
+                const fracLen = (canonicalText.split(".")[1] || "").length
                 if (fracLen > unit.decimals) { ok = false; continue }
-                const value = parseFloat(text)
+                const value = parseFloat(canonicalText)
                 // Bounds are declared against the canonical unit.
                 if (opt(fieldUnits[f.name], 0) === 0) {
                     if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
                     if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
                 }
-                parts.push(JSON.stringify(f.name) + ":" + rationalJson(text, unit, f.canonDp))
+                parts.push(JSON.stringify(f.name) + ":" + rationalJson(canonicalText, unit, f.canonDp))
             } else if (f.isInteger) {
                 if (!/^-?\d+$/.test(text)) { ok = false; continue }
                 const value = parseInt(text)
@@ -555,10 +607,18 @@ Frame {
                         const fromUnit = fieldColumn.modelData.unitOptions[form.opt(form.fieldUnits[name], 0)]
                         const toUnit = fieldColumn.modelData.unitOptions[currentIndex]
                         form.fieldUnits[name] = currentIndex
-                        if (entry.text.trim() !== "")
-                            entry.text = form.convertText(entry.text.trim(), fromUnit, toUnit)
-                        else
+                        if (entry.text.trim() !== "") {
+                            const canonicalText = form.normalizeLocaleNumber(
+                                    entry.text.trim(), form.qtLocale.decimalPoint, form.qtLocale.groupSeparator)
+                            const converted = canonicalText !== null
+                                    ? form.convertText(canonicalText, fromUnit, toUnit) : ""
+                            entry.text = converted !== ""
+                                    ? form.formatCanonicalNumber(
+                                          converted, form.qtLocale.decimalPoint, form.qtLocale.groupSeparator)
+                                    : ""
+                        } else {
                             form.revalidate()
+                        }
                     }
                 }
 

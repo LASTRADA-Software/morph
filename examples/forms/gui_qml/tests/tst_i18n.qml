@@ -63,6 +63,21 @@ Item {
         })
     }
 
+    DynamicForm {
+        id: localeForm
+        actionType: "Probe"
+        controller: null
+        displayLocale: "de"  // decimal comma, "." grouping
+        schema: ({
+            "properties": {
+                "mass": { "$ref": "#/$defs/q", "x-order": 0, "x-decimalPlaces": 3,
+                          "ExtUnits": { "unitAscii": "kg", "unitUnicode": "kg" } }
+            },
+            "$defs": { "q": { "type": ["object", "null"] } },
+            "required": ["mass"]
+        })
+    }
+
     TestCase {
         name: "I18nCatalog"
 
@@ -101,6 +116,12 @@ Item {
 
         function test_explicitKeyOverridesDerivedKey() {
             compare(formOverride.fields[0].label, "Übersteuert")
+        }
+
+        function test_decimalCommaEntryProducesCanonicalPayload() {
+            localeForm.setFieldValue("mass", "1.050,25")
+            verify(localeForm.ready)
+            compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
         }
     }
 }
