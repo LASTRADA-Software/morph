@@ -27,6 +27,8 @@ FormsController::FormsController(QObject* parent) : QObject{parent}, _core{lab::
 
 QString FormsController::schemasJson() const { return QString::fromStdString(_core.schemasJson()); }
 
+QString FormsController::viewsJson() const { return QString::fromStdString(lab::viewsJson()); }
+
 void FormsController::submitIfValid(const QString& actionType, const QString& bodyJson) {
     _core.submitIfValid(
         actionType.toStdString(), bodyJson.toStdString(),

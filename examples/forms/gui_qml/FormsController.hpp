@@ -33,10 +33,20 @@ class FormsController : public QObject {
     /// @brief `{actionType: schema}` JSON -- everything the QML renderer needs.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
+    /// @brief `{viewType: viewSchema}` JSON -- every registered view
+    ///        descriptor (list/table + master-detail screens composed from
+    ///        existing action forms; see docs/spec/forms/views.md).
+    Q_PROPERTY(QString viewsJson READ viewsJson CONSTANT)
+
 public:
     explicit FormsController(QObject* parent = nullptr);
 
     [[nodiscard]] QString schemasJson() const;
+
+    /// @brief Returns the view-schema document set
+    ///        (`morph::views::viewSchemaJson` output per registered view),
+    ///        keyed by view type id.
+    [[nodiscard]] QString viewsJson() const;
 
     /// @brief Dispatches @p bodyJson as the body of @p actionType if the
     ///        body is complete. Called by QML on every field edit once the
