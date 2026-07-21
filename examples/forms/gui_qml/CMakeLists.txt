@@ -21,6 +21,8 @@ qt_add_qml_module(morph_forms_module
     SOURCES
         FormsController.hpp
         FormsController.cpp
+        I18nCatalog.hpp
+        I18nCatalog.cpp
 )
 
 # lab_model.hpp / lab_schemas.hpp live one level up, shared with the console demo.
