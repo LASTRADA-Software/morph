@@ -325,6 +325,7 @@ if(MORPH_BUILD_NET)
                 include/morph/net/detail/tcp_socket.hpp
                 include/morph/net/detail/ws_frame.hpp
                 include/morph/net/socket_server.hpp
+                include/morph/net/socket_backend.hpp
         )
 
         if(MORPH_BUILD_TESTS)
