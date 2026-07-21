@@ -53,6 +53,11 @@
 ///   vocabulary (`requiredWhen`, comparisons, membership, presentation)
 ///   evaluated identically by the schema, the client, and the server. See
 ///   `morph::forms::allRulesSatisfied` below and docs/spec/forms/forms.md.
+/// - **`x-computed` / `x-readonly`** — for a member listed as the destination
+///   of an action's `computedFields` declaration: the field is derived from
+///   sibling inputs (named in `x-computed.inputs`) and must not be rendered as
+///   an editable control (`x-readonly: true`). See `morph::forms::computed`,
+///   `morph::forms::computeList`, and `morph::forms::recomputeAll`.
 ///
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
@@ -70,6 +75,28 @@
 ///     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 /// };
 /// @endcode
+///
+/// @par Declaring computed fields
+/// A derived, read-only field is declared with a `static constexpr` map from a
+/// destination member to its declared input members and a pure derivation:
+/// @code{.cpp}
+/// struct LineItem {
+///     Quantity<Units, 2> qty;
+///     Quantity<Units, 2> price;
+///     Quantity<Units, 2> total;  // computed -- not user-entered
+///
+///     // A generic (auto) lambda parameter: this initializer runs while
+///     // LineItem is still an incomplete type, so the body's member access
+///     // must stay dependent until first use, after the class is complete.
+///     static constexpr auto computedFields = morph::forms::computeList(
+///         morph::forms::computed<&LineItem::total, &LineItem::qty, &LineItem::price>(
+///             [](const auto& s) { return s.qty * s.price; }));
+/// };
+/// @endcode
+/// `schemaJson<A>()` then emits `x-computed`/`x-readonly` on `total` and
+/// excludes it from `required`; `recomputeAll<A>(action)` is the single
+/// evaluator the reactive `set<>` path and every dispatch path call to
+/// overwrite it authoritatively -- see `bridge.md`/`registry.md`.
 ///
 /// @par Readiness helper
 /// `allRequiredEngaged(action)` returns `true` when every *required*
@@ -94,6 +121,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -1283,6 +1311,171 @@ template <typename A>
 
 namespace detail {
 
+/// @brief One computed-field declaration: binds a destination member to the
+///        input members it derives from and a pure derivation function.
+///
+/// Built by `morph::forms::computed<Dst, Inputs...>(fn)`; never named directly
+/// by user code. `Dst` and `Inputs...` are pointer-to-data-member NTTPs (so a
+/// renamed or deleted field is a compile error); `Fn` is the deduced callable
+/// type of the pure derivation `fn(const A&) -> ValueOfDst`.
+/// @tparam Dst    Pointer-to-data-member of the derived (destination) field.
+/// @tparam Fn     Deduced callable type of the derivation function.
+/// @tparam Inputs Pointer-to-data-members of the fields the derivation reads.
+template <auto Dst, typename Fn, auto... Inputs>
+struct ComputedField {
+    /// @brief The pure derivation: `ValueOfDst(const A&)`.
+    Fn fn;
+};
+
+/// @brief Concept: action declares a `static constexpr computedFields` member
+///        (a `ComputeList` built by `morph::forms::computeList(...)`).
+template <typename A>
+concept HasComputedFields = requires { A::computedFields; };
+
+/// @brief Ordered collection of `ComputedField` declarations for one action type.
+///
+/// Built by `morph::forms::computeList(...)`; never named directly by user code.
+/// @tparam Fields Deduced `ComputedField<...>` types, one per declared entry.
+template <typename... Fields>
+struct ComputeList {
+    /// @brief The declarations, in declaration order.
+    std::tuple<Fields...> fields;
+};
+
+/// @brief Whether @p memberAddr is the destination address of @p field.
+/// @tparam A      Action type (a reflectable aggregate).
+/// @tparam Dst    Pointer-to-data-member of @p field's destination.
+/// @tparam Fn     Callable type of @p field's derivation function.
+/// @tparam Inputs Pointer-to-data-members of @p field's declared inputs.
+/// @param action     The action instance @p memberAddr was taken from.
+/// @param memberAddr Address of the member being tested.
+/// @param field      The computed-field declaration to test against.
+/// @return `true` if `memberAddr == std::addressof(action.*Dst)`.
+template <typename A, auto Dst, typename Fn, auto... Inputs>
+[[nodiscard]] constexpr bool isDestinationOf(const A& action, const void* memberAddr,
+                                             const ComputedField<Dst, Fn, Inputs...>& field) noexcept {
+    static_cast<void>(field);
+    return memberAddr == static_cast<const void*>(std::addressof(action.*Dst));
+}
+
+/// @brief Whether @p memberAddr is the address of the destination member of
+///        any entry in `A::computedFields`.
+///
+/// Used by `allRequiredEngaged` to exclude computed destinations from
+/// required-ness the same way the schema's `required` array excludes them
+/// (see `mergeSchemaExtras`). Compares addresses (not names) because the
+/// caller already has a live member reference from `forEachNamedMember`, and
+/// `Dst` gives a member reference on the *same* action instance via
+/// `action.*Dst`.
+/// @tparam A Action type (a reflectable aggregate).
+/// @param action     The action instance @p memberAddr was taken from.
+/// @param memberAddr Address of the member being tested.
+/// @return `true` if @p memberAddr is a computed destination; always `false`
+///         when `A` declares no `computedFields`.
+template <typename A>
+[[nodiscard]] constexpr bool isComputedDestinationMember(const A& action, const void* memberAddr) noexcept {
+    if constexpr (HasComputedFields<A>) {
+        bool found = false;
+        std::apply([&](const auto&... field) { ((found = found || isDestinationOf(action, memberAddr, field)), ...); },
+                   action.computedFields.fields);
+        return found;
+    } else {
+        static_cast<void>(action);
+        static_cast<void>(memberAddr);
+        return false;
+    }
+}
+
+/// @brief Evaluates one `ComputedField` against @p action, writing the result
+///        into the destination member in place.
+///
+/// If every declared input is engaged -- or is not itself empty-capable, in
+/// which case it is always considered engaged, mirroring `allRequiredEngaged`'s
+/// treatment of non-empty-capable members -- the destination member is
+/// overwritten with `field.fn(action)`. For a `Quantity` destination the
+/// result is first converted to the destination's own type (same unit, the
+/// destination's own `DeclaredDecimals`) and then retagged to that type's
+/// declared precision (`Quantity::atDeclaredPrecision()`), so the stored value
+/// matches the field's advertised `x-decimalPlaces` regardless of what
+/// declared precision `Fn`'s return type happened to carry. If any declared
+/// input is unengaged, the destination is instead reset to its
+/// default-constructed (empty, for `Quantity`/`Choice`/`Timestamp`) value
+/// rather than computed from a missing operand.
+/// @tparam A      Action type (a reflectable aggregate).
+/// @tparam Dst    Pointer-to-data-member of the destination field.
+/// @tparam Fn     Callable type of the derivation function.
+/// @tparam Inputs Pointer-to-data-members of the declared input fields.
+/// @param action Draft action whose destination member is overwritten in place.
+/// @param field  The declaration being evaluated.
+template <typename A, auto Dst, typename Fn, auto... Inputs>
+constexpr void recomputeOne(A& action, const ComputedField<Dst, Fn, Inputs...>& field) {
+    bool allEngaged = true;
+    [[maybe_unused]] auto checkInput = [&]<auto InputPtr>() {
+        using InputMember = std::remove_cvref_t<decltype(action.*InputPtr)>;
+        if constexpr (EmptyCapableField<InputMember>) {
+            if (!(action.*InputPtr).hasValue()) {
+                allEngaged = false;
+            }
+        }
+    };
+    (checkInput.template operator()<Inputs>(), ...);
+
+    using DstMember = std::remove_cvref_t<decltype(action.*Dst)>;
+    if (!allEngaged) {
+        action.*Dst = DstMember{};
+        return;
+    }
+    auto result = field.fn(action);
+    if constexpr (units::isQuantity<DstMember>) {
+        DstMember const converted = result;
+        action.*Dst = converted.atDeclaredPrecision();
+    } else {
+        action.*Dst = result;
+    }
+}
+
+/// @brief Resolves the wire (JSON) field name of a pointer-to-member by
+///        locating the reflected member of @p probe whose address matches
+///        `probe.*memberPtr`.
+///
+/// Translates the compile-time pointer-to-member NTTPs a `ComputedField`
+/// carries into the wire field names `x-computed` reports -- the same names
+/// `x-order`/`required` already key on.
+/// @tparam A         Action type (a reflectable aggregate).
+/// @tparam MemberPtr  Deduced pointer-to-data-member type.
+/// @param probe     A default-constructed instance of @p A.
+/// @param memberPtr Pointer-to-data-member of @p A to resolve.
+/// @return The member's reflected name (never empty in practice: @p memberPtr
+///         always names a member of @p A).
+template <typename A, typename MemberPtr>
+[[nodiscard]] std::string_view resolveMemberName(const A& probe, MemberPtr memberPtr) {
+    std::string_view result;
+    forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(I);
+        if (static_cast<const void*>(std::addressof(member)) ==
+            static_cast<const void*>(std::addressof(probe.*memberPtr))) {
+            result = name;
+        }
+    });
+    return result;
+}
+
+/// @brief Records one `ComputedField`'s destination -> ordered input wire
+///        names into @p out, resolved against @p probe.
+/// @tparam A      Action type (a reflectable aggregate).
+/// @tparam Dst    Pointer-to-data-member of the destination field.
+/// @tparam Fn     Callable type of the derivation function.
+/// @tparam Inputs Pointer-to-data-members of the declared input fields.
+/// @param probe Default-constructed instance of @p A used purely for name resolution.
+/// @param field The declaration to record (its `fn` is not invoked here).
+/// @param out   Map from destination wire name to its ordered input wire names.
+template <typename A, auto Dst, typename Fn, auto... Inputs>
+void collectComputedInputs(const A& probe, const ComputedField<Dst, Fn, Inputs...>& field,
+                           std::unordered_map<std::string_view, std::vector<std::string_view>>& out) {
+    static_cast<void>(field);
+    out.emplace(resolveMemberName(probe, Dst), std::vector<std::string_view>{resolveMemberName(probe, Inputs)...});
+}
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, and `x-decimalPlaces` to a glaze-produced schema.
 ///
@@ -1496,6 +1689,65 @@ template <typename A>
 
 }  // namespace detail
 
+/// @brief Builds one computed-field declaration binding a destination member
+///        to its declared input members and a pure derivation function.
+///
+/// @code{.cpp}
+/// static constexpr auto computedFields = morph::forms::computeList(
+///     morph::forms::computed<&LineItem::total, &LineItem::qty, &LineItem::price>(
+///         [](const auto& s) { return s.qty * s.price; }));  // auto: LineItem is incomplete here
+/// @endcode
+///
+/// @tparam Dst    Pointer-to-data-member of the derived (destination) field.
+/// @tparam Inputs Pointer-to-data-members of the fields the derivation reads,
+///                in declaration order.
+/// @tparam Fn     Deduced callable type: `ValueOfDst(const A&)`.
+/// @param fn Pure function computing the destination value from the action.
+///           Must have no side effects and read nothing beyond @p fn's own
+///           argument -- the framework cannot check this; it is the author's
+///           contract.
+/// @return A `detail::ComputedField<Dst, Fn, Inputs...>` value.
+template <auto Dst, auto... Inputs, typename Fn>
+[[nodiscard]] consteval auto computed(Fn fn) noexcept {
+    return detail::ComputedField<Dst, Fn, Inputs...>{fn};
+}
+
+/// @brief Builds a `ComputeList` from one or more `computed(...)` declarations.
+///
+/// Assign the result to a `static constexpr auto computedFields` member on the
+/// action type; `recomputeAll<A>` and `schemaJson<A>()` detect it via the
+/// `detail::HasComputedFields<A>` concept.
+/// @tparam Fields Deduced `detail::ComputedField<...>` types.
+/// @param fields The computed-field declarations, in declaration order.
+/// @return A `detail::ComputeList<Fields...>` value.
+template <typename... Fields>
+[[nodiscard]] consteval auto computeList(Fields... fields) noexcept {
+    return detail::ComputeList<Fields...>{std::tuple<Fields...>{fields...}};
+}
+
+/// @brief Recomputes every entry of `A::computedFields` in place on @p action.
+///
+/// A no-op for actions with no `computedFields` declaration -- backward
+/// compatible with every existing action type. For an action that does
+/// declare `computedFields`, every entry is evaluated in declaration order via
+/// `detail::recomputeOne` (see that function for the per-entry semantics:
+/// empty-input propagation and declared-precision retagging). Called from the
+/// reactive `set<>` path (`bridge.hpp`, live/non-authoritative) and from every
+/// dispatch site (`bridge.hpp`, `registry.hpp`, authoritative) so the value
+/// the client displays and the value the server stores are derived from the
+/// identical function over identically-reconciled inputs.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Draft action whose computed members are overwritten in place.
+template <typename A>
+constexpr void recomputeAll(A& action) {
+    if constexpr (detail::HasComputedFields<A>) {
+        std::apply([&](const auto&... field) { (detail::recomputeOne(action, field), ...); },
+                   A::computedFields.fields);
+    } else {
+        static_cast<void>(action);
+    }
+}
+
 /// @brief Builds a `FieldMeta` for the member named by @p MemberPtr, so the
 ///        wire key is never restated as a string.
 ///
@@ -1580,7 +1832,9 @@ constexpr void reconcileDeclaredPrecision(A& action) {
 ///
 /// Empty-capable covers `Quantity`, `Choice`, `Timestamp`, and any user type
 /// satisfying `EmptyCapableField`. Required means: not a `std::optional<...>`
-/// member and not listed in `A::optionalFields`. Intended as the body of the
+/// member, not listed in `A::optionalFields`, and not the destination of a
+/// `A::computedFields` entry (a computed field is never something the user
+/// must fill -- see `morph::forms::recomputeAll`). Intended as the body of the
 /// action's `validate()`.
 /// @tparam A     Action type (a reflectable aggregate).
 /// @param action Draft whose fields are checked.
@@ -1591,7 +1845,9 @@ template <typename A>
     detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
         if constexpr (EmptyCapableField<Member>) {
-            if (!detail::declaredOptional<A>(name) && !member.hasValue()) {
+            const bool isComputed =
+                detail::isComputedDestinationMember(action, static_cast<const void*>(std::addressof(member)));
+            if (!detail::declaredOptional<A>(name) && !isComputed && !member.hasValue()) {
                 allEngaged = false;
             }
         } else {
