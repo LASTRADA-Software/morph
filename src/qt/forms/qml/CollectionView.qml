@@ -40,6 +40,39 @@ Frame {
         return value === undefined ? fallback : value
     }
 
+    // DynamicForm.qml's own fields never need to be *externally* prefilled
+    // (every field the shipped renderer draws starts from typed user input,
+    // building up form.fieldValues one keystroke/selection at a time) --
+    // form.setFieldValue(name, text) updates that internal reactive state
+    // (and so participates correctly in the required-field/auto-fire gate),
+    // but it does not, by itself, push the value back onto a plain
+    // TextField's displayed `text` (there is no such binding in
+    // DynamicForm.qml, by design: every other control already owns writing
+    // its own `text`/selection from the *user's* input). Reusing
+    // DynamicForm.qml unmodified as the row editor (per docs/spec/forms/
+    // views.md) means CollectionView must drive the same effect the same
+    // way a user would: locate the actual `field_<name>` TextField instance
+    // and set its `text`, whose own `onTextChanged` handler then calls
+    // form.setFieldValue for us. This only reaches the default
+    // (`objectName: "field_" + name`) TextField control DynamicForm.qml
+    // draws for a plain scalar field -- a bound field rendered as a Choice/
+    // DateTime/Slider/Multiline/radio-group control (or overridden via
+    // SlotRegistry) is not currently prefillable this way; see
+    // docs/spec/forms/views.md, "Limitations".
+    function findControlByObjectName(item, name) {
+        if (!item)
+            return null
+        if (item.objectName === name)
+            return item
+        const kids = item.children || []
+        for (let i = 0; i < kids.length; ++i) {
+            const found = root.findControlByObjectName(kids[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
+
     // Same array-or-first-array-member extraction DynamicForm.qml's
     // optionRows() applies to a query action's result.
     function extractRows(result) {
@@ -74,10 +107,15 @@ Frame {
         return String(value)
     }
 
+    // `bind` is the wire object morph::views::viewSchemaJson<V>() emits for
+    // v-rowAction/v-actions: {actionField: rowField, ...} (a plain JSON
+    // object, matching ActionDescriptor::bind's std::span<const BindEntry>
+    // serialised by buildActionNode() -- NOT an array of {actionField,
+    // rowField} entries).
     function bindBodyJson(bind, row) {
         const parts = []
-        for (let i = 0; i < bind.length; ++i)
-            parts.push(JSON.stringify(bind[i].actionField) + ":" + JSON.stringify(row[bind[i].rowField]))
+        for (const actionField in (bind || {}))
+            parts.push(JSON.stringify(actionField) + ":" + JSON.stringify(row[bind[actionField]]))
         return "{" + parts.join(",") + "}"
     }
 
@@ -96,9 +134,18 @@ Frame {
         const rowAction = root.view["v-rowAction"]
         if (!rowAction || !root.editorRow || !form)
             return
-        const bind = rowAction.bind || []
-        for (let i = 0; i < bind.length; ++i)
-            form.setFieldValue(bind[i].actionField, JSON.stringify(root.editorRow[bind[i].rowField]))
+        const bind = rowAction.bind || {}
+        for (const actionField in bind) {
+            // Setting `text` (not calling form.setFieldValue directly) is
+            // deliberate: it drives the *same* TextField.onTextChanged path
+            // a user's own typing does, so both the visible control and
+            // form.fieldValues end up in sync from this one assignment. The
+            // raw (unquoted) text is what fieldValues holds -- fieldJsonLiteral
+            // applies JSON.stringify itself when it later reads this field.
+            const control = root.findControlByObjectName(form, "field_" + actionField)
+            if (control)
+                control.text = String(root.editorRow[bind[actionField]])
+        }
     }
 
     function fireRowAction(descriptor, row) {
@@ -110,7 +157,7 @@ Frame {
             confirmDialog.open()
             return
         }
-        root.controller.submitIfValid(descriptor.action, root.bindBodyJson(descriptor.bind || [], row))
+        root.controller.submitIfValid(descriptor.action, root.bindBodyJson(descriptor.bind || {}, row))
     }
 
     function fireCollectionAction(descriptor) {
@@ -156,7 +203,7 @@ Frame {
         onAccepted: {
             if (confirmDialog.pendingAction && root.controller) {
                 root.controller.submitIfValid(confirmDialog.pendingAction.action,
-                    root.bindBodyJson(confirmDialog.pendingAction.bind || [], confirmDialog.pendingRow))
+                    root.bindBodyJson(confirmDialog.pendingAction.bind || {}, confirmDialog.pendingRow))
             }
             confirmDialog.pendingAction = null
             confirmDialog.pendingRow = null
