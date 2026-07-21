@@ -3,6 +3,7 @@ add_executable(morph_net_tests
     test_sha1.cpp
     test_ws_handshake.cpp
     test_tcp_socket.cpp
+    test_ws_frame.cpp
 )
 
 target_link_libraries(morph_net_tests
