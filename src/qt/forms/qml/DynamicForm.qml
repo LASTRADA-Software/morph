@@ -568,6 +568,10 @@ Frame {
                     displayText: currentIndex < 0 ? "— select —" : currentText
                     model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
                     onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
+                    Accessible.role: Accessible.ComboBox
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 // x-widget: "radio" turns a Choice into a radio group instead
@@ -581,6 +585,10 @@ Frame {
                     Layout.fillWidth: true
                     spacing: 2
                     property int checkedIndex: -1
+                    Accessible.role: Accessible.Grouping
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
 
                     ButtonGroup { id: radioButtons }
 
@@ -606,6 +614,10 @@ Frame {
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
                     onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 TextField {
@@ -624,6 +636,10 @@ Frame {
                     inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                       ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 // x-widget: "textarea" (a Multiline field) — same wire string
@@ -637,6 +653,10 @@ Frame {
                     readOnly: fieldColumn.modelData.readOnly
                     wrapMode: TextArea.Wrap
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 // x-widget: "slider" (a Ranged field) — track bounds and step
@@ -652,6 +672,10 @@ Frame {
                     to: fieldColumn.modelData.sliderMax
                     stepSize: fieldColumn.modelData.sliderStep
                     onMoved: form.setFieldValue(fieldColumn.modelData.name, String(Math.round(value)))
+                    Accessible.role: Accessible.Slider
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 Label {
@@ -669,6 +693,8 @@ Frame {
                     implicitWidth: 92
                     textRole: "display"
                     model: fieldColumn.modelData.unitOptions
+                    Accessible.role: Accessible.ComboBox
+                    Accessible.name: fieldColumn.modelData.name + " unit"
                     onActivated: {
                         const name = fieldColumn.modelData.name
                         const fromUnit = fieldColumn.modelData.unitOptions[form.opt(form.fieldUnits[name], 0)]
@@ -813,6 +839,13 @@ Frame {
             text: form.ready ? "✓ executes automatically as you type" : "fill the required (*) fields"
             opacity: 0.6
             font.italic: true
+            // A blocked submit is announced, not merely tinted (docs/spec/
+            // forms/forms.md's accessibility slice): the same text shown
+            // visually is exposed as this label's accessible description,
+            // reactively, since `text` is itself reactive.
+            Accessible.role: Accessible.StaticText
+            Accessible.name: text
+            Accessible.description: text
         }
 
         Label {

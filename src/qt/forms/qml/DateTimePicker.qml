@@ -25,6 +25,9 @@ RowLayout {
         Layout.fillWidth: true
         placeholderText: "YYYY-MM-DDTHH:MM:SS"
         onTextChanged: picker.edited(text)
+        Accessible.role: Accessible.EditableText
+        Accessible.name: "Date and time"
+        Accessible.description: "ISO-8601, e.g. 2026-07-20T09:00:00"
     }
 
     Button {
@@ -32,6 +35,8 @@ RowLayout {
         text: "📅"  // calendar emoji
         flat: true
         implicitWidth: implicitHeight
+        Accessible.role: Accessible.Button
+        Accessible.name: "Open calendar picker"
         onClicked: {
             popup.initFromText(manual.text)
             popup.open()
@@ -40,12 +45,24 @@ RowLayout {
         Popup {
             id: popup
             modal: true
+            focus: true
             padding: 12
             // Anchored to the button (its visual parent), opening below and
             // right-aligned — Popup is not layout-managed, so plain x/y here
             // is the intended positioning mechanism.
             x: pickButton.width - width
             y: pickButton.height + 4
+
+            // Moves the selected day by @p delta days, rolling over month/
+            // year boundaries via a UTC Date (matching this file's existing
+            // "all times are UTC" convention).
+            function moveSelDay(delta) {
+                const d = new Date(Date.UTC(popup.selYear, popup.selMonth, popup.selDay))
+                d.setUTCDate(d.getUTCDate() + delta)
+                popup.selYear = d.getUTCFullYear()
+                popup.selMonth = d.getUTCMonth()
+                popup.selDay = d.getUTCDate()
+            }
 
         property int selYear: 2026
         property int selMonth: 0  // 0-based, as MonthGrid expects
@@ -82,7 +99,23 @@ RowLayout {
         }
 
         contentItem: ColumnLayout {
+            id: popupContent
             spacing: 8
+
+            // Popup itself is not an Item (it has no Keys attached-property
+            // support); its contentItem is, and Popup { focus: true } grants
+            // keyboard focus to it once opened. Arrow keys move the selected
+            // day, Enter/Return applies, Escape closes -- so the calendar
+            // affordance itself is not pointer-only, on top of the `manual`
+            // field's already-full keyboard path.
+            focus: true
+            Keys.onLeftPressed: popup.moveSelDay(-1)
+            Keys.onRightPressed: popup.moveSelDay(1)
+            Keys.onUpPressed: popup.moveSelDay(-7)
+            Keys.onDownPressed: popup.moveSelDay(7)
+            Keys.onReturnPressed: popup.apply()
+            Keys.onEnterPressed: popup.apply()
+            Keys.onEscapePressed: popup.close()
 
             RowLayout {
                 Button {
