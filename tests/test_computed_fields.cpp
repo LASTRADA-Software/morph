@@ -165,3 +165,31 @@ TEST_CASE("allRequiredEngaged does not require a computed destination to already
     missingPrice.qty = Rational{Numerator{3}, Denominator{1}, dp2};
     CHECK_FALSE(morph::forms::allRequiredEngaged(missingPrice));  // price is a real required field
 }
+
+// ---------------------------------------------------------------------------
+// Schema emission: x-computed / x-readonly, and exclusion from `required`.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("schemaJson emits x-computed and x-readonly on the destination property", "[forms][computed]") {
+    auto const schema = morph::forms::schemaJson<CFLineItem>();
+    REQUIRE_FALSE(schema.empty());
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    CHECK(schema.contains(R"("x-readonly":true)"));
+    CHECK(schema.contains(R"("x-computed":{"inputs":["qty","price"]})"));
+}
+
+TEST_CASE("schemaJson excludes a computed field from required", "[forms][computed]") {
+    auto const schema = morph::forms::schemaJson<CFLineItem>();
+    CHECK(schema.contains(R"("required":["qty","price"])"));
+    CHECK_FALSE(schema.contains(R"("required":["qty","price","total"])"));
+}
+
+TEST_CASE("schemaJson emits neither key for an action with no computedFields", "[forms][computed]") {
+    auto const schema = morph::forms::schemaJson<CFPlainAction>();
+    CHECK_FALSE(schema.contains("x-computed"));
+    CHECK_FALSE(schema.contains("x-readonly"));
+    CHECK(schema.contains(R"("required":["qty","price"])"));
+}

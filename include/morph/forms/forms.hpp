@@ -1477,7 +1477,8 @@ void collectComputedInputs(const A& probe, const ComputedField<Dst, Fn, Inputs..
 }
 
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
-///        array, `x-order`, and `x-decimalPlaces` to a glaze-produced schema.
+///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
+///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
 ///
 /// Separated from `schemaJson` so the fallback path (malformed input passes
 /// through unchanged) is directly testable.
@@ -1498,16 +1499,40 @@ template <typename A>
     // throws over an author's declaration mistake).
     std::vector<std::string_view> memberNames{};
     A probe{};
+
+    // Computed-field destination names -> their declared input wire names,
+    // resolved once against the probe. Empty when A declares no
+    // computedFields (the common case), so every lookup against it below is
+    // then trivially false -- no schema change for actions that don't opt in.
+    std::unordered_map<std::string_view, std::vector<std::string_view>> computedInputs{};
+    if constexpr (HasComputedFields<A>) {
+        std::apply([&](const auto&... field) { (collectComputedInputs(probe, field, computedInputs), ...); },
+                   A::computedFields.fields);
+    }
+
     forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
         static_cast<void>(member);
         memberNames.push_back(name);
-        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name);
+        const bool isComputed = computedInputs.contains(name);
+        // A computed field is derived, not user-entered: exclude it from
+        // `required` the same way an opted-out or std::optional field is.
+        const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name) || isComputed;
         if (!isOptional) {
             requiredNames.emplace_back(std::string{name});
         }
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
+        if (isComputed) {
+            property["x-readonly"] = true;
+            glz::generic_u64 computedMeta{};
+            glz::generic_u64::array_t inputsList{};
+            for (auto const& inputName : computedInputs.at(name)) {
+                inputsList.emplace_back(std::string{inputName});
+            }
+            computedMeta["inputs"] = inputsList;
+            property["x-computed"] = computedMeta;
+        }
 
         // Label/help/placeholder/read-only/hidden: an explicit FieldMeta
         // entry overrides the inferred title and adds the rest; absent, every
