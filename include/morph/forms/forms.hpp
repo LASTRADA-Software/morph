@@ -48,6 +48,11 @@
 /// - **`x-min` / `x-max` / `x-step`** — for a field whose type additionally
 ///   declares `min()`/`max()`/`step()` (the `Ranged` shape): the slider's
 ///   control-track bounds and increment — advisory, not a validation bound.
+/// - **`x-rules`** — for an action declaring a `static constexpr formRules`
+///   (`morph::forms::ruleList(...)`): a closed, typed cross-field rule
+///   vocabulary (`requiredWhen`, comparisons, membership, presentation)
+///   evaluated identically by the schema, the client, and the server. See
+///   `morph::forms::allRulesSatisfied` below and docs/spec/forms/forms.md.
 ///
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
@@ -79,6 +84,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <compare>
 #include <concepts>
 #include <cstddef>
 #include <glaze/glaze.hpp>
@@ -86,6 +92,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -390,6 +397,329 @@ template <auto MemberPtr>
     return found;
 }
 
+/// @brief The closed set of cross-field rule and condition kinds `x-rules`
+/// carries in its `kind` field. One flat enum serves both top-level rules
+/// (`RequiredWhen`, `Greater`, `ExactlyOneOf`, `VisibleWhen`, ...) and the
+/// condition nodes nested inside a rule's `when` clause (`Engaged`,
+/// `NotEngaged`, `Equals`, and the comparison kinds reused as booleans) —
+/// see docs/spec/forms/forms.md's `x-rules` renderer-contract table.
+enum class RuleKind : std::uint8_t {
+    Engaged,
+    NotEngaged,
+    Equals,
+    Greater,
+    GreaterOrEqual,
+    Less,
+    LessOrEqual,
+    RequiredWhen,
+    ExactlyOneOf,
+    AtLeastOneOf,
+    MutuallyExclusive,
+    VisibleWhen,
+    ReadonlyWhen,
+};
+
+/// @brief The wire `"kind"` string for @p kind, exactly as documented in
+/// forms.md's `x-rules` table.
+[[nodiscard]] constexpr std::string_view ruleKindName(RuleKind kind) noexcept {
+    switch (kind) {
+        case RuleKind::Engaged:
+            return "engaged";
+        case RuleKind::NotEngaged:
+            return "notEngaged";
+        case RuleKind::Equals:
+            return "equals";
+        case RuleKind::Greater:
+            return "greater";
+        case RuleKind::GreaterOrEqual:
+            return "greaterOrEqual";
+        case RuleKind::Less:
+            return "less";
+        case RuleKind::LessOrEqual:
+            return "lessOrEqual";
+        case RuleKind::RequiredWhen:
+            return "requiredWhen";
+        case RuleKind::ExactlyOneOf:
+            return "exactlyOneOf";
+        case RuleKind::AtLeastOneOf:
+            return "atLeastOneOf";
+        case RuleKind::MutuallyExclusive:
+            return "mutuallyExclusive";
+        case RuleKind::VisibleWhen:
+            return "visibleWhen";
+        case RuleKind::ReadonlyWhen:
+            return "readonlyWhen";
+        default:
+            return "";
+    }
+}
+
+/// @brief Whether @p value counts as "engaged" for rule purposes:
+/// `hasValue()` for an `EmptyCapableField` (`Quantity`/`Choice`/`Timestamp`),
+/// otherwise `has_value()` for a plain `std::optional<T>` — the rule
+/// vocabulary treats both as "a field with an empty state", unlike
+/// `allRequiredEngaged` (which only inspects `EmptyCapableField`; a plain
+/// `std::optional<T>` exposes `has_value()`, not `hasValue()`, so it never
+/// satisfies that concept — see forms.md's "two exclusions" note). Only ever
+/// called on a type satisfying `EngageableField` (defined below), enforced
+/// by every public factory that calls it.
+template <typename T>
+[[nodiscard]] constexpr bool isEngaged(const T& value) noexcept {
+    if constexpr (::morph::forms::EmptyCapableField<T>) {
+        return value.hasValue();
+    } else {
+        return value.has_value();
+    }
+}
+
+/// @brief Resolves the wire (JSON) field name of @p field on `A`, the same
+/// way `x-order` is derived (`mergeSchemaExtras`): a fresh probe instance is
+/// walked with `forEachNamedMember`, matching by member address. `A` must be
+/// default-constructible (already required by `schemaJson<A>()`). Returns an
+/// empty string if @p field does not name a reflected member of `A` (should
+/// not happen for a pointer-to-member of `A` itself; defensive only).
+template <typename V, typename A>
+[[nodiscard]] inline std::string resolveFieldName(V A::* field) {
+    std::string found;
+    A probe{};
+    forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        static_cast<void>(I);
+        using Member = std::remove_cvref_t<decltype(member)>;
+        if constexpr (std::is_same_v<Member, V>) {
+            if (static_cast<const void*>(&member) == static_cast<const void*>(&(probe.*field))) {
+                found = std::string{name};
+            }
+        }
+    });
+    return found;
+}
+
+/// @brief Constraint for the comparison rule/condition kinds (`greater`,
+/// `greaterOrEqual`, `less`, `lessOrEqual`, added in a later task): an
+/// `EmptyCapableField` whose engaged value (`operator*()`) is three-way
+/// comparable to itself — satisfied by `Quantity` (dereferences to
+/// `math::Rational`) and `morph::time::Timestamp` (dereferences to
+/// `DateTime`), matching forms.md's "numeric / Timestamp" scope for
+/// comparisons.
+template <typename V>
+concept ComparableField = ::morph::forms::EmptyCapableField<V> && requires(const V& value) {
+    { *value <=> *value };
+};
+
+}  // namespace detail
+
+/// @brief Broader than `EmptyCapableField`: also covers a plain
+/// `std::optional<T>` member (e.g. `std::optional<std::string> email`),
+/// which does **not** satisfy `EmptyCapableField` — it exposes
+/// `has_value()`, not `hasValue()` (see forms.md's `allRequiredEngaged`
+/// "two exclusions" note). The cross-field rule vocabulary's engagement
+/// checks (`engaged`, `notEngaged`, `requiredWhen`, and the membership rules
+/// added in a later task) accept either kind of field, since the planned
+/// spec's own worked example ranges an `exactlyOneOf` over two plain
+/// `std::optional<std::string>` fields.
+template <typename T>
+concept EngageableField = EmptyCapableField<T> || detail::isStdOptional<T>;
+
+/// @brief Condition: `field` is engaged (has a value). One of the closed
+/// condition kinds a `requiredWhen` / `visibleWhen` / `readonlyWhen` rule's
+/// `when` clause accepts.
+/// @tparam V Field member type (must satisfy `EngageableField`).
+/// @tparam A Action type the field belongs to.
+template <typename V, typename A>
+struct Engaged {
+    /// @brief Pointer to the member this condition inspects.
+    V A::* field;
+    /// @brief The wire `"kind"` this condition emits: `"engaged"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Engaged;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when the field is engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept { return detail::isEngaged(action.*field); }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"engaged","fields":["<wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds an `Engaged<V, A>` condition testing whether @p field is
+/// engaged.
+/// @tparam V Field member type (deduced; must satisfy `EngageableField`).
+/// @tparam A Action type (deduced).
+/// @param field Pointer to the member to test.
+/// @return The condition node.
+template <typename V, typename A>
+    requires EngageableField<V>
+[[nodiscard]] constexpr auto engaged(V A::* field) {
+    return Engaged<V, A>{field};
+}
+
+/// @brief Condition: `field` is **not** engaged. The complement of
+/// `engaged`.
+/// @tparam V Field member type (must satisfy `EngageableField`).
+/// @tparam A Action type the field belongs to.
+template <typename V, typename A>
+struct NotEngaged {
+    /// @brief Pointer to the member this condition inspects.
+    V A::* field;
+    /// @brief The wire `"kind"` this condition emits: `"notEngaged"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::NotEngaged;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when the field is **not** engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept { return !detail::isEngaged(action.*field); }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"notEngaged","fields":["<wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds a `NotEngaged<V, A>` condition testing whether @p field is
+/// **not** engaged.
+/// @tparam V Field member type (deduced; must satisfy `EngageableField`).
+/// @tparam A Action type (deduced).
+/// @param field Pointer to the member to test.
+/// @return The condition node.
+template <typename V, typename A>
+    requires EngageableField<V>
+[[nodiscard]] constexpr auto notEngaged(V A::* field) {
+    return NotEngaged<V, A>{field};
+}
+
+/// @brief Rule: `field` must be engaged whenever @p Cond holds; vacuously
+/// satisfied (not required) while the condition does not hold.
+/// @tparam V    Field member type (must satisfy `EngageableField`).
+/// @tparam A    Action type the field belongs to.
+/// @tparam Cond Condition node type (e.g. `Engaged<V2, A>`).
+template <typename V, typename A, typename Cond>
+struct RequiredWhen {
+    /// @brief Pointer to the member this rule may require.
+    V A::* field;
+    /// @brief The condition that, when true, makes `field` required.
+    Cond when;
+    /// @brief The wire `"kind"` this rule emits: `"requiredWhen"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::RequiredWhen;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the rule against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when `when` does not hold, or `field` is engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        if (!when.test(action)) {
+            return true;
+        }
+        return detail::isEngaged(action.*field);
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"requiredWhen","fields":["<wire name>"],"when":{...}}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        node["when"] = when.emit();
+        return node;
+    }
+};
+
+/// @brief Builds a `RequiredWhen<V, A, Cond>` rule: @p field becomes
+/// required exactly when @p when holds.
+/// @tparam V    Field member type (deduced; must satisfy `EngageableField`).
+/// @tparam A    Action type (deduced).
+/// @tparam Cond Condition node type (deduced).
+/// @param field Pointer to the member that becomes conditionally required.
+/// @param when  The condition node (`engaged(...)`, `notEngaged(...)`, or —
+///              starting a later task — a comparison or `equals(...)`).
+/// @return The rule node.
+template <typename V, typename A, typename Cond>
+    requires EngageableField<V>
+[[nodiscard]] constexpr auto requiredWhen(V A::* field, Cond when) {
+    return RequiredWhen<V, A, Cond>{field, when};
+}
+
+/// @brief Composed list of an action's declared cross-field rules — the
+/// value of `A::formRules`. Built by `ruleList(...)`; never constructed
+/// directly.
+/// @tparam Rules Rule node types, in declaration order.
+template <typename... Rules>
+struct RuleList {
+    /// @brief The declared rules, in declaration order.
+    std::tuple<Rules...> rules;
+};
+
+/// @brief Composes @p rules into the `RuleList` an action assigns to its
+/// `static constexpr formRules` member.
+/// @tparam Rules Rule node types (deduced).
+/// @param rules The rule nodes, in the order they should be evaluated and
+///              emitted.
+/// @return The composed `RuleList<Rules...>`.
+template <typename... Rules>
+[[nodiscard]] constexpr auto ruleList(Rules... rules) {
+    return RuleList<Rules...>{std::tuple<Rules...>{std::move(rules)...}};
+}
+
+/// @brief Concept: action `A` declares a `static constexpr` `formRules`
+/// member (a `RuleList<...>`). Mirrors `detail::HasOptionalFields`.
+template <typename A>
+concept HasFormRules = requires { A::formRules; };
+
+namespace detail {
+
+/// @brief Evaluates @p rule against @p action, skipping presentation rules
+/// (`VisibleWhen` / `ReadonlyWhen`, added in a later task) by construction —
+/// they never gate.
+template <typename Rule, typename A>
+[[nodiscard]] constexpr bool evaluateGatingRule(const Rule& rule, const A& action) noexcept {
+    if constexpr (Rule::isPresentation) {
+        static_cast<void>(rule);
+        static_cast<void>(action);
+        return true;
+    } else {
+        return rule.test(action);
+    }
+}
+
+}  // namespace detail
+
+/// @brief Whether every **validation** rule in `A::formRules` holds for
+/// @p action. Presentation rules (`visibleWhen` / `readonlyWhen`) are
+/// skipped — they can never fail this check. Returns `true` unconditionally
+/// for an action with no `formRules` (safe to call from every action's
+/// `validate()` regardless of whether it declares rules).
+/// @tparam A Action type.
+/// @param action Action snapshot to check.
+/// @return `true` when every validation rule holds (or there are none).
+template <typename A>
+[[nodiscard]] constexpr bool allRulesSatisfied(const A& action) noexcept {
+    if constexpr (HasFormRules<A>) {
+        return std::apply([&](const auto&... rule) { return (detail::evaluateGatingRule(rule, action) && ...); },
+                          A::formRules.rules);
+    } else {
+        static_cast<void>(action);
+        return true;
+    }
+}
+
+namespace detail {
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, and `x-decimalPlaces` to a glaze-produced schema.
 ///
@@ -580,6 +910,18 @@ template <typename A>
             auto& property = dom["properties"][std::string{span.field}];
             property["x-colspan"] = span.colspan;
         }
+    }
+
+    // Cross-field rules (docs/spec/forms/forms.md's `x-rules`): emitted only
+    // when the action declares `formRules`, so an unannotated action's
+    // schema is byte-identical to before this feature existed. Walks
+    // whatever rule node types A::formRules holds -- every node type past
+    // and future exposes the same emit() -> glz::generic_u64 shape, so this
+    // loop needs no changes as new rule kinds are added.
+    if constexpr (HasFormRules<A>) {
+        glz::generic_u64::array_t xRules{};
+        std::apply([&](const auto&... rule) { (xRules.emplace_back(rule.emit()), ...); }, A::formRules.rules);
+        dom["x-rules"] = xRules;
     }
 
     // value_or without a move: the copy is irrelevant (schemaJson memoises),
