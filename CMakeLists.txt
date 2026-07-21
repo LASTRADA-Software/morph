@@ -15,16 +15,16 @@ option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
-option(MORPH_BUILD_FORMS_QML     "Build the Qt Quick renderer for the forms demo" OFF)
+option(MORPH_BUILD_FORMS_QML     "Build the shipped Qt/QML forms renderer module (MorphForms) and its demo" OFF)
 
 if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
     message(WARNING "MORPH_BUILD_HMAC_EXAMPLES is ignored: it lives under examples/vetted_hmac, "
                     "which needs MORPH_BUILD_EXAMPLES=ON.")
 endif()
 
-if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
-    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: it lives under the forms example, "
-                    "which needs MORPH_BUILD_EXAMPLES=ON and a non-Emscripten toolchain.")
+if(MORPH_BUILD_FORMS_QML AND EMSCRIPTEN)
+    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: the Qt/QML forms renderer needs a "
+                    "non-Emscripten toolchain.")
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
@@ -146,6 +146,24 @@ target_sources(morph
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
 )
+
+# ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
+# Ships the reference Qt/QML renderer (MorphForms, src/qt/forms) as a reusable
+# component, independent of MORPH_BUILD_EXAMPLES. examples/forms/gui_qml
+# (added from examples/forms/CMakeLists.txt, itself still gated on
+# MORPH_BUILD_EXAMPLES, added further below) is a *consumer* of this module,
+# not its home -- this block must run before the "Demo executable" section
+# below (which conditionally adds examples/forms/gui_qml), since that demo's
+# CMakeLists.txt relies on qt_add_library/qt_add_qml_module/qt_add_executable
+# already being defined (via find_package(Qt6 ... Quick)/
+# qt_standard_project_setup() below) and on morph_forms_moduleplugin already
+# existing as a target.
+if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+    find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+    qt_standard_project_setup(REQUIRES 6.5)
+
+    add_subdirectory(src/qt/forms)
+endif()
 
 # ── Demo executable ──────────────────────────────────────────────────────────
 if(MORPH_BUILD_EXAMPLES)
