@@ -83,6 +83,25 @@ struct RecordMeasurement {
         morph::forms::FieldMeta{.field = "note", .hidden = true},
     };
 
+    /// Visual structure (docs/spec/forms/forms.md, "Layout & grouping"): two
+    /// titled sections plus a collapsible notes panel, with the free-text
+    /// note spanning both grid columns. Purely additive — a renderer that
+    /// ignores `x-layout`/`x-colspan` still renders every field, flat, in
+    /// `x-order`.
+    static constexpr std::array<std::string_view, 2> kSample{std::string_view{"sampleId"},
+                                                             std::string_view{"measuredAt"}};
+    static constexpr std::array<std::string_view, 2> kResult{std::string_view{"density"},
+                                                             std::string_view{"moisture"}};
+    static constexpr std::array<std::string_view, 1> kNote{std::string_view{"note"}};
+    static constexpr std::array formLayout{
+        morph::forms::FieldGroup{.title = "Sample", .fields = kSample},
+        morph::forms::FieldGroup{.title = "Result", .fields = kResult},
+        morph::forms::FieldGroup{.title = "Notes", .kind = morph::forms::GroupKind::Accordion, .fields = kNote},
+    };
+    static constexpr std::array fieldSpans{
+        morph::forms::FieldSpan{.field = "note", .colspan = 2},
+    };
+
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
