@@ -27,6 +27,7 @@ if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
                     "which needs MORPH_BUILD_EXAMPLES=ON and a non-Emscripten toolchain.")
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
+option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
 option(MORPH_ENABLE_STRICT_COMPILATION
@@ -185,6 +186,11 @@ if(MORPH_BUILD_TESTS)
     endif()
 
     add_subdirectory(tests)
+endif()
+
+# ── Fuzz harnesses (optional) ────────────────────────────────────────────────
+if(MORPH_BUILD_FUZZERS)
+    add_subdirectory(tests/fuzz)
 endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
