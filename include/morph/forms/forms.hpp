@@ -825,6 +825,95 @@ template <typename V, typename A>
     return LessOrEqual<V, A>{lhs, rhs};
 }
 
+/// @brief Constraint: literal types `equals(...)` accepts — the closed,
+/// JSON-representable scalar set a field can hold. Restricting the literal
+/// type keeps `equals` losslessly serialisable into `x-rules`'s `value` key
+/// (see forms.md): a numeric literal is always the exact `math::Rational`,
+/// never a `double`.
+template <typename T>
+concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || std::same_as<T, std::string> ||
+                      std::same_as<T, ::morph::math::Rational>;
+
+/// @brief Condition: `field`'s engaged value equals @p literal. An
+/// unengaged field is **not** vacuously satisfied here (unlike the
+/// comparison kinds) — a field with no value cannot equal anything, so
+/// `equals` returns `false` while the field is unengaged.
+/// @tparam V Field member type.
+/// @tparam A Action type the field belongs to.
+/// @tparam L Literal type (must satisfy `RuleLiteral`).
+template <typename V, typename A, typename L>
+struct Equals {
+    /// @brief Pointer to the member this condition inspects.
+    V A::* field;
+    /// @brief The literal to compare the field's engaged value against.
+    L literal;
+    /// @brief The wire `"kind"` this condition emits: `"equals"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Equals;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when the field is engaged (or has no empty state) and
+    ///         its value equals `literal`.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        const auto& fieldValue = action.*field;
+        if constexpr (EngageableField<V>) {
+            if (!detail::isEngaged(fieldValue)) {
+                return false;
+            }
+            return static_cast<bool>(*fieldValue == literal);
+        } else {
+            return static_cast<bool>(fieldValue == literal);
+        }
+    }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"equals","fields":["<wire name>"],"value":...}`,
+    ///         where `value` is `{"num":...,"den":...}` for a `Rational`
+    ///         literal and the bare scalar otherwise.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        if constexpr (std::is_same_v<L, ::morph::math::Rational>) {
+            glz::generic_u64 value{};
+            value["num"] = literal.numerator;
+            value["den"] = literal.denominator;
+            node["value"] = value;
+        } else {
+            node["value"] = literal;
+        }
+        return node;
+    }
+};
+
+/// @brief Builds an `Equals<V, A, L>` condition: `field`'s engaged value
+/// equals @p literal.
+/// @tparam V Field member type (deduced).
+/// @tparam A Action type (deduced).
+/// @tparam L Literal type (deduced; must satisfy `RuleLiteral`).
+/// @param field   Pointer to the member to test.
+/// @param literal The value to compare against.
+/// @return The condition node.
+template <typename V, typename A, RuleLiteral L>
+[[nodiscard]] constexpr auto equals(V A::* field, L literal) {
+    return Equals<V, A, L>{field, std::move(literal)};
+}
+
+/// @brief `equals` overload for a string-literal argument (`equals(&A::code,
+/// "X")`), so callers do not have to spell `std::string{"X"}` explicitly.
+/// @tparam V Field member type (deduced).
+/// @tparam A Action type (deduced).
+/// @tparam N String literal length (deduced), including the trailing `'\0'`.
+/// @param field   Pointer to the member to test.
+/// @param literal The string literal to compare against.
+/// @return The condition node, with the literal stored as `std::string`.
+template <typename V, typename A, std::size_t N>
+[[nodiscard]] constexpr auto equals(V A::* field, const char (&literal)[N]) {
+    return Equals<V, A, std::string>{field, std::string{literal}};
+}
+
 /// @brief Rule: `field` must be engaged whenever @p Cond holds; vacuously
 /// satisfied (not required) while the condition does not hold.
 /// @tparam V    Field member type (must satisfy `EngageableField`).
@@ -877,6 +966,147 @@ template <typename V, typename A, typename Cond>
     requires EngageableField<V>
 [[nodiscard]] constexpr auto requiredWhen(V A::* field, Cond when) {
     return RequiredWhen<V, A, Cond>{field, when};
+}
+
+/// @brief Rule: exactly one of the listed fields is engaged.
+/// @tparam A  Action type all fields belong to.
+/// @tparam Vs Field member types, one per listed field (must each satisfy
+///            `EngageableField`).
+template <typename A, typename... Vs>
+struct ExactlyOneOf {
+    /// @brief Pointers to the member fields this rule ranges over.
+    std::tuple<Vs A::*...> fields;
+    /// @brief The wire `"kind"` this rule emits: `"exactlyOneOf"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::ExactlyOneOf;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the rule against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when exactly one listed field is engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        int engagedCount = 0;
+        std::apply([&](auto... field) { ((engagedCount += (detail::isEngaged(action.*field) ? 1 : 0)), ...); },
+                   fields);
+        return engagedCount == 1;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"exactlyOneOf","fields":["<wire name>", ...]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t names{};
+        std::apply([&](auto... field) { (names.emplace_back(detail::resolveFieldName(field)), ...); }, fields);
+        node["fields"] = names;
+        return node;
+    }
+};
+
+/// @brief Builds an `ExactlyOneOf<A, Vs...>` rule over @p fields.
+/// @tparam A  Action type (deduced).
+/// @tparam Vs Field member types (deduced; each must satisfy
+///            `EngageableField`).
+/// @param fields Pointers to the member fields, at least two.
+/// @return The rule node.
+template <typename A, typename... Vs>
+    requires(EngageableField<Vs> && ...)
+[[nodiscard]] constexpr auto exactlyOneOf(Vs A::*... fields) {
+    return ExactlyOneOf<A, Vs...>{std::tuple<Vs A::*...>{fields...}};
+}
+
+/// @brief Rule: at least one of the listed fields is engaged.
+/// @tparam A  Action type all fields belong to.
+/// @tparam Vs Field member types, one per listed field (must each satisfy
+///            `EngageableField`).
+template <typename A, typename... Vs>
+struct AtLeastOneOf {
+    /// @brief Pointers to the member fields this rule ranges over.
+    std::tuple<Vs A::*...> fields;
+    /// @brief The wire `"kind"` this rule emits: `"atLeastOneOf"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::AtLeastOneOf;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the rule against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when at least one listed field is engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        int engagedCount = 0;
+        std::apply([&](auto... field) { ((engagedCount += (detail::isEngaged(action.*field) ? 1 : 0)), ...); },
+                   fields);
+        return engagedCount >= 1;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"atLeastOneOf","fields":["<wire name>", ...]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t names{};
+        std::apply([&](auto... field) { (names.emplace_back(detail::resolveFieldName(field)), ...); }, fields);
+        node["fields"] = names;
+        return node;
+    }
+};
+
+/// @brief Builds an `AtLeastOneOf<A, Vs...>` rule over @p fields.
+/// @tparam A  Action type (deduced).
+/// @tparam Vs Field member types (deduced; each must satisfy
+///            `EngageableField`).
+/// @param fields Pointers to the member fields, at least two.
+/// @return The rule node.
+template <typename A, typename... Vs>
+    requires(EngageableField<Vs> && ...)
+[[nodiscard]] constexpr auto atLeastOneOf(Vs A::*... fields) {
+    return AtLeastOneOf<A, Vs...>{std::tuple<Vs A::*...>{fields...}};
+}
+
+/// @brief Rule: at most one of the listed fields is engaged.
+/// @tparam A  Action type all fields belong to.
+/// @tparam Vs Field member types, one per listed field (must each satisfy
+///            `EngageableField`).
+template <typename A, typename... Vs>
+struct MutuallyExclusive {
+    /// @brief Pointers to the member fields this rule ranges over.
+    std::tuple<Vs A::*...> fields;
+    /// @brief The wire `"kind"` this rule emits: `"mutuallyExclusive"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::MutuallyExclusive;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the rule against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when at most one listed field is engaged.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        int engagedCount = 0;
+        std::apply([&](auto... field) { ((engagedCount += (detail::isEngaged(action.*field) ? 1 : 0)), ...); },
+                   fields);
+        return engagedCount <= 1;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"mutuallyExclusive","fields":["<wire name>", ...]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t names{};
+        std::apply([&](auto... field) { (names.emplace_back(detail::resolveFieldName(field)), ...); }, fields);
+        node["fields"] = names;
+        return node;
+    }
+};
+
+/// @brief Builds a `MutuallyExclusive<A, Vs...>` rule over @p fields.
+/// @tparam A  Action type (deduced).
+/// @tparam Vs Field member types (deduced; each must satisfy
+///            `EngageableField`).
+/// @param fields Pointers to the member fields, at least two.
+/// @return The rule node.
+template <typename A, typename... Vs>
+    requires(EngageableField<Vs> && ...)
+[[nodiscard]] constexpr auto mutuallyExclusive(Vs A::*... fields) {
+    return MutuallyExclusive<A, Vs...>{std::tuple<Vs A::*...>{fields...}};
 }
 
 /// @brief Composed list of an action's declared cross-field rules — the

@@ -187,3 +187,103 @@ TEST_CASE("Forms::Rules::RequiredWhen::ComparisonAsCondition", "[forms][rules]")
     // promo still unengaged, discount now engaged -> requiredWhen trivially satisfied regardless of when().
     CHECK(morph::forms::allRulesSatisfied(surcharge));
 }
+
+// ---------------------------------------------------------------------------
+// equals condition + membership rules: exactlyOneOf / atLeastOneOf / mutuallyExclusive.
+// ---------------------------------------------------------------------------
+
+struct CFRContactForm {
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+
+    static constexpr auto formRules =
+        morph::forms::ruleList(morph::forms::exactlyOneOf(&CFRContactForm::email, &CFRContactForm::phone));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+// File-scope (not function-local, unlike CFRStatusAction/CFRCodeAction below,
+// which never pass through schemaJson<>()/glaze reflection and so carry no
+// such risk): schemaJson<A>() drives glaze's own reflection machinery, which
+// every other schemaJson<>() call site in this codebase only ever exercises
+// against a namespace-scope type.
+struct CFREqualsForm {
+    CFRMoney promo;
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFREqualsForm::promo, morph::forms::equals(&CFREqualsForm::promo, Rational{5, DecimalPlaces{2}})));
+};
+
+TEST_CASE("Forms::Rules::ExactlyOneOf::ZeroOneAndMultipleEngaged", "[forms][rules]") {
+    CFRContactForm form{};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // zero engaged
+
+    form.email = "a@b.com";
+    CHECK(morph::forms::allRulesSatisfied(form));  // exactly one engaged
+
+    form.phone = "555";
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // both engaged
+}
+
+TEST_CASE("Forms::Rules::SchemaJson::ExactlyOneOfEmitsXRules", "[forms][rules]") {
+    auto const schema = morph::forms::schemaJson<CFRContactForm>();
+    CHECK(schema.contains(R"("x-rules":[{"kind":"exactlyOneOf","fields":["email","phone"]}])"));
+}
+
+TEST_CASE("Forms::Rules::AtLeastOneOfAndMutuallyExclusive", "[forms][rules]") {
+    CFRContactForm form{};
+    auto const atLeastOne = morph::forms::atLeastOneOf(&CFRContactForm::email, &CFRContactForm::phone);
+    auto const mutex = morph::forms::mutuallyExclusive(&CFRContactForm::email, &CFRContactForm::phone);
+
+    CHECK_FALSE(atLeastOne.test(form));  // zero engaged
+    CHECK(mutex.test(form));             // zero engaged -> "at most one" holds
+
+    form.email = "a@b.com";
+    CHECK(atLeastOne.test(form));
+    CHECK(mutex.test(form));
+
+    form.phone = "555";
+    CHECK(atLeastOne.test(form));   // still at least one (now two)
+    CHECK_FALSE(mutex.test(form));  // two engaged -> not mutually exclusive
+}
+
+TEST_CASE("Forms::Rules::Equals::EngagedComparesLiteralUnengagedIsFalse", "[forms][rules]") {
+    // A Quantity field compared against an exact Rational literal.
+    auto const cond = morph::forms::equals(&CFRDiscountForm::promo, Rational{5, DecimalPlaces{2}});
+    CFRDiscountForm form{};
+    CHECK_FALSE(cond.test(form));  // unengaged -> false, NOT vacuously true (unlike comparisons)
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK(cond.test(form));
+
+    form.promo = Rational{6, DecimalPlaces{2}};
+    CHECK_FALSE(cond.test(form));
+}
+
+TEST_CASE("Forms::Rules::Equals::PlainScalarField", "[forms][rules]") {
+    struct CFRStatusAction {
+        std::int64_t status = 0;
+    };
+    auto const cond = morph::forms::equals(&CFRStatusAction::status, std::int64_t{2});
+    CFRStatusAction action{};
+    CHECK_FALSE(cond.test(action));
+    action.status = 2;
+    CHECK(cond.test(action));
+}
+
+TEST_CASE("Forms::Rules::Equals::StringLiteralOverload", "[forms][rules]") {
+    struct CFRCodeAction {
+        std::optional<std::string> code;
+    };
+    auto const cond = morph::forms::equals(&CFRCodeAction::code, "URGENT");
+    CFRCodeAction action{};
+    CHECK_FALSE(cond.test(action));
+    action.code = "URGENT";
+    CHECK(cond.test(action));
+    action.code = "OTHER";
+    CHECK_FALSE(cond.test(action));
+}
+
+TEST_CASE("Forms::Rules::SchemaJson::EqualsEmitsRationalValueExactly", "[forms][rules]") {
+    auto const schema = morph::forms::schemaJson<CFREqualsForm>();
+    CHECK(schema.contains(R"("when":{"kind":"equals","fields":["promo"],"value":{"num":5,"den":1}})"));
+}
