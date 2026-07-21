@@ -139,6 +139,7 @@ target_sources(morph
         include/morph/session/session.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/choice.hpp
+        include/morph/forms/i18n.hpp
         include/morph/util/rational.hpp
         include/morph/util/quantity.hpp
         include/morph/util/datetime.hpp
