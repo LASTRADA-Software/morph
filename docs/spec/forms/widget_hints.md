@@ -307,6 +307,6 @@ both.
 - **[quantity_type.md](../util/quantity_type.md)** — `Quantity`'s own
   `x-decimalPlaces` entry-granularity annotation, the analogous (but
   distinct) numeric-precision contract `x-step` does not replace.
-- **[gui_overview.md](../../planned/gui_overview.md)** (planned) — the
-  infer-by-default / declare-to-override principle and the additive-`x-*`
+- **[forms.md](forms.md#design-principle-infer-by-default-declare-to-override)** —
+  the infer-by-default / declare-to-override principle and the additive-`x-*`
   versioning stance this feature obeys.

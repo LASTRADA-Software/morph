@@ -8,8 +8,48 @@ required empty-capable field is filled in. It builds on glaze's
 metadata from `glz::json_schema<A>`, and `ExtUnits` from
 `morph::units::Quantity`) and closes the gaps glaze leaves open.
 
+## Design principle: infer by default, declare to override
+
+Every feature below obeys one rule, which is what reconciles "rapid GUI
+development" with "flexible when the generated form isn't enough":
+
+1. **Infer from the type where possible.** A `Quantity` field already knows its
+   unit and precision; a `Choice` already knows its options action; a
+   `std::optional` already means "not required." The renderer gets as far as it
+   can from types alone, with zero extra user declaration.
+2. **Declare to override.** When inference is ambiguous or insufficient (a
+   label, a layout group, a widget choice, a cross-field rule), the user adds a
+   *typed, compile-time* declaration — a `static constexpr` member or a small
+   registration macro on the action. Never mandatory; absence falls back to a
+   sensible convention.
+3. **Escape hatch always available.** The schema below is a documented, stable
+   contract (see "Renderer contract"). Anything the generated GUI cannot
+   express, an app builds by consuming the schema directly or overriding one
+   field's widget (see "Theming / component-override registry").
+
+This is why the constraints placed on a model's action types are light: flat,
+default-constructible, reflectable aggregates whose fields come from the known
+palette (`Quantity`, `Choice`, `Timestamp`, primitives, or a user type exposing
+`hasValue()`), plus *optional* typed declarations. Convention buys rapid;
+override + direct-schema-consumption buys flexible.
+
+Every schema key this module and its siblings ([choice.md](choice.md),
+[views.md](views.md), [workflows_navigation.md](workflows_navigation.md))
+introduce is **additive and optional** — the emitted schema stays unversioned,
+and a renderer that doesn't recognize a new `x-*` key, or a new top-level
+view/wizard/app document, ignores it harmlessly. Renaming, retyping, or
+changing the meaning of an existing key is the only kind of change reserved for
+a major release.
+
+The **Qt/QML client** (`src/qt/forms`) is the reference renderer these specs
+write concrete examples against, because it already consumes the schema
+contract; the **schema contract itself stays renderer-agnostic** — every
+`x-*` key and view/wizard/app-schema document is specified in platform-neutral
+terms so a web, ImGui, or other renderer can implement the same contract.
+
 ## Contents
 
+- [Design principle: infer by default, declare to override](#design-principle-infer-by-default-declare-to-override)
 - [Empty state — `EmptyCapableField` concept](#empty-state--emptycapablefield-concept)
 - [`Choice` — server-sourced picklist](#choice--server-sourced-picklist)
 - [`FixedString` — NTTP compile-time string](#fixedstring--nttp-compile-time-string)
@@ -331,7 +371,7 @@ member of the action at all.
 
 All six keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
-versioning stance ([gui_overview.md](../../planned/gui_overview.md)). A
+versioning stance (see "Design principle" above). A
 renderer that ignores them falls back to today's behavior exactly: it shows
 the raw wire key as the caption, no helper/placeholder text, and every field
 editable and visible.
