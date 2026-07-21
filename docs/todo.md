@@ -77,16 +77,6 @@ SQLite/file-backed queue that persists payload + `idempotencyKey` + `attempts`
 across restarts would make B1/B2 usable without every host re-writing it.
 *Touches:* new header/example.
 
-### B4 — Journal format versioning & retention · P2 · [spec: `planned/journal_evolution.md`]
-Persisted NDJSON lines carry no format version, `journal::fromJson` is strict
-where the wire is lenient (any new key is a reader flag-day), and the log file
-grows without bound. Land reader leniency first, then a `v` line-format stamp;
-document the data-at-rest contract (additive-only for as long as journals are
-retained — stronger than the protocol-version deprecation window described in
-[`spec/core/wire.md`](spec/core/wire.md#action-evolution-policy)); give `FileActionLog` a
-`rotate()` seam for host-driven retention. *Touches:* `action_log.hpp`,
-`file_action_log.hpp`.
-
 ---
 
 ## C. Operational readiness (needed for any production, esp. remote)

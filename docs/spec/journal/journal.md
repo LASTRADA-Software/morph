@@ -26,9 +26,12 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
 - [Serialization](#serialization)
+- [Line-format version (`v`)](#line-format-version-v)
+- [Data-at-rest contract](#data-at-rest-contract)
 - [IActionLog — the storage interface](#iactionlog--the-storage-interface)
 - [InMemoryActionLog](#inmemoryactionlog)
 - [FileActionLog](#fileactionlog)
+- [Rotation and retention](#rotation-and-retention)
 - [SessionLog](#sessionlog)
 - [replay()](#replay)
 - [Process-wide default log](#process-wide-default-log)
@@ -60,6 +63,7 @@ directly.
 | `principal` | `std::string` | Auth principal from `morph::session::current()`, if any. Empty if unset. |
 | `timestampMs` | `int64_t` | Wall-clock time, milliseconds since the Unix epoch. |
 | `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
+| `v` | `std::uint32_t` | Line-format version this entry was written at. Defaults to `kLogFormatVersion`. See [Line-format version (`v`)](#line-format-version-v). |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
 specialisation, the same automatic reflection `BRIDGE_REGISTER_ACTION` relies on.
@@ -74,8 +78,16 @@ Encodes a `LogEntry` as JSON via Glaze. Throws `SerializationError` on failure
 
 ### `fromJson(std::string_view) -> LogEntry`
 
-Decodes JSON into a `LogEntry`. Throws `SerializationError` if the input is not
-valid.
+Decodes JSON into a `LogEntry`. Reads leniently —
+`glz::read<glz::opts{.error_on_unknown_keys = false}>`, the same stance
+`wire::decode` takes ([wire.md](../core/wire.md)) — so an unknown/extra key
+(an additive field from a newer writer) is ignored rather than rejected; the
+same duplicate-key caveat as `wire::decode` applies (last-wins, not a security
+boundary). Syntactically malformed JSON still throws `SerializationError`.
+After a successful decode, `fromJson` also enforces the [line-format version
+rule](#line-format-version-v): a decoded `v` greater than this build's
+`kLogFormatVersion` throws `SerializationError` even though the JSON itself
+parsed cleanly.
 
 ### `SerializationError`
 
@@ -88,6 +100,70 @@ Shared non-template helper used by both `toJson` and `fromJson` so their error
 paths compile through the same branch. `fromJson`'s failure path is easy to
 exercise (malformed JSON is everyday input); `toJson`'s is not — Glaze's
 buffer-writer has no reachable failure mode for a flat struct like `LogEntry`.
+
+## Line-format version (`v`)
+
+```cpp
+inline constexpr std::uint32_t kLogFormatVersion = 1;  // bumped only on a breaking line-format change
+```
+
+`LogEntry::v` (`std::uint32_t`, default `kLogFormatVersion`) records which line
+format wrote a persisted entry.
+
+- Every freshly-constructed `LogEntry` — which is every entry `toJson` ever
+  writes for a new action execution — carries `v = kLogFormatVersion` via its
+  default member initializer; no separate stamping step runs inside `toJson`.
+- A **legacy line** (written before `v` existed) has no `v` key; `fromJson`'s
+  leniency means that is just an absent-key case like any other, and the
+  member's default applies: the entry decodes with `v == kLogFormatVersion`
+  (currently `1`). This is intentional, not an approximation — `v = 1` **is**
+  today's shape; `kLogFormatVersion` merely gives it a name.
+- **Read rule.** `v <= kLogFormatVersion` decodes normally. `v` **greater**
+  than the reader's `kLogFormatVersion` throws `SerializationError` — a build
+  refuses to guess at a line format it has never seen, rather than silently
+  misreading it. This check runs *after* leniency's unknown-key tolerance, so
+  the two rules compose: an unrelated new key is ignored, but a `v` bump is
+  always fatal to an older reader.
+- **The existing torn-line rule is unchanged.** `FileActionLog::entries()`
+  still tolerates a decode failure — of any cause, including a too-new `v` —
+  only on the file's last line, skipping it with a warning; the same failure
+  mid-file is re-thrown. See [FileActionLog](#fileactionlog). Note that
+  `FileActionLog`'s constructor itself scans `entries()` to rebuild its
+  `idempotencyKey` dedup set, so a too-new `v` on an interior line surfaces as
+  a thrown `SerializationError` from **construction**, not only from a later
+  explicit `entries()` call — the same behavior any other interior corruption
+  already has (see [Sink-side dedup](#sink-side-dedup)).
+- `kLogFormatVersion` bumps only on a **breaking** change to the line format;
+  additive keys (tolerated by leniency) do not bump it — the same discipline
+  applied to protocol-version bumps elsewhere in the wire layer.
+
+## Data-at-rest contract
+
+One rule with teeth: **an action recorded in a retained journal must stay
+decodable for as long as that journal is retained.** This extends the wire
+layer's additive-only evolution policy from *deployment* scope (peers upgrade
+within a window) to *retention* scope — a journal can outlive every deployment
+that ever wrote to it:
+
+- Fields of journal-recorded actions evolve **additive-only** — a new field
+  must be optional-or-defaulted so an old payload (recorded before the field
+  existed) still decodes into the new struct.
+- **Removing or retyping** a recorded action's field requires either every
+  retained journal containing it to have expired, or an explicit migration
+  pass (below) run first.
+- Replay and dispatch share one codec — `ActionTraits<A>::fromJson` — so there
+  is exactly one compatibility surface to keep honest; there is no separate
+  "archive format" that can drift from the live one.
+
+### The migration recipe (not shipped)
+
+When retention forces a breaking change through despite the above: call
+[`rotate()`](#rotation-and-retention) to seal the active file; transform the
+sealed segments offline (a host-owned mapping over the recorded payload JSON,
+using `entries()` or plain NDJSON tooling); write the result as new segments
+stamped with the current `v`. morph guarantees the decode rules above and
+ships no transformer — reading never mutates history, and there is no
+upgrade-on-read.
 
 ## IActionLog — the storage interface
 
@@ -151,6 +227,52 @@ genuine corruption and
 the `fromJson` exception is re-thrown — the log is not silently truncated at an
 interior tear. So a single trailing torn record is recoverable; interior
 damage is fatal and surfaced to the caller.
+
+See [Rotation and retention](#rotation-and-retention) for `rotate()`, the seam
+a host uses to seal and archive segments of this file.
+
+## Rotation and retention
+
+```cpp
+void rotate(const std::filesystem::path& sealedPath);
+```
+
+Seals the active file and reopens a fresh, empty one at the same path — the
+seam a host uses to implement its own retention policy (archive or delete
+sealed segments on whatever schedule or size trigger it chooses; morph ships
+the seam, not the policy).
+
+- **What it does.** Flushes (`fflush` + `fsync`/`_commit`) and closes the
+  current active file, renames it to `sealedPath`, then reopens a fresh, empty
+  active file at the original path. Thread-safe — guarded by the same mutex as
+  `append()`/`flush()`/`entries()`, so no in-flight `append()` call is ever
+  split across the sealed and the new active file.
+- **`entries()` is unchanged.** It keeps reading only the (now-empty, then
+  regrowing) active file. Sealed segments are immutable history the host reads
+  directly — e.g. by opening its own `FileActionLog` on the sealed path, or
+  with plain NDJSON tooling.
+- **Full-history reads and replay compose segments oldest → newest, then the
+  active file** — a documented recipe, not a new API: concatenate `entries()`
+  from each sealed segment in seal order, then the active file's `entries()`,
+  and hand the result to [`replay()`](#replay). File order is already the
+  cross-restart ordering authority (`seq` stays process-local, unchanged).
+- **Crash safety.** The rename is a single atomic filesystem operation. A
+  crash before it completes leaves the pre-rotation active file exactly as it
+  was — as if `rotate()` had never been called. A crash after leaves the
+  sealed file plus a freshly recreated, empty active file. Either way no line
+  is ever torn across the two files, so the existing torn-line rule
+  ([FileActionLog](#fileactionlog)) keeps applying independently per file.
+- **A failed rename does not lose data.** If renaming to `sealedPath` fails
+  (e.g. its directory does not exist), `rotate()` reopens the *original*
+  active file in place — still holding every entry recorded before the call —
+  and throws `std::runtime_error`. The log stays fully usable; the rotation
+  simply did not happen.
+- **Not `rotate()`'s job.** Choosing *when* to rotate (by size, by time, on a
+  host-defined "archive now" action) and what happens to a sealed segment
+  afterward (compress, ship, delete) are entirely the host's call — morph
+  supplies only the seal-and-reopen primitive. See the [Data-at-rest
+  contract](#data-at-rest-contract) for what a sealed segment's contents must
+  keep decoding as.
 
 ## SessionLog
 
@@ -507,9 +629,10 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`, `idempotencyKey`. Glaze-reflected (no `glz::meta`). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta`). |
+| `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON. Throws `SerializationError`. |
-| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON. Throws `SerializationError`. |
+| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
 | `detail::throwOnGlazeError` | inline function | `void throwOnGlazeError(const glz::error_ctx&, std::string_view)` — shared error path for `toJson`/`fromJson`. |
 
@@ -519,7 +642,7 @@ All symbols live in `namespace morph::journal`.
 |---|---|---|
 | `IActionLog` | abstract struct | `virtual ~IActionLog() = default`; `append(LogEntry)`, `flush()`, `entries(entityKey)`. |
 | `InMemoryActionLog` | class | `: IActionLog`. Thread-safe `std::vector`-backed. `flush()` no-op. |
-| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path)`. Copy/move deleted. |
+| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path)`. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
 | `SessionLog` | class | `: IActionLog`. Full-fidelity in-memory log + `undoLast()` + `checkpoint()`. |
 
 ### Process-wide default
@@ -557,6 +680,10 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
 | `InMemoryActionLog`/`FileActionLog` dedup on `idempotencyKey` | **Non-empty key only; `SessionLog` excluded** | Makes both safe default choices for `OutboxRelay::sink` without changing behavior for callers that never set the key (empty key never dedups). `SessionLog` is excluded because its contract is full fidelity — nothing coalesced or dropped. |
+| `fromJson` reads leniently | **`glz::read<{.error_on_unknown_keys = false}>`, not `glz::read_json`** | Matches `wire::decode`'s forward-compatibility contract; without it, adding the `v` key itself (or any future key) would be a reader flag-day for every already-deployed reader. |
+| `LogEntry::v` defaults to `kLogFormatVersion` | **Default member initializer, not a `toJson`-time stamp** | A freshly constructed entry (every entry `toJson` ever encodes for a new action) already carries the current version for free; a legacy line missing the key decodes with the same default, so "legacy is v1" falls out of the type rather than being special-cased in code. |
+| `v` newer than `kLogFormatVersion` throws | **Fail loud, not guess** | A reader has no way to know the shape a future breaking change introduces; refusing to decode is safer than guessing a superset/subset shape. |
+| `rotate()` reopens the active path regardless of rename outcome | **Never leave the log unusable** | A failed rename reopens the pre-rotation file in place (no data lost, rotation simply didn't happen); a successful rename reopens a fresh empty file. Either branch leaves `FileActionLog` in a valid, appendable state. |
 | `setOutboxManaged` suppresses `recordIfAttached`, not `hasActionLog()` | **Two independent signals** | A store-backed model needs to stop the auto-append without losing "a log is attached" as a fact holders can still query — the suppression is a separate flag, not a side effect of detaching the log. |
 
 ## Invariants
@@ -660,14 +787,20 @@ Honest boundaries of the current design:
   bound. Each `undoLast()` replays the entire remaining prefix from scratch, so
   undoing the last *k* actions one at a time is O(n·k) ≈ O(n²) in the history
   length. There is no incremental/snapshot fast-path.
-- **No schema version or migration path for persisted NDJSON.** `FileActionLog`
-  writes `LogEntry` as Glaze-reflected JSON with no embedded schema version. A
-  change to `LogEntry`'s shape has no defined migration story for files written
-  by an earlier build; on-disk compatibility rests entirely on the struct
-  staying additive-and-compatible under Glaze.
+- **No automatic rotation and no shipped migration tool.** `rotate()` is a
+  seam, not a policy: nothing in morph decides when to call it, and reading
+  never transforms history — a breaking change forced through by retention is
+  an explicit, offline, host-owned pass over sealed segments (see [The
+  migration recipe](#the-migration-recipe-not-shipped)). Absent host-driven
+  `rotate()` calls, the active file still grows without bound.
+- **No compaction of sealed history.** `checkpoint()` is the only reducer, and
+  it runs *before* entries become durable; once a segment is sealed or
+  written, morph never rewrites or drops entries from it.
 
 ## Cross-references
 
+- **`wire.md`** — `wire::decode`'s `error_on_unknown_keys = false` stance and
+  duplicate-key caveat, which `journal::fromJson` now mirrors.
 - **`registry.md`** — `ModelRegistryFactory`/`ActionDispatcher` and
   `ModelFactory::create`, which auto-attach the default log and which `replay()`
   reuses for dispatch. Also the `ActionDispatcher::coalesce` lookup driving
