@@ -17,6 +17,7 @@ qt_add_qml_module(lab_forms_demo_module
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/AppShell.qml
     SOURCES
         FormsController.hpp
         FormsController.cpp

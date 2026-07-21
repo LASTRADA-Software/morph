@@ -6,7 +6,7 @@
 int main(int argc, char** argv) {
     QGuiApplication app{argc, argv};
     QQmlApplicationEngine engine;
-    engine.loadFromModule("LabFormsDemo", "Main");
+    engine.loadFromModule("LabFormsDemo", "AppShell");
     if (engine.rootObjects().isEmpty()) {
         return 1;
     }
