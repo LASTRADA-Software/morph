@@ -7,10 +7,14 @@
 // the corpus "drift guard" (docs/spec/forms/forms.md, "Renderer conformance
 // kit").
 //
-// Collection-view / wizard / app (v-*/w-*/app-*) fixtures are intentionally
-// absent: no C++ emitter exists yet for those Tier-2 view-schema keys
-// (gui_collections_views.md / gui_workflows_navigation.md are themselves
-// still "Status: planned").
+// Wizard / app (w-*/app-*) fixtures are intentionally absent: no C++ emitter
+// exists yet for those Tier-2 view-schema keys (gui_workflows_navigation.md
+// is itself still "Status: planned"). The view-schema layer (v-*,
+// morph::views::viewSchemaJson, docs/spec/forms/views.md) IS implemented;
+// its own coverage lives in tests/test_views.cpp and
+// src/qt/forms/tests/tst_collectionview.qml rather than this corpus, since a
+// view composes existing action schemas rather than adding new per-field
+// schema keys of the kind this corpus's CF* fixtures pin.
 //
 // Types here are prefixed CF (Conformance Fixture) and kept at file scope
 // (not inside an anonymous namespace) -- every test .cpp in this directory

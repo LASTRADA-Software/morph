@@ -604,11 +604,16 @@ executable form of this document's "normative" claim.
 
 **Scope note.** The corpus above covers exactly the keys this document's
 renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
-below. It does **not** yet include a collection-view or wizard/app fixture
-(`v-*`/`w-*`/`app-*`): no emitter for those Tier-2 view-schema keys exists in
-the codebase (`gui_collections_views.md` / `gui_workflows_navigation.md` are
-themselves still planned) — those fixtures are deferred to whichever future
-work implements those emitters.
+below. It does **not** include a wizard/app-shell fixture (`w-*`/`app-*`): no
+emitter for those Tier-2 keys exists in the codebase yet
+([gui_workflows_navigation.md](../../planned/gui_workflows_navigation.md) is
+itself still planned) — those fixtures are deferred to whichever future work
+implements that emitter. The `v-*` view-schema layer
+(`morph::views::viewSchemaJson`, [views.md](views.md)) **is** implemented;
+its own renderer-behavior coverage lives in
+`src/qt/forms/tests/tst_collectionview.qml` rather than this five-fixture
+corpus (a view composes existing action schemas rather than introducing new
+per-field schema keys, so it does not need a sixth `CF*` fixture type here).
 
 ## Theming / component-override registry
 
@@ -1278,6 +1283,7 @@ wrong or un-merged schema rather than fail loudly.
 | Spec | Why |
 |---|---|
 | [choice.md](choice.md) | Full `Choice` API and design (this spec cross-refs rather than duplicates it). |
+| [views.md](views.md) | The view-schema layer (`morph::views`) that composes query+edit+delete action *sets* into list/table and master-detail screens; reuses `schemaJson<Row>()` unmodified to derive each column's `ExtUnits`/`x-decimalPlaces`. |
 | [widget_hints.md](widget_hints.md) | Full `Multiline`/`Ranged` API and design (this spec cross-refs rather than duplicates it). |
 | [quantity_type.md](../util/quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |
 | [datetime.md](../util/datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |

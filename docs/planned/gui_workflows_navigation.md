@@ -8,7 +8,7 @@
 > builds navigation. It sits in Tier 2 of [gui_overview.md](gui_overview.md),
 > extends the reactive draft of [bridge.md](../spec/core/bridge.md) to span a
 > sequence, and composes the screens of
-> [gui_collections_views.md](gui_collections_views.md). See [todo.md](../todo.md).
+> [gui_collections_views.md](../spec/forms/views.md). See [todo.md](../todo.md).
 
 ## The gap
 
@@ -44,7 +44,7 @@ Two additive, independent descriptors:
 Both obey [gui_overview.md](gui_overview.md): additive, unversioned, ignorable by
 an older renderer (which loses navigation/sequencing, not correctness), and each
 step/screen is still a Tier-1 action-form or a
-[gui_collections_views.md](gui_collections_views.md) view.
+[gui_collections_views.md](../spec/forms/views.md) view.
 
 ## Design
 
@@ -111,7 +111,7 @@ public:
   each `prefill` path against the flow's captured values and issues the
   corresponding `set<>` on that step's draft before showing the form — the same
   prefill mechanic `bind` uses in
-  [gui_collections_views.md](gui_collections_views.md), but the source is an
+  [gui_collections_views.md](../spec/forms/views.md), but the source is an
   earlier step rather than a table row.
 - **Drafts persist across steps and `back()`.** A per-step draft persists exactly
   as [bridge.md](../spec/core/bridge.md) already guarantees (a draft "persists across
@@ -151,11 +151,11 @@ navigation, replacing the "enumerate every schema onto one scroll" of
 | `app-title` | top-level | string | Application title (window/header). |
 | `app-menu` | top-level | array | Ordered navigation entries `{ label, screen }`. A renderer builds a menu/sidebar/tabs from these; the target `screen` keys into `app-screens`. |
 | `app-screens` | top-level | object | Map of screen-id → screen descriptor. |
-| ↳ `kind` | screen | string | `"form"` (one action, [forms.md](../spec/forms/forms.md)), `"view"` (a collection/master-detail, [gui_collections_views.md](gui_collections_views.md)), or `"wizard"` (a flow, above). |
+| ↳ `kind` | screen | string | `"form"` (one action, [forms.md](../spec/forms/forms.md)), `"view"` (a collection/master-detail, [gui_collections_views.md](../spec/forms/views.md)), or `"wizard"` (a flow, above). |
 | ↳ `ref` | screen | string | The type-id of the referenced action / view / wizard. The renderer fetches that thing's own schema and renders it into the routed area. |
 
 A screen is therefore **just a reference** to a Tier-1 form, a
-[gui_collections_views.md](gui_collections_views.md) view, or a wizard — the
+[gui_collections_views.md](../spec/forms/views.md) view, or a wizard — the
 shell contributes only the menu and the routing, never new field-level rendering.
 An `app-*`-ignorant renderer falls back to today's behavior: it can still load
 each referenced action schema directly and render a form. The shell is declared
@@ -231,7 +231,7 @@ below, so every layer is independently ignorable — the additive-key contract o
   view/app schema stack and the additive-key contract each `*-` vocabulary obeys.
 - [forms.md](../spec/forms/forms.md) — the per-action form each wizard step and each
   `kind: "form"` screen renders.
-- [gui_collections_views.md](gui_collections_views.md) — the `kind: "view"`
+- [gui_collections_views.md](../spec/forms/views.md) — the `kind: "view"`
   screens the shell routes to; the `bind` prefill mechanic wizards reuse as
   `prefill`.
 - [bridge.md](../spec/core/bridge.md) — the per-action reactive draft

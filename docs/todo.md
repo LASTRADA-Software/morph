@@ -163,8 +163,10 @@ reference renderer, the schema contract stays renderer-agnostic).
 
 ### Tier 2 — app generation (a view/app schema layer above the action schema)
 
-- **E-G7 — Collections & views** · P2 · [spec: `planned/gui_collections_views.md`] —
-  list/table + master-detail from query+edit+delete action sets.
+- **E-G7 — Collections & views** · P2 · **Implemented** — see
+  `spec/forms/views.md` (`morph::views::viewSchemaJson`, `BRIDGE_REGISTER_VIEW`,
+  `ViewRegistry`) and the `src/qt/forms` `CollectionView.qml` reference
+  renderer.
 - **E-G8 — Workflows & navigation** · P2 · [spec: `planned/gui_workflows_navigation.md`] —
   multi-step wizards (shared draft across actions) + app-shell/route descriptor.
 
