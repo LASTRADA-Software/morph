@@ -15,3 +15,8 @@
 MAX_ENVELOPE_BYTES = 8388608   # morph::wire::kMaxEnvelopeBytes (8 MiB); include/morph/core/wire.hpp
 MAX_DECIMAL_PLACES = 18        # morph::math::kMaxDecimalPlaces; include/morph/util/rational.hpp
 CLOCK_SKEW_MS = 60000          # morph::session::kClockSkewMs (60s); include/morph/session/session_auth.hpp
+
+# ── Enum cardinalities (value = ordinal of the LAST declared enumerator + 1) ─
+AUTH_ERROR_CARDINALITY = 4          # morph::session::AuthError: Malformed/BadSignature/Expired/NotYetValid
+LOG_LEVEL_CARDINALITY = 5           # morph::log::LogLevel: debug/info/warn/error/off
+RECONNECT_OUTCOME_CARDINALITY = 3   # morph::offline::ReconnectOutcome: Reconnected/GaveUp/Aborted

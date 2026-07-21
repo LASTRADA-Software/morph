@@ -18,7 +18,9 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 
@@ -49,4 +51,79 @@ TEST_CASE("pinned-facts: key constants match docs/spec/pinned_facts.toml", "[pin
                    static_cast<std::uint32_t>(morph::pinned_facts::kExpected_MAX_DECIMAL_PLACES));
     STATIC_REQUIRE(morph::session::kClockSkewMs ==
                    static_cast<std::int64_t>(morph::pinned_facts::kExpected_CLOCK_SKEW_MS));
+}
+
+// ── Enum cardinalities ───────────────────────────────────────────────────────
+//
+// Each `pin*Switch` below lists a `case` for every enumerator declared today.
+// Under MORPH_ENABLE_STRICT_COMPILATION (-Werror/-WX, the CI default),
+// -Wswitch-enum and -Wswitch-default (GCC explicitly; Clang via -Weverything;
+// MSVC via /w14061, scoped to this file in tests/CMakeLists.txt) turn a
+// future appended, removed, or renamed enumerator into a hard compile error:
+// -Wswitch-enum fires on a missing case *even with* a `default` label present
+// (unlike plain -Wswitch), which is exactly why a `default` here does not
+// weaken the guard. This is a stronger, cross-compiler-consistent version of
+// the "last member's ordinal" check docs/planned/drift_guard.md sketches;
+// the STATIC_REQUIRE below adds that check too, as a second, independent
+// signal tied to the manifest's numeric claim.
+
+namespace {
+
+void pinAuthErrorSwitch(morph::session::AuthError value) {
+    switch (value) {
+        case morph::session::AuthError::Malformed:
+        case morph::session::AuthError::BadSignature:
+        case morph::session::AuthError::Expired:
+        case morph::session::AuthError::NotYetValid:
+            break;
+        default:
+            break;
+    }
+}
+
+void pinLogLevelSwitch(morph::log::LogLevel value) {
+    switch (value) {
+        case morph::log::LogLevel::debug:
+        case morph::log::LogLevel::info:
+        case morph::log::LogLevel::warn:
+        case morph::log::LogLevel::error:
+        case morph::log::LogLevel::off:
+            break;
+        default:
+            break;
+    }
+}
+
+void pinReconnectOutcomeSwitch(morph::offline::ReconnectOutcome value) {
+    switch (value) {
+        case morph::offline::ReconnectOutcome::Reconnected:
+        case morph::offline::ReconnectOutcome::GaveUp:
+        case morph::offline::ReconnectOutcome::Aborted:
+            break;
+        default:
+            break;
+    }
+}
+
+}  // namespace
+
+TEST_CASE("pinned-facts: AuthError has exactly 4 enumerators", "[pinned-facts]") {
+    // Compiling this TU at all *is* the assertion: pinAuthErrorSwitch's switch
+    // above must list every current AuthError enumerator by name, or
+    // -Wswitch-enum/-Wswitch-default (-> -Werror) fails the build.
+    pinAuthErrorSwitch(morph::session::AuthError::NotYetValid);
+    STATIC_REQUIRE(static_cast<int>(morph::session::AuthError::NotYetValid) ==
+                   static_cast<int>(morph::pinned_facts::kExpected_AUTH_ERROR_CARDINALITY) - 1);
+}
+
+TEST_CASE("pinned-facts: LogLevel has exactly 5 enumerators", "[pinned-facts]") {
+    pinLogLevelSwitch(morph::log::LogLevel::off);
+    STATIC_REQUIRE(static_cast<int>(morph::log::LogLevel::off) ==
+                   static_cast<int>(morph::pinned_facts::kExpected_LOG_LEVEL_CARDINALITY) - 1);
+}
+
+TEST_CASE("pinned-facts: ReconnectOutcome has exactly 3 enumerators", "[pinned-facts]") {
+    pinReconnectOutcomeSwitch(morph::offline::ReconnectOutcome::Aborted);
+    STATIC_REQUIRE(static_cast<int>(morph::offline::ReconnectOutcome::Aborted) ==
+                   static_cast<int>(morph::pinned_facts::kExpected_RECONNECT_OUTCOME_CARDINALITY) - 1);
 }

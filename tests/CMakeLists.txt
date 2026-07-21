@@ -72,6 +72,16 @@ apply_warnings(morph_tests)
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
+# /w14062 (enabled project-wide) only fires when an enum switch has no
+# `default`; test_pinned_facts.cpp's exhaustive enum-cardinality switches keep
+# a `default:` (so GCC/Clang's -Wswitch-default does not fire), which would
+# otherwise exempt them from MSVC's check. /w14061 fires even with a default
+# present. Scoped to this one file rather than project-wide -- see the plan's
+# Global Constraints for why.
+set_source_files_properties(test_pinned_facts.cpp PROPERTIES
+    COMPILE_OPTIONS "$<$<CXX_COMPILER_ID:MSVC>:/w14061>"
+)
+
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_tests ${AF_SANITIZER})
 endif()
