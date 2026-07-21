@@ -86,18 +86,18 @@ void setHealthHandler(std::function<void(const HealthStatus&)>);
 
 `health()` reads `liveModels` from the model registry (under the same mutex
 `register`/`deregister`/`execute` use) and `inFlight` from `_inFlightExecutes`
-— the same atomic counter `LimitPolicy::maxInFlightExecutes` enforces and the
-`executeInFlight` metric reports (see [Thread safety](#thread-safety)): one
-counter, three consumers, never double-counted. `setHealthHandler` installs a
-callback that fires immediately with the current snapshot (so a subscriber
-never has to wait for a transition to see a baseline) and would fire again on
-any future readiness change. **`ready` is always `true` today** — nothing in
-the current codebase flips it. It is retained as a stable seam for a future
-shutdown sequence (`docs/planned/graceful_shutdown.md`'s `beginShutdown()`) to
-flip to `false` and re-invoke the handler, without any change to this API.
-`morph` does not embed an HTTP health endpoint; a deployment's transport (e.g.
-`QtWebSocketServer`) is expected to expose `health()` over whatever probe
-protocol it serves.
+— the same atomic counter `LimitPolicy::maxInFlightExecutes` enforces, the
+`executeInFlight` metric reports, and `RemoteServer::drainedWithin()` waits on
+(see [Thread safety](#thread-safety) and [backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)):
+one counter, four consumers, never double-counted. `setHealthHandler` installs
+a callback that fires immediately with the current snapshot (so a subscriber
+never has to wait for a transition to see a baseline) and fires again on any
+subsequent readiness change. `ready` starts `true` and is flipped to `false`,
+once and for good, by `RemoteServer::beginShutdown()` — there is no
+un-shutdown, so once a server has begun shutting down `ready` stays `false`
+for the rest of its lifetime. `morph` does not embed an HTTP health endpoint;
+a deployment's transport (e.g. `QtWebSocketServer`) is expected to expose
+`health()` over whatever probe protocol it serves.
 
 ## Call sites
 
@@ -212,8 +212,8 @@ See [backend.md](backend.md)'s `RemoteServer` API reference table.
 | `registerCount`/`deregisterCount` count every call, not just successes | Counts attempts | Gives an accurate load/rate signal on that path (an unauthorized or malformed register still costs the server work); `executeErrors` is the separate counter for outcome-scoped failure signal on the execute path. |
 | `RemoteServer`'s in-flight metric reuses `_inFlightExecutes` | No second counter added | `LimitPolicy::maxInFlightExecutes` already introduced an atomic in-flight counter with exactly this admit/complete lifecycle; adding a parallel `_inFlight` member for the metric alone would require keeping two counters in lockstep for no benefit. `health()`'s `inFlight` field reads the same counter. |
 | `LocalBackend`'s in-flight counter is a `shared_ptr`, not a plain atomic member | Avoids capturing `this` in a strand-posted lambda | `LocalBackend`'s existing strand tasks already avoid `this` captures for lifetime safety (see Limitations); the counter follows the same rule rather than becoming a new dangling-pointer risk. `RemoteServer`'s equivalent counter is a plain atomic member because its strand task already captures `self = shared_from_this()`, keeping the whole object alive. |
-| `setHealthHandler` fires immediately on install | Calls the handler once, synchronously, right after storing it | A subscriber gets a baseline status without waiting for the first (currently nonexistent) transition; also makes the stored handler genuinely used rather than write-only. |
-| `ready` has no internal mutator yet | `RemoteServer` never sets `_ready` to `false` in this release | The seam is deliberately landed ahead of `docs/planned/graceful_shutdown.md`'s `beginShutdown()`, which is expected to be the first caller — landing the field and the handler-firing contract now means that future change needs no API change. |
+| `setHealthHandler` fires immediately on install | Calls the handler once, synchronously, right after storing it | A subscriber gets a baseline status without waiting for the first transition; also makes the stored handler genuinely used rather than write-only. |
+| `ready`'s sole mutator is `beginShutdown()` | `RemoteServer` sets `_ready` to `false` only from `beginShutdown()`, never back to `true` | This seam landed ahead of `beginShutdown()` specifically so that the later change ([backend.md](backend.md#graceful-shutdown-beginshutdown--drainedwithin)) needed no API change — just a store and a handler re-invocation inside the method already documented as the trigger. |
 
 ## Limitations
 

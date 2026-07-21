@@ -116,14 +116,13 @@ registry lock (RTTI dependency, O(all models)). Capture backend-change-awareness
 at registration and drive from a maintained set. Pure internal refactor,
 behavior-preserving. *Touches:* `model.hpp`, `backend.hpp`.
 
-### C5 — Graceful shutdown & drain · P1 · [spec: `planned/graceful_shutdown.md`]
-Stopping a server is abrupt at every layer: `QtWebSocketServer::close()`
-aborts sockets, nothing refuses new work while in-flight executes finish, and
-readiness (C1) never flips for a deploy. Add `RemoteServer::beginShutdown()` +
-`drainedWithin(deadline)` (reject new `register`/`execute` with a canonical
-error, drain the shared in-flight counter) and
-`QtWebSocketServer::closeGracefully(deadline)` (close frames, then hard stop).
-*Touches:* `remote.hpp`, `qt/qt_websocket_server.hpp`.
+### C5 — Graceful shutdown & drain · P1 · shipped — folded into [`spec/core/backend.md`](spec/core/backend.md#graceful-shutdown-beginshutdown--drainedwithin)
+`RemoteServer::beginShutdown()` + `drainedWithin(deadline)` (reject new
+`register`/`execute` with `err "server shutting down"`, drain the shared
+in-flight counter, flip `health().ready` to `false`) and
+`QtWebSocketServer::closeGracefully(deadline)` (close frames, then hard stop)
+are implemented, opt-in/default-off — a server that never calls either
+behaves byte-for-byte as before.
 
 ---
 

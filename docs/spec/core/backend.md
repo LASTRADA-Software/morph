@@ -237,10 +237,11 @@ optional state-change callback, detailed in [observability.md](observability.md)
 `health()` returns `HealthStatus{ready, liveModels, inFlight}`: `liveModels`
 from the registry (same mutex as `register`/`deregister`/`execute`), `inFlight`
 from `_inFlightExecutes` — the same atomic counter `LimitPolicy::maxInFlightExecutes`
-enforces and the `executeInFlight` metric reports. `ready` is always `true` in
-the current codebase — nothing here flips it yet. `setHealthHandler` fires
-immediately with the current snapshot and is retained for a future shutdown
-sequence to re-invoke.
+enforces, `drainedWithin()` (below) waits on, and the `executeInFlight` metric
+reports. `ready` starts `true` and is flipped to `false`, once and for good, by
+`beginShutdown()` (below) — there is no un-shutdown. `setHealthHandler` fires
+immediately with the current snapshot, and again with the post-shutdown
+snapshot when `beginShutdown()` runs.
 
 **Metrics and tracing.** `dispatchMessage`'s `register`/`deregister` branches
 emit `registerCount`/`deregisterCount`; `dispatchExecute`'s admit/complete
@@ -325,6 +326,39 @@ nothing for a caller that never uses it.
   lookups (see concurrency_and_lifetimes.md).
 - `SimulatedRemoteBackend` keeps using the unscoped path (its "connection" is
   the process itself) — it is unaffected by connection scopes.
+
+### Graceful shutdown (`beginShutdown()` / `drainedWithin()`)
+
+`beginShutdown()` enters shutdown: every subsequent `register` and `execute`
+envelope is rejected with `err "server shutting down"` (checked once, at the
+top of `dispatchMessage`, before any other validation — including the
+shutdown check happening before authorization or registry lookups run);
+`deregister` (and any other envelope kind) is still served so clients can
+tear down cleanly during the drain window. Idempotent, and irreversible —
+there is no un-shutdown; a restarted service constructs a fresh
+`RemoteServer`. `beginShutdown()` also flips `health()`'s `ready` to `false`
+and, if a handler is installed via `setHealthHandler()`, re-invokes it with
+the post-shutdown snapshot — the mechanism that lets an orchestrator stop
+routing to a server that is draining.
+
+`drainedWithin(deadline)` blocks the calling thread (via a condition
+variable, not a busy poll) until every in-flight `execute` has delivered its
+reply, or `deadline` elapses, returning `true`/`false` accordingly.
+"In-flight" is the same `_inFlightExecutes` counter `LimitPolicy::maxInFlightExecutes`
+gates and `health()`'s `inFlight` field reads (one counter, never
+double-counted): incremented when `dispatchExecute` admits a call for
+dispatch (before posting to the model's strand) and decremented — waking any
+`drainedWithin()` waiter once it reaches zero — right before its reply is
+sent, on every resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout`
+firing first).
+
+The standard sequence an operator (or `QtWebSocketServer::closeGracefully`,
+below) follows is `beginShutdown()` then `drainedWithin(deadline)`: new work
+fails fast while old work finishes, and once drained the existing teardown
+rules ([concurrency_and_lifetimes.md](../concurrency_and_lifetimes.md)) apply
+trivially, because every queue is already empty. morph never preempts a
+running action to force a drain — a model that can run unboundedly long
+bounds itself; the deadline bounds the *caller's wait*, not the model.
 
 ## `SimulatedRemoteBackend` — adapter for testing
 
@@ -539,6 +573,31 @@ pool threads and are each marshalled back to their originating socket.
 **TLS.** Constructing with a `QSslConfiguration` puts the `QWebSocketServer` into
 `SecureMode` (`wss://`); without one it runs in `NonSecureMode`.
 
+**Graceful shutdown (`closeGracefully(deadline)`).** The transport-level
+counterpart to `RemoteServer::beginShutdown()`/`drainedWithin()`: it calls
+`QWebSocketServer::pauseAccepting()` (no new connections), then
+`beginShutdown()` on the `RemoteServer` (new `register`/`execute` now fail
+fast on every existing connection), then waits up to `deadline` for
+`drainedWithin()` — pumping the Qt event loop while it waits so the reply
+callbacks `onTextMessage` already queued via `QMetaObject::invokeMethod`
+actually run. Because `drainedWithin()`'s in-flight count can reach zero a
+moment before that queued reply callback has actually flushed the bytes over
+the socket, `closeGracefully` pumps a short additional settle window (bounded
+by whatever is left of `deadline`) before proceeding, so a reply that just
+landed is not closed out from under. It then sends every still-connected
+client a real close frame (`CloseCodeGoingAway`, reason `"server shutting
+down"`) instead of an abort, pumps the event loop again for the remainder of
+`deadline` to let that handshake flush, and finally calls the existing
+`close()` for whatever `deadline` did not leave time to finish gracefully
+(which also reclaims each remaining client's connection scope, same as
+`close()` always has). `deadline` bounds the whole sequence from the moment
+`closeGracefully` is called: a drain that used the full budget leaves no time
+for the close handshake before the hard stop, while a drain that finishes
+early leaves the remaining budget for it. Returns `true` if the drain
+finished within `deadline`, `false` if the hard stop had to reclaim
+stragglers. Purely additive and opt-in: a server that never calls it behaves
+exactly as today, and `close()` itself is unchanged.
+
 **Resource limits.** `QtWebSocketServerConfig` (aliased `QtWebSocketServer::Config`,
 declared outside the class for the same "fully-parsed-before-default-argument"
 reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
@@ -710,8 +769,10 @@ onto the Qt thread before `sendTextMessage`.
 | `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
 | `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
 | `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
-| `health()` | `[[nodiscard]] HealthStatus health() const` | Snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
-| `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` | Fires immediately with the current status; `nullptr` clears without firing. |
+| `health()` | `[[nodiscard]] HealthStatus health() const` — snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
+| `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` — fires immediately with the current status, and again whenever readiness changes (currently only `beginShutdown()` triggers a change); `nullptr` clears without firing. |
+| `beginShutdown()` | Enters shutdown: subsequent `register`/`execute` envelopes get `err "server shutting down"`; `deregister` still served. Idempotent, irreversible. Flips `health().ready` to `false` and re-invokes any installed health handler. |
+| `drainedWithin(deadline)` | `[[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline)` — blocks (condition-variable wait, not a poll) until every in-flight `execute` has replied or `deadline` elapses. Returns `true`/`false` accordingly. |
 
 ### `SimulatedRemoteBackend`
 
@@ -775,6 +836,7 @@ not a behavior change to the existing loopback-only default.
 | `listen()` | Binds to `cfg.bindAddress:port` and starts accepting; returns success. Refuses (returns `false`, logs at error level) a non-loopback `cfg.bindAddress` with no `tls` and `cfg.allowPlaintextExposure == false`. |
 | `port()` | Bound port (OS-assigned when constructed with `0`). |
 | `close()` | Stops accepting; calls `closeConnection` for every remaining client (reclaiming its models) before aborting and `deleteLater`ing its socket. Also run by the destructor. |
+| `closeGracefully(deadline)` | Opt-in graceful stop: pause accepting, `beginShutdown()`, wait up to `deadline` for the drain (pumping the event loop, plus a short settle window for a reply that just landed), send real close frames (`CloseCodeGoingAway`) to survivors, then `close()` for stragglers. Returns whether the drain finished before `deadline`. |
 
 ## Design decisions
 
@@ -798,6 +860,7 @@ not a behavior change to the existing loopback-only default.
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
 | `executeTimeout` implementation | A dedicated, lazily-started background thread (`detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill, drop (not close) on empty | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Dropping (vs. closing) keeps a transient burst from taking down the connection — pair with `LimitPolicy::executeTimeout` if bounded caller-side waiting is also needed. |
+| Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 
 ## Cross-references
 
@@ -864,3 +927,11 @@ not a behavior change to the existing loopback-only default.
   plain worker thread, and `waitForConnected` / the synchronous `register` path
   both pump nested `QEventLoop`s on that thread. Completion callbacks reach the
   GUI only if `cbExec` (typically `QtExecutor`) posts back to the Qt loop.
+- **Graceful shutdown never preempts a running action.** `beginShutdown()`,
+  `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
+  and wait for old work to finish; a model whose action runs longer than the
+  caller's `deadline` still finishes on its strand after `drainedWithin`
+  returns `false` (and after `closeGracefully`'s hard stop reclaims the
+  connection). This is intentional — morph never interrupts a strand task —
+  but it does mean a model with no self-imposed bound can make
+  `closeGracefully` always hit its hard stop.
