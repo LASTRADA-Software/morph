@@ -11,6 +11,12 @@ dispatch actions against them. The abstraction spans several header files:
   `RemoteServer`). These are the concrete remote transport that gives
   `DisconnectedError`, `setReconnectHandler`, and the reconnect lifecycle their
   meaning; `SimulatedRemoteBackend` is the in-process stand-in for the same shape.
+- **`net/socket_backend.hpp`** / **`net/socket_server.hpp`** (namespace
+  `morph::net`, opt-in via the CMake option `MORPH_BUILD_NET`, off by default) —
+  `SocketBackend` and `SocketServer`, a Qt-free reference transport that speaks
+  the same RFC 6455 WebSocket framing as the Qt transport above, over raw POSIX
+  (BSD) sockets. Wire-interoperable with `QtWebSocketBackend`/`QtWebSocketServer`
+  — both sides round-trip the same `wire::Envelope`.
 
 `Bridge` (in `bridge.hpp`) holds one active backend at a time and can swap it
 atomically via `Bridge::switchBackend()`. Every backend follows the same
@@ -29,6 +35,7 @@ and react to backend changes.
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
 - [`QtWebSocketBackend` — client-side WebSocket transport](#qtwebsocketbackend--client-side-websocket-transport)
 - [`QtWebSocketServer` — server-side WebSocket transport](#qtwebsocketserver--server-side-websocket-transport)
+- [`SocketBackend` / `SocketServer` — raw-socket WebSocket transport](#socketbackend--socketserver--raw-socket-websocket-transport)
 - [Lifetime & ownership](#lifetime--ownership)
 - [Failure modes](#failure-modes)
 - [Thread context](#thread-context)
@@ -618,6 +625,86 @@ reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
 | `bindAddress` | `QHostAddress::LocalHost` | The address `listen()` binds to (see "Flow" above). |
 | `allowPlaintextExposure` | `false` | Deliberate opt-out of the exposure guard: set `true` only to knowingly serve plaintext on a non-loopback `bindAddress` (see "Flow" above). |
 
+## `SocketBackend` / `SocketServer` — raw-socket WebSocket transport
+
+`morph::net::SocketBackend` (`include/morph/net/socket_backend.hpp`) and
+`morph::net::SocketServer` (`include/morph/net/socket_server.hpp`) are the
+Qt-free reference transport: they speak the same RFC 6455 WebSocket framing as
+`QtWebSocketBackend`/`QtWebSocketServer` — plaintext `ws://` only, no TLS — over
+raw POSIX (BSD) sockets instead of `QWebSocket`/`QWebSocketServer`. The module
+is header-only, gated behind the CMake option `MORPH_BUILD_NET` (default
+`OFF`; Linux/macOS only — see Limitations), and depends on nothing but `morph`
+itself: the HTTP/1.1 Upgrade handshake (`Sec-WebSocket-Key`/
+`Sec-WebSocket-Accept`, via a hand-rolled SHA-1 + base64) and the masked/
+unmasked text-frame codec are implemented from scratch in
+`include/morph/net/detail/` (`sha1.hpp`, `base64.hpp`, `ws_handshake.hpp`,
+`ws_frame.hpp`, `tcp_socket.hpp`). Because both transports round-trip the same
+`wire::Envelope`, a `SocketBackend` client and a `QtWebSocketServer`
+interoperate (and vice versa) with no protocol changes on either side.
+
+**Threading — the one deliberate difference from the Qt transport.**
+`QtWebSocketBackend` is pinned to the Qt event loop and uses a nested
+`QEventLoop` for its synchronous `registerModel`; `SocketBackend` instead owns
+a dedicated I/O thread and uses `std::condition_variable`s for the same
+synchronous control op, so it needs no GUI event loop at all. A consequence is
+that, unlike `QtWebSocketBackend`, `SocketBackend` may safely be driven from
+multiple threads concurrently — `registerModel`/`execute`/`deregisterModel`/
+`cancelPending` are all internally synchronized; there is no single "owning"
+thread. `SocketServer` mirrors this: one accept thread plus one thread per
+accepted connection, in place of Qt's event-loop-driven socket signals. One
+consequence worth calling out for tests/embedders: because neither side of
+`morph::net` needs a Qt event loop, blocking calls like
+`SocketBackend::waitForConnected()`/the synchronous `registerModel` genuinely
+block the calling thread with no event-loop pumping of their own — fine
+against a `SocketServer` peer (which needs no pumping either), but calling
+them directly from the one thread that owns a `QCoreApplication` a
+*`QtWebSocketServer`* peer depends on would starve that peer's own
+accept/handshake machinery. See
+`tests/net_qt_interop/test_net_qt_interop.cpp`'s `waitForConnectedPumpingQt`/
+`makeHandlerPumpingQt` helpers for the pattern such a caller needs (poll with
+a short timeout while pumping `QCoreApplication::processEvents()`).
+
+**`SocketBackend` — client-side `IBackend`.** Implements every `IBackend`
+method with the same observable semantics as `QtWebSocketBackend`:
+`registerModel` is synchronous (parks on a condition variable instead of a
+nested event loop; a register whose reply never arrives unblocks with
+`"register failed: disconnected"` rather than hanging, the same hardening
+`QtWebSocketBackend::sendSync` applies); `deregisterModel` is fire-and-forget
+(same trade-off, and — unlike `QtWebSocketServer` — `SocketServer` does **not**
+participate in `RemoteServer`'s connection-scope contract, so an undelivered
+or lost `deregister` against a `SocketServer` peer leaks the model
+indefinitely; see Limitations); `execute` assigns a monotonic `callId`, is
+fully asynchronous, and supports concurrent in-flight calls matched by
+`callId` exactly like the Qt transport. Reconnect is configured by
+`SocketBackendConfig` (aliased `SocketBackend::Config`), with the same four
+fields and defaults as `QtWebSocketBackendConfig` (`reconnectEnabled`,
+`initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus one new
+field, `connectTimeout` (default 5 s), bounding the initial/reconnect TCP
+connect attempt. `waitForConnected(timeout = 5000ms)` blocks the calling
+thread on a condition variable until connected or the timeout elapses — the
+non-Qt equivalent of pumping the Qt event loop. The constructor takes a
+`ws://` URL string (`wss://` throws immediately — see Limitations) and starts
+the I/O thread; the thread connects, performs the RFC 6455 handshake, and then
+reads framed messages until told to shut down.
+
+**`SocketServer` — server-side transport.** Fronts a `RemoteServer` by
+reference — the same non-owning-reference lifetime rule as `QtWebSocketServer`
+applies (see Lifetime & ownership). `listen()` binds `127.0.0.1:port` (`0`
+lets the OS assign a free port, exactly like the Qt transport) and spawns an
+accept thread; each accepted connection gets its own thread that performs the
+server-side handshake, then reads framed text messages and calls the
+**unscoped** `RemoteServer::handle(msg, reply)` — `SocketServer` does not call
+`openConnection`/`closeConnection`, so it does not participate in the
+connection-scope cleanup `QtWebSocketServer` opts into (see "Connection
+scopes" above and Limitations). The `reply` callback (which runs on a
+`RemoteServer` worker-pool thread) writes back to the originating connection
+under a per-connection write mutex; if the connection closed before the reply
+is ready, a `weak_ptr` check drops the write silently — the same behavior
+`QtWebSocketServer`'s `QPointer` gives. `close()` (also run by the destructor)
+is idempotent: it shuts down the listening socket and every client socket
+(unblocking their threads' blocked reads/accepts), then joins every thread it
+started, so destruction leaves no dangling threads.
+
 ## Lifetime & ownership
 
 The backends hold *references*, not owning pointers, to the resources they run
@@ -636,16 +723,18 @@ are:
   calling `handle()` throws `std::bad_weak_ptr` (see ARCHITECTURE.md
   "RemoteServer must be heap-allocated").
 - **The `RemoteServer` shared_ptr must outlive every referencing
-  `SimulatedRemoteBackend` and every transport `QtWebSocketServer`.**
-  Both `SimulatedRemoteBackend` and `QtWebSocketServer` store `RemoteServer&
-  _server` — a non-owning reference — and forward client messages through it. If
-  the server's owning shared_ptr is released while such an adapter still
-  references it, subsequent calls dereference a dangling reference. The `handle()`
-  path is self-protecting for tasks already *in flight* (each captures a
-  shared_ptr copy), but the reference member is not — the caller must keep the
-  server alive for the adapter's whole lifetime. (`QtWebSocketBackend`, by
-  contrast, holds no `RemoteServer` reference: it is a client that reaches the
-  server only over the socket.)
+  `SimulatedRemoteBackend` and every transport front (`QtWebSocketServer`,
+  `morph::net::SocketServer`).**
+  `SimulatedRemoteBackend`, `QtWebSocketServer`, and `SocketServer` all store
+  `RemoteServer& _server` — a non-owning reference — and forward client
+  messages through it. If the server's owning shared_ptr is released while
+  such an adapter still references it, subsequent calls dereference a
+  dangling reference. The `handle()` path is self-protecting for tasks
+  already *in flight* (each captures a shared_ptr copy), but the reference
+  member is not — the caller must keep the server alive for the adapter's
+  whole lifetime. (`QtWebSocketBackend`/`SocketBackend`, by contrast, hold no
+  `RemoteServer` reference: they are clients that reach the server only over
+  the socket.)
 - **Pending strand tasks capture shared_ptr copies, so model destruction
   mid-flight is safe.** Both backends' `execute` strand tasks capture the model
   `holder` by `shared_ptr` copy (and `RemoteServer`'s also captures the reply
@@ -678,6 +767,17 @@ apply, plus transport-level failures the in-process backends cannot hit:
 | Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
 | `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
 | Malformed reply frame while a sync waiter is parked | The raw frame is handed to the parked `sendSync` loop so it unblocks rather than hanging; decode then fails there. |
+
+`morph::net::SocketBackend` gives the same guarantees over its own transport
+(condition-variable waits in place of the nested `QEventLoop`):
+
+| Situation | `SocketBackend` |
+|---|---|
+| `execute` while the socket is disconnected | Completion resolves immediately with `DisconnectedError`. |
+| Socket drops with execute calls in flight | The I/O thread's disconnect handling calls `cancelPending(DisconnectedError{})`, resolving every pending completion with `DisconnectedError`. |
+| Reply arrives for an unknown/cancelled `callId` | Dropped silently. |
+| `register` reply is `err` (e.g. unknown model type) | `registerModel` throws `std::runtime_error("register failed: " + message)`. |
+| `register` reply never arrives (never connected, or disconnects mid-call) | The parked `sendSync` wait wakes on disconnect and throws `"disconnected"`, wrapped as `"register failed: disconnected"` — never hangs. |
 
 There is **no typed "model not found" exception** on either path — callers that
 need to distinguish it from any other `std::runtime_error` have only the message
@@ -715,6 +815,24 @@ Over the WebSocket transport the split is different again:
 receives frames on the Qt thread, hands them to `RemoteServer::handle` (which
 runs on the server pool / model strand as above), and marshals the reply *back*
 onto the Qt thread before `sendTextMessage`.
+
+`morph::net::SocketBackend` splits the same callables across its own I/O
+thread instead of the Qt thread:
+
+| Callable | Runs on (`SocketBackend`) |
+|---|---|
+| `serializeAction` | The **calling thread** — `execute` invokes it while building the envelope, before handing the frame to the I/O thread's write path. |
+| `deserializeResult` | The **I/O thread** — invoked when the matching reply frame arrives. |
+| `localOp` | Never invoked (no local models). |
+
+Unlike `QtWebSocketBackend`, `SocketBackend`'s `execute`/`registerModel`/
+`deregisterModel` may themselves be called from any thread — there is no
+single owning event-loop thread to violate. `morph::net::SocketServer`
+receives frames on its own per-connection thread, hands them to
+`RemoteServer::handle` (server pool / model strand, as above), and writes the
+reply back on whichever thread produces it (serialized per connection by a
+write mutex) — there is no separate marshalling step because there is no GUI
+thread to marshal onto.
 
 ## API reference
 
@@ -844,6 +962,44 @@ not a behavior change to the existing loopback-only default.
 | `close()` | Stops accepting; calls `closeConnection` for every remaining client (reclaiming its models) before aborting and `deleteLater`ing its socket. Also run by the destructor. |
 | `closeGracefully(deadline)` | Opt-in graceful stop: pause accepting, `beginShutdown()`, wait up to `deadline` for the drain (pumping the event loop, plus a short settle window for a reply that just landed), send real close frames (`CloseCodeGoingAway`) to survivors, then `close()` for stragglers. Returns whether the drain finished before `deadline`. |
 
+### `SocketBackendConfig` (`morph::net::SocketBackend::Config`)
+
+| Member | Type | Default |
+|---|---|---|
+| `reconnectEnabled` | `bool` | `true` |
+| `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
+| `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
+| `backoffMultiplier` | `double` | `2.0` |
+| `connectTimeout` | `std::chrono::milliseconds` | `5 s` |
+
+### `SocketBackend` (namespace `morph::net`)
+
+| Method | Notes |
+|---|---|
+| `explicit SocketBackend(serverUrl, cfg = Config{})` | Parses `serverUrl` (`ws://` only — throws immediately on `wss://`) and starts the I/O thread, which connects asynchronously. |
+| `waitForConnected(timeout = 5000ms)` | Blocks the calling thread on a condition variable until connected or the timeout elapses; returns the current connected state. |
+| `registerModel(typeId, factory)` | Synchronous via a parked condition variable; `factory` ignored. Throws on `err` reply or disconnect. Thread-safe, but only one such call may be in flight at a time. |
+| `deregisterModel(mid)` | **Fire-and-forget** — sends only if connected, does not wait for the ack. |
+| `execute(mid, call, cbExec)` | Assigns a `callId`, sends `execute`, returns a `Completion`. Immediate `DisconnectedError` if not connected. Thread-safe; supports concurrent in-flight calls from multiple threads. |
+| `notifyBackendChanged()` | No-op. |
+| `cancelPending(exc)` | Drains the pending map, delivers `exc` to each state. |
+| `setReconnectHandler(handler)` | Stores the handler; invoked on the I/O thread after every *subsequent* connect. `nullptr` clears. |
+
+### `SocketServerConfig` (`morph::net::SocketServer::Config`)
+
+| Member | Type | Default |
+|---|---|---|
+| `backlog` | `int` | `64` |
+
+### `SocketServer` (namespace `morph::net`)
+
+| Method | Notes |
+|---|---|
+| `SocketServer(server, port = 0, cfg = Config{})` | Fronts `RemoteServer& server`. Does not start listening. |
+| `listen()` | Binds `127.0.0.1:port` and spawns the accept thread; returns success. |
+| `port()` | Bound port (OS-assigned when constructed with `0`), or `0` before `listen()` succeeds. |
+| `close()` | Stops accepting, shuts down and joins every client thread and the accept thread. Idempotent; also run by the destructor. |
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -868,6 +1024,9 @@ not a behavior change to the existing loopback-only default.
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill, drop (not close) on empty | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Dropping (vs. closing) keeps a transient burst from taking down the connection — pair with `LimitPolicy::executeTimeout` if bounded caller-side waiting is also needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
+| `morph::net`'s I/O model | A dedicated I/O thread + `std::condition_variable`, instead of the Qt event loop | Lets `SocketBackend`/`SocketServer` run with no GUI event loop and no Qt dependency, and — as a side effect — lets `SocketBackend` be driven safely from multiple threads (`QtWebSocketBackend` cannot be, since it is pinned to one event-loop thread). |
+| `morph::net` frame/handshake implementation | Hand-rolled RFC 6455 (SHA-1 + base64 + HTTP Upgrade + frame codec), not a third-party library | The spec's own interop requirement (a `morph::net` client/server must talk to the real Qt transport and vice versa) rules out a bespoke non-WebSocket framing; hand-rolling avoids adding a dependency to keep morph's default build dependency-free, and RFC 6455's core (handshake + unfragmented text frames) is a small, bounded surface. |
+| `SocketServer` stays on the unscoped `handle(msg, reply)` | Does not call `openConnection`/`closeConnection` | The plan that introduced `morph::net` predates `RemoteServer`'s connection-scope contract and scoped `SocketServer` to the same shape `SimulatedRemoteBackend` already has (a reference transport forwarding to `RemoteServer`, nothing more); wiring it into connection scopes is a natural, low-risk future addition (see Limitations) rather than something folded in silently here. |
 
 ## Cross-references
 
@@ -880,7 +1039,7 @@ not a behavior change to the existing loopback-only default.
 | registry.md | `ModelRegistryFactory::create` (remote model construction, `BRIDGE_REGISTER_MODEL`), `ActionDispatcher::dispatch` (the remote execute call site), and the `Loggable` policy. |
 | completion.md | `Completion<shared_ptr<void>>` returned by `execute`, the `CompletionState` the backends track for `cancelPending`, and `cbExec` callback delivery. |
 | offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
-| executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool) and `qt/qt_executor.hpp`'s `QtExecutor`, the `cbExec` used to deliver completion callbacks onto the Qt thread. |
+| executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool); `qt/qt_executor.hpp`'s `QtExecutor` is the `cbExec` a Qt host uses to deliver completion callbacks onto the Qt thread, while a `morph::net::SocketBackend` host uses a plain `ThreadPoolExecutor`/`MainThreadExecutor` instead — no Qt event loop required. |
 | observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`setHealthHandler()`. |
 | testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle`/`dispatchMessage` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
 
@@ -920,13 +1079,54 @@ not a behavior change to the existing loopback-only default.
   `SimulatedRemoteBackend` deliberately stays on the unscoped path (its
   "connection" is the process itself), so its models still live until an
   explicit `deregister` or process exit, unchanged from before this feature.
-  Deregistration therefore remains the caller's responsibility for any path
-  that does not go through a scope-aware transport.
+  `morph::net::SocketServer` also stays on the unscoped path today (it predates
+  the scope contract), so a `SocketBackend` client that disconnects without an
+  explicit `deregisterModel` leaks its models on the server exactly like
+  `SimulatedRemoteBackend`'s clients do. Deregistration therefore remains the
+  caller's responsibility for any path that does not go through a
+  scope-aware transport.
 - **WebSocket transport is single-threaded and Qt-bound.** `QtWebSocketBackend`
   must live on the Qt event loop thread; there is no way to drive it from a
   plain worker thread, and `waitForConnected` / the synchronous `register` path
   both pump nested `QEventLoop`s on that thread. Completion callbacks reach the
   GUI only if `cbExec` (typically `QtExecutor`) posts back to the Qt loop.
+  `morph::net::SocketBackend` does not have this limitation (see above) — but a
+  test or app that mixes a `SocketBackend`/`SocketServer` with a
+  `QtWebSocketServer`/`QtWebSocketBackend` peer on the *same* thread that owns
+  the `QCoreApplication` must still pump Qt events while any blocking
+  `morph::net` call is outstanding, or the Qt-side peer starves (see the
+  `SocketBackend`/`SocketServer` Threading note above).
+- **`morph::net` is Linux/macOS only.** `TcpSocket` is a thin wrapper over
+  POSIX `sys/socket.h`; `MORPH_BUILD_NET=ON` on Windows produces a
+  `message(WARNING ...)` and builds nothing. Windows/Winsock2 support is
+  documented future work, not implemented today.
+- **`morph::net` has no TLS.** `SocketBackend`/`SocketServer` speak plaintext
+  `ws://` only; `parseWsUrl` throws immediately on a `wss://` URL. A `wss://`
+  variant needing a TLS library (e.g. OpenSSL) is future work.
+- **No fragmented WebSocket frames.** `WsFrameReader` throws on `FIN=0` or a
+  `CONTINUATION` opcode. This is not a practical limitation for morph's own
+  traffic — a `wire::Envelope` is always one JSON line, and the frame format's
+  64-bit extended-length field already covers up to `wire::kMaxEnvelopeBytes`
+  in a single frame — but a `SocketBackend`/`SocketServer` cannot talk to an
+  arbitrary third-party WebSocket peer that fragments its messages.
+- **`SocketServer` joins its per-connection threads at `close()`/destruction,
+  not eagerly per-disconnect.** A client that disconnects naturally leaves its
+  finished-but-unjoined thread handle in an internal list until the whole
+  server is closed; this bounds resource growth by the server's lifetime, not
+  by connection churn — acceptable for a reference transport (see the
+  connection-scoping bullet above) but worth knowing before running a very
+  long-lived `SocketServer` under heavy connection churn.
+- **`SocketBackend`'s destructor can block up to `Config::connectTimeout`.**
+  If destruction races an in-flight (re)connect attempt, the TCP connect phase
+  is bounded by `connectTimeout`, but the handshake read that follows a
+  successful TCP connect has no separate timeout in this reference
+  implementation — a peer that completes the TCP handshake but never speaks
+  (or never finishes) the WebSocket Upgrade leaves the I/O thread, and
+  therefore the destructor's join, waiting for the OS to notice. This is an
+  accepted, documented limitation of the reference implementation, not a bug
+  to route around: production code that needs a hard bound on teardown time
+  should not construct a `SocketBackend` against an untrusted or unreliable
+  peer without an external watchdog.
 - **Graceful shutdown never preempts a running action.** `beginShutdown()`,
   `drainedWithin()`, and `closeGracefully()` only stop new work from arriving
   and wait for old work to finish; a model whose action runs longer than the

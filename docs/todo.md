@@ -87,12 +87,11 @@ in-flight, queue depth, reconnect counts), no tracing hooks, and no health/readi
 signal. *Work:* a lightweight metrics/trace seam (injectable, like the logger) and
 a server health endpoint/callback. *Touches:* new spec, `remote.hpp`, `logger.hpp`.
 
-### C2 — Non-Qt transport option · P2 · [spec: `planned/non_qt_transport.md`]
-The only network transport is `QtWebSocketBackend/Server` — single-threaded,
-Qt-event-loop-bound. Shops that don't want Qt on the server must implement
-`IBackend` + wire it to `RemoteServer` themselves. *Work:* a reference
-transport-agnostic (or plain-socket / HTTP) transport, or a documented, worked
-example of writing one. *Touches:* new example, `backend.md`.
+### C2 — Non-Qt transport option · DONE · [spec: `spec/core/backend.md`]
+Shipped as `morph::net` (`SocketBackend`/`SocketServer`, opt-in via
+`MORPH_BUILD_NET`) — a raw-socket RFC 6455 WebSocket transport with no Qt
+dependency, wire-interoperable with `QtWebSocketBackend`/`QtWebSocketServer`.
+See `docs/spec/core/backend.md`'s `SocketBackend`/`SocketServer` section.
 
 ### C3 — Load / soak / fuzz testing · P1 · shipped — folded into [`spec/testing_strategy.md`](spec/testing_strategy.md)
 `fuzz_wire_decode`/`fuzz_dispatch_execute` (`MORPH_BUILD_FUZZERS=ON`), the
