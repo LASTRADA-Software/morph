@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <mutex>
 #include <string>
+#include <string_view>
+#include <utility>
 
 #include "../core/logger.hpp"
+#include "../core/observability.hpp"
 
 namespace morph::offline {
 
@@ -17,6 +21,22 @@ enum class ReconnectOutcome : std::uint8_t {
     GaveUp,       ///< Exhausted maxAttempts without a successful reconnect; stayed offline.
     Aborted,      ///< shouldContinue() returned false before any reconnect (e.g. went offline again).
 };
+
+namespace detail {
+/// @brief Tag value for the `reconnectOutcome` metric's "outcome" dimension.
+constexpr std::string_view reconnectOutcomeName(ReconnectOutcome outcome) noexcept {
+    switch (outcome) {
+        case ReconnectOutcome::Reconnected:
+            return "Reconnected";
+        case ReconnectOutcome::GaveUp:
+            return "GaveUp";
+        case ReconnectOutcome::Aborted:
+            return "Aborted";
+        default:
+            return "?";
+    }
+}
+}  // namespace detail
 
 /// @brief Tuning parameters for `ReconnectCoordinator`.
 ///
@@ -122,8 +142,9 @@ public:
 
         for (int attempt = 1; attempt <= _cfg.maxAttempts; ++attempt) {
             if (!callShouldContinue()) {
-                return ReconnectOutcome::Aborted;
+                return emitOutcome(ReconnectOutcome::Aborted);
             }
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::reconnectAttempts, 1.0);
             if (callTryReconnect()) {
                 _deps.activatePrimary();
                 _deps.bindContext();
@@ -133,7 +154,7 @@ public:
                 if (callShouldContinue()) {
                     _deps.replay();
                 }
-                return ReconnectOutcome::Reconnected;
+                return emitOutcome(ReconnectOutcome::Reconnected);
             }
             // No sleep after the final attempt — it would just waste retryDelay
             // before giving up.
@@ -144,7 +165,7 @@ public:
 
         ::morph::log::logWarn("[reconnect_coordinator] gave up after " + std::to_string(_cfg.maxAttempts) +
                               " attempts, staying offline");
-        return ReconnectOutcome::GaveUp;
+        return emitOutcome(ReconnectOutcome::GaveUp);
     }
 
     /// @brief Switch to the local backend and rebind context.
@@ -191,6 +212,16 @@ private:
         } catch (...) {
             return false;
         }
+    }
+
+    /// @brief Emits the `reconnectOutcome` counter tagged by @p outcome, then
+    ///        returns it — lets each `onOnline()` return site emit-and-return
+    ///        in one expression.
+    static ReconnectOutcome emitOutcome(ReconnectOutcome outcome) noexcept {
+        std::array<std::pair<std::string_view, std::string_view>, 1> const tags{
+            {{"outcome", detail::reconnectOutcomeName(outcome)}}};
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::reconnectOutcome, 1.0, tags);
+        return outcome;
     }
 
     Deps _deps;

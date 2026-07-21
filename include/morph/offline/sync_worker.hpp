@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "../core/logger.hpp"
+#include "../core/observability.hpp"
 #include "offline_queue.hpp"
 
 namespace morph::offline {
@@ -105,7 +106,9 @@ public:
             return result;
         }
 
-        for (auto& item : _queue.drain()) {
+        auto items = _queue.drain();
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueDepth, static_cast<double>(items.size()));
+        for (auto& item : items) {
             if (_stopped.load()) {
                 break;
             }

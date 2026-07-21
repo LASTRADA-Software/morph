@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <morph/core/logger.hpp>
+#include <morph/core/observability.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
 #include <stdexcept>
@@ -339,4 +340,26 @@ TEST_CASE(
     REQUIRE(result.failed == 1);
     REQUIRE(result.deadLettered == 0);
     REQUIRE(queue.drain().size() == 1);
+}
+
+TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending count at drain",
+          "[sync][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::offline::InMemoryOfflineQueue queue;
+    queue.enqueue("item1");
+    queue.enqueue("item2");
+    queue.enqueue("item3");
+
+    std::vector<double> samples;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::queueDepth) {
+            samples.push_back(evt.value);
+        }
+    });
+
+    morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
+    worker.run();
+
+    REQUIRE(samples.size() == 1);
+    REQUIRE(samples[0] == 3.0);
 }
