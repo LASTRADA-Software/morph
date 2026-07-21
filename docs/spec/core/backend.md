@@ -93,7 +93,10 @@ Four exception types are thrown into in-flight `Completion`s:
   `std::runtime_error("model not found: id=<n>")`. Otherwise it tracks the
   completion in the pending list, posts `localOp` on the model's strand
   (serialised per-model), sets up a `ScopedContext` (from `call.session`) before
-  calling `localOp`, and returns the `Completion`.
+  calling `localOp`, and returns the `Completion`. The strand task also emits
+  `executeLatencyMs`/`executeInFlight`/`executeErrors` and calls
+  `beginSpan`/`endSpan` around `localOp` — see [observability.md](observability.md).
+  Both `registerModel` and `deregisterModel` emit `registerCount`/`deregisterCount`.
 - `cancelPending` — snapshots the pending list under the pending mutex, delivers
   `exc` to every still-live state.
 - `notifyBackendChanged` — under `_regMtx`, scans all models for holders that
@@ -228,6 +231,24 @@ capture the server-side log. Thread-safe.
 using LogProvider = std::function<std::shared_ptr<morph::journal::IActionLog>(
     std::string_view modelType, std::string_view contextKey)>;
 ```
+
+**`health()` / `setHealthHandler(handler)`** — a readiness snapshot and an
+optional state-change callback, detailed in [observability.md](observability.md).
+`health()` returns `HealthStatus{ready, liveModels, inFlight}`: `liveModels`
+from the registry (same mutex as `register`/`deregister`/`execute`), `inFlight`
+from `_inFlightExecutes` — the same atomic counter `LimitPolicy::maxInFlightExecutes`
+enforces and the `executeInFlight` metric reports. `ready` is always `true` in
+the current codebase — nothing here flips it yet. `setHealthHandler` fires
+immediately with the current snapshot and is retained for a future shutdown
+sequence to re-invoke.
+
+**Metrics and tracing.** `dispatchMessage`'s `register`/`deregister` branches
+emit `registerCount`/`deregisterCount`; `dispatchExecute`'s admit/complete
+points emit `executeInFlight`, and its strand task emits
+`executeLatencyMs`/`executeErrors` and calls `beginSpan`/`endSpan` around the
+`ActionDispatcher::dispatch` call. All are no-ops unless a sink is installed
+via `morph::observe::setMetricSink`/`setTraceSink` — see
+[observability.md](observability.md).
 
 ### Protocol-version negotiation
 
@@ -689,6 +710,8 @@ onto the Qt thread before `sendTextMessage`.
 | `setLogProvider(provider)` | Installs a `LogProvider`; `nullptr` clears. Thread-safe. |
 | `setLimitPolicy(policy)` | Installs a `LimitPolicy`; thread-safe. All-zero (default) reproduces pre-existing behavior. |
 | `setSupportedVersionRange(min, max)` | Sets the inclusive protocol-version range advertised on `hello`. Defaults to `{kProtocolVersion, kProtocolVersion}`. Throws `std::invalid_argument` if `min > max`. Thread-safe. |
+| `health()` | `[[nodiscard]] HealthStatus health() const` | Snapshot of readiness/liveModels/inFlight. Cheap; safe from any thread. See [observability.md](observability.md). |
+| `setHealthHandler(handler)` | `void setHealthHandler(std::function<void(const HealthStatus&)>)` | Fires immediately with the current status; `nullptr` clears without firing. |
 
 ### `SimulatedRemoteBackend`
 
@@ -788,6 +811,7 @@ not a behavior change to the existing loopback-only default.
 | completion.md | `Completion<shared_ptr<void>>` returned by `execute`, the `CompletionState` the backends track for `cancelPending`, and `cbExec` callback delivery. |
 | offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
 | executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool) and `qt/qt_executor.hpp`'s `QtExecutor`, the `cbExec` used to deliver completion callbacks onto the Qt thread. |
+| observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`setHealthHandler()`. |
 
 ## Limitations
 

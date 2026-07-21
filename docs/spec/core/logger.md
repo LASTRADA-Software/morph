@@ -333,3 +333,8 @@ logger is the right tool:
   all framework internals route through `morph::log::detail::log`, and
   applications call `setLogger` once at startup to redirect to spdlog, Qt
   logging, or a test spy.
+- **`observability.md`** — the `morph::observe` metrics/trace seam copies this
+  file's replaceable-sink pattern (global `std::function` sink, mutex-guarded
+  swap, lock-free hot-path check) for structured numbers and spans that this
+  logger's `(LogLevel, string_view)` sink signature cannot carry (see
+  [Limitations](#limitations)).

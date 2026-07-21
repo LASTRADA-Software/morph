@@ -241,7 +241,7 @@ and calls a caller-supplied `ReplayFunction` for each item.
 | `ReplayFunction` | `std::function<bool(const std::string&)>` | Return `true` → success, `false` → failure. Throwing is treated as failure. |
 | `DeadLetterSink` | `std::function<void(const QueueItem&)>` | Invoked with the exhausted item, just before it is removed, when an item hits the retry cap. Optional — default unset. |
 | ctor | `SyncWorker(IOfflineQueue&, ReplayFunction, DeadLetterSink = nullptr)` | References the queue and the replay callable; the sink is an optional third argument. |
-| `run()` | `SyncResult run()` | Drains the queue and replays each item. Concurrent calls are serialised by an internal mutex. Returns immediately if `stop()` was called before acquiring the lock. |
+| `run()` | `SyncResult run()` | Drains the queue and replays each item. Concurrent calls are serialised by an internal mutex. Returns immediately if `stop()` was called before acquiring the lock. Emits the `queueDepth` metric once, with the drained item count, before replaying (see [observability.md](../core/observability.md)). |
 | `stop()` | `void stop()` | Signals an in-progress `run()` to stop after the current item. One-shot — the flag resets at the start of the next `run()`. |
 
 **Retry & dead-letter (hard-coded cap, durable count):**
@@ -398,11 +398,15 @@ ReconnectOutcome onOnline();
 Synchronous. Runs the retry loop. For each attempt:
 
 1. Check `shouldContinue()` — abort if false.
-2. Call `tryReconnect()` — skip to sleep if false.
+2. Emit the `reconnectAttempts` metric, then call `tryReconnect()` — skip to sleep if false.
 3. On success: `activatePrimary()`, `bindContext()`, re-check
    `shouldContinue()` before `replay()`, return `Reconnected`.
 4. Sleep `retryDelay` (except after the final attempt).
 5. After `maxAttempts` failures, log a warning and return `GaveUp`.
+
+Every return path also emits the `reconnectOutcome` metric once, tagged
+`outcome` = `"Reconnected"` / `"GaveUp"` / `"Aborted"` (see
+[observability.md](../core/observability.md)).
 
 #### `onOffline()`
 
@@ -661,3 +665,7 @@ Honest boundaries of what ships today:
   `safeProbe`, `SyncWorker`'s replay `try/catch`, `SyncWorker`'s
   `DeadLetterSink` `try/catch`, and the coordinator's
   `callTryReconnect`/`callShouldContinue`.
+- **`observability.md`** — `SyncWorker::run()`'s `queueDepth` gauge and
+  `ReconnectCoordinator::onOnline()`'s `reconnectAttempts`/`reconnectOutcome`
+  counters, fed through the same injectable `morph::observe` seam
+  `RemoteServer`/`LocalBackend` use.
