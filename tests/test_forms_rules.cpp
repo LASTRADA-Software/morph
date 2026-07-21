@@ -287,3 +287,64 @@ TEST_CASE("Forms::Rules::SchemaJson::EqualsEmitsRationalValueExactly", "[forms][
     auto const schema = morph::forms::schemaJson<CFREqualsForm>();
     CHECK(schema.contains(R"("when":{"kind":"equals","fields":["promo"],"value":{"num":5,"den":1}})"));
 }
+
+// ---------------------------------------------------------------------------
+// Presentation rules: visibleWhen / readonlyWhen (never gate the submit check).
+// ---------------------------------------------------------------------------
+
+struct CFRPromoForm {
+    CFRMoney promo;
+    CFRMoney discount;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::requiredWhen(&CFRPromoForm::discount, morph::forms::engaged(&CFRPromoForm::promo)),
+        morph::forms::visibleWhen(&CFRPromoForm::discount, morph::forms::engaged(&CFRPromoForm::promo)),
+        morph::forms::readonlyWhen(&CFRPromoForm::promo, morph::forms::engaged(&CFRPromoForm::discount)));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+TEST_CASE("Forms::Rules::VisibleWhen::NeverGatesTheCheck", "[forms][rules]") {
+    CFRPromoForm form{};
+    // visibleWhen never affects allRulesSatisfied, in either visibility state.
+    CHECK(morph::forms::allRulesSatisfied(form));  // promo unengaged: discount not required, hidden
+
+    auto const visibility =
+        morph::forms::visibleWhen(&CFRPromoForm::discount, morph::forms::engaged(&CFRPromoForm::promo));
+    CHECK(visibility.test(form));             // VisibleWhen::test() is always true -- it never gates, by design
+    CHECK_FALSE(visibility.when.test(form));  // the CONDITION it carries is false right now (promo unengaged)
+    CHECK(visibility.isPresentation);
+}
+
+TEST_CASE("Forms::Rules::VisibleWhen::TestAlwaysTrueEvenThoughItsOwnConditionCanBeFalse", "[forms][rules]") {
+    // VisibleWhen::test() always returns true (it never gates); the
+    // condition it carries (`when`) is what a renderer inspects separately
+    // to decide the control's visibility.
+    CFRPromoForm form{};
+    auto const rule = morph::forms::visibleWhen(&CFRPromoForm::discount, morph::forms::engaged(&CFRPromoForm::promo));
+    CHECK(rule.test(form));             // the RULE never fails
+    CHECK_FALSE(rule.when.test(form));  // the CONDITION it carries is false right now (promo unengaged)
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK(rule.test(form));       // still never fails
+    CHECK(rule.when.test(form));  // condition now true
+}
+
+TEST_CASE("Forms::Rules::SchemaJson::VisibleWhenAndReadonlyWhenEmitXRules", "[forms][rules]") {
+    auto const schema = morph::forms::schemaJson<CFRPromoForm>();
+    CHECK(schema.contains(
+        R"({"kind":"visibleWhen","fields":["discount"],"when":{"kind":"engaged","fields":["promo"]}})"));
+    CHECK(schema.contains(
+        R"({"kind":"readonlyWhen","fields":["promo"],"when":{"kind":"engaged","fields":["discount"]}})"));
+}
+
+TEST_CASE("Forms::Rules::PresentationRules::NeverBreakAllRulesSatisfiedAcrossStates", "[forms][rules]") {
+    CFRPromoForm form{};
+    CHECK(morph::forms::allRulesSatisfied(form));
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // discount now required by requiredWhen (a validation rule)
+
+    form.discount = Rational{1, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));  // requiredWhen satisfied; visibleWhen/readonlyWhen never gate
+}

@@ -1109,6 +1109,115 @@ template <typename A, typename... Vs>
     return MutuallyExclusive<A, Vs...>{std::tuple<Vs A::*...>{fields...}};
 }
 
+/// @brief Presentation rule: the listed field is shown only while @p Cond
+/// holds. Never gates `allRulesSatisfied` — while hidden, the field's
+/// current draft value still travels in the payload (hiding never clears
+/// it), exactly like a static `x-hidden` field.
+/// @tparam V    Field member type.
+/// @tparam A    Action type the field belongs to.
+/// @tparam Cond Condition node type.
+template <typename V, typename A, typename Cond>
+struct VisibleWhen {
+    /// @brief Pointer to the member whose visibility this rule controls.
+    V A::* field;
+    /// @brief The condition that, when true, makes `field` visible.
+    Cond when;
+    /// @brief The wire `"kind"` this rule emits: `"visibleWhen"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::VisibleWhen;
+    /// @brief Presentation rule: never participates in the gate.
+    static constexpr bool isPresentation = true;
+
+    /// @brief Always `true`: presentation rules never gate submission. A
+    /// renderer inspects `when` directly (not this method) to decide the
+    /// field's visibility.
+    /// @param action Unused (kept for interface uniformity with every other
+    ///               rule node).
+    /// @return `true`, unconditionally.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        static_cast<void>(action);
+        return true;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"visibleWhen","fields":["<wire name>"],"when":{...}}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        node["when"] = when.emit();
+        return node;
+    }
+};
+
+/// @brief Builds a `VisibleWhen<V, A, Cond>` presentation rule: @p field is
+/// shown only while @p when holds.
+/// @tparam V    Field member type (deduced).
+/// @tparam A    Action type (deduced).
+/// @tparam Cond Condition node type (deduced).
+/// @param field Pointer to the member whose visibility is controlled.
+/// @param when  The condition node.
+/// @return The rule node.
+template <typename V, typename A, typename Cond>
+[[nodiscard]] constexpr auto visibleWhen(V A::* field, Cond when) {
+    return VisibleWhen<V, A, Cond>{field, when};
+}
+
+/// @brief Presentation rule: the listed field is editable only while
+/// @p Cond does **not** hold (the field is read-only while `when` holds).
+/// Never gates `allRulesSatisfied`, exactly like `VisibleWhen`.
+/// @tparam V    Field member type.
+/// @tparam A    Action type the field belongs to.
+/// @tparam Cond Condition node type.
+template <typename V, typename A, typename Cond>
+struct ReadonlyWhen {
+    /// @brief Pointer to the member whose editability this rule controls.
+    V A::* field;
+    /// @brief The condition that, when true, makes `field` read-only.
+    Cond when;
+    /// @brief The wire `"kind"` this rule emits: `"readonlyWhen"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::ReadonlyWhen;
+    /// @brief Presentation rule: never participates in the gate.
+    static constexpr bool isPresentation = true;
+
+    /// @brief Always `true`: presentation rules never gate submission. A
+    /// renderer inspects `when` directly (not this method) to decide the
+    /// field's editability.
+    /// @param action Unused (kept for interface uniformity with every other
+    ///               rule node).
+    /// @return `true`, unconditionally.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        static_cast<void>(action);
+        return true;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"readonlyWhen","fields":["<wire name>"],"when":{...}}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(field));
+        node["fields"] = fields;
+        node["when"] = when.emit();
+        return node;
+    }
+};
+
+/// @brief Builds a `ReadonlyWhen<V, A, Cond>` presentation rule: @p field
+/// is editable only while @p when does **not** hold.
+/// @tparam V    Field member type (deduced).
+/// @tparam A    Action type (deduced).
+/// @tparam Cond Condition node type (deduced).
+/// @param field Pointer to the member whose editability is controlled.
+/// @param when  The condition node.
+/// @return The rule node.
+template <typename V, typename A, typename Cond>
+[[nodiscard]] constexpr auto readonlyWhen(V A::* field, Cond when) {
+    return ReadonlyWhen<V, A, Cond>{field, when};
+}
+
 /// @brief Composed list of an action's declared cross-field rules — the
 /// value of `A::formRules`. Built by `ruleList(...)`; never constructed
 /// directly.
