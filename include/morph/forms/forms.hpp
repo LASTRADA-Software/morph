@@ -444,6 +444,22 @@ template <typename A>
         }
     }
 
+    // Column spans (docs/spec/forms/forms.md, "Layout & grouping"): a no-op
+    // unless the action declares a static constexpr `fieldSpans`.
+    if constexpr (detail::HasFieldSpans<A>) {
+        for (auto const& span : A::fieldSpans) {
+            if (span.colspan <= 1) {
+                continue;  // 1 is the default width; nothing to advertise
+            }
+            bool const isMember = std::find(memberNames.begin(), memberNames.end(), span.field) != memberNames.end();
+            if (!isMember) {
+                continue;  // names a field the action does not have: ignored, never thrown
+            }
+            auto& property = dom["properties"][std::string{span.field}];
+            property["x-colspan"] = span.colspan;
+        }
+    }
+
     // value_or without a move: the copy is irrelevant (schemaJson memoises),
     // and keeping the fallback branch inside glaze's expected avoids an
     // untestable line here (write_json of a DOM we just built cannot fail).

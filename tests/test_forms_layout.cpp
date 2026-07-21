@@ -218,3 +218,46 @@ TEST_CASE("Forms::SchemaJson::FieldClaimedByTwoGroupsKeepsTheFirst", "[forms][la
     CHECK(schema.contains(R"("x-group":"First")"));
     CHECK_FALSE(schema.contains(R"("x-group":"Second")"));
 }
+
+// ---------------------------------------------------------------------------
+// schemaJson<A>(): x-colspan
+// ---------------------------------------------------------------------------
+
+struct SpannedAction {
+    std::int64_t sampleId = 0;
+    std::string notes;
+    std::string code;
+
+    static constexpr std::array fieldSpans{
+        FieldSpan{.field = "notes", .colspan = 2},
+        FieldSpan{.field = "code", .colspan = 1},          // explicit default: emits nothing
+        FieldSpan{.field = "doesNotExist", .colspan = 3},  // ignored, never thrown
+    };
+};
+
+TEST_CASE("Forms::SchemaJson::ColspanGreaterThanOneIsEmitted", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<SpannedAction>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));  // still valid JSON; never throws
+
+    CHECK(schema.contains(R"("x-colspan":2)"));
+}
+
+TEST_CASE("Forms::SchemaJson::ColspanOfOneEmitsNothing", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<SpannedAction>();
+    // "code" declares colspan == 1 explicitly: the default width is never
+    // advertised, keeping the schema minimal.
+    CHECK_FALSE(schema.contains(R"("x-colspan":1)"));
+}
+
+TEST_CASE("Forms::SchemaJson::SpanNamingNonexistentFieldIsIgnored", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<SpannedAction>();
+    CHECK_FALSE(schema.contains("doesNotExist"));
+}
+
+TEST_CASE("Forms::SchemaJson::NoFieldSpansEmitsNoColspan", "[forms][layout]") {
+    // LayoutGrouped (Task 2) declares formLayout but no fieldSpans.
+    auto const schema = morph::forms::schemaJson<LayoutGrouped>();
+    CHECK_FALSE(schema.contains("x-colspan"));
+}
