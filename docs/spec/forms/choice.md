@@ -15,6 +15,7 @@ which action to call and which result fields to use without hardcoding anything.
 
 - [Choice — structure](#choice--structure)
 - [Empty state](#empty-state)
+- [Dependent (cascading) options — `DependsOn`](#dependent-cascading-options--dependson)
 - [Wire and schema](#wire-and-schema)
 - [Schema representation](#schema-representation)
 - [API reference](#api-reference)
@@ -29,7 +30,8 @@ which action to call and which result fields to use without hardcoding anything.
 
 ```cpp
 template <typename T, FixedString OptionsAction,
-          FixedString ValueField = "id", FixedString LabelField = "name">
+          FixedString ValueField = "id", FixedString LabelField = "name",
+          FixedString... DependsOn>
 struct Choice {
     std::optional<T> value;
     // ...
@@ -39,14 +41,18 @@ struct Choice {
 | Template parameter | Purpose |
 |---|---|
 | `T` | Underlying value type submitted on the wire (e.g. `std::int64_t` for ids, `std::string` for codes). |
-| `OptionsAction` | Type id of the registered action whose result provides the options (executed with an empty body). |
+| `OptionsAction` | Type id of the registered action whose result provides the options. Executed with an empty body when `DependsOn` is empty; otherwise with `{name: value, ...}` built from the named sibling fields' current values. |
 | `ValueField` | Field of each result row submitted as the value. |
 | `LabelField` | Field of each result row shown to the user. |
+| `DependsOn` | Optional trailing pack of wire (JSON) field names of sibling fields whose current values parameterise the options action — a cascading picklist. Defaults to empty (no dependency), which is today's independent `Choice`, unchanged. |
 
 The four template parameters — the type parameter `T` plus the three
 `FixedString` NTTPs — make every `Choice<T, "ListPayees">` a distinct type
 whose options source is known at compile time. The same action name can appear
-in multiple `Choice` fields across different form types.
+in multiple `Choice` fields across different form types. `DependsOn` is a
+fifth, trailing, defaulted-empty pack: it adds no new distinctness rule beyond
+what the pack's own contents already produce (two `Choice`s differing only in
+`DependsOn` are already distinct types, same as differing in any other NTTP).
 
 ## Empty state
 
@@ -57,6 +63,44 @@ unchecked access (UB when empty, exactly like `std::optional`).
 Equality is total: `operator==` returns `true` when both are empty or both hold
 equal values.
 
+## Dependent (cascading) options — `DependsOn`
+
+`Choice` accepts an optional trailing pack of `FixedString` names, `DependsOn`,
+naming sibling fields of the same enclosing action whose **current values**
+parameterise the options action — a cascading picklist (the list of cities
+depends on the selected country, sub-accounts depend on the selected account,
+…). The pack defaults to empty, which is today's independent `Choice`
+unchanged: `optionsDependsOn()` returns an empty array, `OptionsAction` is
+still called with an empty body, and the emitted schema carries no
+`x-optionsDependsOn` key.
+
+When `DependsOn` is non-empty, the options action's request body is no longer
+empty: a client sends `{name: value, …}` — one entry per `DependsOn` name, set
+to that sibling's current engaged value — instead of `{}`. The options action
+is still an ordinary registered action; only the body it receives changes.
+The options action's own `schemaJson` describes that body (a `ListCities`
+action with a `country` field expects exactly that key), so the `DependsOn`
+names must match the options action's actual input field names — the same
+class of runtime-checked convention `ValueField`/`LabelField` already are
+against the options action's *result* fields.
+
+```cpp
+struct ShippingAddress {
+    morph::forms::Choice<std::int64_t, "ListCountries"> country;
+    morph::forms::Choice<std::int64_t, "ListCities", "id", "name", "country">
+        city;   // options depend on the sibling "country" value
+};
+```
+
+`optionsDependsOn()` returns the declared names as
+`std::array<std::string_view, N>`, in declaration order — the accessor
+`mergeSchemaExtras` ([forms.md](forms.md)) reads to emit `x-optionsDependsOn`
+on the property, and the same accessor a renderer reads to know which sibling
+fields to watch. *Fetching* on that dependency (waiting for every parent to be
+engaged, re-fetching on change, clearing a stale child selection) is a
+renderer concern documented in [forms.md](forms.md)'s renderer contract, not
+part of the `Choice` type itself — `Choice` only carries the declaration.
+
 ## Wire and schema
 
 On the morph JSON wire a `Choice` is its nullable underlying value — the
@@ -65,23 +109,26 @@ maps the type name to `"Choice"` and serialises through the `value` member
 directly:
 
 ```cpp
-template <typename T, FixedString OA, FixedString VF, FixedString LF>
-struct glz::meta<morph::forms::Choice<T, OA, VF, LF>> {
-    static constexpr auto value = &morph::forms::Choice<T, OA, VF, LF>::value;
+template <typename T, FixedString OA, FixedString VF, FixedString LF, FixedString... DependsOn>
+struct glz::meta<morph::forms::Choice<T, OA, VF, LF, DependsOn...>> {
+    static constexpr auto value = &morph::forms::Choice<T, OA, VF, LF, DependsOn...>::value;
     static constexpr std::string_view name = "Choice";
 };
 ```
 
 In the generated JSON Schema (`morph::forms::schemaJson`) the property receives
 `x-optionsAction`, `x-optionValue`, and `x-optionLabel` annotations so a client
-knows which action to call and which result fields to use. A non-optional
-`Choice` member is required by the `morph::forms` rules.
+knows which action to call and which result fields to use — plus
+`x-optionsDependsOn` when the field declares a `DependsOn` pack (see
+[Dependent (cascading) options](#dependent-cascading-options--dependson)
+above). A non-optional `Choice` member is required by the `morph::forms`
+rules.
 
 ## Schema representation
 
 The `glz::meta` specialisation sets `name = "Choice"` for *every*
-instantiation, regardless of `T`, `OptionsAction`, `ValueField`, or
-`LabelField`. glaze uses that name as the type's key in the schema's `$defs`
+instantiation, regardless of `T`, `OptionsAction`, `ValueField`, `LabelField`,
+or `DependsOn`. glaze uses that name as the type's key in the schema's `$defs`
 block and as the `$ref` target for each property. Two consequences follow, both
 intentional:
 
@@ -97,19 +144,21 @@ intentional:
   in `$defs`.
 
 The collision is therefore benign: the parts that *do* differ between fields —
-which action to call, which result fields to read — are emitted by
+which action to call, which result fields to read, and (for a dependent
+`Choice`) which sibling fields parameterise it — are emitted by
 `mergeSchemaExtras` as **property-level** `x-optionsAction` / `x-optionValue` /
-`x-optionLabel` annotations, one set per property, alongside `x-order` and the
-derived `required` array. A renderer reads those from the property, not from
-`$defs`, so it never depends on the shared `$defs/Choice` node to tell two
-`Choice` fields apart. The one caveat, when `T` varies across `Choice` fields
-in the same action, is that the single `$defs/Choice` payload type cannot be
-correct for all of them; renderers that submit the raw nullable value observe
-no problem, since the wire value is validated by the action, not by the schema.
+`x-optionLabel` / `x-optionsDependsOn` annotations, one set per property,
+alongside `x-order` and the derived `required` array. A renderer reads those
+from the property, not from `$defs`, so it never depends on the shared
+`$defs/Choice` node to tell two `Choice` fields apart. The one caveat, when `T`
+varies across `Choice` fields in the same action, is that the single
+`$defs/Choice` payload type cannot be correct for all of them; renderers that
+submit the raw nullable value observe no problem, since the wire value is
+validated by the action, not by the schema.
 
 ## API reference
 
-### `Choice<T, OptionsAction, ValueField, LabelField>`
+### `Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>`
 
 | Member | Signature | Notes |
 |---|---|---|
@@ -120,6 +169,7 @@ no problem, since the wire value is validated by the action, not by the schema.
 | `optionsAction()` | `static constexpr std::string_view optionsAction() noexcept` | The action name from the type. |
 | `valueField()` | `static constexpr std::string_view valueField() noexcept` | The result-row field submitted as the value. |
 | `labelField()` | `static constexpr std::string_view labelField() noexcept` | The result-row field shown to the user. |
+| `optionsDependsOn()` | `static constexpr std::array<std::string_view, N> optionsDependsOn() noexcept` | Wire names of the sibling fields this field's options depend on; empty for an independent `Choice`. |
 | `hasValue()` | `constexpr bool hasValue() const noexcept` | Engaged? No implicit `bool` conversion. |
 | `operator*` | `constexpr const T& operator*() const noexcept` | Unchecked access (UB when empty). |
 | `operator==` | `constexpr bool operator==(const Choice&) const noexcept` | Total; empty==empty is `true`. |
@@ -138,6 +188,7 @@ no problem, since the wire value is validated by the action, not by the schema.
 | Value / label fields | **NTTP defaults `"id"` / `"name"`** | Most list actions return rows with these conventional field names; override when the result schema differs. |
 | Wire representation | **Nullable `T` only** | Options metadata never travels with payloads — it lives in the C++ type and the generated schema. Keeps the wire compact and stable. |
 | Options metadata delivery | **Schema annotations (`x-optionsAction` etc.)** | Generated by `schemaJson` from the NTTP parameters so a client can discover the options source without hardcoding. |
+| Sibling dependency | **Optional trailing `FixedString... DependsOn` NTTP pack** | Cascading picklists need the parent's current value in the options-action request; `Choice` doesn't know its enclosing action type, so parent names are opaque wire-name strings — the same NTTP vehicle `OptionsAction`/`ValueField`/`LabelField` already use. Defaults to empty, so every pre-existing `Choice<...>` is source- and schema-compatible unchanged. |
 | Blank state | **`std::nullopt` in the payload** | Same pattern as `Quantity` and `Timestamp`; a non-optional `Choice` member is required by the forms rules. |
 | Glaze serialisation | **Through the `value` member directly** | The glaze `meta` specialisation maps `value` so the type serialises as its nullable payload, with the type name `"Choice"`. |
 | Equality | **Total, through `std::optional`'s semantics** | Empty equals empty; engaged values compare by `T`'s equality. |
@@ -167,14 +218,16 @@ value. On the wire the field is just a nullable integer — `null` or `42`.
 
 ## Author's obligations
 
-Declaring a `Choice` places three obligations on the author that the type
+Declaring a `Choice` places six obligations on the author that the type
 system cannot check, because the strings are opaque NTTPs:
 
 - **The `OptionsAction` must be a registered action.** The name (`"ListSamples"`
   above) has to resolve to an action the executor knows, and that action must
-  succeed **when invoked with an empty body** — the renderer calls it with no
+  succeed **when invoked with an empty body** (an independent `Choice`, no
+  `DependsOn`) **or with `{name: value, ...}` built from the `DependsOn`
+  names** (a dependent `Choice`) — the renderer calls it with no other
   arguments to populate the combo box. An action that requires input fields
-  cannot serve as an options source.
+  beyond its declared `DependsOn` cannot serve as an options source.
 - **The result rows must expose the value and label fields.** Each row the
   options action returns must have fields literally named by `ValueField` and
   `LabelField` — `id` and `name` by default. The renderer reads those two
@@ -187,6 +240,16 @@ system cannot check, because the strings are opaque NTTPs:
   that renamed wire name — not the original member identifier. Defaulting to
   `"id"`/`"name"` works only when the result rows serialise with exactly those
   keys.
+- **Each `DependsOn` name must be a real sibling field's wire name** in the
+  enclosing action. The renderer reads that sibling's current value to build
+  the options request; a name matching no property yields a missing key in
+  the request body.
+- **The options action must accept those names as input fields.** An options
+  action that ignores the body silently returns the unfiltered list — no
+  error, just a non-cascading picklist.
+- **The parent's value type must match the options action's input field
+  type.** The renderer forwards the parent `Choice`'s underlying `T` as-is; a
+  mismatch surfaces only as a decode failure or empty result at fetch time.
 
 ## Failure modes
 
@@ -232,13 +295,19 @@ and nothing more. That leaves gaps neither the client nor the server closes:
   every dereference with `hasValue()` themselves; the type will not do it for
   them, and "read the value if present, else a default" has to be written by
   hand.
+- **`DependsOn` names are unchecked strings, same as `OptionsAction`.** Each
+  name is resolved at runtime against the enclosing action's sibling fields
+  and against the options action's input fields; a typo, a renamed sibling,
+  or an options action that doesn't accept the named input all compile
+  cleanly and fail only when a client fetches.
 
 ## Cross-references
 
 - **[forms.md](forms.md)** — how a `Choice` member becomes *required* (the
   `EmptyCapableField` concept plus the not-`std::optional`/not-`optionalFields`
   rule), and where `mergeSchemaExtras` emits the `x-optionsAction` /
-  `x-optionValue` / `x-optionLabel` property annotations.
+  `x-optionValue` / `x-optionLabel` / `x-optionsDependsOn` property
+  annotations.
 - **[quantity_type.md](../util/quantity_type.md)** and **[datetime.md](../util/datetime.md)** —
   `Quantity` and `Timestamp` share the *one kind of empty* pattern: the blank
   state lives inside the value as `std::optional`, `hasValue()` reports

@@ -73,7 +73,8 @@ action over the same wire, and the result rows are mapped to a combo box.
 
 ```cpp
 template <typename T, FixedString OptionsAction,
-          FixedString ValueField = "id", FixedString LabelField = "name">
+          FixedString ValueField = "id", FixedString LabelField = "name",
+          FixedString... DependsOn>
 struct Choice {
     std::optional<T> value;
     // ...
@@ -82,9 +83,14 @@ struct Choice {
 
 - `T` — the value type submitted on the wire (`int64_t` for ids, `string` for codes).
 - `OptionsAction` — the registered action type id whose result provides options
-  (executed with an empty body, returns `{valueField, labelField, ...}` rows).
+  (executed with an empty body when `DependsOn` is empty, or with
+  `{name: value, ...}` built from the `DependsOn` names otherwise; returns
+  `{valueField, labelField, ...}` rows either way).
 - `ValueField` / `LabelField` — which result-row fields carry the submitted value
   and the display label; both default to `"id"` / `"name"`.
+- `DependsOn` — an optional trailing pack of sibling wire field names whose
+  current values parameterise the options action (a cascading picklist);
+  empty by default. See [choice.md](choice.md) for the full design.
 
 On the wire a `Choice` is just its nullable `T` — the options metadata lives in
 the C++ type and the generated schema only, never in payloads. The
@@ -159,7 +165,7 @@ rationale are in [widget_hints.md](widget_hints.md).
 ## `schemaJson<A>()` — schema generation
 
 Produces a complete JSON Schema string for action type `A`, post-processing the
-output of `glz::write_json_schema<A>()` to add six annotation groups:
+output of `glz::write_json_schema<A>()` to add seven annotation groups:
 
 | Annotation | Scope | Contents |
 |---|---|---|
@@ -168,6 +174,7 @@ output of `glz::write_json_schema<A>()` to add six annotation groups:
 | `x-decimalPlaces` | `Quantity` properties | The field's declared precision (`Quantity<U, Dec>::declaredDecimals`). |
 | `x-unitAlternatives` | `Quantity` properties | Convertible display/entry units derived from `UnitTraits::relations`, each with `{id, display, decimals, num, den}` — `id`/`display`/`decimals` come from the alternative unit's `UnitMeta`, and `num`/`den` are the exact alternative-to-canonical ratio. Omitted entirely when the field's unit declares no convertible units. |
 | `x-optionsAction` / `x-optionValue` / `x-optionLabel` | `Choice` properties | The action that serves the options and which result fields to use. |
+| `x-optionsDependsOn` | `Choice` properties whose options depend on sibling fields | Wire names of the sibling fields that parameterise the options action; omitted when the `Choice` declares no dependency. |
 | `x-widget` / `x-min` / `x-max` / `x-step` | Properties whose field type declares `widget()` (optionally `min()`/`max()`/`step()`), or any field named in a `fieldMetadata`-shaped override | The preferred control id, and (for a bounded numeric) the slider's track bounds and increment ([widget_hints.md](widget_hints.md)). |
 
 The result is **computed once per type and cached** in a `static const std::string`
@@ -441,9 +448,10 @@ must resolve the `$ref` to see both:
   `Quantity`'s type definition, not onto the property. Many properties of the
   same unit type share one `$def` and therefore one `ExtUnits`.
 - **`x-order`, `x-decimalPlaces`, `x-unitAlternatives`, `x-optionsAction` /
-  `x-optionValue` / `x-optionLabel` are siblings of the `$ref` on the property**
-  — `mergeSchemaExtras` patches `dom["properties"][name]`, which is the property
-  node holding the `$ref`, never the referenced `$def`.
+  `x-optionValue` / `x-optionLabel` / `x-optionsDependsOn` are siblings of the
+  `$ref` on the property** — `mergeSchemaExtras` patches
+  `dom["properties"][name]`, which is the property node holding the `$ref`,
+  never the referenced `$def`.
 
 The **"Where"** column below names the node each key is written to. A renderer
 resolves the `$ref` into `$defs`, then merges: per-property `x-*` keys (from the
@@ -462,9 +470,10 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | ↳ `decimals` | alternative entry | non-negative integer | The alternative unit's own default decimals (`UnitMeta::defaultDecimals`) — the input step to use while that unit is selected. |
 | ↳ `num` | alternative entry | signed integer | Numerator of the exact **alternative→canonical** ratio. |
 | ↳ `den` | alternative entry | signed integer | Denominator of that ratio. `value_in_canonical = value_in_alternative · num / den`; `num`/`den` are the `Rational` numerator/denominator of the composed relation, so the recompute is exact (no floating-point drift). |
-| `x-optionsAction` | property node (sibling of `$ref`) | string | Type id of the registered action whose result rows populate this field's combo box (executed with an empty body). |
+| `x-optionsAction` | property node (sibling of `$ref`) | string | Type id of the registered action whose result rows populate this field's combo box. Executed with an empty body, unless the property also carries `x-optionsDependsOn` (below), in which case the request body is `{parentField: value, ...}` built from the named sibling fields' current values. |
 | `x-optionValue` | property node (sibling of `$ref`) | string | Which result-row field carries the value submitted on the wire (default `"id"`). |
 | `x-optionLabel` | property node (sibling of `$ref`) | string | Which result-row field carries the display label (default `"name"`). |
+| `x-optionsDependsOn` | property node (sibling of `$ref`) | array of strings | Wire field names of sibling fields whose current values parameterise this field's options action (a cascading picklist). The renderer sends `{name: value, …}` as the options-action request body instead of an empty one, and re-fetches — clearing a now-invalid selection — whenever any listed field changes. **Omitted entirely** when the `Choice` declares no dependency. |
 | `title` | property node (sibling of `$ref`) | string | The field's display label — an explicit `FieldMeta::label`, else a title-cased member name (`dryMassPct` → "Dry Mass Pct"). Standard JSON-Schema vocabulary, not an `x-*` key. **Always emitted.** See "Field metadata" above. |
 | `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty; never submitted. |
 | `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true` — including on every `computedFields` destination (see [Computed fields](#computed-fields)). Not a security control — see "Field metadata is not a security control" above. |
@@ -526,11 +535,15 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
   owns the `Bridge`/`BridgeHandler<Model>`/`QtExecutor` wiring an app's own
   `QObject`/`QML_ELEMENT` controller subclass forwards to. It exposes
   `schemasJson()`, `submitIfValid(actionType, bodyJson, onReply, onError)`, and
-  `fetchOptions(optionsAction, onReply, onError)` — both operations dispatch
-  generically via `BridgeHandler::executeJson`, so an app's controller never
-  hardcodes one action; `examples/forms/gui_qml/FormsController.hpp` is the
-  ~20-line reference wrapper (naming its own model type, since Qt cannot
-  register the template itself).
+  `fetchOptions(optionsAction, bodyJson, onReply, onError)` — both operations
+  dispatch generically via `BridgeHandler::executeJson`, so an app's
+  controller never hardcodes one action, and `fetchOptions`'s `bodyJson` is a
+  true pass-through (`"{}"` for an independent `Choice`, or
+  `{parentField: value, ...}` for a dependent one — see [Choice —
+  server-sourced picklist](#choice--server-sourced-picklist)) rather than
+  always empty; `examples/forms/gui_qml/FormsController.hpp` is the ~20-line
+  reference wrapper (naming its own model type, since Qt cannot register the
+  template itself).
 - **`examples/forms/gui_qml`** is a *consumer* of the shipped module, not its
   home: its own `LabFormsDemo` QML module carries only `Main.qml` and the
   `FormsController` subclass naming `lab::LabModel`; `Main.qml` imports
@@ -565,8 +578,9 @@ executable form of this document's "normative" claim.
   `x-optionsAction`/`x-optionValue`/`x-optionLabel`; a `Timestamp` renders as a
   date-time control and gates on ISO-8601; two properties sharing one `$def`
   each keep their own `x-order` while resolving the same `ExtUnits`. The
-  empty-body options-fetch itself (`Choice` executing its options action with
-  an empty body) is asserted separately, in
+  options-fetch itself — an independent `Choice` executing its options action
+  with an empty body, and a dependent one (`x-optionsDependsOn`) with
+  `{parentField: value, ...}` — is asserted separately, in
   `src/qt/forms/tests/test_forms_controller_core.cpp` (a Catch2 + Qt
   executable covering `FormsControllerCore<Model>` directly), since
   `DynamicForm` never calls the options action directly — its controller
@@ -1076,7 +1090,7 @@ validator check on every dispatch path.
 |---|---|
 | `template <typename T> concept EmptyCapableField` | `const T&` has a `noexcept` `.hasValue()` returning convertible-to-`bool`. |
 
-### `Choice<T, OptionsAction, ValueField, LabelField>` and `FixedString<N>`
+### `Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>` and `FixedString<N>`
 
 Both types are **owned by `choice.hpp` and specified in full in
 [choice.md](choice.md)** — this spec does not restate their member-by-member API,
@@ -1085,7 +1099,11 @@ to avoid two copies drifting apart. In brief: `Choice<T, "Action", "value",
 unchecked `operator*`, defaulted `operator==`) whose options come from executing
 a named registered action; `optionsAction()`/`valueField()`/`labelField()`
 expose the compile-time metadata that `mergeSchemaExtras` reads to emit
-`x-optionsAction`/`x-optionValue`/`x-optionLabel`. `FixedString<N>` is the
+`x-optionsAction`/`x-optionValue`/`x-optionLabel`. An optional trailing
+`DependsOn` pack names sibling fields whose current values parameterise the
+options action (a cascading picklist); `optionsDependsOn()` exposes it, and
+`mergeSchemaExtras` emits `x-optionsDependsOn` only when it is non-empty — an
+independent `Choice` (the default) is unaffected. `FixedString<N>` is the
 `consteval` NTTP string that carries those names inside the `Choice` type. The
 `isChoice<T>` trait (`true` for any cvref-stripped `Choice`) is what
 `mergeSchemaExtras` and `allRequiredEngaged` branch on. See [choice.md](choice.md)
@@ -1121,6 +1139,7 @@ for the exhaustive tables and design rationale.
 | `Choice` metadata | **In the type, not the payload** | The set of options for a field is a compile-time property of the action, not a runtime property of each submission. The generated schema communicates it to the client; payloads carry only the selected value. |
 | Wire serialisation | **Glaze `meta` reflects `value` directly** | `Choice<T, ...>` serialises as `T \| null` — the options metadata never travels. |
 | Options action | **A registered action type id** | The same action dispatch mechanism handles queries for picklist data, so no separate protocol or endpoint is needed. |
+| Dependent `Choice` options | **Sibling values as the options-action request body, not a new dispatch mechanism** | `Choice`'s `DependsOn` pack only changes what body a renderer sends; the options action stays an ordinary registered action reached through the same `executeJson`/`ActionDispatcher` seam as every other action, so multi-parent cascades and independent `Choice`s coexist with no new framework surface. |
 | `x-order` | **Always emitted, on every property** | JSON object key order is not reliable across DOM implementations; the explicit index gives renderers a deterministic layout. |
 | Cross-field rules | **Closed, typed vocabulary, one declaration → schema + client + server** | Client and server must evaluate cross-field conditions identically; a closed set of framework-owned node types (not application lambdas) is what makes that possible. Arbitrary logic that does not fit stays in `validate()`/`execute`, unreflected into `x-rules`, exactly as `allRequiredEngaged` already draws the line for per-field required-ness. |
 | `x-unitAlternatives` | **Derived from `UnitTraits::relations`** | The same `UnitRelation` entries that drive `convert` also drive the display-unit selector — no separate declaration to keep in sync. |

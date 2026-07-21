@@ -167,7 +167,7 @@ reference renderer, the schema contract stays renderer-agnostic).
   declaration with [the server-side validator](spec/core/registry.md).
 - **E-G5 — Computed fields** · P2 · [spec: `spec/forms/forms.md`] —
   derived read-only fields, recomputed live client-side, authoritative server-side.
-- **E-G6 — Dependent choices** · P2 · [spec: `planned/gui_dependent_choices.md`] —
+- **E-G6 — Dependent choices** · P2 · [spec: `spec/forms/choice.md`] —
   `Choice` options parameterised by sibling field values (cascading picklists).
 - **E-G10 — Localisation (i18n)** · P1 · [spec: `planned/gui_i18n.md`] —
   translated labels/help/rule messages via schema-derived stable message keys
