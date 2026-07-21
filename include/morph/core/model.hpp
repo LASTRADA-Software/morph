@@ -95,31 +95,53 @@ struct IModelHolder {
     /// @brief Returns `true` if an action log is attached to this instance.
     [[nodiscard]] bool hasActionLog() const noexcept { return static_cast<bool>(_actionLog); }
 
-    /// @brief Records @p entry if a log is attached; no-op otherwise.
+    /// @brief Marks this instance as outbox-managed: the model records its own
+    ///        `LogEntry` (inside its own store's transaction) and relays it via
+    ///        `journal::OutboxRelay`, so `recordIfAttached` must stop
+    ///        auto-appending for it — otherwise the framework's normal
+    ///        fire-after-success append would double-log the same action.
+    ///
+    /// Independent of `attachActionLog`/`hasActionLog()`: those keep reporting
+    /// whatever log is attached and whether one is attached, respectively; this
+    /// flag only changes whether `recordIfAttached` actually forwards to it.
+    /// Defaults to `false` — every instance auto-appends exactly as before
+    /// unless a model explicitly opts in.
+    /// @param outboxManaged `true` to suppress `recordIfAttached`; `false` to
+    ///        restore the ordinary fire-after-success behavior.
+    void setOutboxManaged(bool outboxManaged) noexcept { _outboxManaged = outboxManaged; }
+
+    /// @brief Returns `true` if `setOutboxManaged(true)` was called on this instance.
+    [[nodiscard]] bool isOutboxManaged() const noexcept { return _outboxManaged; }
+
+    /// @brief Records @p entry if a log is attached and this instance is not
+    ///        outbox-managed; no-op otherwise.
     ///
     /// Called automatically by the two places `Model::execute()` is actually
     /// invoked (`ActionDispatcher`'s runner and `Bridge::executeVia`'s local
     /// op) — model code and application code never call this directly.
     /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;
     /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.
+    /// A no-op if no log is attached, **or** if `setOutboxManaged(true)` was
+    /// called on this instance (the model records its own entry elsewhere).
     /// @param entry Entry to record; `seq` is assigned by the attached sink.
     void recordIfAttached(::morph::journal::LogEntry entry) {
-        if (!_actionLog) {
+        if (!_actionLog || _outboxManaged) {
             return;
         }
         entry.entityKey = _contextKey;
         if (const auto* ctx = ::morph::session::current()) {
             entry.principal = ctx->principal;
         }
-        entry.timestampMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
+        entry.timestampMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
         _actionLog->append(std::move(entry));
     }
 
 private:
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
+    bool _outboxManaged{false};
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 

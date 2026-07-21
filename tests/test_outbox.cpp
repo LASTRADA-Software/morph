@@ -137,3 +137,76 @@ TEST_CASE("FileActionLog: idempotencyKey dedup survives reopening the same file 
 
     REQUIRE(reopened.entries().size() == 1);
 }
+
+// ── IModelHolder::setOutboxManaged / isOutboxManaged ────────────────────────
+
+TEST_CASE("IModelHolder::setOutboxManaged: suppresses recordIfAttached while hasActionLog stays true",
+          "[outbox][holder]") {
+    auto holder = morph::model::detail::ModelFactory::create<OBModel>();
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "acct-1");
+    holder->setOutboxManaged(true);
+
+    REQUIRE(holder->hasActionLog());
+    REQUIRE(holder->isOutboxManaged());
+
+    holder->recordIfAttached(makeEntry("OB_Model", "", "OB_Deposit"));
+
+    REQUIRE(log->entries().empty());
+}
+
+TEST_CASE("IModelHolder::setOutboxManaged: defaults to false, ordinary recording is unaffected", "[outbox][holder]") {
+    auto holder = morph::model::detail::ModelFactory::create<OBModel>();
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "acct-1");
+
+    REQUIRE_FALSE(holder->isOutboxManaged());
+    holder->recordIfAttached(makeEntry("OB_Model", "", "OB_Deposit"));
+
+    REQUIRE(log->entries().size() == 1);
+}
+
+TEST_CASE("ActionDispatcher: outbox-managed holder does not auto-append despite an attached log",
+          "[outbox][dispatch]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<OBModel>("OB_Model");
+    dispatcher.registerAction<OBModel, OBDeposit>("OB_Model", "OB_Deposit");
+
+    auto holder = registry.create("OB_Model");
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "acct-1");
+    holder->setOutboxManaged(true);
+
+    auto depositJson = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 10});
+    REQUIRE(dispatcher.dispatch("OB_Model", "OB_Deposit", *holder, depositJson) == "10");
+
+    REQUIRE(log->entries().empty());  // suppressed — the model is expected to log itself
+}
+
+TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despite an attached log",
+          "[outbox][bridge]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto log = std::make_shared<InMemoryActionLog>();
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "OB_Model";
+    binding->modelFactory = [log] {
+        auto holder = morph::model::detail::ModelFactory::create<OBModel>();
+        holder->attachActionLog(log, "acct-1");
+        holder->setOutboxManaged(true);
+        return holder;
+    };
+    morph::bridge::BridgeHandler<OBModel> handler{bridge, &cbExec, binding};
+
+    std::atomic<int> depositResult{-1};
+    handler.execute(OBDeposit{.amount = 20})
+        .then([&](int v) { depositResult.store(v); })
+        .onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return depositResult.load() != -1; }));
+    REQUIRE(depositResult.load() == 20);
+
+    REQUIRE(log->entries().empty());
+}
