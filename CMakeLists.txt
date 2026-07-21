@@ -29,6 +29,13 @@ endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
 option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
+# Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
+# Resolved via CMake's bundled FindSQLite3 module against a system SQLite3 dev
+# package -- deliberately NOT added to vcpkg.json, so vcpkg-toolchain presets
+# do not install it unconditionally. Off by default: the standard build tree
+# never needs SQLite3 to be present. See docs/spec/offline/offline.md,
+# "SqliteOfflineQueue".
+option(MORPH_BUILD_OFFLINE_SQLITE "Build the SQLite-backed durable IOfflineQueue reference implementation (needs SQLite3)" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
 option(MORPH_ENABLE_STRICT_COMPILATION
@@ -293,6 +300,26 @@ if(MORPH_BUILD_QT)
 
     if(MORPH_BUILD_EXAMPLES)
         add_subdirectory(examples/qt_tls_client)
+    endif()
+endif()
+
+# ── SQLite-backed durable offline queue (optional) ──────────────────────────
+if(MORPH_BUILD_OFFLINE_SQLITE)
+    find_package(SQLite3 REQUIRED)
+
+    add_library(morph_offline_sqlite INTERFACE)
+    add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
+    target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)
+    target_sources(morph_offline_sqlite
+        INTERFACE
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/offline/sqlite_offline_queue.hpp
+    )
+
+    if(MORPH_BUILD_TESTS)
+        add_subdirectory(tests/offline_sqlite)
     endif()
 endif()
 
