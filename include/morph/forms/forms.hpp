@@ -34,6 +34,12 @@
 ///   options, and which result-row fields carry the submitted value and the
 ///   display label. Renderers turn these into combo boxes populated by
 ///   executing the named action.
+/// - **`x-optionsDependsOn`** — for a `Choice` whose options are
+///   parameterised by sibling field values (`Choice`'s `DependsOn` pack): the
+///   wire names of those sibling fields. Renderers send `{name: value, ...}`
+///   as the options-action request body instead of an empty one, and
+///   re-fetch when a named field changes. Omitted when the `Choice` declares
+///   no dependency.
 /// - **`x-layout` / `x-group` / `x-section` / `x-colspan`** — for actions
 ///   declaring a `static constexpr` `formLayout` and/or `fieldSpans`
 ///   (`morph::forms::FieldGroup` / `FieldSpan`, `forms/layout.hpp`): visual
@@ -1591,6 +1597,18 @@ template <typename A>
             property["x-optionsAction"] = std::string{Member::optionsAction()};
             property["x-optionValue"] = std::string{Member::valueField()};
             property["x-optionLabel"] = std::string{Member::labelField()};
+
+            // Sibling fields whose current values parameterise the options
+            // action (cascading picklists). Omitted entirely for an
+            // independent Choice, so the emitted schema is byte-for-byte
+            // unchanged from before this key existed.
+            if constexpr (!Member::optionsDependsOn().empty()) {
+                glz::generic_u64::array_t dependsOn{};
+                for (auto const& parentName : Member::optionsDependsOn()) {
+                    dependsOn.emplace_back(std::string{parentName});
+                }
+                property["x-optionsDependsOn"] = dependsOn;
+            }
         }
 
         // Widget hint: the field type's own widget() (e.g. Multiline,

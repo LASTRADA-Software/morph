@@ -617,6 +617,54 @@ TEST_CASE("Forms::DispatchChoiceActionThroughRegistry", "[forms]") {
     CHECK(ActionTraits<QFSchedule>::resultFromJson(result) == "slot 4 at 2026-07-06T09:00:00.000Z");
 }
 
+TEST_CASE("Forms::SchemaJson::OptionsDependsOnEmission", "[forms]") {
+    auto const schema = morph::forms::schemaJson<QFShippingAddress>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    // The dependent field ("city") carries the new key, naming its one parent.
+    CHECK(schema.contains(R"("x-optionsDependsOn":["country"])"));
+    CHECK(schema.contains(R"("x-optionsAction":"QFListCities")"));
+
+    // Only "city" carries it — "country" (independent) does not.
+    std::size_t occurrences = 0;
+    std::size_t pos = 0;
+    while ((pos = schema.find("x-optionsDependsOn", pos)) != std::string::npos) {
+        ++occurrences;
+        ++pos;
+    }
+    CHECK(occurrences == 1);
+
+    // An independent Choice elsewhere is unaffected: no key, schema unchanged
+    // (backward compatibility).
+    CHECK_FALSE(morph::forms::schemaJson<QFSchedule>().contains("x-optionsDependsOn"));
+}
+
+TEST_CASE("Forms::DispatchDependentChoiceThroughRegistry", "[forms]") {
+    using morph::model::ActionTraits;
+
+    auto holder = morph::model::detail::ModelFactory::create<QFLabModel>();
+
+    auto const countries =
+        morph::model::detail::ActionDispatcher::instance().dispatch("QFLabModel", "QFListCountries", *holder, "{}");
+    CHECK(countries == R"({"countries":[{"id":1,"name":"Wonderland"},{"id":2,"name":"Narnia"}]})");
+
+    // The options action's own body is the parent's current value — an
+    // ordinary registered action, no new dispatch mechanism.
+    auto const cities = morph::model::detail::ActionDispatcher::instance().dispatch("QFLabModel", "QFListCities",
+                                                                                    *holder, R"({"country":1})");
+    CHECK(cities == R"({"cities":[{"id":10,"name":"Looking-Glass City"}]})");
+
+    auto const differentCities = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "QFLabModel", "QFListCities", *holder, R"({"country":2})");
+    CHECK(differentCities == R"({"cities":[{"id":20,"name":"Cair Paravel"}]})");
+
+    auto const result = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "QFLabModel", "QFShippingAddress", *holder, R"({"country":1,"city":10})");
+    CHECK(result == "10");
+}
+
 // ---------------------------------------------------------------------------
 // Convertible entry units: declared per unit system, surfaced in schemas.
 // ---------------------------------------------------------------------------
