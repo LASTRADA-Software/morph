@@ -780,6 +780,15 @@ private:
             }
             snapshot = std::any_cast<const Action&>(iter->second.draft);
         }
+        // Recompute every declared computed field live, on the snapshot, before
+        // the readiness check and fire -- so a validator that inspects a
+        // computed field sees the freshly-derived value, and the fired action
+        // already carries it. No-op for actions with no computedFields. This is
+        // a live, non-authoritative recompute for display; the dispatch paths
+        // (bridge.hpp's ActionExecuteRegistry executor and localOp, registry.hpp's
+        // ActionDispatcher runner) recompute it again, authoritatively. See
+        // docs/spec/forms/forms.md.
+        ::morph::forms::recomputeAll(snapshot);
         if (!::morph::model::ActionValidator<Action>::ready(snapshot)) {
             return;
         }

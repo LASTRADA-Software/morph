@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <array>
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <chrono>
 #include <cstdint>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
+#include <mutex>
 #include <string_view>
+#include <thread>
+
+#include "test_support.hpp"
 
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
@@ -192,4 +200,56 @@ TEST_CASE("schemaJson emits neither key for an action with no computedFields", "
     CHECK_FALSE(schema.contains("x-computed"));
     CHECK_FALSE(schema.contains("x-readonly"));
     CHECK(schema.contains(R"("required":["qty","price"])"));
+}
+
+// ---------------------------------------------------------------------------
+// Client reactive path: BridgeHandler::set<> recomputes live before firing.
+// ---------------------------------------------------------------------------
+
+struct CFModel {
+    CFLineItem execute(const CFLineItem& action) { return action; }
+};
+
+BRIDGE_REGISTER_MODEL(CFModel, "Test_CF_Model")
+BRIDGE_REGISTER_ACTION(CFModel, CFLineItem, "Test_CF_LineItem")
+
+using SyncExecutor = morph::testing::InlineExecutor;
+
+TEST_CASE("BridgeHandler::set<> recomputes total live before firing", "[bridge][computed]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+
+    std::mutex totalMtx;
+    std::atomic<bool> haveTotal{false};
+    Rational lastTotal{0, dp2};
+    handler.subscribe<CFLineItem>([&](CFLineItem result) {
+        std::scoped_lock lock{totalMtx};
+        if (result.total.hasValue()) {
+            lastTotal = *result.total;
+            haveTotal.store(true);
+        }
+    });
+
+    handler.set<&CFLineItem::qty>(Rational{Numerator{3}, Denominator{1}, dp2});
+    handler.set<&CFLineItem::price>(Rational{Numerator{2}, Denominator{1}, dp2});
+
+    REQUIRE(morph::testing::waitUntil([&] { return haveTotal.load(); }));
+    std::scoped_lock lock{totalMtx};
+    CHECK(lastTotal == Rational{6, dp2});
+}
+
+TEST_CASE("BridgeHandler::set<> does not fire before both computed inputs are engaged", "[bridge][computed]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> fired{false};
+    handler.subscribe<CFLineItem>([&](CFLineItem /*unused*/) { fired.store(true); });
+
+    handler.set<&CFLineItem::qty>(Rational{Numerator{3}, Denominator{1}, dp2});
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    CHECK_FALSE(fired.load());  // price still missing -> total unengaged -> validate() is false
 }
