@@ -320,6 +320,7 @@ if(MORPH_BUILD_NET)
             BASE_DIRS include
             FILES
                 include/morph/net/detail/base64.hpp
+                include/morph/net/detail/sha1.hpp
         )
 
         if(MORPH_BUILD_TESTS)

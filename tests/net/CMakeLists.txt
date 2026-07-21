@@ -1,5 +1,6 @@
 add_executable(morph_net_tests
     test_base64.cpp
+    test_sha1.cpp
 )
 
 target_link_libraries(morph_net_tests
