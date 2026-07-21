@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/observability.hpp>
+#include <morph/core/registry.hpp>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #include "test_support.hpp"
 
 using SyncExecutor = morph::testing::InlineExecutor;
-
 
 struct CounterAction {
     int delta = 0;
@@ -159,4 +161,141 @@ TEST_CASE("morph::bridge::BridgeHandler destructor deregisters model cleanly", "
         // handler goes out of scope here — deregister must not crash
     }
     REQUIRE(result.load() == 10);
+}
+
+// ── morph::backend::LocalBackend: observability (metrics + tracing) ─────────
+
+TEST_CASE("morph::backend::LocalBackend: execute emits executeLatencyMs and toggles executeInFlight",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::atomic<int> latencyEvents{0};
+    std::mutex sampleMtx;
+    std::vector<double> inFlightSamples;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            latencyEvents.fetch_add(1, std::memory_order_relaxed);
+        } else if (evt.metric == morph::observe::Metric::executeInFlight) {
+            std::scoped_lock const lock{sampleMtx};
+            inFlightSamples.push_back(evt.value);
+        }
+    });
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "BE_CounterModel";
+    call.actionTypeId = "BE_CounterAction";
+    call.localOp = [](morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+        auto& typed = static_cast<morph::model::detail::ModelHolder<CounterModel>&>(holder);
+        return std::make_shared<int>(typed.model.execute(CounterAction{.delta = 3}));
+    };
+
+    std::atomic<bool> done{false};
+    backend.execute(mid, std::move(call), &cbExec).then([&](const std::shared_ptr<void>&) { done = true; });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(latencyEvents.load() == 1);
+    std::scoped_lock const lock{sampleMtx};
+    REQUIRE(inFlightSamples.size() == 2);
+    REQUIRE(inFlightSamples[0] == 1.0);
+    REQUIRE(inFlightSamples[1] == 0.0);
+}
+
+TEST_CASE("morph::backend::LocalBackend: an erroring action emits executeErrors", "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::atomic<int> errorEvents{0};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeErrors) {
+            errorEvents.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "BE_CounterModel";
+    call.actionTypeId = "BE_CounterAction";
+    call.localOp = [](morph::model::detail::IModelHolder&) -> std::shared_ptr<void> {
+        throw std::runtime_error("boom");
+    };
+
+    std::atomic<bool> errored{false};
+    backend.execute(mid, std::move(call), &cbExec)
+        .then([](const std::shared_ptr<void>&) {})
+        .onError([&](const std::exception_ptr&) { errored = true; });
+
+    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+    REQUIRE(errorEvents.load() == 1);
+}
+
+TEST_CASE("morph::backend::LocalBackend: registerModel/deregisterModel emit their counters",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    std::atomic<int> registerEvents{0};
+    std::atomic<int> deregisterEvents{0};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::registerCount) {
+            registerEvents.fetch_add(1, std::memory_order_relaxed);
+        } else if (evt.metric == morph::observe::Metric::deregisterCount) {
+            deregisterEvents.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+    backend.deregisterModel(mid);
+
+    REQUIRE(registerEvents.load() == 1);
+    REQUIRE(deregisterEvents.load() == 1);
+}
+
+TEST_CASE("morph::backend::LocalBackend: one execute produces exactly one beginSpan/endSpan pair",
+          "[backend][local][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = backend.registerModel("BE_CounterModel", morph::model::detail::ModelFactory::create<CounterModel>);
+
+    std::atomic<int> beginCalls{0};
+    std::atomic<int> endCalls{0};
+    morph::observe::setTraceSink(morph::observe::TraceSink{
+        .beginSpan =
+            [&](std::string_view, std::string_view, std::string_view) {
+                beginCalls.fetch_add(1, std::memory_order_relaxed);
+                return morph::observe::SpanId{5};
+            },
+        .endSpan =
+            [&](morph::observe::SpanId id, bool ok) {
+                endCalls.fetch_add(1, std::memory_order_relaxed);
+                REQUIRE(id == 5);
+                REQUIRE(ok);
+            },
+    });
+
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "BE_CounterModel";
+    call.actionTypeId = "BE_CounterAction";
+    call.localOp = [](morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
+        auto& typed = static_cast<morph::model::detail::ModelHolder<CounterModel>&>(holder);
+        return std::make_shared<int>(typed.model.execute(CounterAction{.delta = 1}));
+    };
+
+    std::atomic<bool> done{false};
+    backend.execute(mid, std::move(call), &cbExec).then([&](const std::shared_ptr<void>&) { done = true; });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(beginCalls.load() == 1);
+    REQUIRE(endCalls.load() == 1);
 }

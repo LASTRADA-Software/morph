@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -15,6 +17,7 @@
 #include "../session/session.hpp"
 #include "completion.hpp"
 #include "model.hpp"
+#include "observability.hpp"
 #include "registry.hpp"
 #include "strand.hpp"
 
@@ -177,6 +180,7 @@ public:
     ::morph::exec::detail::ModelId registerModel(
         const std::string& /*typeId*/,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
         ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
         std::scoped_lock const lock{_regMtx};
         _models[mid] = factory();
@@ -186,6 +190,7 @@ public:
     /// @brief Removes the model with @p mid. Thread-safe.
     /// @param mid Id returned by a prior `registerModel()` call.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
         std::scoped_lock const lock{_regMtx};
         _models.erase(mid);
     }
@@ -264,13 +269,56 @@ public:
         trackPending(compState);
         auto localOp = std::move(call.localOp);
         auto session = std::move(call.session);
+        auto modelTypeId = call.modelTypeId;
+        auto actionTypeId = call.actionTypeId;
+        // Captured by shared_ptr, never by raw `this`: see the Global
+        // Constraints note on `~StrandExecutor`'s member-destruction-order
+        // subtlety. A shared_ptr copy has its own lifetime, independent of
+        // LocalBackend's, so it stays valid even if the backend is torn down
+        // while this task is still queued or running.
+        auto inFlightCounter = _inFlight;
+        auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                             static_cast<double>(inFlightAfterInc));
         _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
-                           session = std::move(session)]() mutable {
+                           session = std::move(session), modelTypeId = std::move(modelTypeId),
+                           actionTypeId = std::move(actionTypeId), inFlightCounter]() mutable {
+            auto const start = std::chrono::steady_clock::now();
+            auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
+            bool ok = false;
+            // Resolve `compState` only after every metric and `endSpan` below are
+            // recorded — nothing synchronizes a `.then()`/`.onError()` callback
+            // (delivered via `cbExec`, which may run inline/synchronously) with
+            // anything after `setValue`/`setException` returns, so resolving first
+            // would let the caller observe completion before these metrics are
+            // emitted. This is a real race, not just a theoretical one.
+            std::shared_ptr<void> value;
+            std::exception_ptr error;
             try {
                 ::morph::session::detail::ScopedContext const scoped{session};
-                compState->setValue(localOp(*holder));
+                value = localOp(*holder);
+                ok = true;
             } catch (...) {
-                compState->setException(std::current_exception());
+                error = std::current_exception();
+            }
+            ::morph::observe::detail::endSpan(spanId, ok);
+            auto const elapsedMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+            if (!ok) {
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+            }
+            auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                 static_cast<double>(inFlightAfterDec));
+            // Resolve last: the Completion is still settled exactly once, only
+            // its position relative to the now-recorded instrumentation moved.
+            if (ok) {
+                compState->setValue(std::move(value));
+            } else {
+                compState->setException(error);
             }
         });
         return comp;
@@ -306,6 +354,11 @@ private:
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    // Concurrent in-flight executes, for the executeInFlight metric. A
+    // shared_ptr (not a plain atomic member) so strand tasks hold their own
+    // reference instead of capturing `this` — see execute()'s comment and the
+    // Global Constraints note on ~StrandExecutor's destruction order.
+    std::shared_ptr<std::atomic<std::size_t>> _inFlight = std::make_shared<std::atomic<std::size_t>>(0);
 };
 
 }  // namespace morph::backend
