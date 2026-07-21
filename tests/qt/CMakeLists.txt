@@ -14,6 +14,7 @@ apply_warnings(qt_test_client)
 
 add_executable(morph_qt_tests
     test_qt_websocket.cpp
+    test_qt_websocket_adversarial.cpp
 )
 
 target_link_libraries(morph_qt_tests
