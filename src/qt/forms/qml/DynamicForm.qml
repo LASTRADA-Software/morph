@@ -175,6 +175,10 @@ Frame {
                     optionsAction: opt(optionsAction, ""),
                     valueField: opt(opt(raw["x-optionValue"], p["x-optionValue"]), "id"),
                     labelField: opt(opt(raw["x-optionLabel"], p["x-optionLabel"]), "name"),
+                    // Wire names of sibling fields whose current values
+                    // parameterise this Choice's options action (cascading
+                    // picklist); empty for an independent Choice.
+                    dependsOn: opt(raw["x-optionsDependsOn"], opt(p["x-optionsDependsOn"], [])),
                     isDateTime: p.format === "date-time",
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
@@ -200,6 +204,29 @@ Frame {
                     jsonType: types.length > 0 ? types[0] : ""
                 }
             })
+    }
+
+    // name -> field descriptor, for parent/child lookups by wire name.
+    property var fieldByName: {
+        const map = {}
+        for (let i = 0; i < fields.length; ++i)
+            map[fields[i].name] = fields[i]
+        return map
+    }
+
+    // Reverse of x-optionsDependsOn: parent field name -> [dependent child names].
+    property var dependents: {
+        const map = {}
+        for (let i = 0; i < fields.length; ++i) {
+            const f = fields[i]
+            for (let j = 0; j < f.dependsOn.length; ++j) {
+                const parentName = f.dependsOn[j]
+                if (map[parentName] === undefined)
+                    map[parentName] = []
+                map[parentName].push(f.name)
+            }
+        }
+        return map
     }
 
     // Field descriptors bucketed into x-layout's declared groups (in
@@ -530,6 +557,57 @@ Frame {
         return (scaled.neg ? "-" : "") + padded.slice(0, -to.decimals) + "." + padded.slice(-to.decimals)
     }
 
+    // Encodes one field's current input text as the JSON literal morph
+    // expects on the wire, applying the same per-kind syntax and bounds
+    // checks as submission. Returns null when the field is blank or its
+    // typed text does not currently encode to a valid literal. Shared by
+    // revalidate() (the submit body) and optionsRequestBody() (a dependent
+    // Choice's parent values).
+    function fieldJsonLiteral(f) {
+        const text = (opt(fieldValues[f.name], "")).trim()
+        if (text === "")
+            return null
+        if (f.isChoice) {
+            return text  // already a JSON literal (see the ComboBox's onActivated)
+        }
+        if (f.isDateTime) {
+            const utcIso = zonedToUtcIso(text, displayOffsetMinutes)
+            return utcIso === null ? null : JSON.stringify(utcIso)
+        }
+        if (f.isQuantity) {
+            const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator)
+            if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText))
+                return null
+            const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
+            // Reject more decimals than the current unit's precision instead
+            // of silently rounding them away.
+            const fracLen = (canonicalText.split(".")[1] || "").length
+            if (fracLen > unit.decimals)
+                return null
+            const value = parseFloat(canonicalText)
+            // Bounds are declared against the canonical unit.
+            if (opt(fieldUnits[f.name], 0) === 0) {
+                if (f.minimum !== undefined && value < f.minimum)
+                    return null
+                if (f.maximum !== undefined && value > f.maximum)
+                    return null
+            }
+            return rationalJson(canonicalText, unit, f.canonDp)
+        }
+        if (f.isInteger) {
+            if (!/^-?\d+$/.test(text))
+                return null
+            const value = parseInt(text)
+            if (f.minimum !== undefined && value < f.minimum)
+                return null
+            if (f.maximum !== undefined && value > f.maximum)
+                return null
+            // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
+            return text.replace(/^(-?)0+(?=\d)/, "$1")
+        }
+        return JSON.stringify(text)
+    }
+
     function revalidate() {
         // Assembled as JSON text (not JSON.stringify) so rational digits and
         // int64-sized integers stay exact.
@@ -538,42 +616,13 @@ Frame {
         for (let i = 0; i < fields.length; ++i) {
             const f = fields[i]
             const text = (opt(fieldValues[f.name], "")).trim()
-            if (text === "") {
-                if (f.required || isDynamicallyRequired(f.name))
+            const literal = fieldJsonLiteral(f)
+            if (literal === null) {
+                if (text !== "" || f.required || isDynamicallyRequired(f.name))
                     ok = false
                 continue
             }
-            if (f.isChoice) {
-                parts.push(JSON.stringify(f.name) + ":" + text)  // stored as a JSON literal
-            } else if (f.isDateTime) {
-                const utcIso = zonedToUtcIso(text, displayOffsetMinutes)
-                if (utcIso === null) { ok = false; continue }
-                parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(utcIso))
-            } else if (f.isQuantity) {
-                const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator)
-                if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText)) { ok = false; continue }
-                const unit = f.unitOptions[opt(fieldUnits[f.name], 0)]
-                // Reject more decimals than the current unit's precision
-                // instead of silently rounding them away.
-                const fracLen = (canonicalText.split(".")[1] || "").length
-                if (fracLen > unit.decimals) { ok = false; continue }
-                const value = parseFloat(canonicalText)
-                // Bounds are declared against the canonical unit.
-                if (opt(fieldUnits[f.name], 0) === 0) {
-                    if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
-                    if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                }
-                parts.push(JSON.stringify(f.name) + ":" + rationalJson(canonicalText, unit, f.canonDp))
-            } else if (f.isInteger) {
-                if (!/^-?\d+$/.test(text)) { ok = false; continue }
-                const value = parseInt(text)
-                if (f.minimum !== undefined && value < f.minimum) { ok = false; continue }
-                if (f.maximum !== undefined && value > f.maximum) { ok = false; continue }
-                // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
-                parts.push(JSON.stringify(f.name) + ":" + text.replace(/^(-?)0+(?=\d)/, "$1"))
-            } else {
-                parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(text))
-            }
+            parts.push(JSON.stringify(f.name) + ":" + literal)
         }
         // Cross-field rules (x-rules): evaluated after the per-field checks
         // above, over the same draft. Presentation kinds (visibleWhen /
@@ -594,9 +643,52 @@ Frame {
             form.controller.submitIfValid(form.actionType, form.previewLine)
     }
 
+    // The JSON body to send a Choice field's options action: {parentName:
+    // value, ...} built from the current values of its declared parents
+    // (x-optionsDependsOn). Returns null when any parent is not yet engaged
+    // or valid — the caller must not fetch in that case (same null
+    // convention as fieldJsonLiteral).
+    function optionsRequestBody(field) {
+        const parts = []
+        for (let i = 0; i < field.dependsOn.length; ++i) {
+            const parentName = field.dependsOn[i]
+            const parent = form.fieldByName[parentName]
+            const literal = parent ? form.fieldJsonLiteral(parent) : null
+            if (literal === null)
+                return null
+            parts.push(JSON.stringify(parentName) + ":" + literal)
+        }
+        return "{" + parts.join(",") + "}"
+    }
+
+    // Re-fetches (or clears) every Choice field that depends on parentName,
+    // called whenever parentName's value changes. A child whose parents are
+    // not all currently engaged is not fetched — its options are cleared and
+    // its stale selection (if any) is dropped instead.
+    function refreshDependents(parentName) {
+        const children = form.dependents[parentName] || []
+        for (let i = 0; i < children.length; ++i) {
+            const child = form.fieldByName[children[i]]
+            const body = form.optionsRequestBody(child)
+            if (body === null) {
+                form.fieldOptions[child.name] = []
+                form.optionsRevision++
+                if ((opt(form.fieldValues[child.name], "")) !== "") {
+                    form.fieldValues[child.name] = ""
+                    form.revalidate()
+                }
+                continue
+            }
+            if (form.controller)
+                form.controller.fetchOptions(child.optionsAction, body)
+        }
+    }
+
     function setFieldValue(name, text) {
         fieldValues[name] = text
         revalidate()
+        if (form.dependents[name] !== undefined)
+            form.refreshDependents(name)
     }
 
     // Extracts the option rows from an options action's result: the result
@@ -641,6 +733,18 @@ Frame {
                 form.fieldOptions[f.name] = form.optionRows(parsed).map(function (row) {
                     return { label: String(row[f.labelField]), valueJson: JSON.stringify(row[f.valueField]) }
                 })
+                // A parent change re-fetches; drop a selection the new list
+                // no longer backs (closes the staleness noted in choice.md's
+                // Failure modes). A no-op for an independent Choice: its
+                // options rarely change underneath an already-made
+                // selection, but the check is unconditional and harmless
+                // either way.
+                const current = form.fieldValues[f.name]
+                if (current !== undefined && current !== ""
+                    && !form.fieldOptions[f.name].some(function (row) { return row.valueJson === current })) {
+                    form.fieldValues[f.name] = ""
+                    form.revalidate()
+                }
             }
             form.optionsRevision++
         }
@@ -712,7 +816,14 @@ Frame {
                 ComboBox {
                     visible: overrideLoader.sourceComponent === null
                              && fieldColumn.modelData.isChoice && !fieldColumn.modelData.isRadioChoice
+                    // A dependent Choice (x-optionsDependsOn) stays disabled
+                    // until its parent(s) are engaged and a fetch has
+                    // populated fieldOptions; an independent Choice is
+                    // unaffected (dependsOn.length === 0 always short-circuits
+                    // true here, exactly like before this feature existed).
                     enabled: !fieldColumn.modelData.readOnly
+                             && (fieldColumn.modelData.dependsOn.length === 0
+                                 || (form.fieldOptions[fieldColumn.modelData.name] || []).length > 0)
                     Layout.fillWidth: true
                     textRole: "label"
                     currentIndex: -1
@@ -1026,8 +1137,11 @@ Frame {
         if (!controller)
             return
         for (let i = 0; i < fields.length; ++i) {
-            if (fields[i].isChoice)
-                controller.fetchOptions(fields[i].optionsAction)
+            // A dependent Choice is never fetched here — every field starts
+            // blank, so its parent can't be engaged yet. refreshDependents
+            // fetches it once setFieldValue engages that parent.
+            if (fields[i].isChoice && fields[i].dependsOn.length === 0)
+                controller.fetchOptions(fields[i].optionsAction, "{}")
         }
     }
 }

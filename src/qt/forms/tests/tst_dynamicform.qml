@@ -101,6 +101,25 @@ Item {
         })
     }
 
+    // A fifth, independent form probing x-optionsDependsOn (cascading
+    // Choice options) — kept separate so its country/city fields never
+    // perturb the other fixtures' assertions.
+    DynamicForm {
+        id: depForm
+        actionType: "ShipTo"
+        controller: null
+        schema: ({
+            "properties": {
+                "country": { "type": ["integer", "null"], "x-order": 0,
+                             "x-optionsAction": "ListCountries", "x-optionValue": "id", "x-optionLabel": "name" },
+                "city": { "type": ["integer", "null"], "x-order": 1,
+                          "x-optionsAction": "ListCities", "x-optionValue": "id", "x-optionLabel": "name",
+                          "x-optionsDependsOn": ["country"] }
+            },
+            "required": ["country", "city"]
+        })
+    }
+
     TestCase {
         name: "DynamicFormLogic"
 
@@ -287,6 +306,34 @@ Item {
             compare(form.sections[0].fields.length, form.fields.length)
             compare(form.renderRuns.length, 1)
             compare(form.renderRuns[0].type, "single")
+        }
+
+        function test_dependsOnFieldDescriptor() {
+            compare(depForm.fields[0].dependsOn.length, 0)     // country: independent
+            compare(depForm.fields[1].dependsOn.length, 1)
+            compare(depForm.fields[1].dependsOn[0], "country")
+        }
+
+        function test_dependentsIsReverseOfDependsOn() {
+            compare(depForm.dependents["country"].length, 1)
+            compare(depForm.dependents["country"][0], "city")
+            verify(depForm.dependents["city"] === undefined)
+        }
+
+        function test_fieldByNameIndexesByName() {
+            compare(depForm.fieldByName["country"].name, "country")
+            compare(depForm.fieldByName["city"].name, "city")
+        }
+
+        function test_fieldJsonLiteralAndOptionsRequestBody() {
+            // Fresh component: country/city both start blank, so the parent
+            // is not yet engaged and the dependent field cannot be fetched.
+            compare(depForm.fieldJsonLiteral(depForm.fieldByName["country"]), null)
+            verify(depForm.optionsRequestBody(depForm.fieldByName["city"]) === null)
+
+            depForm.setFieldValue("country", "1")
+            compare(depForm.fieldJsonLiteral(depForm.fieldByName["country"]), "1")
+            compare(depForm.optionsRequestBody(depForm.fieldByName["city"]), '{"country":1}')
         }
     }
 }
