@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <glaze/glaze.hpp>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -43,6 +43,14 @@ struct LogEntry {
 
     /// @brief Wall-clock time of execution, milliseconds since the Unix epoch.
     int64_t timestampMs = 0;
+
+    /// @brief Optional dedup token for outbox-relayed entries. Empty by default;
+    ///        ordinary auto-appended entries (from `ActionDispatcher`'s runner or
+    ///        `Bridge::executeVia`'s local op) never set it. Mirrors
+    ///        `morph::offline::QueueItem::idempotencyKey`'s exact contract: opaque,
+    ///        stored verbatim, stable across restarts for one logical outbox row.
+    ///        See `journal::OutboxRelay` (`outbox.hpp`) for how it's used.
+    std::string idempotencyKey{};
 };
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.
@@ -104,6 +112,16 @@ inline LogEntry fromJson(std::string_view json) {
 /// items once retried successfully). Implementations range from in-memory
 /// (`InMemoryActionLog`) to file, SQL, or network-backed stores supplied by the
 /// host application.
+///
+/// @par Idempotency-key dedup (optional)
+/// An implementation MAY treat a non-empty `LogEntry::idempotencyKey` as a dedup
+/// key on `append()`: if an entry with the same key was already recorded, treat
+/// the call as a no-op. This is not required by the interface, but
+/// `InMemoryActionLog` and `FileActionLog` both do it, which is what makes them
+/// safe choices for `journal::OutboxRelay::sink` (see `outbox.hpp`) — a
+/// re-relayed row after a crash between `append()` and marking it relayed lands
+/// here twice but is stored once. An entry with an empty `idempotencyKey` is
+/// never deduped.
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IActionLog {
     virtual ~IActionLog() = default;

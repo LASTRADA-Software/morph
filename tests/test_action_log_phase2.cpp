@@ -5,22 +5,21 @@
 // RemoteServer::LogProvider mechanism that closes phase 1's "remote identity"
 // gap. (Phase 3, a Kafka-shaped sink, was dropped for now.)
 
-#include <morph/journal/action_log.hpp>
-#include <morph/core/backend.hpp>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/journal/file_action_log.hpp>
-#include <morph/journal/journal.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/core/wire.hpp>
-
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/journal/action_log.hpp>
+#include <morph/journal/file_action_log.hpp>
+#include <morph/journal/journal.hpp>
 #include <string>
 
 #include "test_support.hpp"
@@ -92,6 +91,7 @@ TEST_CASE("journal::toJson/fromJson: round-trips every field", "[action_log][pha
     entry.seq = 7;
     entry.principal = "alice";
     entry.timestampMs = 123456789;
+    entry.idempotencyKey = "idem-42";
 
     auto json = morph::journal::toJson(entry);
     auto decoded = morph::journal::fromJson(json);
@@ -104,6 +104,12 @@ TEST_CASE("journal::toJson/fromJson: round-trips every field", "[action_log][pha
     REQUIRE(decoded.result == "5");
     REQUIRE(decoded.principal == "alice");
     REQUIRE(decoded.timestampMs == 123456789);
+    REQUIRE(decoded.idempotencyKey == "idem-42");
+}
+
+TEST_CASE("LogEntry::idempotencyKey: defaults to empty", "[action_log][phase2][json]") {
+    LogEntry fresh{};
+    REQUIRE(fresh.idempotencyKey.empty());
 }
 
 TEST_CASE("journal::fromJson: throws SerializationError on malformed input", "[action_log][phase2][json]") {
@@ -211,9 +217,10 @@ TEST_CASE("FileActionLog: entries() rethrows on a malformed line that is NOT the
 // doc asked for ("wire sessionLog.checkpoint(sink) into a real Save action's
 // completion handler") ──────────────────────────────────────────────────────
 
-TEST_CASE("Save action end-to-end: intermediate actions stay in-memory, Save checkpoints to a real file, "
-         "replay from disk reproduces state",
-         "[action_log][phase2][integration]") {
+TEST_CASE(
+    "Save action end-to-end: intermediate actions stay in-memory, Save checkpoints to a real file, "
+    "replay from disk reproduces state",
+    "[action_log][phase2][integration]") {
     TempFile tmp{"save_e2e"};
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
@@ -285,7 +292,8 @@ TEST_CASE("wire::makeRegister: contextKey defaults to empty", "[action_log][phas
 
 // ── RemoteServer::setLogProvider — closes phase 1's remote-identity gap ─────
 
-TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created holder", "[action_log][phase2][remote]") {
+TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created holder",
+          "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
@@ -301,8 +309,8 @@ TEST_CASE("RemoteServer::setLogProvider: attaches a log to the server-created ho
         return log;
     });
 
-    auto regReply =
-        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-9"))));
+    auto regReply = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-9"))));
     REQUIRE(regReply.kind == "ok");
     REQUIRE(requestedFor == std::vector<std::string>{"P2_Model:acct-9"});
 
@@ -341,7 +349,8 @@ TEST_CASE("RemoteServer::setLogProvider: not consulted when contextKey is empty"
     REQUIRE_FALSE(providerCalled);
 }
 
-TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches no log", "[action_log][phase2][remote]") {
+TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches no log",
+          "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
@@ -351,8 +360,8 @@ TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches n
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, dispatcher, registry);
     server->setLogProvider([](std::string_view, std::string_view) { return nullptr; });
 
-    auto regReply =
-        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-x"))));
+    auto regReply = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-x"))));
     REQUIRE(regReply.kind == "ok");
 
     morph::wire::Envelope exec;
@@ -368,7 +377,7 @@ TEST_CASE("RemoteServer::setLogProvider: a provider returning nullptr attaches n
 }
 
 TEST_CASE("RemoteServer::setLogProvider: nullptr provider removes a previously installed one",
-         "[action_log][phase2][remote]") {
+          "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::model::detail::ModelRegistryFactory registry;
     morph::model::detail::ActionDispatcher dispatcher;
@@ -382,8 +391,8 @@ TEST_CASE("RemoteServer::setLogProvider: nullptr provider removes a previously i
     });
     server->setLogProvider(nullptr);
 
-    auto reply =
-        morph::wire::decode(server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-y"))));
+    auto reply = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegister("P2_Model", "acct-y"))));
     REQUIRE(reply.kind == "ok");
     REQUIRE_FALSE(called);
 }
@@ -397,7 +406,7 @@ TEST_CASE("RemoteServer::setLogProvider: nullptr provider removes a previously i
 // for a genuinely remote-shaped topology.
 
 TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvider via SimulatedRemoteBackend",
-         "[action_log][phase2][remote]") {
+          "[action_log][phase2][remote]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::model::detail::ModelRegistryFactory registry;
@@ -418,8 +427,9 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     morph::bridge::BridgeHandler<P2Model> handler{bridge, &cbExec, binding};
 
     std::atomic<int> result{-1};
-    handler.execute(P2Deposit{.amount = 30}).then([&](int v) { result.store(v); }).onError([](const std::exception_ptr&) {
-    });
+    handler.execute(P2Deposit{.amount = 30})
+        .then([&](int v) { result.store(v); })
+        .onError([](const std::exception_ptr&) {});
     REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
     REQUIRE(result.load() == 30);
 
