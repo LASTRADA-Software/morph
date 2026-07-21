@@ -202,6 +202,7 @@ if(MORPH_BUILD_LOAD_TESTS)
             "targets link Catch2, fetched under that option).")
     endif()
     add_subdirectory(tests/soak)
+    add_subdirectory(tests/bench)
 endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
