@@ -117,7 +117,8 @@ reuses the action wire for the empty-body case. It returns the same
 - If **any** parent in `DependsOn` is currently unengaged, the child list is
   **not fetched**; the renderer shows the child disabled/empty until every parent
   it depends on has a value. (This mirrors the empty-input propagation of
-  [gui_computed_fields.md](gui_computed_fields.md).)
+  [forms.md](../spec/forms/forms.md)'s computed fields — see its "Computed
+  fields" section.)
 - When a parent value **changes**, the renderer re-fetches with the new body and
   **clears** any existing child selection that is not present in the new result —
   closing (client-side) the staleness that [choice.md](../spec/forms/choice.md) Failure
@@ -152,7 +153,7 @@ table (additive, optional):
 
 The dependency names are the parent fields' **wire names**, matching the property
 keys a renderer already indexes (the same convention as `x-computed.inputs` in
-[gui_computed_fields.md](gui_computed_fields.md) and `fields` in
+[forms.md](../spec/forms/forms.md)'s computed fields and `fields` in
 [forms.md](../spec/forms/forms.md)'s cross-field rules), so the renderer
 resolves each parent to a property it is already rendering.
 
@@ -256,8 +257,9 @@ already lists:
   (implemented) — a rule may require a dependent `Choice` be engaged;
   parent/child *consistency* is a model concern the closed rule vocabulary does
   not cover.
-- [gui_computed_fields.md](gui_computed_fields.md) — shares the "sibling field
-  names as wire strings" and empty-input-propagation conventions.
+- [forms.md](../spec/forms/forms.md) — computed fields (`computed`/`computeList`/
+  `recomputeAll`, now implemented): shares the "sibling field names as wire
+  strings" and empty-input-propagation conventions.
 - [bridge.md](../spec/core/bridge.md) — the action-execute path the renderer uses to
   fetch options is the same one every other action uses.
 - [todo.md](../todo.md) — execution order within the GUI program.

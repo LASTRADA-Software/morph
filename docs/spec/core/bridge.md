@@ -95,12 +95,21 @@ action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
 `currentId`, so it never blocks on `switchBackend()`'s `_mtx`. If `currentId` is 0,
 completes immediately with `"handler not bound"`. Constructs an `ActionCall`
 with serialization/deserialization lambdas and a `localOp` that, on
-`LocalBackend`, first enforces `morph::model::ActionValidator<Action>::ready(action)`
-— throwing `morph::model::ValidationError` (which resolves the `Completion`
-through `onError`) when it returns `false` — then calls `Model::execute(*action)`
-and optionally records a journal `LogEntry` for loggable actions. This mirrors
-`ActionDispatcher::registerAction`'s runner (`registry.md`) for the in-process
-path; actions with no validator are unaffected (`ready()` defaults to `true`).
+`LocalBackend`, first overwrites any declared computed fields from their
+inputs (`morph::forms::recomputeAll`, [forms.md](../forms/forms.md), a no-op
+for actions with no `computedFields`) — the authoritative recompute for
+`LocalBackend`, mirroring `ActionDispatcher::registerAction`'s runner
+(`registry.md`) for remote topologies — then enforces
+`morph::model::ActionValidator<Action>::ready(action)` — throwing
+`morph::model::ValidationError` (which resolves the `Completion` through
+`onError`) when it returns `false` — then calls `Model::execute(*action)` and
+optionally records a journal `LogEntry` for loggable actions. Recompute runs
+**before** the validator check so a validator inspecting a computed field
+sees the authoritative value, not whatever the caller constructed the action
+with; actions with no validator are unaffected (`ready()` defaults to
+`true`). No JSON is involved on this path, so there is no declared-precision
+reconciliation step here (that only applies to decoded wire payloads); the
+`Quantity` fields carry whatever precision the caller constructed them with.
 The typed result is unwrapped from `std::shared_ptr<void>`
 into the final `Completion<R>` inside a `try`/`catch`: moving the result out of
 the opaque `shared_ptr<void>` can throw (a throwing move/copy on `R`, or a bad
@@ -222,13 +231,15 @@ automatically by the bridge.
 executor in `ActionExecuteRegistry::instance()` and dispatches. The
 registry's executor deserializes the JSON body via
 `ActionTraits<Action>::fromJson`, then — before invoking the handler —
-**reconciles Quantity precision and enforces the action's validator** (see
-below), calls `execute<Action>`, and serializes the result back to JSON. Throws
-`std::runtime_error` if the action was never registered.
+**reconciles Quantity precision, overwrites any declared computed fields
+(`morph::forms::recomputeAll`, [forms.md](../forms/forms.md)), and enforces
+the action's validator** (see below), calls `execute<Action>`, and serializes
+the result back to JSON. Throws `std::runtime_error` if the action was never
+registered.
 
-Between decode and dispatch the registry executor applies two normalisations, so
-the request/reply path matches the schema and the reactive `set<>` path rather
-than trusting the raw wire body:
+Between decode and dispatch the registry executor applies three
+normalisations, in order, so the request/reply path matches the schema and
+the reactive `set<>` path rather than trusting the raw wire body:
 
 - **Declared-precision reconciliation.** `morph::forms::reconcileDeclaredPrecision`
   retags every `Quantity` field of the decoded action to its *declared* precision
@@ -236,6 +247,14 @@ than trusting the raw wire body:
   the schema's advertised `x-decimalPlaces` instead of whatever runtime `dp` the
   client sent. It is a no-op for actions with no `Quantity` members and for
   actions whose type glaze cannot reflect. See [forms.md](../forms/forms.md).
+- **Computed-field recompute.** `morph::forms::recomputeAll` overwrites every
+  `A::computedFields` destination from its declared inputs, discarding
+  whatever value the wire carried for it — a computed field is never trusted
+  from the client, on any dispatch path. No-op for actions with no
+  `computedFields`. Runs after precision reconciliation (so the inputs it
+  reads are already at their declared precision) and before the validator
+  check below (so a validator inspecting a computed field sees the
+  authoritative value). See [forms.md](../forms/forms.md).
 - **Validator enforcement.** `ActionValidator<Action>::ready(action)` is checked;
   if it returns `false` the executor throws `std::invalid_argument` and the
   completion resolves through `onError` (a proper error reply upstream) — the
@@ -254,7 +273,9 @@ action type.
 
 **`set<&Action::field>(value)`** updates one field of the in-progress draft.
 Uses `MemberPointerTraits` to recover the action and field types from the
-pointer-to-member. After setting the value, checks
+pointer-to-member. After setting the value, recomputes any declared computed
+fields on the snapshot (`morph::forms::recomputeAll`, [forms.md](../forms/forms.md),
+a no-op for actions with no `computedFields`), then checks
 `ActionValidator<Action>::ready(snapshot)`. If all required fields are
 present, fires the action via `Bridge::executeVia` and delivers the result
 to the registered `sink` callback. If a flight is already in progress, marks
@@ -379,8 +400,14 @@ exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
   Actions that need several fields before firing add a `validate()` member (the
   preferred, macro-free path — auto-detected via the `HasValidate` concept) or
   specialise the validator.
-- **Every ready `set<>` re-fires.** Each `set<>` landing a `ready()==true`
-  snapshot dispatches the action again — live recomputation. Rapid patches
+- **Every ready `set<>` re-fires.** Each `set<>` recomputes any declared
+  computed fields on the draft snapshot (`morph::forms::recomputeAll`,
+  [forms.md](../forms/forms.md), a no-op for actions with no
+  `computedFields`) before the `ready()` check, then — landing a
+  `ready()==true` snapshot — dispatches the action again with the recomputed
+  value already in place: live recomputation. This recompute is client-side
+  and **not authoritative** (for display only); every dispatch path below
+  recomputes it again, authoritatively, before `Model::execute`. Rapid patches
   coalesce: while a flight is running, further `set<>` calls set
   `pending=true`, and exactly one re-fire with the latest snapshot is issued
   when the in-flight completion resolves (`consumeFlight`).
@@ -539,3 +566,5 @@ make teardown order-independent.)
   `ActionDispatcher` counterpart.
 - [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the broader
   mutex-ordering and object-lifetime rules this type participates in.
+- [`forms.md`](../forms/forms.md) — `morph::forms::computed`/`computeList`/`recomputeAll`,
+  the computed-field declaration this spec's reactive and dispatch paths recompute.

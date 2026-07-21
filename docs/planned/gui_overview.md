@@ -62,7 +62,7 @@ unsupported.
 | [gui_layout_grouping.md](gui_layout_grouping.md) | Sections, tabs, accordions, column spans — visual structure over the flat field list. |
 | [gui_widget_hints.md](gui_widget_hints.md) | Control selection (multiline, slider, radio-vs-combo) — derived from type, annotated when ambiguous. |
 | [gui_cross_field_rules.md](../spec/forms/forms.md) | **Implemented.** A typed rule vocabulary (required-when, comparisons, one-of) evaluated on **both** client and server — see forms.md's "Cross-field rules" section. |
-| [gui_computed_fields.md](gui_computed_fields.md) | Derived read-only fields recomputed live client-side and authoritatively server-side. |
+| [gui_computed_fields.md](../spec/forms/forms.md) | **Implemented.** Derived read-only fields recomputed live client-side and authoritatively server-side — see forms.md's "Computed fields" section. |
 | [gui_dependent_choices.md](gui_dependent_choices.md) | `Choice` options parameterised by sibling field values (cascading picklists). |
 | [gui_i18n.md](gui_i18n.md) | Localised display text — stable message keys derived from the schema, a renderer-side catalog seam, and locale formatting duties. Cross-cutting: fixes the key scheme the other Tier-1 declarations translate through. |
 

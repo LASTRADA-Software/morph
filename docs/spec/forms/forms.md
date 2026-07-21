@@ -24,6 +24,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Cross-field rules — the `x-rules` vocabulary](#cross-field-rules--the-x-rules-vocabulary)
+- [Computed fields](#computed-fields)
 - [Support traits and helpers](#support-traits-and-helpers)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -179,10 +180,13 @@ Schema generation never throws.
 ### Required-ness rule
 
 Required is the default. A member is *optional* (and therefore not added to
-`required`) when either:
+`required`) when any of:
 1. Its type is `std::optional<...>`, or
 2. Its name appears in `A::optionalFields` — a `static constexpr` iterable of
-   `std::string_view` that the action declares:
+   `std::string_view` that the action declares, or
+3. It is the destination of an `A::computedFields` entry — a derived,
+   read-only field is never something the user must fill in; see
+   [Computed fields](#computed-fields).
 
 ```cpp
 struct RecordMeasurement {
@@ -463,7 +467,9 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-optionLabel` | property node (sibling of `$ref`) | string | Which result-row field carries the display label (default `"name"`). |
 | `title` | property node (sibling of `$ref`) | string | The field's display label — an explicit `FieldMeta::label`, else a title-cased member name (`dryMassPct` → "Dry Mass Pct"). Standard JSON-Schema vocabulary, not an `x-*` key. **Always emitted.** See "Field metadata" above. |
 | `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty; never submitted. |
-| `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. Not a security control — see "Field metadata is not a security control" above. |
+| `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true` — including on every `computedFields` destination (see [Computed fields](#computed-fields)). Not a security control — see "Field metadata is not a security control" above. |
+| `x-computed` | property node (sibling of `$ref`) | object | Marks the field as derived. Present when the action declares it as a `computed(...)` destination ([Computed fields](#computed-fields)); absent otherwise. |
+| ↳ `inputs` | `x-computed` object | array of strings | Wire field names of the sibling fields the value derives from, in declaration order. Advisory to the renderer; **authoritative computation is the server's** — see [Where the value is authoritative](#where-the-value-is-authoritative). |
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. Not a security control. |
 | `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `fieldMetadata`-shaped override (a `.field`/`.widget` entry, read structurally — see [widget_hints.md](widget_hints.md)) wins; else the field type's own `widget()` (`Multiline`, `Ranged`). **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper type nor an override supplies one. |
 | `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound, when present) — `x-min` is the *control track* start and is never enforced. |
@@ -934,6 +940,105 @@ unrecognised `kind` (a rule *or* a nested condition) must be treated as
 server rather than passing the rule — the server, running the compiled C++
 rule list directly, has no such "unrecognised kind" case.
 
+## Computed fields
+
+Some fields are not entered by the user at all — they are a **pure function
+of other fields on the same action**: `total = qty * price`, `vatDue = net *
+rate`. An action declares one with a `static constexpr` map from a
+destination member to its declared input members and a pure derivation,
+next to `optionalFields`/`formRules`:
+
+```cpp
+struct LineItem {
+    Quantity<Units, 2> qty;
+    Quantity<Units, 2> price;
+    Quantity<Units, 2> total;  // computed -- not user-entered
+
+    // A generic (auto) lambda parameter, not `const LineItem&`: this
+    // initializer runs while LineItem is still an incomplete type (a static
+    // data member initializer is not a complete-class context the way a
+    // member function body or a non-static default member initializer is
+    // -- see "Incomplete-type self-reference" above), so the body's member
+    // access must stay dependent until first use, after the class is complete.
+    static constexpr auto computedFields = morph::forms::computeList(
+        morph::forms::computed<&LineItem::total, &LineItem::qty, &LineItem::price>(
+            [](const auto& s) { return s.qty * s.price; }));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+```
+
+- **`computed<Dst, Inputs...>(fn)`** binds a destination member, its ordered
+  input members, and a pure derivation `fn(const A&) -> ValueOfDst`. `Dst` and
+  `Inputs...` are pointer-to-data-member NTTPs (trailing template arguments,
+  not a braced-list runtime parameter), so a renamed or deleted field is a
+  compile error and the input list is type-checked.
+- **`computeList(...)`** composes one or more `computed(...)` declarations
+  into a `detail::ComputeList<...>` value assigned to `static constexpr auto
+  computedFields`. The framework detects it via the `detail::HasComputedFields<A>`
+  concept, mirroring `detail::HasOptionalFields<A>`/`HasFormRules<A>`.
+- **`recomputeAll<A>(action)`** is the single evaluator: it walks
+  `A::computedFields` and, for each entry, overwrites the destination member
+  with `fn(action)` — or, if any declared input is unengaged (`hasValue() ==
+  false`, for an input satisfying `EmptyCapableField`; a non-empty-capable
+  input is always considered engaged), resets the destination to its
+  default-constructed (empty) value instead of computing from a missing
+  operand. For a `Quantity` destination the result is converted to the
+  destination's own type and retagged to its declared precision
+  (`Quantity::atDeclaredPrecision()`), so the stored value matches
+  `x-decimalPlaces` regardless of what declared precision `fn`'s return type
+  happened to carry.
+- `fn` must be **pure** — a function of the action's own fields only, no side
+  effects, no external state. The framework cannot check this; it is the
+  author's contract. Anything impure (model state, a database lookup, the
+  current time) belongs in the model's `execute`, not a computed field.
+
+### Schema emission
+
+`mergeSchemaExtras` patches each computed destination's property node with
+`x-readonly: true` and `x-computed: { "inputs": [...] }` (wire field names, in
+declaration order, resolved from the pointer-to-member the same way
+`x-order` is derived), and **excludes it from the synthesised `required`
+array** (see [Required-ness rule](#required-ness-rule)) — a computed field is
+never something the user must fill. `x-computed`/`x-readonly` are additive,
+optional `x-*` keys (see the [renderer contract](#renderer-contract-the-schema-key-vocabulary)
+table below); an action that declares no `computedFields` emits neither key.
+
+### Where the value is authoritative
+
+`recomputeAll` runs at four call sites:
+
+1. `BridgeHandler::set<>`'s reactive path (`tryFireImpl`, [bridge.md](../core/bridge.md))
+   — live, client-side, **not authoritative**, for display only.
+2. `ActionExecuteRegistry::registerAction`'s executor (the client-bridge JSON
+   dispatch path behind `BridgeHandler::executeJson`, [bridge.md](../core/bridge.md)).
+3. `Bridge::executeVia`'s `localOp` (the in-process execution path `LocalBackend`
+   uses for every `execute<Action>()`/`executeJson` call, [bridge.md](../core/bridge.md)).
+4. `ActionDispatcher::registerAction`'s runner (the server-side execution path
+   `RemoteServer` uses for `SimulatedRemoteBackend` and the Qt WebSocket
+   transport, [registry.md](../core/registry.md)).
+
+Sites 2–4 run **after** decode and **before** `Model::execute`, so a computed
+value arriving on the wire is always discarded and replaced with the
+authoritative recomputation — a hostile or buggy client cannot influence the
+stored value by tampering with a computed field. On every site that also
+decodes JSON (2 and 4; `localOp` never does — it dispatches an already-typed
+`Action`), `recomputeAll` runs immediately after `reconcileDeclaredPrecision`
+and **before** the `ActionValidator::ready` check, so a validator that
+inspects a computed field sees the authoritative, server-derived value rather
+than whatever arrived on the wire. Because every site calls the identical
+`recomputeAll` over inputs reconciled to declared precision
+(`reconcileDeclaredPrecision`, [above](#advertised-precision-is-enforced-on-dispatch)),
+the client's displayed value and the server's stored value are identical to
+the last digit. It is a **no-op** for actions with no `computedFields` — zero
+behaviour change, backward compatible — mirroring how `reconcileDeclaredPrecision`
+no-ops for actions with no `Quantity` members.
+
+A cross-field rule ([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary))
+that references a computed field evaluates on the server's authoritative
+recomputed value, not the client's, since `recomputeAll` runs before the
+validator check on every dispatch path.
+
 ## Support traits and helpers
 
 | Symbol | Kind | Purpose |
@@ -997,6 +1102,14 @@ for the exhaustive tables and design rationale.
 | `allRulesSatisfied<A>(action)` | function template | `true` when every **validation** rule in `A::formRules` holds (or there are none); skips presentation rules. `noexcept`. |
 | `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
 
+### `computed<Dst, Inputs...>()` / `computeList()` / `recomputeAll<A>()`
+
+| Signature | Returns |
+|---|---|
+| `template <auto Dst, auto... Inputs, typename Fn> auto computed(Fn fn)` | A `detail::ComputedField<Dst, Fn, Inputs...>` value. |
+| `template <typename... Fields> auto computeList(Fields... fields)` | A `detail::ComputeList<Fields...>` value — assign to `static constexpr auto computedFields`. |
+| `template <typename A> void recomputeAll(A& action)` | Overwrites every `A::computedFields` destination in place; a no-op when `A` declares none. |
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -1015,6 +1128,7 @@ for the exhaustive tables and design rationale.
 | Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
 | Widget selection | **Type-derived by default (`Multiline`/`Ranged`), `fieldMetadata`-shaped override wins** | Mirrors the `Choice`/`Quantity` pattern: the control is a compile-time property of the type; the escape hatch is a typed declaration, not a schema-only knob. |
 | Widget override lookup | **Duck-typed on `.field`/`.widget`, not a named type** | Keeps `forms.hpp`'s widget lookup free of a hard dependency on any one field-metadata descriptor type declaration; any shape exposing those two members is honoured, `FieldMeta` ([above](#field-metadata--fieldmeta)) included. |
+| Computed fields | **One declaration (`computed`/`computeList`) drives schema + client + server via a single shared `recomputeAll`** | The same evaluator runs on the reactive client path and on every server dispatch path, so the displayed value and the stored value are derived identically — a computed field can never drift, and the server never trusts a client-submitted derivation. |
 
 ## Failure modes
 
@@ -1151,6 +1265,8 @@ wrong or un-merged schema rather than fail loudly.
 | [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. Also the comparison/equality `greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`equals` use for numeric fields, so client and server compare identical values. |
 | [security.md](../security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
 | [session.md](../session/session.md) | `Context::locale`, the server-side hook for data (not chrome) localisation — the one place `session::current()->locale` participates, for `Choice` option-row labels. |
+| [bridge.md](../core/bridge.md) | The reactive `set<>`/`tryFireImpl` live recompute, and the `ActionExecuteRegistry`/`executeVia` authoritative recompute sites. |
+| [registry.md](../core/registry.md) | `ActionDispatcher::registerAction`'s runner — the server-side authoritative recompute site. |
 
 ## Out of scope
 

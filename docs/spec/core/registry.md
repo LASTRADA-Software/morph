@@ -356,11 +356,15 @@ class ActionDispatcher {
 ```
 
 - `registerAction` registers a runner that deserialises, reconciles any
-  `Quantity` fields to their declared precision, enforces
-  `ActionValidator<Action>::ready(action)` (throwing `ValidationError` on
-  `false`, before `Model::execute` runs), executes via `Model::execute(action)`,
-  serialises the result, and records to the attached action log when the
-  action is loggable and a log is attached.
+  `Quantity` fields to their declared precision, overwrites any declared
+  computed fields from their inputs (`morph::forms::recomputeAll`,
+  [forms.md](../forms/forms.md) — a no-op for actions with no
+  `computedFields`; runs after precision reconciliation and before the
+  validator check, so the validator sees the authoritative computed value),
+  enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
+  on `false`, before `Model::execute` runs), executes via
+  `Model::execute(action)`, serialises the result, and records to the attached
+  action log when the action is loggable and a log is attached.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs.
 - `coalesce` returns the `ActionLogPolicy<Action>::coalesce` value for the pair;
@@ -671,10 +675,13 @@ testing obligation, not a compile-time guarantee.
   *defined* there), the parallel executor path this spec's
   `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s
   `localOp`, which enforces the same `ValidationError` gate as this spec's
-  `ActionDispatcher::registerAction` for the local execution path.
-- **[forms.md](../forms/forms.md)** — `allRequiredEngaged`, and the closed
+  `ActionDispatcher::registerAction` for the local execution path and performs
+  the same computed-field recompute (`morph::forms::recomputeAll`) for it.
+- **[forms.md](../forms/forms.md)** — `allRequiredEngaged`; the closed
   cross-field rule vocabulary (`allRulesSatisfied`, `x-rules`) that composes
-  into `validate()` alongside it.
+  into `validate()` alongside it; and `computed`/`computeList`/`recomputeAll`,
+  both invoked by `ActionDispatcher::registerAction`'s runner before
+  `Model::execute`.
 - **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the
