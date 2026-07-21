@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "../session/session.hpp"
@@ -174,7 +175,10 @@ public:
     /// @brief Creates a model instance via @p factory and registers it.
     ///
     /// @p typeId is accepted for interface compatibility but not used — the
-    /// concrete type is captured by the factory closure.
+    /// concrete type is captured by the factory closure. If the new holder's
+    /// `isBackendChangeAware()` returns `true`, @p mid is also recorded in
+    /// `_changeAware` so `notifyBackendChanged()` finds it without a
+    /// `dynamic_cast` sweep.
     /// @param factory  Callable that constructs the `IModelHolder`.
     /// @return Newly assigned `ModelId`.
     ::morph::exec::detail::ModelId registerModel(
@@ -183,7 +187,11 @@ public:
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
         ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
         std::scoped_lock const lock{_regMtx};
-        _models[mid] = factory();
+        auto holder = factory();
+        if (holder->isBackendChangeAware()) {
+            _changeAware.insert(mid);
+        }
+        _models[mid] = std::move(holder);
         return mid;
     }
 
@@ -193,14 +201,19 @@ public:
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
         std::scoped_lock const lock{_regMtx};
         _models.erase(mid);
+        _changeAware.erase(mid);
     }
 
-    /// @brief Schedules `onBackendChanged()` on each live model's strand. Thread-safe.
+    /// @brief Schedules `onBackendChanged()` on each change-aware model's strand. Thread-safe.
     ///
-    /// Every model that implements `IBackendChangedSink` has its
-    /// `onBackendChanged()` **posted onto that model's own strand** (the same
-    /// per-`ModelId` serial queue `execute` uses), rather than invoked inline on
-    /// the caller's thread. Two properties follow, and they are the whole point:
+    /// Only models recorded in `_changeAware` — maintained by `registerModel`/
+    /// `deregisterModel` from `IModelHolder::isBackendChangeAware()`, a
+    /// compile-time answer per model type — are visited; there is no
+    /// `dynamic_cast` and no scan of models that never opted in. Each such
+    /// model's `onBackendChanged()` (the `IModelHolder` base virtual) is
+    /// **posted onto that model's own strand** (the same per-`ModelId` serial
+    /// queue `execute` uses), rather than invoked inline on the caller's thread.
+    /// Two properties follow, and they are the whole point:
     ///
     /// - **Strand-serialised, lock-free model code.** `onBackendChanged()` runs
     ///   on the pool inside the model's strand, so it never overlaps an
@@ -219,22 +232,19 @@ public:
     /// pending notification (mirrors `execute`'s holder capture).
     void notifyBackendChanged() override {
         std::vector<std::pair<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>>>
-            sinks;
+            aware;
         {
             std::scoped_lock const lock{_regMtx};
-            for (auto& [modelId, holder] : _models) {
-                if (dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get()) != nullptr) {
-                    sinks.emplace_back(modelId, holder);
+            aware.reserve(_changeAware.size());
+            for (auto modelId : _changeAware) {
+                auto iter = _models.find(modelId);
+                if (iter != _models.end()) {
+                    aware.emplace_back(modelId, iter->second);
                 }
             }
         }
-        for (auto& [modelId, holder] : sinks) {
-            _strand.post(modelId, [h = std::move(holder)]() mutable {
-                auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(h.get());
-                if (sink != nullptr) {
-                    sink->onBackendChanged();
-                }
-            });
+        for (auto& [modelId, holder] : aware) {
+            _strand.post(modelId, [h = std::move(holder)]() mutable { h->onBackendChanged(); });
         }
     }
 
@@ -351,6 +361,12 @@ private:
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
         _models;
+    // Ids of models whose holder answered `isBackendChangeAware() == true` at
+    // registration time. Maintained in lockstep with `_models` (inserted in
+    // `registerModel`, erased in `deregisterModel`, both under `_regMtx`) so
+    // `notifyBackendChanged()` never needs to inspect a model it doesn't have
+    // to. Always a subset of `_models`' keys.
+    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _changeAware;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
