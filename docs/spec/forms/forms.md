@@ -13,6 +13,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [Empty state — `EmptyCapableField` concept](#empty-state--emptycapablefield-concept)
 - [`Choice` — server-sourced picklist](#choice--server-sourced-picklist)
 - [`FixedString` — NTTP compile-time string](#fixedstring--nttp-compile-time-string)
+- [Widget hints — `Multiline` / `Ranged`](#widget-hints--multiline--ranged)
 - [`schemaJson<A>()` — schema generation](#schemajsona--schema-generation)
 - [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
 - [Layout & grouping — sections, tabs, spans](#layout--grouping--sections-tabs-spans)
@@ -101,10 +102,58 @@ struct FixedString {
 Used by `Choice` to embed the options-action name, value field, and label field
 in the type itself.
 
+## Widget hints — `Multiline` / `Ranged`
+
+Two more thin wrappers carry rendering *control* intent in the type, in the
+same spirit as `Choice`: a `Multiline` field is a `std::string` that should be
+edited as a text area, and a `Ranged<Min, Max, Step>` field is a bounded
+numeric that should be edited as a slider.
+
+```cpp
+struct Multiline {
+    std::string value;
+    static constexpr std::string_view widget() noexcept { return "textarea"; }
+};
+
+template <auto Min, auto Max, auto Step = 1>
+struct Ranged {
+    std::optional<decltype(Min)> value;
+    bool hasValue() const noexcept { return value.has_value(); }
+    static constexpr auto min() noexcept { return Min; }
+    static constexpr auto max() noexcept { return Max; }
+    static constexpr auto step() noexcept { return Step; }
+    static constexpr std::string_view widget() noexcept { return "slider"; }
+};
+```
+
+Both serialise through `glz::meta` as their bare payload — `Multiline` as a
+plain JSON string, `Ranged` as a nullable number — so the wire is unchanged.
+Neither type is `std::optional` itself, so both are *required* by the
+[Required-ness rule](#required-ness-rule) unless opted out via
+`optionalFields`. `Ranged` additionally satisfies `EmptyCapableField`
+(`hasValue()` is `noexcept`), so it gates `allRequiredEngaged` exactly like
+`Choice`; `Multiline` does not (a plain `std::string` payload has no
+distinguishable "empty" state the forms module tracks) and so is always
+considered engaged, same as an unwrapped `std::string` member.
+
+`mergeSchemaExtras` emits `x-widget` on any property whose field type declares
+a `noexcept static constexpr widget()` — the shape both types above expose —
+and `x-min` / `x-max` / `x-step` on any property whose field type additionally
+declares `min()` / `max()` / `step()` (the `Ranged` shape). An action may also
+override the widget for *any* field — wrapped or plain — by naming it in the
+same `static constexpr fieldMetadata` array the [field-metadata
+feature](#field-metadata--fieldmeta) uses, as long as its entries expose
+`.field` and a non-empty `.widget` (both string-view-convertible); this is
+read structurally (duck-typed), so this header does not gain a named
+dependency on `FieldMeta`'s declaration — any type shaped that way is
+honoured, and the override always wins over a type's own derived `widget()`.
+Full API, the `$defs`-collapse caveat shared with `Choice`, and design
+rationale are in [widget_hints.md](widget_hints.md).
+
 ## `schemaJson<A>()` — schema generation
 
 Produces a complete JSON Schema string for action type `A`, post-processing the
-output of `glz::write_json_schema<A>()` to add five annotation groups:
+output of `glz::write_json_schema<A>()` to add six annotation groups:
 
 | Annotation | Scope | Contents |
 |---|---|---|
@@ -113,6 +162,7 @@ output of `glz::write_json_schema<A>()` to add five annotation groups:
 | `x-decimalPlaces` | `Quantity` properties | The field's declared precision (`Quantity<U, Dec>::declaredDecimals`). |
 | `x-unitAlternatives` | `Quantity` properties | Convertible display/entry units derived from `UnitTraits::relations`, each with `{id, display, decimals, num, den}` — `id`/`display`/`decimals` come from the alternative unit's `UnitMeta`, and `num`/`den` are the exact alternative-to-canonical ratio. Omitted entirely when the field's unit declares no convertible units. |
 | `x-optionsAction` / `x-optionValue` / `x-optionLabel` | `Choice` properties | The action that serves the options and which result fields to use. |
+| `x-widget` / `x-min` / `x-max` / `x-step` | Properties whose field type declares `widget()` (optionally `min()`/`max()`/`step()`), or any field named in a `fieldMetadata`-shaped override | The preferred control id, and (for a bounded numeric) the slider's track bounds and increment ([widget_hints.md](widget_hints.md)). |
 
 The result is **computed once per type and cached** in a `static const std::string`
 inside `schemaJson<A>()`. On internal failure (malformed intermediate JSON,
@@ -408,6 +458,10 @@ exactly this dual read.
 | `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty; never submitted. |
 | `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. Not a security control — see "Field metadata is not a security control" above. |
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. Not a security control. |
+| `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `fieldMetadata`-shaped override (a `.field`/`.widget` entry, read structurally — see [widget_hints.md](widget_hints.md)) wins; else the field type's own `widget()` (`Multiline`, `Ranged`). **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper type nor an override supplies one. |
+| `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound, when present) — `x-min` is the *control track* start and is never enforced. |
+| `x-max` | property node (sibling of `$ref`) | number | Slider upper bound, from `Ranged::max()`. Emitted only for a `Ranged` field. |
+| `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` (above); `x-step` is not emitted for `Quantity`. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
 | `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
@@ -521,6 +575,8 @@ for the exhaustive tables and design rationale.
 | `x-unitAlternatives` | **Derived from `UnitTraits::relations`** | The same `UnitRelation` entries that drive `convert` also drive the display-unit selector — no separate declaration to keep in sync. |
 | `Timestamp` | **Uses standard `"format": "date-time"`** | No extension annotation needed; standard JSON-Schema vocabulary is sufficient. |
 | Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
+| Widget selection | **Type-derived by default (`Multiline`/`Ranged`), `fieldMetadata`-shaped override wins** | Mirrors the `Choice`/`Quantity` pattern: the control is a compile-time property of the type; the escape hatch is a typed declaration, not a schema-only knob. |
+| Widget override lookup | **Duck-typed on `.field`/`.widget`, not a named type** | Keeps `forms.hpp`'s widget lookup free of a hard dependency on any one field-metadata descriptor type declaration; any shape exposing those two members is honoured, `FieldMeta` ([above](#field-metadata--fieldmeta)) included. |
 
 ## Failure modes
 
@@ -646,6 +702,7 @@ wrong or un-merged schema rather than fail loudly.
 | Spec | Why |
 |---|---|
 | [choice.md](choice.md) | Full `Choice` API and design (this spec cross-refs rather than duplicates it). |
+| [widget_hints.md](widget_hints.md) | Full `Multiline`/`Ranged` API and design (this spec cross-refs rather than duplicates it). |
 | [quantity_type.md](../util/quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |
 | [datetime.md](../util/datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |
 | [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. |
