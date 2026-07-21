@@ -136,6 +136,7 @@ target_sources(morph
         include/morph/offline/network_monitor.hpp
         include/morph/offline/offline_queue.hpp
         include/morph/offline/sync_worker.hpp
+        include/morph/offline/file_offline_queue.hpp
         include/morph/session/session.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/choice.hpp
