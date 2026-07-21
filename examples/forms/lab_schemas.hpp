@@ -14,6 +14,7 @@
 #include <string_view>
 
 #include "lab_model.hpp"
+#include "lab_wizard.hpp"
 
 namespace lab {
 
@@ -38,9 +39,24 @@ namespace lab {
     out += morph::forms::schemaJson<DeleteSample>();
     out += ",\"CreateSample\":";
     out += morph::forms::schemaJson<CreateSample>();
+    out += ",\"RegisterSample\":";
+    out += morph::forms::schemaJson<RegisterSample>();
     out += "}";
     return out;
 }
+
+/// @brief `{wizardId: schema}` JSON for every registered wizard the demo's
+///        app shell references — parallel to `schemasJson` for actions.
+[[nodiscard]] inline std::string wizardSchemasJson() {
+    std::string out;
+    out += "{\"IntakeWizard\":";
+    out += morph::flows::wizardSchemaJson<IntakeWizard>();
+    out += "}";
+    return out;
+}
+
+/// @brief The `app-*` document for the demo's app shell (menu -> screens).
+[[nodiscard]] inline std::string appSchemaJson() { return morph::app::appSchemaJson<LabApp>(); }
 
 /// @brief View descriptor for the sample list/master-detail screen (E-G7,
 ///        docs/spec/forms/views.md): lists `ListSamples`' rows, opens
