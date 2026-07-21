@@ -41,6 +41,13 @@
 ///   per-field grid column spans. Absent either declaration, none of these
 ///   keys are emitted and a renderer lays fields out exactly as it does
 ///   today.
+/// - **`x-widget`** — for a field whose type declares a `noexcept static
+///   constexpr widget()` (`Multiline`, `Ranged` — widget_hints.hpp), or any
+///   field named in a `fieldMetadata`-shaped override: the renderer's
+///   preferred control id (`"textarea"`, `"slider"`, `"radio"`, …).
+/// - **`x-min` / `x-max` / `x-step`** — for a field whose type additionally
+///   declares `min()`/`max()`/`step()` (the `Ranged` shape): the slider's
+///   control-track bounds and increment — advisory, not a validation bound.
 ///
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
@@ -72,6 +79,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <concepts>
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <memory>
@@ -109,9 +117,12 @@ struct FieldMeta {
     std::string_view help{};
     /// @brief In-control placeholder hint; empty omits `x-placeholder`.
     std::string_view placeholder{};
-    /// @brief Reserved widget-selection override slot. Storage only: its
-    ///        semantics and the `x-widget` key it will emit belong to
-    ///        `docs/planned/gui_widget_hints.md`; this header never reads it.
+    /// @brief Widget-selection override; empty means "use the field type's
+    ///        own `widget()`, if any". A non-empty value replaces that
+    ///        type-derived default and is emitted as `x-widget`
+    ///        (docs/spec/forms/widget_hints.md). Read structurally by
+    ///        `detail::widgetOverride`, not through this type by name — see
+    ///        `detail::HasFieldMetadataWidgets`.
     std::string_view widget{};
     /// @brief Displayed but not editable when `true`; emits `x-readonly`.
     bool readOnly{false};
@@ -196,9 +207,17 @@ template <typename A>
 
 /// @brief Concept: action declares a `static constexpr`/`static const`
 ///        iterable `fieldMetadata` list of `FieldMeta` entries.
+///
+/// Constrained to `FieldMeta` elements specifically (not just "some iterable
+/// named `fieldMetadata`"): `findFieldMeta` below hands back a `const
+/// FieldMeta*`, so an action whose `fieldMetadata` holds a different element
+/// shape must not satisfy this concept — that shape may still be a valid
+/// *widget*-override source for `detail::HasFieldMetadataWidgets` /
+/// `detail::widgetOverride` (structural, `.field`/`.widget` only), which is
+/// deliberately independent of this concept.
 template <typename A>
 concept HasFieldMetadata = requires {
-    std::begin(A::fieldMetadata);
+    { *std::begin(A::fieldMetadata) } -> std::convertible_to<const FieldMeta&>;
     std::end(A::fieldMetadata);
 };
 
@@ -244,6 +263,62 @@ inline std::string inferTitle(std::string_view fieldName) {
         startOfWord = false;
     }
     return result;
+}
+
+/// @brief Concept: a field type that declares its own preferred control id via
+///        a `noexcept` `static constexpr widget()` — the shape `Multiline` and
+///        `Ranged` (forms/widget_hints.hpp) expose; any user type may opt in
+///        the same way.
+template <typename T>
+concept DeclaresWidget = requires {
+    { std::remove_cvref_t<T>::widget() } noexcept -> std::convertible_to<std::string_view>;
+};
+
+/// @brief Concept: a field type that declares slider bounds via `noexcept`
+///        `static constexpr min()` / `max()` / `step()` — the `Ranged` shape.
+template <typename T>
+concept DeclaresRangedBounds = requires {
+    { std::remove_cvref_t<T>::min() } noexcept;
+    { std::remove_cvref_t<T>::max() } noexcept;
+    { std::remove_cvref_t<T>::step() } noexcept;
+};
+
+/// @brief Concept: `A` declares a `static constexpr` iterable `fieldMetadata`
+///        (structural check only — the element type is not named here).
+template <typename A>
+concept HasFieldMetadataEntries = requires {
+    std::begin(A::fieldMetadata);
+    std::end(A::fieldMetadata);
+};
+
+/// @brief Concept: `A::fieldMetadata` entries additionally expose `.field` and
+///        `.widget`, both convertible to `std::string_view` — the shape
+///        `FieldMeta` (above) has. Checked structurally (duck-typed) so this
+///        header never has to include or name that type by name in this
+///        lookup: any descriptor array with the two members is honoured as a
+///        widget-override source, regardless of which header declares it.
+template <typename A>
+concept HasFieldMetadataWidgets =
+    HasFieldMetadataEntries<A> && requires(std::remove_cvref_t<decltype(*std::begin(A::fieldMetadata))> entry) {
+        { entry.field } -> std::convertible_to<std::string_view>;
+        { entry.widget } -> std::convertible_to<std::string_view>;
+    };
+
+/// @brief Returns the non-empty `widget` of the `A::fieldMetadata` entry whose
+///        `field` equals @p fieldName, or an empty view when `A` declares no
+///        `fieldMetadata` (or none of its entries name @p fieldName).
+template <typename A>
+[[nodiscard]] constexpr std::string_view widgetOverride(std::string_view fieldName) noexcept {
+    if constexpr (HasFieldMetadataWidgets<A>) {
+        for (auto const& entry : A::fieldMetadata) {
+            if (std::string_view{entry.field} == fieldName) {
+                return std::string_view{entry.widget};
+            }
+        }
+    } else {
+        static_cast<void>(fieldName);
+    }
+    return {};
 }
 
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
@@ -390,6 +465,38 @@ template <typename A>
             property["x-optionsAction"] = std::string{Member::optionsAction()};
             property["x-optionValue"] = std::string{Member::valueField()};
             property["x-optionLabel"] = std::string{Member::labelField()};
+        }
+
+        // Widget hint: the field type's own widget() (e.g. Multiline,
+        // Ranged), overridden — if present — by a fieldMetadata-shaped entry
+        // naming this field. The override always wins over the type-derived
+        // default.
+        std::string_view widgetHint{};
+        if constexpr (DeclaresWidget<Member>) {
+            widgetHint = Member::widget();
+        }
+        if constexpr (HasFieldMetadataWidgets<A>) {
+            if (auto const overrideWidget = widgetOverride<A>(name); !overrideWidget.empty()) {
+                widgetHint = overrideWidget;
+            }
+        }
+        if (!widgetHint.empty()) {
+            property["x-widget"] = std::string{widgetHint};
+        }
+        if constexpr (DeclaresRangedBounds<Member>) {
+            // The slider's control track: a UI hint, not a validation bound
+            // (glaze's own minimum/maximum, when present, stay authoritative
+            // for validation regardless of what x-widget ends up here).
+            using Bound = std::remove_cvref_t<decltype(Member::min())>;
+            if constexpr (std::floating_point<Bound>) {
+                property["x-min"] = static_cast<double>(Member::min());
+                property["x-max"] = static_cast<double>(Member::max());
+                property["x-step"] = static_cast<double>(Member::step());
+            } else {
+                property["x-min"] = static_cast<std::int64_t>(Member::min());
+                property["x-max"] = static_cast<std::int64_t>(Member::max());
+                property["x-step"] = static_cast<std::int64_t>(Member::step());
+            }
         }
     });
     // Always assign — an explicit empty array beats leaving whatever the
