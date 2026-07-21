@@ -28,6 +28,7 @@ if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
+option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
 option(MORPH_ENABLE_STRICT_COMPILATION
@@ -191,6 +192,16 @@ endif()
 # ── Fuzz harnesses (optional) ────────────────────────────────────────────────
 if(MORPH_BUILD_FUZZERS)
     add_subdirectory(tests/fuzz)
+endif()
+
+# ── Soak + load/latency benchmark targets (optional) ─────────────────────────
+if(MORPH_BUILD_LOAD_TESTS)
+    if(NOT MORPH_BUILD_TESTS)
+        message(FATAL_ERROR
+            "MORPH_BUILD_LOAD_TESTS requires MORPH_BUILD_TESTS=ON (the soak/bench "
+            "targets link Catch2, fetched under that option).")
+    endif()
+    add_subdirectory(tests/soak)
 endif()
 
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
