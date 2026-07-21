@@ -253,6 +253,46 @@ constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     }(std::make_index_sequence<memberCount>{});
 }
 
+/// @brief Extracts the containing class type from a pointer-to-member type.
+template <typename T>
+struct MemberPointerClass;
+
+/// @brief Partial specialisation matching `Member Class::*`.
+template <typename C, typename M>
+struct MemberPointerClass<M C::*> {
+    /// @brief The pointer-to-member's containing class.
+    using type = C;
+};
+
+/// @brief Convenience alias for `MemberPointerClass<T>::type`.
+template <typename T>
+using MemberPointerClassT = typename MemberPointerClass<T>::type;
+
+/// @brief Resolves the wire key name of @p MemberPtr by comparing member
+///        addresses on a default-constructed probe of its containing type.
+///
+/// Deliberately **not** `constexpr`/`consteval`: glaze's `get_member` for
+/// reflectable (pure-reflection) aggregates is not itself constexpr, so this
+/// can only run at ordinary runtime — which is why `describe<>()` is a plain
+/// function and why a `fieldMetadata` array built from it must be defined
+/// out-of-line (see `describe()`'s documentation for why and how).
+template <auto MemberPtr>
+[[nodiscard]] std::string_view memberWireName() noexcept {
+    using A = MemberPointerClassT<decltype(MemberPtr)>;
+    A probe{};
+    std::string_view found{};
+    forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, auto& member) {
+        using MemberT = std::remove_reference_t<decltype(member)>;
+        using TargetT = std::remove_reference_t<decltype(probe.*MemberPtr)>;
+        if constexpr (std::is_same_v<MemberT, TargetT>) {
+            if (std::addressof(member) == std::addressof(probe.*MemberPtr)) {
+                found = name;
+            }
+        }
+    });
+    return found;
+}
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, and `x-decimalPlaces` to a glaze-produced schema.
 ///
@@ -348,6 +388,40 @@ template <typename A>
 // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 }  // namespace detail
+
+/// @brief Builds a `FieldMeta` for the member named by @p MemberPtr, so the
+///        wire key is never restated as a string.
+///
+/// @warning Because this resolves @p MemberPtr via runtime reflection on a
+/// probe instance of its *own* containing type, a `fieldMetadata` array built
+/// from `describe<>()` cannot be a single in-class `static constexpr`
+/// initializer (the type is still incomplete at that point, and glaze's
+/// reflection for it is not `constexpr` either — see this feature's plan for
+/// the two compile errors this produces). Declare the member in the class
+/// and define it just after the closing brace instead:
+/// @code{.cpp}
+/// struct RecordMeasurement {
+///     Choice<std::int64_t, "ListSamples"> sampleId;
+///     Density density{};
+///     Moisture moisture{};
+///
+///     static const std::array<morph::forms::FieldMeta, 2> fieldMetadata;
+/// };
+/// inline const std::array<morph::forms::FieldMeta, 2> RecordMeasurement::fieldMetadata{
+///     morph::forms::describe<&RecordMeasurement::sampleId>("Sample", "Which logged sample…"),
+///     morph::forms::describe<&RecordMeasurement::moisture>().withReadOnly(),
+/// };
+/// @endcode
+/// The plain `FieldMeta{.field = "sampleId", ...}` literal form has no such
+/// restriction and stays a single in-class `static constexpr` array.
+/// @tparam MemberPtr Pointer to the member, e.g. `&RecordMeasurement::sampleId`.
+/// @param label Display label; empty infers one from the member name.
+/// @param help  Help text; empty omits `description`.
+/// @return A `FieldMeta` naming @p MemberPtr's wire key, with @p label and @p help set.
+template <auto MemberPtr>
+[[nodiscard]] FieldMeta describe(std::string_view label = {}, std::string_view help = {}) noexcept {
+    return FieldMeta{.field = detail::memberWireName<MemberPtr>(), .label = label, .help = help};
+}
 
 /// @brief Retags every `Quantity` member of @p action to its **declared**
 ///        precision, so a stored value matches the precision the schema

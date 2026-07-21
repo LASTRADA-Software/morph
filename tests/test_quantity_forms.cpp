@@ -681,3 +681,45 @@ TEST_CASE("Forms::FieldMeta::FluentBuildersComposeWithLiteralForm", "[forms][fie
     static_assert(withHidden.hidden);
     static_assert(!base.readOnly && !base.hidden && base.placeholder.empty());
 }
+
+// describe<>() sugar: declared in-class, defined out-of-line (see this
+// plan's Task 2 note on why). Must produce the same property annotations as
+// an equivalent hand-written FieldMeta literal (QFDescribeLiteral, below).
+// File scope, not an anonymous namespace, matching every other action/data
+// struct already in this file.
+struct QFDescribeSugar {
+    std::int64_t sampleId = 0;
+    Q<QFUnit::kg> mass;
+
+    static const std::array<morph::forms::FieldMeta, 2> fieldMetadata;
+};
+
+struct QFDescribeLiteral {
+    std::int64_t sampleId = 0;
+    Q<QFUnit::kg> mass;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "sampleId", .label = "Sample", .help = "Which logged sample"},
+        morph::forms::FieldMeta{.field = "mass", .readOnly = true},
+    };
+};
+
+inline const std::array<morph::forms::FieldMeta, 2> QFDescribeSugar::fieldMetadata{
+    morph::forms::describe<&QFDescribeSugar::sampleId>("Sample", "Which logged sample"),
+    morph::forms::describe<&QFDescribeSugar::mass>().withReadOnly(),
+};
+
+TEST_CASE("Forms::FieldMeta::DescribeSugarMatchesExplicitLiteral", "[forms][field_meta]") {
+    // describe<&Action::field>(...) and the equivalent FieldMeta{.field="…"}
+    // literal produce identical property-level annotations for the same
+    // field shape. The two action *type names* differ (QFDescribeSugar vs
+    // QFDescribeLiteral), so only the per-property substrings are compared,
+    // not the whole schema string (glaze stamps each type's own name as its
+    // top-level "title", which necessarily differs between the two types).
+    auto const sugar = morph::forms::schemaJson<QFDescribeSugar>();
+    auto const literal = morph::forms::schemaJson<QFDescribeLiteral>();
+    CHECK(sugar.contains(R"("title":"Sample","description":"Which logged sample")"));
+    CHECK(literal.contains(R"("title":"Sample","description":"Which logged sample")"));
+    CHECK(sugar.contains(R"("x-readonly":true)"));
+    CHECK(literal.contains(R"("x-readonly":true)"));
+}
