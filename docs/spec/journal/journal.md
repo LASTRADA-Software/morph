@@ -34,6 +34,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 - [Process-wide default log](#process-wide-default-log)
 - [Attaching a log to remote instances](#attaching-a-log-to-remote-instances)
 - [ScopedActionLog](#scopedactionlog)
+- [Transactional outbox (opt-in)](#transactional-outbox-opt-in)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Invariants](#invariants)
@@ -58,6 +59,7 @@ directly.
 | `result` | `std::string` | JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after successful execution. |
 | `principal` | `std::string` | Auth principal from `morph::session::current()`, if any. Empty if unset. |
 | `timestampMs` | `int64_t` | Wall-clock time, milliseconds since the Unix epoch. |
+| `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
 specialisation, the same automatic reflection `BRIDGE_REGISTER_ACTION` relies on.
@@ -381,6 +383,122 @@ for tests and for temporarily redirecting auto-attached logging.
 
 Copy and move are deleted.
 
+## Transactional outbox (opt-in)
+
+A model with its own transactional store (a SQL database, a file) can tie its
+state commit and its journal entry into one atomic write instead of the
+framework's default two independent writes (mutate-then-auto-append). This is
+opt-in — a model that does nothing new keeps the fire-after-success behavior
+described above unchanged.
+
+### The pattern
+
+1. **The model writes its own outbox row inside its own transaction.** Alongside
+   its business-table mutation, the model inserts a row shaped like `LogEntry`
+   (including a stable `idempotencyKey`) into an outbox table in its own store,
+   in the same transaction as the mutation. Either both commit or neither does —
+   morph does not participate in this transaction and never touches the model's
+   database.
+2. **The model calls `IModelHolder::setOutboxManaged(true)`** on its own holder
+   (typically once, from the same factory closure that calls `attachActionLog`).
+   This suppresses `recordIfAttached`'s automatic append for that instance:
+   `hasActionLog()` keeps reporting whatever log is attached, but
+   `recordIfAttached` becomes a no-op, so the framework's normal
+   fire-after-success append does not also record the action (which would
+   double-log it).
+3. **A separate `journal::OutboxRelay` moves committed rows to the durable
+   sink**, asynchronously, on whatever schedule the host chooses (a timer, an
+   idle callback, a background thread).
+
+### `IModelHolder::setOutboxManaged` / `isOutboxManaged`
+
+```cpp
+void setOutboxManaged(bool outboxManaged) noexcept;
+[[nodiscard]] bool isOutboxManaged() const noexcept;
+```
+
+- `setOutboxManaged(true)` makes `recordIfAttached` a no-op for that instance,
+  regardless of what `attachActionLog` attached. `hasActionLog()` is unaffected —
+  it still reports whether a log is attached, independent of whether this
+  instance auto-appends to it.
+- Defaults to `false`: every instance auto-appends exactly as before unless a
+  model explicitly opts in.
+
+### Sink-side dedup
+
+`InMemoryActionLog::append` and `FileActionLog::append` treat a **non-empty**
+`idempotencyKey` as a dedup key: if an entry with the same key was already
+appended, the second `append()` call is a silent no-op (no duplicate stored, no
+`seq` consumed). An **empty** `idempotencyKey` never dedups — every entry with
+no key is stored, exactly as before. `FileActionLog`'s dedup set is rebuilt from
+the existing on-disk entries every time the file is opened (an O(n) scan of the
+current contents, paid once per open, not per append), so the dedup survives a
+process restart, not just repeated calls within one run — and, as a consequence,
+opening an existing file whose *interior* is corrupted now throws
+`SerializationError` from the constructor itself (a malformed *trailing* line is
+still tolerated, matching `entries()`).
+
+`SessionLog::append` deliberately does **not** dedup — its documented contract
+is full fidelity, nothing coalesced or dropped (see `undoLast()`). Wire
+`OutboxRelay::sink` to `InMemoryActionLog`, `FileActionLog`, or a custom
+`IActionLog` that dedups on `idempotencyKey`; a `SessionLog` used as the relay's
+sink gives no re-relay protection.
+
+### `journal::OutboxRelay`
+
+```cpp
+struct OutboxRelayResult {
+    std::size_t relayed = 0;
+};
+
+struct OutboxRelay {
+    std::function<std::vector<LogEntry>()> drainOutbox;
+    std::function<void(std::span<const LogEntry>)> markRelayed;
+    std::shared_ptr<IActionLog> sink;
+
+    OutboxRelayResult relay();
+};
+```
+
+Declared in `outbox.hpp`. `drainOutbox` and `markRelayed` are injected against
+the model's own store, exactly as `morph::offline::ReconnectCoordinator::Deps`
+and `morph::offline::SyncWorker::ReplayFunction` inject their side effects —
+morph never touches the model's database.
+
+`relay()` drains every currently-unrelayed row, appends each to `sink`, flushes
+`sink`, then marks the whole batch relayed via `markRelayed` in one call. A
+no-op (`{.relayed = 0}`, `sink`/`markRelayed` untouched) if `drainOutbox()`
+returns nothing.
+
+**Crash safety.** Because `markRelayed` runs only after `sink`'s append *and*
+flush complete, a crash between them leaves the row still "unrelayed" in the
+model's store; the next `relay()` call re-drains and re-appends it, and the
+sink's `idempotencyKey` dedup makes that re-append a no-op — the row is marked
+relayed exactly once from the outbox table's perspective, and stored exactly
+once in the sink. This is at-least-once-plus-dedup, not two-phase commit: `sink`
+and the model's own store are never committed as a single distributed
+transaction. A crash *before* the model's own outbox-row insert ever committed
+means `drainOutbox()` never reports the row in the first place — neither the
+state nor the log advanced, so there is no divergence to reconcile; this
+guarantee comes from the host's own transaction, not from `OutboxRelay`.
+
+Mirroring `ReconnectCoordinator::Deps`, a null `drainOutbox`/`markRelayed`/`sink`
+is logged (via `morph::log::logError`) at the start of every `relay()` call but
+does not reject the call — invoking a null member still throws
+(`std::bad_function_call`) or crashes as usual.
+
+### What this does not do
+
+- **No database driver ships.** `drainOutbox`/`markRelayed` are the host's
+  callables against its own store; morph provides only the relay loop and the
+  dedup-capable sinks.
+- **Not distributed transactions.** The model's own store commit (business
+  tables + outbox row) is one local transaction; the relay to `sink` is a
+  separate, at-least-once-plus-dedup step, not 2PC.
+- **`examples/bank` is unchanged.** It still demonstrates the two-write
+  divergence this section closes for models that opt in; adopting the pattern
+  there is not part of this change.
+
 ## API reference
 
 All symbols live in `namespace morph::journal`.
@@ -389,7 +507,7 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`. Glaze-reflected (no `glz::meta`). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`, `idempotencyKey`. Glaze-reflected (no `glz::meta`). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON. Throws `SerializationError`. |
 | `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON. Throws `SerializationError`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
@@ -438,6 +556,8 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `FileActionLog::seq` is process-local | **Fresh per process, not resumed from disk** | `seq` is a monotonic order key within one process instance, not a cross-restart durable identifier. On-disk order is append order; `entries()` returns in that order regardless of `seq` gaps. |
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
+| `InMemoryActionLog`/`FileActionLog` dedup on `idempotencyKey` | **Non-empty key only; `SessionLog` excluded** | Makes both safe default choices for `OutboxRelay::sink` without changing behavior for callers that never set the key (empty key never dedups). `SessionLog` is excluded because its contract is full fidelity — nothing coalesced or dropped. |
+| `setOutboxManaged` suppresses `recordIfAttached`, not `hasActionLog()` | **Two independent signals** | A store-backed model needs to stop the auto-append without losing "a log is attached" as a fact holders can still query — the suppression is a separate flag, not a side effect of detaching the log. |
 
 ## Invariants
 
@@ -499,12 +619,15 @@ alone implies. Understand these before relying on the log for recovery:
   durable sink and that sink's `flush()` returns. For `FileActionLog`, `flush()`
   is what fsyncs; before it, entries may sit in stdio/OS buffers. A crash before
   `checkpoint()` loses the entire uncheckpointed session's history.
-- **No transactional link to the model's own store.** The log and a model's own
-  durable store (e.g. the SQLite in `examples/bank`) commit as two independent
-  steps. A crash can leave the store committed but the log missing the
-  corresponding entries (uncheckpointed), or — with a separately-flushed
-  file — the log ahead of the store. There is no outbox tying the two into one
-  atomic write; recovery must reconcile them out of band.
+- **No transactional link to the model's own store, unless it opts in.** By
+  default the log and a model's own durable store (e.g. the SQLite in
+  `examples/bank`) commit as two independent steps. A crash can leave the store
+  committed but the log missing the corresponding entries (uncheckpointed), or —
+  with a separately-flushed file — the log ahead of the store. A model that
+  writes its own outbox row in its own transaction and calls
+  `setOutboxManaged(true)` closes this gap for itself (see
+  [Transactional outbox (opt-in)](#transactional-outbox-opt-in)); a model that
+  does not opt in must still reconcile the two out of band.
 - **`FileActionLog` torn-write recovery is trailing-only.** A single truncated
   *final* line (from a crash mid-`append`) is skipped with a warning; any
   malformed *interior* line makes `entries()` throw. So the file self-heals from
@@ -525,9 +648,13 @@ Honest boundaries of the current design:
   side effects. Undo and reconstruction are therefore **exact only for pure,
   deterministic, in-memory models**. A model backed by an external store will,
   on replay, attempt to re-apply its writes.
-- **No transactional outbox.** As above, nothing ties a log entry to the
-  commit of the model's own store. Divergence between the two is possible and
-  is the application's problem to detect and reconcile.
+- **Transactional outbox is opt-in, not automatic.** `journal::OutboxRelay` plus
+  `IModelHolder::setOutboxManaged` close the store/log divergence gap only for a
+  model that actively writes its own outbox row and calls
+  `setOutboxManaged(true)` (see [Transactional outbox (opt-in)](#transactional-outbox-opt-in)).
+  A model that does not opt in keeps the default two-independent-writes
+  behavior, and divergence between the two remains the application's problem to
+  detect and reconcile.
 - **Unbounded in-memory growth; O(n²) repeated undo.** `SessionLog` retains full
   uncoalesced history for the lifetime of the instance — memory grows without
   bound. Each `undoLast()` replays the entire remaining prefix from scratch, so
@@ -544,7 +671,8 @@ Honest boundaries of the current design:
 - **`registry.md`** — `ModelRegistryFactory`/`ActionDispatcher` and
   `ModelFactory::create`, which auto-attach the default log and which `replay()`
   reuses for dispatch. Also the `ActionDispatcher::coalesce` lookup driving
-  `checkpoint()`.
+  `checkpoint()`, and `IModelHolder::setOutboxManaged`/`isOutboxManaged`, the
+  opt-out this outbox section's suppression relies on.
 - **`bridge.md`** — the two (mutually exclusive) recording call sites
   (`Bridge::executeVia`'s `localOp` for local mode; the `RemoteServer` dispatch
   path for remote/Qt), and `HandlerBinding::contextKey`/`RemoteServer::setLogProvider`

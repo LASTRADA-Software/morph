@@ -269,6 +269,8 @@ struct IModelHolder {
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog>, std::string contextKey);
     bool hasActionLog() const noexcept;
     void recordIfAttached(LogEntry entry);
+    void setOutboxManaged(bool outboxManaged) noexcept;
+    [[nodiscard]] bool isOutboxManaged() const noexcept;
 };
 ```
 
@@ -279,7 +281,11 @@ struct IModelHolder {
 - `recordIfAttached` is called automatically by `ActionDispatcher`'s runner and
   `Bridge::executeVia` — model code never calls it directly. It fills
   `entityKey`, `principal` (from `session::current()`), and `timestampMs` on the
-  entry before forwarding.
+  entry before forwarding. It is also a no-op when `isOutboxManaged()` is
+  `true` — see [journal.md's transactional outbox section](../journal/journal.md#transactional-outbox-opt-in).
+- `setOutboxManaged(true)` marks this instance as managing its own outbox log
+  write, so `recordIfAttached` stops auto-appending for it; `hasActionLog()` is
+  unaffected. Defaults to `false`.
 
 ### `ModelHolder<Model>`
 
@@ -516,7 +522,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 
 | Symbol | Kind | Purpose |
 |---|---|---|
-| `IModelHolder` | abstract class | Type-erased model owner with action log slot. |
+| `IModelHolder` | abstract class | Type-erased model owner with an action log slot and an outbox-managed opt-out flag. |
 | `ModelHolder<M>` | class template | Concrete holder storing `M` by value; conditionally inherits `IBackendChangedSink`. |
 | `ModelFactory` | class | `static create<M>()` — default-constructs `ModelHolder<M>` and attaches the process-wide default log. |
 | `IBackendChangedSink` | abstract class | Optional interface for backend-switch notification, discovered via `dynamic_cast`. |
@@ -561,6 +567,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | Action validation is a property of the action | **`ActionValidator<Action>`, not `ActionValidator<Model, Action>`** | Different actions on the same model have different readiness requirements; keeping the predicate next to the action keeps the GUI side oblivious to model internals. |
 | `Loggable` is a strong enum | **`Loggable::No` / `Loggable::Yes`**, not bare `bool` | Registration call sites read as intent rather than an unexplained `false`. |
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
+| `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `BridgeHandler::set`) opt in. |
 
 ## Thread safety
@@ -661,7 +668,10 @@ testing obligation, not a compile-time guarantee.
 - **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the
-  durable log, and provides the scoped-install pattern the registries lack.
+  durable log, and provides the scoped-install pattern the registries lack. Also
+  `LogEntry::idempotencyKey` and `journal::OutboxRelay`, the transactional
+  outbox this spec's `setOutboxManaged`/`isOutboxManaged` opt-out enables — see
+  [Transactional outbox (opt-in)](../journal/journal.md#transactional-outbox-opt-in).
 - **[backend.md](backend.md)** — backends store `IModelHolder`s in a single map
   and drive `IBackendChangedSink` / `BackendChangedMixin`; the model instances
   created by `ModelRegistryFactory` land here.

@@ -395,8 +395,10 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
   decimal precision shrinks the representable magnitude. Wire input is *clamped*,
   not rejected, on malformed values.
 - **Journal replay re-executes actions**, so undo/reconstruction is only exact
-  for pure, in-memory models; there is no transactional outbox tying the log to a
-  model's own store yet.
+  for pure, in-memory models. A model with its own transactional store can close
+  the store/log divergence gap by opting into `IModelHolder::setOutboxManaged` +
+  `journal::OutboxRelay` (see `docs/spec/journal/journal.md`); a model that
+  doesn't opt in keeps the default fire-after-success append.
 - **Offline durability is bring-your-own.** Only an in-memory queue ships; the
   crash-safety story depends on a durable queue you implement.
 - **Registration is global and macro-driven** (per-TU, static-init, string type
