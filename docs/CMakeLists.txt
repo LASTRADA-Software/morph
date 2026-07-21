@@ -44,6 +44,8 @@ set(DOXYGEN_WARN_AS_ERROR          FAIL_ON_WARNINGS)
 set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::log::detail"
     "morph::log::detail::*"
+    "morph::observe::detail"
+    "morph::observe::detail::*"
     "morph::exec::detail"
     "morph::exec::detail::*"
     "morph::async::detail"

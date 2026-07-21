@@ -9,6 +9,7 @@ add_executable(morph_tests
     test_completion_extra.cpp
     test_model.cpp
     test_logger.cpp
+    test_observability.cpp
     test_backend_extra.cpp
     test_registry_extra.cpp
     test_bridge_local.cpp

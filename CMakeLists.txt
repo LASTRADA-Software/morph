@@ -118,6 +118,7 @@ target_sources(morph
     BASE_DIRS include
     FILES
         include/morph/core/logger.hpp
+        include/morph/core/observability.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
