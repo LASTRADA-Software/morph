@@ -48,10 +48,29 @@ type or subsystem. The rules, from `CLAUDE.md`:
 - **Formatting/linting:** `.clang-format` and `.clang-tidy` govern C++;
   markdown follows `.markdownlint.yaml` (119-column limit; code blocks and
   tables exempt). `pre-commit run --all-files` runs the configured hooks.
-- **Keep mechanical facts honest:** if you change a pinned constant, enum
-  cardinality, or canonical error string, update the spec prose that cites it
-  in the same commit (`docs/planned/drift_guard.md` describes the CI guard
-  this feeds).
+- **Keep mechanical facts honest:** `docs/spec/pinned_facts.toml` pins the
+  mechanical facts that recur across specs — enum cardinalities, key
+  constants (`kMaxEnvelopeBytes`, `kMaxDecimalPlaces`, `kClockSkewMs`),
+  canonical error/reply strings, and glaze parsing behavior
+  (`error_on_unknown_keys = false`, duplicate-key last-wins). Two CI checks
+  enforce it:
+  - `tests/test_pinned_facts.cpp` asserts the real code symbols against a
+    header `cmake/pinned_facts.cmake` generates from the manifest at
+    configure time — a `static_assert`/exhaustive-`switch` compile-time gate
+    where the type system allows it, a Catch2 runtime `REQUIRE` where it
+    does not (an exception's `what()`, a `RemoteServer` reply string, a
+    glaze option that has no reachable symbol). It runs as part of the
+    normal `morph_tests` target, so it is checked under every compiler in
+    the CI matrix.
+  - `scripts/check_spec_citations.sh` (the "Drift guard" workflow) asserts
+    every pinned value is still cited in the spec file that documents it,
+    and that no banned, superseded terminology (e.g. the pipe-delimited-era
+    "*N*-part protocol" wording) has crept back into `docs/spec/`,
+    `docs/ARCHITECTURE.md`, or `include/`.
+
+  If you change a pinned constant, enum cardinality, or canonical error
+  string, update the code, `docs/spec/pinned_facts.toml`, and the spec prose
+  that cites it together in the same commit.
 
 ## Security
 

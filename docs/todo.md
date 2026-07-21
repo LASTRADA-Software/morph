@@ -128,12 +128,14 @@ behaves byte-for-byte as before.
 
 ## D. Process / project
 
-### D1 — Spec ↔ code drift guard (CI) · P1 · [spec: `planned/drift_guard.md`]
+### D1 — Spec ↔ code drift guard (CI) · P1 · DONE — see [CONTRIBUTING.md, "Quality gates"](../CONTRIBUTING.md#quality-gates)
 The recurring audit finding was header docs/specs disagreeing with code (the
 `authenticate` principal-clearing lie, the false "unknown keys ignored" claim,
-the `runFor` comment, a stale `AuthError` cardinality). Add a CI check pinning the
-mechanical facts: enum cardinalities, key constants (`kMaxDecimalPlaces`,
-`kMaxEnvelopeBytes`), canonical error-message strings, and glaze
+the `runFor` comment, a stale `AuthError` cardinality). Landed: a CI check
+pinning the mechanical facts (`docs/spec/pinned_facts.toml`,
+`tests/test_pinned_facts.cpp`, `scripts/check_spec_citations.sh`) — enum
+cardinalities, key constants (`kMaxDecimalPlaces`, `kMaxEnvelopeBytes`,
+`kClockSkewMs`), canonical error-message strings, and glaze
 `error_on_unknown_keys` behavior — so future drift fails the build.
 
 ### D2 — API stability / 1.0 commitment · P2 · [spec: `planned/api_stability.md`]
