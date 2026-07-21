@@ -37,6 +37,50 @@ Item {
         })
     }
 
+    DynamicForm {
+        id: layoutForm
+        actionType: "LayoutProbe"
+        controller: null
+        schema: ({
+            "properties": {
+                "sampleId": { "type": ["integer", "null"], "x-order": 0, "x-group": "Identity", "x-section": 0 },
+                "density": { "type": ["number", "null"], "x-order": 1, "x-group": "Measurement", "x-section": 1 },
+                "moisture": { "type": ["number", "null"], "x-order": 2, "x-group": "Measurement", "x-section": 1 },
+                "notes": { "type": ["string", "null"], "x-order": 3, "x-group": "Notes", "x-section": 2, "x-colspan": 2 },
+                "remarks": { "type": ["string", "null"], "x-order": 4 }
+            },
+            "required": ["sampleId"],
+            "x-layout": {
+                "groups": [
+                    { "title": "Identity", "kind": "section", "fields": ["sampleId"] },
+                    { "title": "Measurement", "kind": "section", "fields": ["moisture", "density"] },
+                    { "title": "Notes", "kind": "accordion", "fields": ["notes"] }
+                ]
+            }
+        })
+    }
+
+    DynamicForm {
+        id: tabForm
+        actionType: "TabProbe"
+        controller: null
+        schema: ({
+            "properties": {
+                "a": { "type": ["integer", "null"], "x-order": 0, "x-section": 0 },
+                "b": { "type": ["integer", "null"], "x-order": 1, "x-section": 1 },
+                "c": { "type": ["integer", "null"], "x-order": 2, "x-section": 2 }
+            },
+            "required": [],
+            "x-layout": {
+                "groups": [
+                    { "title": "One", "kind": "tab", "fields": ["a"] },
+                    { "title": "Two", "kind": "tab", "fields": ["b"] },
+                    { "title": "Solo", "kind": "section", "fields": ["c"] }
+                ]
+            }
+        })
+    }
+
     TestCase {
         name: "DynamicFormLogic"
 
@@ -157,6 +201,50 @@ Item {
             compare(form.optionRows([{ id: 1 }]).length, 1)                       // bare array
             compare(form.optionRows({ rows: [{ id: 1 }, { id: 2 }] }).length, 2)  // first array member
             compare(form.optionRows({ nothing: 1 }).length, 0)
+        }
+
+        function test_layoutGroupsBucketFieldsInOrder() {
+            compare(layoutForm.sections.length, 4)  // Identity, Measurement, Notes, trailing "remarks"
+            compare(layoutForm.sections[0].title, "Identity")
+            compare(layoutForm.sections[0].kind, "section")
+            compare(layoutForm.sections[0].fields.map(f => f.name).join(","), "sampleId")
+            // The schema's x-layout.groups[1].fields deliberately lists
+            // "moisture" before "density" (the opposite of their x-order):
+            // the renderer buckets by each field's own x-section, then
+            // relies on `fields` already being x-order-sorted, so the
+            // bucket comes out "density,moisture" regardless of the
+            // declared array order — x-order is the sole intra-group
+            // ordering authority.
+            compare(layoutForm.sections[1].fields.map(f => f.name).join(","), "density,moisture")
+            compare(layoutForm.sections[2].kind, "accordion")
+            compare(layoutForm.sections[2].fields.map(f => f.name).join(","), "notes")
+            // The field absent from every declared group falls into the
+            // implicit trailing group, never dropped.
+            compare(layoutForm.sections[3].title, "")
+            compare(layoutForm.sections[3].fields.map(f => f.name).join(","), "remarks")
+            // colspan surfaces per field; the default (1) applies when
+            // x-colspan is absent.
+            compare(layoutForm.fields.find(f => f.name === "notes").colspan, 2)
+            compare(layoutForm.fields.find(f => f.name === "sampleId").colspan, 1)
+        }
+
+        function test_tabSectionsMergeIntoOneRun() {
+            compare(tabForm.renderRuns.length, 2)  // {a,b} tabset, then solo "c" section
+            compare(tabForm.renderRuns[0].type, "tabset")
+            compare(tabForm.renderRuns[0].sections.length, 2)
+            compare(tabForm.renderRuns[0].sections[0].title, "One")
+            compare(tabForm.renderRuns[0].sections[1].title, "Two")
+            compare(tabForm.renderRuns[1].type, "single")
+            compare(tabForm.renderRuns[1].section.title, "Solo")
+        }
+
+        function test_noXLayoutFallsBackToOneFlatSection() {
+            // `form` (the file-scope fixture) declares no x-layout.
+            compare(form.sections.length, 1)
+            compare(form.sections[0].kind, "flat")
+            compare(form.sections[0].fields.length, form.fields.length)
+            compare(form.renderRuns.length, 1)
+            compare(form.renderRuns[0].type, "single")
         }
     }
 }

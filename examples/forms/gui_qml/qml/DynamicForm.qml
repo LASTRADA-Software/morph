@@ -91,9 +91,57 @@ Frame {
                     isInteger: types.indexOf("integer") !== -1,
                     required: required.indexOf(name) !== -1,
                     minimum: p.minimum,
-                    maximum: p.maximum
+                    maximum: p.maximum,
+                    section: opt(raw["x-section"], p["x-section"]),
+                    colspan: opt(opt(raw["x-colspan"], p["x-colspan"]), 1)
                 }
             })
+    }
+
+    // Field descriptors bucketed into x-layout's declared groups (in
+    // x-layout order), with every field absent from every group collected
+    // into one implicit trailing group — never dropped, per
+    // docs/spec/forms/forms.md, "Layout & grouping". When the schema
+    // declares no x-layout at all, this is one implicit group holding every
+    // field: the pre-grouping flat form, unchanged.
+    property var sections: {
+        const groupDefs = (schema["x-layout"] || {}).groups || []
+        if (groupDefs.length === 0)
+            return [{ title: "", kind: "flat", fields: fields }]
+
+        const buckets = groupDefs.map(function (g) {
+            return { title: g.title, kind: g.kind, fields: [] }
+        })
+        const trailing = { title: "", kind: "flat", fields: [] }
+        for (let i = 0; i < fields.length; ++i) {
+            const f = fields[i]
+            if (f.section !== undefined && f.section >= 0 && f.section < buckets.length)
+                buckets[f.section].fields.push(f)
+            else
+                trailing.fields.push(f)
+        }
+        return trailing.fields.length > 0 ? buckets.concat([trailing]) : buckets
+    }
+
+    // Consecutive "tab" sections share one tab bar; every other section
+    // (including the implicit "flat" one) renders as its own run.
+    property var renderRuns: {
+        const runs = []
+        let i = 0
+        while (i < sections.length) {
+            if (sections[i].kind === "tab") {
+                const tabRun = []
+                while (i < sections.length && sections[i].kind === "tab") {
+                    tabRun.push(sections[i])
+                    ++i
+                }
+                runs.push({ type: "tabset", sections: tabRun })
+            } else {
+                runs.push({ type: "single", section: sections[i] })
+                ++i
+            }
+        }
+        return runs
     }
 
     // --- draft state --------------------------------------------------------
@@ -284,6 +332,188 @@ Frame {
         }
     }
 
+    Component {
+        id: fieldDelegate
+
+        ColumnLayout {
+            id: fieldColumn
+            required property var modelData
+            Layout.fillWidth: true
+            Layout.columnSpan: fieldColumn.modelData.colspan
+            visible: !fieldColumn.modelData.hidden
+            spacing: 2
+
+            RowLayout {
+                Label {
+                    text: fieldColumn.modelData.title
+                    font.bold: true
+                }
+                Label {
+                    visible: fieldColumn.modelData.required
+                    text: "*"
+                    color: "#d33"
+                }
+            }
+
+            Label {
+                visible: fieldColumn.modelData.description !== ""
+                text: fieldColumn.modelData.description
+                opacity: 0.6
+                font.pixelSize: 12
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+
+                ComboBox {
+                    visible: fieldColumn.modelData.isChoice
+                    enabled: !fieldColumn.modelData.readOnly
+                    Layout.fillWidth: true
+                    textRole: "label"
+                    currentIndex: -1
+                    displayText: currentIndex < 0 ? "— select —" : currentText
+                    model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
+                    onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
+                }
+
+                DateTimePicker {
+                    visible: fieldColumn.modelData.isDateTime
+                    enabled: !fieldColumn.modelData.readOnly
+                    Layout.fillWidth: true
+                    onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
+                }
+
+                TextField {
+                    id: entry
+                    objectName: "field_" + fieldColumn.modelData.name
+                    visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
+                    Layout.fillWidth: true
+                    readOnly: fieldColumn.modelData.readOnly
+                    placeholderText: fieldColumn.modelData.placeholder !== ""
+                                     ? fieldColumn.modelData.placeholder
+                                     : (fieldColumn.modelData.isQuantity
+                                        ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
+                                        : (fieldColumn.modelData.isInteger ? "0" : ""))
+                    inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
+                                      ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
+                    onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                }
+
+                // Unit selector when the unit system declares convertible
+                // alternatives: switching recalculates the entry exactly.
+                ComboBox {
+                    visible: fieldColumn.modelData.isQuantity
+                             && fieldColumn.modelData.unitOptions.length > 1
+                    enabled: !fieldColumn.modelData.readOnly
+                    implicitWidth: 92
+                    textRole: "display"
+                    model: fieldColumn.modelData.unitOptions
+                    onActivated: {
+                        const name = fieldColumn.modelData.name
+                        const fromUnit = fieldColumn.modelData.unitOptions[form.opt(form.fieldUnits[name], 0)]
+                        const toUnit = fieldColumn.modelData.unitOptions[currentIndex]
+                        form.fieldUnits[name] = currentIndex
+                        if (entry.text.trim() !== "")
+                            entry.text = form.convertText(entry.text.trim(), fromUnit, toUnit)
+                        else
+                            form.revalidate()
+                    }
+                }
+
+                Label {
+                    visible: fieldColumn.modelData.unit !== ""
+                             && !(fieldColumn.modelData.isQuantity
+                                  && fieldColumn.modelData.unitOptions.length > 1)
+                    text: fieldColumn.modelData.unit
+                    opacity: 0.6
+                }
+            }
+        }
+    }
+
+    Component {
+        id: sectionRun
+
+        // A single section: "flat" (the implicit whole-form bucket used
+        // when the schema declares no x-layout — one column, no chrome,
+        // pixel-identical to the pre-grouping renderer), "section" (a
+        // titled fieldset), or "accordion" (a collapsible panel). "tab"
+        // groups never reach here — the renderer merges consecutive "tab"
+        // sections into one tabsetRun instead.
+        ColumnLayout {
+            id: box
+            property var runData
+            Layout.fillWidth: true
+            property bool collapsed: false
+
+            RowLayout {
+                visible: box.runData.section.title !== ""
+                Layout.fillWidth: true
+
+                Button {
+                    visible: box.runData.section.kind === "accordion"
+                    text: box.collapsed ? "▸" : "▾"
+                    flat: true
+                    onClicked: box.collapsed = !box.collapsed
+                }
+                Label {
+                    text: box.runData.section.title
+                    font.bold: true
+                    font.pixelSize: 16
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                visible: !box.collapsed
+                columns: box.runData.section.kind === "flat" ? 1 : 2
+
+                Repeater {
+                    model: box.runData.section.fields
+                    delegate: fieldDelegate
+                }
+            }
+        }
+    }
+
+    Component {
+        id: tabsetRun
+
+        // Consecutive "tab" groups share one tab bar; the grid below shows
+        // only the fields of whichever tab is currently selected.
+        ColumnLayout {
+            id: tabsBox
+            property var runData
+            Layout.fillWidth: true
+            property int currentTab: 0
+
+            TabBar {
+                id: bar
+                Layout.fillWidth: true
+                currentIndex: tabsBox.currentTab
+                onCurrentIndexChanged: tabsBox.currentTab = currentIndex
+
+                Repeater {
+                    model: tabsBox.runData.sections
+                    delegate: TabButton {
+                        required property var modelData
+                        text: modelData.title
+                    }
+                }
+            }
+
+            GridLayout {
+                Layout.fillWidth: true
+                columns: 2
+
+                Repeater {
+                    model: tabsBox.runData.sections[tabsBox.currentTab].fields
+                    delegate: fieldDelegate
+                }
+            }
+        }
+    }
+
     // --- layout ---------------------------------------------------------------
 
     ColumnLayout {
@@ -298,100 +528,14 @@ Frame {
         }
 
         Repeater {
-            model: form.fields
+            model: form.renderRuns
 
-            ColumnLayout {
-                id: fieldColumn
+            delegate: Loader {
+                id: runLoader
                 required property var modelData
                 Layout.fillWidth: true
-                visible: !fieldColumn.modelData.hidden
-                spacing: 2
-
-                RowLayout {
-                    Label {
-                        text: fieldColumn.modelData.title
-                        font.bold: true
-                    }
-                    Label {
-                        visible: fieldColumn.modelData.required
-                        text: "*"
-                        color: "#d33"
-                    }
-                }
-
-                Label {
-                    visible: fieldColumn.modelData.description !== ""
-                    text: fieldColumn.modelData.description
-                    opacity: 0.6
-                    font.pixelSize: 12
-                }
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    ComboBox {
-                        visible: fieldColumn.modelData.isChoice
-                        enabled: !fieldColumn.modelData.readOnly
-                        Layout.fillWidth: true
-                        textRole: "label"
-                        currentIndex: -1
-                        displayText: currentIndex < 0 ? "— select —" : currentText
-                        model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
-                        onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
-                    }
-
-                    DateTimePicker {
-                        visible: fieldColumn.modelData.isDateTime
-                        enabled: !fieldColumn.modelData.readOnly
-                        Layout.fillWidth: true
-                        onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
-                    }
-
-                    TextField {
-                        id: entry
-                        objectName: "field_" + fieldColumn.modelData.name
-                        visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
-                        Layout.fillWidth: true
-                        readOnly: fieldColumn.modelData.readOnly
-                        placeholderText: fieldColumn.modelData.placeholder !== ""
-                                         ? fieldColumn.modelData.placeholder
-                                         : (fieldColumn.modelData.isQuantity
-                                            ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
-                                            : (fieldColumn.modelData.isInteger ? "0" : ""))
-                        inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
-                                          ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
-                        onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
-                    }
-
-                    // Unit selector when the unit system declares convertible
-                    // alternatives: switching recalculates the entry exactly.
-                    ComboBox {
-                        visible: fieldColumn.modelData.isQuantity
-                                 && fieldColumn.modelData.unitOptions.length > 1
-                        enabled: !fieldColumn.modelData.readOnly
-                        implicitWidth: 92
-                        textRole: "display"
-                        model: fieldColumn.modelData.unitOptions
-                        onActivated: {
-                            const name = fieldColumn.modelData.name
-                            const fromUnit = fieldColumn.modelData.unitOptions[form.opt(form.fieldUnits[name], 0)]
-                            const toUnit = fieldColumn.modelData.unitOptions[currentIndex]
-                            form.fieldUnits[name] = currentIndex
-                            if (entry.text.trim() !== "")
-                                entry.text = form.convertText(entry.text.trim(), fromUnit, toUnit)
-                            else
-                                form.revalidate()
-                        }
-                    }
-
-                    Label {
-                        visible: fieldColumn.modelData.unit !== ""
-                                 && !(fieldColumn.modelData.isQuantity
-                                      && fieldColumn.modelData.unitOptions.length > 1)
-                        text: fieldColumn.modelData.unit
-                        opacity: 0.6
-                    }
-                }
+                sourceComponent: runLoader.modelData.type === "tabset" ? tabsetRun : sectionRun
+                onLoaded: item.runData = runLoader.modelData
             }
         }
 
