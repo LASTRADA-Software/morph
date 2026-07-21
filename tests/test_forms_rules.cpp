@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <cstdint>
+#include <memory>
 #include <morph/core/registry.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/datetime.hpp>
@@ -10,6 +12,8 @@
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+
+#include "test_support.hpp"
 
 using morph::math::DecimalPlaces;
 using morph::math::Denominator;
@@ -347,4 +351,198 @@ TEST_CASE("Forms::Rules::PresentationRules::NeverBreakAllRulesSatisfiedAcrossSta
 
     form.discount = Rational{1, DecimalPlaces{2}};
     CHECK(morph::forms::allRulesSatisfied(form));  // requiredWhen satisfied; visibleWhen/readonlyWhen never gate
+}
+
+// ---------------------------------------------------------------------------
+// No-drift: one declaration, evaluated identically on every dispatch path.
+// ---------------------------------------------------------------------------
+
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/remote.hpp>
+
+namespace {
+std::atomic<int> gCfrBookRoomExecuteCount{0};
+}  // namespace
+
+struct CFRBookRoom {
+    morph::time::Timestamp checkIn;
+    morph::time::Timestamp checkOut;
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+    CFRMoney promo;
+    CFRMoney discount;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::greater(&CFRBookRoom::checkOut, &CFRBookRoom::checkIn),
+        morph::forms::exactlyOneOf(&CFRBookRoom::email, &CFRBookRoom::phone),
+        morph::forms::requiredWhen(&CFRBookRoom::discount, morph::forms::engaged(&CFRBookRoom::promo)),
+        morph::forms::visibleWhen(&CFRBookRoom::discount, morph::forms::engaged(&CFRBookRoom::promo)));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+struct CFRBookRoomResult {
+    bool booked = false;
+};
+
+struct CFRBookingModel {
+    CFRBookRoomResult execute(const CFRBookRoom&) {
+        gCfrBookRoomExecuteCount.fetch_add(1);
+        return CFRBookRoomResult{.booked = true};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(CFRBookingModel, "CFR_BookingModel")
+BRIDGE_REGISTER_ACTION(CFRBookingModel, CFRBookRoom, "CFR_BookRoom")
+
+namespace {
+
+[[nodiscard]] CFRBookRoom validRoomBooking() {
+    using morph::time::DateTime;
+    using morph::time::Timestamp;
+    CFRBookRoom room{};
+    room.checkIn = Timestamp{DateTime{std::chrono::year{2026}, std::chrono::month{8}, std::chrono::day{1},
+                                      std::chrono::hours{0}, std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    room.checkOut = Timestamp{DateTime{std::chrono::year{2026}, std::chrono::month{8}, std::chrono::day{5},
+                                       std::chrono::hours{0}, std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    room.email = "guest@example.com";
+    return room;
+}
+
+[[nodiscard]] CFRBookRoom invalidRoomBooking() {
+    // checkOut before checkIn -> violates greater(checkOut, checkIn).
+    using morph::time::DateTime;
+    using morph::time::Timestamp;
+    CFRBookRoom room{};
+    room.checkIn = Timestamp{DateTime{std::chrono::year{2026}, std::chrono::month{8}, std::chrono::day{5},
+                                      std::chrono::hours{0}, std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    room.checkOut = Timestamp{DateTime{std::chrono::year{2026}, std::chrono::month{8}, std::chrono::day{1},
+                                       std::chrono::hours{0}, std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    room.email = "guest@example.com";
+    return room;
+}
+
+}  // namespace
+
+TEST_CASE("Forms::Rules::NoDrift::ActionDispatcherRejectsViaValidationError", "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    auto holder = morph::model::detail::ModelFactory::create<CFRBookingModel>();
+    auto const payload = morph::model::ActionTraits<CFRBookRoom>::toJson(invalidRoomBooking());
+
+    REQUIRE_THROWS_AS(morph::model::detail::ActionDispatcher::instance().dispatch("CFR_BookingModel", "CFR_BookRoom",
+                                                                                  *holder, payload),
+                      morph::model::ValidationError);
+    REQUIRE(gCfrBookRoomExecuteCount.load() == 0);
+}
+
+TEST_CASE("Forms::Rules::NoDrift::ActionDispatcherDispatchesAValidBookingNormally", "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    auto holder = morph::model::detail::ModelFactory::create<CFRBookingModel>();
+    auto const payload = morph::model::ActionTraits<CFRBookRoom>::toJson(validRoomBooking());
+
+    auto const resultJson = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "CFR_BookingModel", "CFR_BookRoom", *holder, payload);
+    auto const result = morph::model::ActionTraits<CFRBookRoom>::resultFromJson(resultJson);
+    CHECK(result.booked);
+    CHECK(gCfrBookRoomExecuteCount.load() == 1);
+}
+
+TEST_CASE("Forms::Rules::NoDrift::LocalBackendRejectsViaOnErrorWithValidationError", "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> sawValidationError{false};
+    std::atomic<bool> done{false};
+    handler.execute(invalidRoomBooking())
+        .then([&](CFRBookRoomResult) { done.store(true); })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const morph::model::ValidationError&) {
+                sawValidationError.store(true);
+            } catch (...) {
+            }
+            done.store(true);
+        });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(sawValidationError.load());
+    REQUIRE(gCfrBookRoomExecuteCount.load() == 0);
+}
+
+TEST_CASE("Forms::Rules::NoDrift::LocalBackendDispatchesAValidBookingNormally", "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> observedBooked{false};
+    std::atomic<bool> done{false};
+    handler.execute(validRoomBooking())
+        .then([&](CFRBookRoomResult result) {
+            observedBooked.store(result.booked);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedBooked.load());
+    REQUIRE(gCfrBookRoomExecuteCount.load() == 1);
+}
+
+TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendRejectsTheSameViolatingAction", "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> sawError{false};
+    std::string errorMessage;
+    std::atomic<bool> done{false};
+    handler.execute(invalidRoomBooking())
+        .then([&](CFRBookRoomResult) { done.store(true); })
+        .onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                errorMessage = exc.what();
+                sawError.store(true);
+            }
+            done.store(true);
+        });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(sawError.load());
+    REQUIRE(errorMessage == "action failed validation: CFR_BookingModel/CFR_BookRoom");
+    REQUIRE(gCfrBookRoomExecuteCount.load() == 0);
+}
+
+TEST_CASE("Forms::Rules::NoDrift::SimulatedRemoteBackendDispatchesAValidBookingNormally",
+          "[forms][rules][validation]") {
+    gCfrBookRoomExecuteCount.store(0);
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::testing::InlineExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<CFRBookingModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> observedBooked{false};
+    std::atomic<bool> done{false};
+    handler.execute(validRoomBooking())
+        .then([&](CFRBookRoomResult result) {
+            observedBooked.store(result.booked);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(observedBooked.load());
+    REQUIRE(gCfrBookRoomExecuteCount.load() == 1);
 }
