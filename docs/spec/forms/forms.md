@@ -15,6 +15,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [`FixedString` — NTTP compile-time string](#fixedstring--nttp-compile-time-string)
 - [`schemaJson<A>()` — schema generation](#schemajsona--schema-generation)
 - [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
+- [Layout & grouping — sections, tabs, spans](#layout--grouping--sections-tabs-spans)
 - [Renderer contract: the schema key vocabulary](#renderer-contract-the-schema-key-vocabulary)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Support traits and helpers](#support-traits-and-helpers)
@@ -267,6 +268,83 @@ renderer that ignores them falls back to today's behavior exactly: it shows
 the raw wire key as the caption, no helper/placeholder text, and every field
 editable and visible.
 
+## Layout & grouping — sections, tabs, spans
+
+An action may declare visual structure over its flat field list: a
+`static constexpr` `formLayout` groups fields into titled sections, tabs, or
+an accordion panel, and a parallel `static constexpr` `fieldSpans` widens
+individual fields in a grid renderer. Both mirror the `optionalFields`
+convention above — a `static constexpr` list `mergeSchemaExtras` looks for by
+name, present only when an action opts in. Absent either, `schemaJson<A>()`'s
+output is unchanged: no `x-layout`, `x-group`, `x-section`, or `x-colspan` key
+is emitted, and a renderer lays every field out exactly as it always has
+(flat, `x-order` order).
+
+```cpp
+// morph::forms::FieldGroup / FieldSpan / GroupKind — forms/layout.hpp.
+enum class GroupKind { Section, Tab, Accordion };
+
+struct FieldGroup {
+    std::string_view title;                    // section / tab / panel heading
+    GroupKind kind{GroupKind::Section};
+    std::span<const std::string_view> fields;  // member wire keys (membership;
+                                               // intra-group order is x-order)
+};
+
+struct FieldSpan {
+    std::string_view field;   // wire key
+    int colspan{1};           // grid columns this field spans
+};
+
+struct RecordMeasurement {
+    Choice<std::int64_t, "ListSamples"> sampleId;
+    Density  density{};
+    Moisture moisture{};
+    std::string notes;
+
+    static constexpr std::array kIdent{std::string_view{"sampleId"}};
+    static constexpr std::array kMeas{std::string_view{"density"},
+                                      std::string_view{"moisture"}};
+    static constexpr std::array kNote{std::string_view{"notes"}};
+
+    static constexpr std::array formLayout{
+        FieldGroup{.title = "Identity",    .fields = kIdent},
+        FieldGroup{.title = "Measurement", .fields = kMeas},
+        FieldGroup{.title = "Notes", .kind = GroupKind::Accordion, .fields = kNote},
+    };
+    static constexpr std::array fieldSpans{
+        FieldSpan{.field = "notes", .colspan = 2},
+    };
+};
+```
+
+Each group carries its own `kind`: `Section` (the default) renders as a
+titled fieldset stacked vertically, consecutive `Tab` groups render as panes
+of one shared tab bar, and `Accordion` renders as a collapsible panel.
+`x-order` remains the sole authority on **intra-group** ordering —
+`formLayout`'s array order gives the cross-group order and a group's
+`fields` list gives membership only. A field named in no group falls into an
+implicit trailing default group, in `x-order` order, so declaring a group for
+*some* fields never hides the rest — the no-`formLayout` case is simply one
+implicit group containing every field, which is exactly today's flat form.
+
+`mergeSchemaExtras<A>` (see above) stamps this onto the DOM in a pass that
+runs only when `A::formLayout` / `A::fieldSpans` exist
+(`detail::HasFormLayout<A>` / `detail::HasFieldSpans<A>`, `forms/layout.hpp`):
+the ordered group list becomes a single top-level `x-layout` object, and each
+reflected member (via `forEachNamedMember`) gets `x-group`/`x-section` (if it
+is named in a group) and `x-colspan` (if its declared span exceeds `1`). A
+group naming a field the action does not have is silently ignored (schema
+generation never throws); a field claimed by two groups keeps the **first**
+one that names it.
+
+The reference QML renderer (`examples/forms/gui_qml/qml/DynamicForm.qml`)
+buckets its flat `fields` array into `sections` keyed on each field's
+`x-section`, merges consecutive `"tab"`-kind sections into one shared tab
+bar (`renderRuns`), and lays each section's fields out in a 2-column grid
+honoring `x-colspan` — falling back to a single implicit flat section
+(one column, no chrome) when the schema carries no `x-layout` at all.
+
 ## Renderer contract: the schema key vocabulary
 
 This is the **normative** list of every key a renderer must understand to build
@@ -332,6 +410,10 @@ exactly this dual read.
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. Not a security control. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
 | `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
+| `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
+| `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to. Omitted for a field in the implicit default group, or when `x-layout` is absent. |
+| `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
+| `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. |
 
 ### Versioning stance
 
@@ -438,6 +520,7 @@ for the exhaustive tables and design rationale.
 | `x-order` | **Always emitted, on every property** | JSON object key order is not reliable across DOM implementations; the explicit index gives renderers a deterministic layout. |
 | `x-unitAlternatives` | **Derived from `UnitTraits::relations`** | The same `UnitRelation` entries that drive `convert` also drive the display-unit selector — no separate declaration to keep in sync. |
 | `Timestamp` | **Uses standard `"format": "date-time"`** | No extension annotation needed; standard JSON-Schema vocabulary is sufficient. |
+| Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
 
 ## Failure modes
 
