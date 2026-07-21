@@ -604,11 +604,13 @@ executable form of this document's "normative" claim.
 
 **Scope note.** The corpus above covers exactly the keys this document's
 renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
-below. It does **not** include a wizard/app-shell fixture (`w-*`/`app-*`): no
-emitter for those Tier-2 keys exists in the codebase yet
-([gui_workflows_navigation.md](../../planned/gui_workflows_navigation.md) is
-itself still planned) — those fixtures are deferred to whichever future work
-implements that emitter. The `v-*` view-schema layer
+below. It does **not** include a wizard/app-shell fixture (`w-*`/`app-*`):
+although the emitters for those Tier-2 keys now exist
+(`morph::flows::wizardSchemaJson`/`morph::app::appSchemaJson`, see
+[workflows_navigation.md](workflows_navigation.md)), no conformance-kit
+fixture exercises them yet — that coverage is deferred to future work,
+exactly as this corpus already treats views (below) separately rather than
+as a sixth `CF*` fixture. The `v-*` view-schema layer
 (`morph::views::viewSchemaJson`, [views.md](views.md)) **is** implemented;
 its own renderer-behavior coverage lives in
 `src/qt/forms/tests/tst_collectionview.qml` rather than this five-fixture
@@ -735,9 +737,13 @@ realization: `I18nCatalog` (`examples/forms/gui_qml/I18nCatalog.hpp`), an
 in-memory `QObject` catalog (QML cannot hold a `std::function` directly),
 wired into `DynamicForm.qml`'s `resolveText`/`i18nFieldKey` JS mirrors of the
 functions above. It currently resolves only the field label/help/placeholder
-slot — group, wizard, and app-menu rendering (and therefore their i18n
-wiring) land with `gui_layout_grouping.md` and `gui_workflows_navigation.md`
-respectively (see `docs/planned/`). Cross-field rules (above) are implemented
+slot — group rendering (and its i18n wiring) lands with
+`gui_layout_grouping.md`. The wizard/app-shell layer
+([workflows_navigation.md](workflows_navigation.md)) is implemented, but its
+QML renderer (`WizardView.qml`/`AppShell.qml`) does not yet accept an
+`I18nCatalog` either, matching `CollectionView.qml`'s own gap (see
+[views.md](views.md), "Limitations") — wizard/app-menu i18n wiring remains
+future work. Cross-field rules (above) are implemented
 but carry no translatable message text of their own — the `x-rules`
 vocabulary is structural (`kind`/`fields`/`when`/`value`) only, so a renderer
 builds any rule-violation message from that structure (or its own catalog
@@ -1283,6 +1289,7 @@ wrong or un-merged schema rather than fail loudly.
 | Spec | Why |
 |---|---|
 | [choice.md](choice.md) | Full `Choice` API and design (this spec cross-refs rather than duplicates it). |
+| [workflows_navigation.md](workflows_navigation.md) | The wizard/app-shell layer built on this schema — one wizard step or one `kind: "form"` app screen still renders as an ordinary action form. |
 | [views.md](views.md) | The view-schema layer (`morph::views`) that composes query+edit+delete action *sets* into list/table and master-detail screens; reuses `schemaJson<Row>()` unmodified to derive each column's `ExtUnits`/`x-decimalPlaces`. |
 | [widget_hints.md](widget_hints.md) | Full `Multiline`/`Ranged` API and design (this spec cross-refs rather than duplicates it). |
 | [quantity_type.md](../util/quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |

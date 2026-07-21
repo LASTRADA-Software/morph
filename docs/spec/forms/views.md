@@ -353,8 +353,10 @@ pattern:
 
 - **Not an app framework.** A view is one screen composed of existing
   action-forms. Multi-screen navigation, menus, and cross-screen flow are a
-  separate, not-yet-implemented concern
-  ([gui_workflows_navigation.md](../../planned/gui_workflows_navigation.md)).
+  separate concern, implemented in
+  [workflows_navigation.md](workflows_navigation.md) — a view is not itself
+  one of that layer's screen kinds yet (`ViewScreen`/`kind: "view"` is
+  reserved but not declared there).
 - **No new dispatch path or wire change.** Populate/edit/delete/create are
   ordinary action executes over the existing path
   ([bridge.md](../core/bridge.md)); the view document is metadata a renderer
@@ -382,3 +384,7 @@ pattern:
 - [../core/registry.md](../core/registry.md) — `ActionTraits::typeId()` (the
   ids `describeAction` resolves), and the `BRIDGE_REGISTER_ACTION` pattern
   `BRIDGE_REGISTER_VIEW` mirrors.
+- [workflows_navigation.md](workflows_navigation.md) — the wizard/app-shell
+  layer this view's Non-goals defers menus and cross-screen flow to; that
+  layer's `app-*` document reserves but does not yet declare a `kind: "view"`
+  screen referencing a view like this one.

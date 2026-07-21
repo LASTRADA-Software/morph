@@ -564,6 +564,11 @@ make teardown order-independent.)
 - [`registry.md`](registry.md) — `ModelTraits`, `ActionTraits`,
   `ActionValidator`, `Loggable`, `BRIDGE_REGISTER_ACTION`, and the server-side
   `ActionDispatcher` counterpart.
+- [`../forms/workflows_navigation.md`](../forms/workflows_navigation.md) —
+  `FlowSession`, the typed sequencer that extends the per-action reactive
+  draft (`subscribe`/`set<>`/`reset`, draft persistence across fires and
+  backend switches) to span a wizard's ordered steps, with no new dispatch
+  path.
 - [`concurrency_and_lifetimes.md`](../concurrency_and_lifetimes.md) — the broader
   mutex-ordering and object-lifetime rules this type participates in.
 - [`forms.md`](../forms/forms.md) — `morph::forms::computed`/`computeList`/`recomputeAll`,

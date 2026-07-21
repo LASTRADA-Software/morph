@@ -76,7 +76,7 @@ from Tier-1 action-forms.
 | Spec | Adds |
 |---|---|
 | [gui_collections_views.md](../spec/forms/views.md) | **Implemented.** List/table + master-detail views generated from query + edit + delete action *sets* — see views.md's API reference. |
-| [gui_workflows_navigation.md](gui_workflows_navigation.md) | Multi-step wizards (shared draft across actions) and an app-shell/route descriptor (menu → screens). |
+| [gui_workflows_navigation.md](../spec/forms/workflows_navigation.md) | **Implemented.** Multi-step wizards (shared draft across actions) and an app-shell/route descriptor (menu → screens) — see workflows_navigation.md's API reference. |
 
 ### Ecosystem — make renderers cheap to own
 

@@ -167,8 +167,11 @@ reference renderer, the schema contract stays renderer-agnostic).
   `spec/forms/views.md` (`morph::views::viewSchemaJson`, `BRIDGE_REGISTER_VIEW`,
   `ViewRegistry`) and the `src/qt/forms` `CollectionView.qml` reference
   renderer.
-- **E-G8 — Workflows & navigation** · P2 · [spec: `planned/gui_workflows_navigation.md`] —
-  multi-step wizards (shared draft across actions) + app-shell/route descriptor.
+- **E-G8 — Workflows & navigation** · P2 · **Implemented** — see
+  `spec/forms/workflows_navigation.md` (`morph::flows::Wizard`/`FlowSession`,
+  `morph::app::App`, `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP`) and the
+  `src/qt/forms` `WizardView.qml` reference renderer plus the demo's
+  `AppShell.qml`.
 
 ### Ecosystem
 
