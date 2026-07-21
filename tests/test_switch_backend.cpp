@@ -447,3 +447,56 @@ TEST_CASE(
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     REQUIRE(counter->load() == 1);
 }
+
+// ── morph::model::detail::IModelHolder::isBackendChangeAware / onBackendChanged ──
+// (compile-time capability capture — introduced to replace the dynamic_cast
+// sweep in LocalBackend::notifyBackendChanged; see docs/spec/core/backend.md)
+
+TEST_CASE("morph::model::detail::ModelHolder::isBackendChangeAware reflects BackendChangedNotifiable<M>",
+          "[model][concept]") {
+    auto notifiable = std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>();
+    auto silent = std::make_unique<morph::model::detail::ModelHolder<SilentModel>>();
+
+    REQUIRE(notifiable->isBackendChangeAware());
+    REQUIRE_FALSE(silent->isBackendChangeAware());
+}
+
+TEST_CASE("morph::model::detail::IModelHolder::onBackendChanged forwards to the model when change-aware",
+          "[model][concept]") {
+    auto holder = std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>();
+    morph::model::detail::IModelHolder* base = holder.get();  // base-class virtual dispatch, no dynamic_cast
+
+    base->onBackendChanged();
+    REQUIRE(holder->model.notifyCount == 1);
+
+    base->onBackendChanged();
+    REQUIRE(holder->model.notifyCount == 2);
+}
+
+TEST_CASE("morph::model::detail::IModelHolder::onBackendChanged is a no-op for a non-aware model",
+          "[model][concept]") {
+    auto holder = std::make_unique<morph::model::detail::ModelHolder<SilentModel>>();
+    morph::model::detail::IModelHolder* base = holder.get();
+
+    REQUIRE_NOTHROW(base->onBackendChanged());
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelHolder: the IModelHolder::onBackendChanged path and the "
+    "dynamic_cast<IBackendChangedSink*> path both reach the same underlying call",
+    "[model][concept]") {
+    // ModelHolder<Model>::onBackendChanged() is declared once but is the final
+    // overrider for two unrelated base virtuals: IModelHolder::onBackendChanged
+    // (new) and, when Model is notifiable, IBackendChangedSink::onBackendChanged
+    // (reached via BackendChangedMixin<Model, true>). This test proves both
+    // call paths land on the identical implementation.
+    auto holder = std::make_unique<morph::model::detail::ModelHolder<NotifiableModel>>();
+
+    static_cast<morph::model::detail::IModelHolder&>(*holder).onBackendChanged();
+    REQUIRE(holder->model.notifyCount == 1);
+
+    auto* sink = dynamic_cast<morph::model::detail::IBackendChangedSink*>(holder.get());
+    REQUIRE(sink != nullptr);
+    sink->onBackendChanged();
+    REQUIRE(holder->model.notifyCount == 2);
+}

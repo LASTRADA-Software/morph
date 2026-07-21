@@ -66,6 +66,24 @@ struct IModelHolder {
     /// @brief Returns the `std::type_index` of the concrete model type.
     [[nodiscard]] virtual std::type_index type() const noexcept = 0;
 
+    /// @brief Returns `true` if the concrete model type declares `void onBackendChanged()`.
+    ///
+    /// Answered by `ModelHolder<Model>` from the `BackendChangedNotifiable<Model>`
+    /// concept — a compile-time constant per concrete `Model` — so a backend can
+    /// learn this once, at registration time, instead of `dynamic_cast`ing every
+    /// holder on every backend switch. See `LocalBackend::registerModel` /
+    /// `LocalBackend::notifyBackendChanged` (`backend.hpp`).
+    [[nodiscard]] virtual bool isBackendChangeAware() const noexcept = 0;
+
+    /// @brief Forwards to the concrete model's `onBackendChanged()`, if it declared one.
+    ///
+    /// Default implementation is a no-op, for holders whose model is not
+    /// backend-change-aware. `ModelHolder<Model>` overrides this to call
+    /// `Model::onBackendChanged()` when `BackendChangedNotifiable<Model>` holds.
+    /// Called by `LocalBackend::notifyBackendChanged` through this base-class
+    /// virtual — no `dynamic_cast`, no RTTI dependency on this path.
+    virtual void onBackendChanged() {}
+
     /// @brief Down-casts to a concrete `Model` reference.
     ///
     /// @tparam Model The expected concrete type.
@@ -160,6 +178,24 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
 
     /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.
     [[nodiscard]] std::type_index type() const noexcept override { return typeid(Model); }
+
+    /// @brief Returns `BackendChangedNotifiable<Model>` — a compile-time constant.
+    [[nodiscard]] bool isBackendChangeAware() const noexcept override { return BackendChangedNotifiable<Model>; }
+
+    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.
+    ///
+    /// This single definition is the final overrider for two unrelated base
+    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`
+    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via
+    /// `BackendChangedMixin<Model, true>`. That mixin's own forwarding body
+    /// becomes unreachable (shadowed by this more-derived override) but is left
+    /// as-is; both call paths (`IModelHolder*` and `dynamic_cast<IBackendChangedSink*>`)
+    /// land here.
+    void onBackendChanged() override {
+        if constexpr (BackendChangedNotifiable<Model>) {
+            model.onBackendChanged();
+        }
+    }
 };
 
 /// @brief Factory that creates default-constructed `ModelHolder<Model>` instances.
