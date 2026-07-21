@@ -25,6 +25,7 @@
 #include "../session/session.hpp"
 #include "backend.hpp"
 #include "logger.hpp"
+#include "observability.hpp"
 #include "wire.hpp"
 
 namespace morph::backend {
@@ -240,6 +241,16 @@ private:
 /// `RemoteServer::handle()`/`handleInline()` calls always have. Non-zero
 /// values are minted by `RemoteServer::openConnection()`.
 using ConnectionId = std::uint64_t;
+
+/// @brief Snapshot of a `RemoteServer`'s current health.
+struct HealthStatus {
+    /// @brief `true` if the server currently accepts and dispatches new work.
+    bool ready;
+    /// @brief Number of models currently registered on the server.
+    std::size_t liveModels;
+    /// @brief Number of executes currently dispatched but not yet replied.
+    std::size_t inFlight;
+};
 
 /// @brief Server-side message handler that owns model instances and dispatches actions.
 ///
@@ -470,6 +481,46 @@ public:
         _maxVersion.store(max);
     }
 
+    /// @brief Snapshots the server's current health. Cheap; safe from any thread.
+    /// @return Current `HealthStatus` (`liveModels` from the registry, `inFlight`
+    ///         from the same counter the `executeInFlight` metric reads).
+    [[nodiscard]] HealthStatus health() const {
+        std::size_t liveModels = 0;
+        {
+            std::scoped_lock const lock{_regMtx};
+            liveModels = _models.size();
+        }
+        return HealthStatus{
+            .ready = _ready.load(std::memory_order_relaxed),
+            .liveModels = liveModels,
+            .inFlight = _inFlightExecutes.load(std::memory_order_relaxed),
+        };
+    }
+
+    /// @brief Installs @p handler, invoked immediately with the current
+    ///        `health()` snapshot, and again whenever readiness changes.
+    ///
+    /// Thread-safe. Pass `nullptr` to remove a previously installed handler
+    /// (clearing does not itself invoke anything). `RemoteServer` has no
+    /// internal path that flips `HealthStatus::ready` to `false` yet — that
+    /// arrives with a future shutdown sequence — so today the handler only ever
+    /// observes `ready == true`, but is retained so that sequence can fire it
+    /// without any change to this API. A deployment's transport (e.g.
+    /// `QtWebSocketServer`) can expose `health()`/this handler over an
+    /// HTTP/probe endpoint; `morph` does not embed an HTTP server.
+    /// @param handler Callback invoked with the current `HealthStatus`.
+    void setHealthHandler(std::function<void(const HealthStatus&)> handler) {
+        std::function<void(const HealthStatus&)> toCall;
+        {
+            std::scoped_lock const lock{_healthMtx};
+            _healthHandler = std::move(handler);
+            toCall = _healthHandler;
+        }
+        if (toCall) {
+            toCall(health());
+        }
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
@@ -481,6 +532,7 @@ private:
         }
         try {
             if (env.kind == "register") {
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
                 if (env.typeId.empty()) {
                     throw std::runtime_error("register requires a typeId");
                 }
@@ -552,6 +604,7 @@ private:
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
                 ::morph::exec::detail::ModelId const mid{env.modelId};
                 // Per-instance authorization also gates deregister: consult the
                 // hook with the recorded owner before destroying the instance.
@@ -674,7 +727,13 @@ private:
         // external shared_ptr could drop before the strand task executes, leaving
         // `_dispatcher` dangling (use-after-free) or the reply silently lost so a
         // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
-        _inFlightExecutes.fetch_add(1, std::memory_order_relaxed);
+        // Concurrent in-flight executes: this is the same counter
+        // LimitPolicy::maxInFlightExecutes checks above, reused (not duplicated)
+        // as the executeInFlight metric's gauge and health()'s inFlight field —
+        // one counter, three consumers, never double-counted.
+        auto const inFlightAfterInc = _inFlightExecutes.fetch_add(1, std::memory_order_relaxed) + 1;
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                             static_cast<double>(inFlightAfterInc));
         auto self = shared_from_this();
         std::uint64_t const callId = env.callId;
 
@@ -687,7 +746,9 @@ private:
         auto replySlot = std::make_shared<std::function<void(std::string)>>(std::move(reply));
         auto complete = [self, finished, replySlot](std::string msg) {
             if (!finished->test_and_set()) {
-                self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed);
+                auto const inFlightAfterDec = self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed) - 1;
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                     static_cast<double>(inFlightAfterDec));
                 (*replySlot)(std::move(msg));
             }
         };
@@ -703,6 +764,17 @@ private:
         }
 
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
+            auto const start = std::chrono::steady_clock::now();
+            auto const spanId =
+                ::morph::observe::detail::beginSpan(env.session.requestId, env.modelType, env.actionType);
+            // Metrics and endSpan are recorded before `complete(...)` runs (below)
+            // so a caller observing completion — via handle()'s reply or the
+            // timeout path racing it — can never see the reply before this
+            // dispatch's own instrumentation is recorded. This mirrors the
+            // reply-exactly-once contract `complete` already provides: whichever
+            // path wins the race, the metrics for *this* strand task are always
+            // emitted here, exactly once, regardless of which path's reply the
+            // caller actually receives.
             try {
                 ::morph::session::detail::ScopedContext const scoped{env.session};
                 // `dispatch` (registry.hpp, ActionDispatcher::registerAction's runner)
@@ -720,6 +792,12 @@ private:
                         self->_timeoutScheduler->cancel(timeoutHandle);
                     }
                 }
+                ::morph::observe::detail::endSpan(spanId, true);
+                auto const elapsedMs =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                    {{"modelType", env.modelType}, {"actionType", env.actionType}}};
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
                 complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
                 {
@@ -728,6 +806,13 @@ private:
                         self->_timeoutScheduler->cancel(timeoutHandle);
                     }
                 }
+                ::morph::observe::detail::endSpan(spanId, false);
+                auto const elapsedMs =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+                std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                    {{"modelType", env.modelType}, {"actionType", env.actionType}}};
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
                 complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
@@ -757,7 +842,9 @@ private:
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
-    std::mutex _regMtx;
+    // mutable: health() is const and must still be able to lock this to read
+    // _models.size() safely from any thread.
+    mutable std::mutex _regMtx;
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
         _models;
@@ -785,8 +872,20 @@ private:
     LogProvider _logProvider;
     std::mutex _limitsMtx;
     LimitPolicy _limits;
+    // Concurrent in-flight executes: incremented when dispatchExecute admits a
+    // call for dispatch (post-authorization), decremented exactly once when
+    // its reply is delivered (see `complete`, above) — regardless of whether
+    // the winning path was the strand's dispatch or a LimitPolicy::executeTimeout
+    // firing first. Shared by the executeInFlight metric and health()'s
+    // inFlight field: one counter, never double-counted.
     std::atomic<std::size_t> _inFlightExecutes{0};
     std::unique_ptr<detail::TimeoutScheduler> _timeoutScheduler;
+    // Readiness flag for health(). Always true today: nothing in this file
+    // flips it — a future beginShutdown() (docs/planned/graceful_shutdown.md)
+    // is expected to be the first caller that sets it false.
+    std::atomic<bool> _ready{true};
+    std::mutex _healthMtx;
+    std::function<void(const HealthStatus&)> _healthHandler;
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as

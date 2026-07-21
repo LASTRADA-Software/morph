@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/session/session.hpp>
-#include <morph/session/session_auth.hpp>
-#include <morph/core/wire.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/observability.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #include "test_support.hpp"
-
 
 // Fresh dispatcher + registry per test to avoid global state pollution
 struct Env {
@@ -330,12 +332,267 @@ TEST_CASE(
     req.session.principal = "spoofed-client-claim";
     // expiresAtMs must be strictly positive — a zero expiry is now treated as
     // already-expired (never eternal), so mint with a far-future real expiry.
-    req.session.token = morph::session::TokenIssuer{secret}.issue(
-        morph::session::SessionToken{.principal = "real-verified-user", .expiresAtMs = 9'999'999'999'999, .roles = {}});
+    req.session.token = morph::session::TokenIssuer{secret}.issue(morph::session::SessionToken{
+        .principal = "real-verified-user", .expiresAtMs = 9'999'999'999'999, .roles = {}});
 
     WaitReply waiter;
     server->handle(morph::wire::encode(req), std::ref(waiter));
     waiter.await();
     REQUIRE(waiter.env.kind == "ok");
     REQUIRE(waiter.env.body == "\"real-verified-user\"");
+}
+
+// ── morph::backend::RemoteServer: observability (metrics + tracing) ──────────
+
+TEST_CASE("morph::backend::RemoteServer: execute emits executeLatencyMs and toggles executeInFlight",
+          "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
+
+    std::atomic<int> latencyEvents{0};
+    std::mutex sampleMtx;
+    std::vector<double> inFlightSamples;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeLatencyMs) {
+            latencyEvents.fetch_add(1, std::memory_order_relaxed);
+        } else if (evt.metric == morph::observe::Metric::executeInFlight) {
+            std::scoped_lock const lock{sampleMtx};
+            inFlightSamples.push_back(evt.value);
+        }
+    });
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":5})";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "ok");
+
+    REQUIRE(latencyEvents.load() == 1);
+    std::scoped_lock const lock{sampleMtx};
+    REQUIRE(inFlightSamples.size() == 2);
+    REQUIRE(inFlightSamples[0] == 1.0);
+    REQUIRE(inFlightSamples[1] == 0.0);
+}
+
+TEST_CASE("morph::backend::RemoteServer: an erroring execute emits executeErrors", "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+
+    std::atomic<int> errorEvents{0};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::executeErrors) {
+            errorEvents.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareFail";
+    req.body = "{}";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(errorEvents.load() == 1);
+}
+
+TEST_CASE("morph::backend::RemoteServer: register/deregister emit their counters", "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    std::atomic<int> registerEvents{0};
+    std::atomic<int> deregisterEvents{0};
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::registerCount) {
+            registerEvents.fetch_add(1, std::memory_order_relaxed);
+        } else if (evt.metric == morph::observe::Metric::deregisterCount) {
+            deregisterEvents.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
+    dereg.await();
+
+    REQUIRE(registerEvents.load() == 1);
+    REQUIRE(deregisterEvents.load() == 1);
+}
+
+TEST_CASE("morph::backend::RemoteServer: with no sink installed, register still works and metrics stay disabled",
+          "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::observe::setMetricSink(nullptr);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(reg.env.kind == "ok");
+    REQUIRE_FALSE(morph::observe::metricsEnabled());
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: one execute produces exactly one beginSpan/endSpan pair with the caller's "
+    "requestId",
+    "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+
+    std::atomic<int> beginCalls{0};
+    std::atomic<int> endCalls{0};
+    std::string capturedRequestId;
+    morph::observe::setTraceSink(morph::observe::TraceSink{
+        .beginSpan =
+            [&](std::string_view requestId, std::string_view, std::string_view) {
+                beginCalls.fetch_add(1, std::memory_order_relaxed);
+                capturedRequestId = requestId;
+                return morph::observe::SpanId{99};
+            },
+        .endSpan =
+            [&](morph::observe::SpanId id, bool ok) {
+                endCalls.fetch_add(1, std::memory_order_relaxed);
+                REQUIRE(id == 99);
+                REQUIRE(ok);
+            },
+    });
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareAction";
+    req.body = R"({"x":5})";
+    req.session.requestId = "req-abc";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+
+    REQUIRE(waiter.env.kind == "ok");
+    REQUIRE(beginCalls.load() == 1);
+    REQUIRE(endCalls.load() == 1);
+    REQUIRE(capturedRequestId == "req-abc");
+}
+
+TEST_CASE("morph::backend::RemoteServer: endSpan reports ok=false for a failing execute", "[remote][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+
+    std::atomic<bool> capturedOk{true};
+    std::atomic<int> endCalls{0};
+    morph::observe::setTraceSink(morph::observe::TraceSink{
+        .beginSpan = [](std::string_view, std::string_view, std::string_view) { return morph::observe::SpanId{1}; },
+        .endSpan =
+            [&](morph::observe::SpanId, bool ok) {
+                endCalls.fetch_add(1, std::memory_order_relaxed);
+                capturedOk = ok;
+            },
+    });
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = reg.env.modelId;
+    req.modelType = "RX_SquareModel";
+    req.actionType = "RX_SquareFail";
+    req.body = "{}";
+    WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    waiter.await();
+
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(endCalls.load() == 1);
+    REQUIRE_FALSE(capturedOk.load());
+}
+
+// ── morph::backend::RemoteServer: health / readiness ──────────────────────────
+
+TEST_CASE("morph::backend::RemoteServer: health() reports liveModels and inFlight", "[remote][observability]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto initial = server->health();
+    REQUIRE(initial.ready);
+    REQUIRE(initial.liveModels == 0);
+    REQUIRE(initial.inFlight == 0);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("RX_SquareModel")), std::ref(reg));
+    reg.await();
+    REQUIRE(server->health().liveModels == 1);
+
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(reg.env.modelId)), std::ref(dereg));
+    dereg.await();
+    REQUIRE(server->health().liveModels == 0);
+}
+
+TEST_CASE("morph::backend::RemoteServer: setHealthHandler fires immediately with the current status",
+          "[remote][observability]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    int calls = 0;
+    morph::backend::HealthStatus last{};
+    server->setHealthHandler([&](const morph::backend::HealthStatus& status) {
+        ++calls;
+        last = status;
+    });
+
+    REQUIRE(calls == 1);
+    REQUIRE(last.ready);
+    REQUIRE(last.liveModels == 0);
+}
+
+TEST_CASE("morph::backend::RemoteServer: setHealthHandler(nullptr) clears the handler without invoking it",
+          "[remote][observability]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = sharedEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    int calls = 0;
+    server->setHealthHandler([&](const morph::backend::HealthStatus&) { ++calls; });
+    REQUIRE(calls == 1);
+    server->setHealthHandler(nullptr);
+    REQUIRE(calls == 1);
 }
