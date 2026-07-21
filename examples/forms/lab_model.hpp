@@ -196,6 +196,21 @@ struct ShippingAck {
     std::string summary;
 };
 
+/// @brief Registers a new sample and returns its assigned id — step one of
+///        the `IntakeWizard` (see lab_wizard.hpp): the result's `id`
+///        prefills `RecordMeasurement.sampleId` in step two.
+struct RegisterSample {
+    std::string name;
+
+    [[nodiscard]] bool validate() const { return !name.empty(); }
+};
+
+/// @brief Result of `RegisterSample`.
+struct RegisterSampleAck {
+    std::int64_t id = 0;
+    std::string name;
+};
+
 /// @brief The business model behind the generated forms.
 class LabModel {
 public:
@@ -244,6 +259,20 @@ public:
         SampleInfo created{.id = _nextSampleId++, .name = "New sample"};
         _samples.push_back(created);
         return created;
+    }
+
+    /// @brief Registers a new sample under the caller-supplied name — step
+    ///        one of `IntakeWizard` (lab_wizard.hpp). Shares the same id
+    ///        counter and sample list as `CreateSample`/`ListSamples`, so a
+    ///        registered sample is immediately selectable in
+    ///        `RecordMeasurement.sampleId` and shows up in `SamplesView`.
+    RegisterSampleAck execute(const RegisterSample& action) {
+        if (!action.validate()) {
+            throw std::invalid_argument{"RegisterSample: name is required"};
+        }
+        SampleInfo created{.id = _nextSampleId++, .name = action.name};
+        _samples.push_back(created);
+        return RegisterSampleAck{.id = created.id, .name = created.name};
     }
 
     /// @brief Serves the country combo-box options (a pure query,
@@ -330,6 +359,11 @@ struct glz::json_schema<lab::ShippingAddress> {
     schema city{.description = "Destination city (options depend on country)"};
 };
 
+template <>
+struct glz::json_schema<lab::RegisterSample> {
+    schema name{.description = "Sample name/label"};
+};
+
 using lab::ComputeDryDensity;
 using lab::CreateSample;
 using lab::DeleteSample;
@@ -339,6 +373,7 @@ using lab::ListCities;
 using lab::ListCountries;
 using lab::ListSamples;
 using lab::RecordMeasurement;
+using lab::RegisterSample;
 using lab::ShippingAddress;
 
 BRIDGE_REGISTER_MODEL(LabModel, "LabModel")
@@ -351,3 +386,4 @@ BRIDGE_REGISTER_ACTION(LabModel, ShippingAddress, "ShippingAddress")
 BRIDGE_REGISTER_ACTION(LabModel, EditSample, "EditSample")
 BRIDGE_REGISTER_ACTION(LabModel, DeleteSample, "DeleteSample")
 BRIDGE_REGISTER_ACTION(LabModel, CreateSample, "CreateSample")
+BRIDGE_REGISTER_ACTION(LabModel, RegisterSample, "RegisterSample")
