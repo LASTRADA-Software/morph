@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -281,8 +282,8 @@ public:
     }
 
     morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId mid,
-                                                             morph::backend::detail::ActionCall call,
-                                                             morph::exec::IExecutor* cbExec) override {
+                                                            morph::backend::detail::ActionCall call,
+                                                            morph::exec::IExecutor* cbExec) override {
         return _inner.execute(mid, std::move(call), cbExec);
     }
 
@@ -339,9 +340,8 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback on partial failure 
     REQUIRE(res.load() == 3);
 }
 
-TEST_CASE(
-    "morph::bridge::Bridge::switchBackend  -  rollback still rethrows original error when deregister also fails",
-    "[bridge][switch][rollback]") {
+TEST_CASE("morph::bridge::Bridge::switchBackend  -  rollback still rethrows original error when deregister also fails",
+          "[bridge][switch][rollback]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExec cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
@@ -369,4 +369,81 @@ TEST_CASE("morph::bridge::BridgeHandler destructor is a no-op when the bridge is
         // bridge destroyed here while handler still lives — its liveness token expires.
     }
     REQUIRE_NOTHROW(handler.reset());  // handler dtor must not dereference the dangling Bridge&
+}
+
+// ── Behavior-parity fixtures for the compile-time onBackendChanged dispatch
+//    refactor (docs/planned/backend_changed_dispatch.md) ─────────────────────
+//
+// AwareCounterModel exposes its onBackendChanged() side effect through an
+// external std::shared_ptr<std::atomic<int>> (rather than a plain int member
+// like NotifiableModel above) because LocalBackend::registerModel() only ever
+// returns a ModelId — the constructed ModelHolder is never handed back to the
+// caller, so there is no other way to observe the callback firing once the
+// backend owns the holder.
+
+struct AwareCounterModel {
+    std::shared_ptr<std::atomic<int>> counter;
+    void onBackendChanged() { counter->fetch_add(1); }
+};
+
+static std::unique_ptr<morph::model::detail::IModelHolder> makeAwareCounterHolder(
+    std::shared_ptr<std::atomic<int>> counter) {
+    auto holder = std::make_unique<morph::model::detail::ModelHolder<AwareCounterModel>>();
+    holder->model.counter = std::move(counter);
+    return holder;
+}
+
+// ── Parity baseline ───────────────────────────────────────────────────────────
+// These two tests pass against today's dynamic_cast-based
+// LocalBackend::notifyBackendChanged (this task adds no production code).
+// Task 3 re-runs them, byte-for-byte unmodified, against the rewritten
+// implementation to prove the refactor is behavior-preserving.
+
+TEST_CASE(
+    "morph::backend::LocalBackend::notifyBackendChanged: parity baseline - notifies every change-aware "
+    "model in a mixed population",
+    "[backend][notify][parity]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto counter1 = std::make_shared<std::atomic<int>>(0);
+    auto counter2 = std::make_shared<std::atomic<int>>(0);
+    auto counter3 = std::make_shared<std::atomic<int>>(0);
+
+    backend.registerModel("Aware1", [counter1] { return makeAwareCounterHolder(counter1); });
+    backend.registerModel("Silent1",
+                          [] { return std::make_unique<morph::model::detail::ModelHolder<SilentModel>>(); });
+    backend.registerModel("Aware2", [counter2] { return makeAwareCounterHolder(counter2); });
+    backend.registerModel("Silent2",
+                          [] { return std::make_unique<morph::model::detail::ModelHolder<SilentModel>>(); });
+    backend.registerModel("Aware3", [counter3] { return makeAwareCounterHolder(counter3); });
+
+    backend.notifyBackendChanged();
+
+    // Set semantics, not order: the spec makes no ordering guarantee across
+    // models (each is serialised only against itself, via its own strand), so
+    // this only asserts that all three eventually fire, not in what order.
+    REQUIRE(morph::testing::waitUntil(
+        [&] { return counter1->load() == 1 && counter2->load() == 1 && counter3->load() == 1; }));
+}
+
+TEST_CASE(
+    "morph::backend::LocalBackend::notifyBackendChanged: parity baseline - a deregistered change-aware "
+    "model is never notified again",
+    "[backend][notify][parity]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto counter = std::make_shared<std::atomic<int>>(0);
+    auto mid = backend.registerModel("Aware", [counter] { return makeAwareCounterHolder(counter); });
+
+    backend.notifyBackendChanged();
+    REQUIRE(morph::testing::waitUntil([&] { return counter->load() == 1; }));
+
+    backend.deregisterModel(mid);
+    REQUIRE_NOTHROW(backend.notifyBackendChanged());
+
+    // Give any errant post a chance to land, then confirm the count never moved.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    REQUIRE(counter->load() == 1);
 }
