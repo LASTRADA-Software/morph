@@ -34,6 +34,20 @@ BRIDGE_REGISTER_MODEL(SbEchoModel, "SbEchoModel")
 BRIDGE_REGISTER_ACTION(SbEchoModel, SbEchoAction, "SbEchoAction")
 BRIDGE_REGISTER_ACTION(SbEchoModel, SbEchoFail, "SbEchoFail")
 
+struct SbSlowAction {
+    int value = 0;
+};
+
+struct SbSlowModel {
+    int execute(SbSlowAction action) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{300});
+        return action.value;
+    }
+};
+
+BRIDGE_REGISTER_MODEL(SbSlowModel, "SbSlowModel")
+BRIDGE_REGISTER_ACTION(SbSlowModel, SbSlowAction, "SbSlowAction")
+
 namespace {
 void spinUntil(const std::function<bool()>& done, int maxIterations = 200) {
     for (int i = 0; i < maxIterations && !done(); ++i) {
@@ -148,4 +162,162 @@ TEST_CASE("SocketBackend: two backends share one server with isolated model stat
     spinUntil([&] { return lastA.load() != -1 && lastB.load() != -1; });
     REQUIRE(lastA.load() == 11);
     REQUIRE(lastB.load() == 22);
+}
+
+TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
+          "[net][socket_backend][disconnect]") {
+    // Port 1 is reserved (root-only) on Linux/macOS and never listening — the
+    // socket never connects, so the io thread exits without retrying.
+    morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
+    REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
+
+    bool threw = false;
+    std::string what;
+    try {
+        (void)backend.registerModel("SbEchoModel", nullptr);
+    } catch (const std::exception& exc) {
+        threw = true;
+        what = exc.what();
+    }
+    REQUIRE(threw);
+    REQUIRE(what.find("register failed") != std::string::npos);
+    REQUIRE(what.find("disconnected") != std::string::npos);
+}
+
+TEST_CASE("SocketBackend: register after the server closes fails instead of hanging",
+          "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer->port());
+    morph::net::SocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    auto mid = backend.registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid.v != 0U);
+
+    wsServer->close();
+    wsServer.reset();
+
+    bool threw = false;
+    std::string what;
+    for (int i = 0; i < 100 && !threw; ++i) {
+        try {
+            (void)backend.registerModel("SbEchoModel", nullptr);
+        } catch (const std::exception& exc) {
+            threw = true;
+            what = exc.what();
+        }
+        if (!threw) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{20});
+        }
+    }
+    REQUIRE(threw);
+    REQUIRE(what.find("register failed") != std::string::npos);
+}
+
+TEST_CASE("SocketBackend: execute while disconnected resolves immediately with DisconnectedError",
+          "[net][socket_backend][disconnect]") {
+    morph::net::SocketBackend backend{"ws://127.0.0.1:1"};
+    REQUIRE_FALSE(backend.waitForConnected(std::chrono::milliseconds{200}));
+
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::backend::detail::ActionCall call;
+    call.modelTypeId = "SbEchoModel";
+    call.actionTypeId = "SbEchoAction";
+    call.serializeAction = [] { return std::string{"{}"}; };
+    call.deserializeResult = [](std::string_view) -> std::shared_ptr<void> { return nullptr; };
+
+    std::atomic<bool> gotDisconnected{false};
+    auto comp = backend.execute(morph::exec::detail::ModelId{1}, std::move(call), &cbPool);
+    comp.onError([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const morph::backend::DisconnectedError&) {
+            gotDisconnected.store(true);
+        }
+    });
+    spinUntil([&] { return gotDisconnected.load(); });
+    REQUIRE(gotDisconnected.load());
+}
+
+TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completion with DisconnectedError",
+          "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer->port());
+    auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::exec::ThreadPoolExecutor cbPool{1};
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<SbSlowModel> handler{bridge, &cbPool};
+
+    std::atomic<bool> gotDisconnected{false};
+    handler.execute(SbSlowAction{5}).then([](int) {}).onError([&](const std::exception_ptr& exc) {
+        try {
+            std::rethrow_exception(exc);
+        } catch (const morph::backend::DisconnectedError&) {
+            gotDisconnected.store(true);
+        }
+    });
+
+    // Give the request time to reach the server and start the slow action,
+    // then pull the rug out from under the connection before it replies.
+    std::this_thread::sleep_for(std::chrono::milliseconds{50});
+    wsServer->close();
+    wsServer.reset();
+
+    spinUntil([&] { return gotDisconnected.load(); }, 200);
+    REQUIRE(gotDisconnected.load());
+}
+
+TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net][socket_backend][disconnect]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::net::SocketBackend::Config cfg;
+    cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+    cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+
+    std::uint16_t port = 0;
+    std::string url;
+    std::unique_ptr<morph::net::SocketBackend> backend;
+    {
+        auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+        REQUIRE(wsServer->listen());
+        port = wsServer->port();
+        url = "ws://127.0.0.1:" + std::to_string(port);
+
+        backend = std::make_unique<morph::net::SocketBackend>(url, cfg);
+        REQUIRE(backend->waitForConnected());
+
+        auto mid = backend->registerModel("SbEchoModel", nullptr);
+        REQUIRE(mid.v != 0U);
+        // wsServer is destroyed at the end of this scope.
+    }
+    // Give the OS a moment to release the port before rebinding it.
+    std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+    auto wsServer2 = std::make_unique<morph::net::SocketServer>(*server, port);
+    REQUIRE(wsServer2->listen());
+
+    // _connected is a level-triggered flag, so polling waitForConnected
+    // repeatedly is correct: it returns true as soon as the io thread's
+    // backoff loop reconnects (50ms initial delay, 200ms cap).
+    bool reconnected = false;
+    for (int i = 0; i < 100 && !reconnected; ++i) {
+        if (backend->waitForConnected(std::chrono::milliseconds{50})) {
+            reconnected = true;
+        }
+    }
+    REQUIRE(reconnected);
+
+    auto mid2 = backend->registerModel("SbEchoModel", nullptr);
+    REQUIRE(mid2.v != 0U);
 }
