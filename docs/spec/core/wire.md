@@ -121,6 +121,14 @@ authorization) via the action's `fromJson`. Two consequences:
   them; the action codec must (the size cap does bound the total, so `body`
   cannot exceed `kMaxEnvelopeBytes` either).
 
+`tests/fuzz/fuzz_wire_decode.cpp` (built under `MORPH_BUILD_FUZZERS=ON`) fuzzes
+exactly this: `decode()`'s outer parse and, for a decoded `execute` envelope,
+the inner `ActionTraits::fromJson` re-parse of `body` — proving over a
+coverage-guided distribution of inputs, not just the hand-picked cases in
+`test_wire_hardening.cpp`, that both stages either succeed or throw
+`std::runtime_error` and never crash or hang. See
+[testing_strategy.md](../testing_strategy.md).
+
 ### Duplicate JSON keys are accepted (last-wins)
 
 glaze 7.4 does **not** reject duplicate object keys, and exposes no option to

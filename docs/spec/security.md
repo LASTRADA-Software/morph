@@ -9,8 +9,11 @@ session layer (`session.hpp` `Context`/`IAuthorizer`, `session_auth.hpp`
 Related specs: [session.md](session/session.md) (the `Context`/`IAuthorizer` types),
 [wire.md](core/wire.md) (the envelope the `session` travels in),
 [backend.md](core/backend.md) (`RemoteServer`/`LocalBackend` dispatch),
-[error_handling.md](error_handling.md) (how a rejected request surfaces). The
-shipped `morph::qt` WebSocket transport supplies the TLS layer discussed below.
+[error_handling.md](error_handling.md) (how a rejected request surfaces), and
+[testing_strategy.md](testing_strategy.md) (the fuzz/soak/load/adversarial
+suites that exercise this trust model over distributions and time, rather than
+single-shot examples). The shipped `morph::qt` WebSocket transport supplies the
+TLS layer discussed below.
 
 ## Threat model — what morph does and does not defend
 
@@ -681,3 +684,16 @@ impl. `tests/CMakeLists.txt` additionally runs three `try_compile` checks
 proving the `MORPH_REQUIRE_VETTED_HMAC` default-argument guard: it blocks a
 construction relying on the default, still allows one with an explicit
 `MacFunction`, and leaves the default working when the option is off.
+
+Four opt-in suites generalise this coverage from single-shot examples to
+distributions of input and time: `tests/fuzz/fuzz_wire_decode.cpp` and
+`tests/fuzz/fuzz_dispatch_execute.cpp` (`MORPH_BUILD_FUZZERS=ON`) coverage-fuzz
+`wire::decode`, the inner `body` re-parse, and `RemoteServer::dispatchMessage`;
+`tests/soak/` (`MORPH_BUILD_LOAD_TESTS=ON`) cycles `switchBackend` and the
+`NetworkMonitor`/`ReconnectCoordinator`/`SyncWorker` pipeline for hundreds of
+cycles, checking resource stability rather than a single transition;
+`tests/bench/bench_dispatch_latency.cpp` baselines dispatch throughput/latency;
+and `tests/qt/test_qt_websocket_adversarial.cpp` drives a hostile client
+(oversized frames, a message flood, a duplicate-key envelope, a stalled
+connection) against a real `QtWebSocketServer` and confirms honest clients are
+unaffected. See [testing_strategy.md](testing_strategy.md).

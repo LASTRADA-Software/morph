@@ -669,3 +669,7 @@ Honest boundaries of what ships today:
   `ReconnectCoordinator::onOnline()`'s `reconnectAttempts`/`reconnectOutcome`
   counters, fed through the same injectable `morph::observe` seam
   `RemoteServer`/`LocalBackend` use.
+- **`testing_strategy.md`** — the soak test (`tests/soak/test_soak_reconnect_churn.cpp`)
+  that drives this exact `NetworkMonitor` → `ReconnectCoordinator` → `SyncWorker`
+  pipeline through hundreds of offline/online flaps and asserts the queue
+  always fully drains and every reconnect attempt succeeds.

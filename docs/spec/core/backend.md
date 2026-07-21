@@ -875,6 +875,7 @@ not a behavior change to the existing loopback-only default.
 | offline.md | `NetworkMonitorConfig` (the sibling struct whose declaration-order rationale `QtWebSocketBackendConfig` mirrors) and the disconnect/reconnect story the `QtWebSocketBackend` transport participates in. |
 | executor.md | `IExecutor` / `ThreadPoolExecutor` (the server worker pool) and `qt/qt_executor.hpp`'s `QtExecutor`, the `cbExec` used to deliver completion callbacks onto the Qt thread. |
 | observability.md | The `morph::observe` metrics/trace seam wrapping `RemoteServer`/`LocalBackend` dispatch, and `RemoteServer::health()`/`setHealthHandler()`. |
+| testing_strategy.md | `fuzz_dispatch_execute` fuzzes `RemoteServer::handle`/`dispatchMessage` directly; the soak test (`test_soak_switch_backend.cpp`) cycles `switchBackend` between `LocalBackend` and `SimulatedRemoteBackend` under load; the load benchmark (`bench_dispatch_latency.cpp`) baselines dispatch throughput/latency; the adversarial run (`test_qt_websocket_adversarial.cpp`) drives a hostile client against `QtWebSocketServer` and exercises the default (unconfigured) `LimitPolicy`/`QtWebSocketServerConfig`. |
 
 ## Limitations
 

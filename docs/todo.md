@@ -104,11 +104,12 @@ Qt-event-loop-bound. Shops that don't want Qt on the server must implement
 transport-agnostic (or plain-socket / HTTP) transport, or a documented, worked
 example of writing one. *Touches:* new example, `backend.md`.
 
-### C3 — Load / soak / fuzz testing · P1 · [spec: `planned/testing_strategy.md`]
-Unit coverage is strong (2734 assertions), but there is no evidence of load, soak,
-or fuzz testing, or an adversarial cross-process run. *Work:* a fuzz harness over
-`wire::decode`/`dispatchExecute`, a soak test for reconnect/switchBackend churn,
-and a throughput/latency benchmark. Gates confidence in A1–A3.
+### C3 — Load / soak / fuzz testing · P1 · shipped — folded into [`spec/testing_strategy.md`](spec/testing_strategy.md)
+`fuzz_wire_decode`/`fuzz_dispatch_execute` (`MORPH_BUILD_FUZZERS=ON`), the
+switchBackend/reconnect soak tests and the throughput/latency benchmark
+(`MORPH_BUILD_LOAD_TESTS=ON`), and the adversarial cross-socket run
+(`MORPH_BUILD_QT=ON`) are implemented, all opt-in/default-off. See
+`spec/testing_strategy.md` for what each proves and how to scale/run them.
 
 ### C4 — Compile-time `onBackendChanged` dispatch · P2 · [spec: `planned/backend_changed_dispatch.md`]
 `LocalBackend::notifyBackendChanged` `dynamic_cast`s every live model under the
