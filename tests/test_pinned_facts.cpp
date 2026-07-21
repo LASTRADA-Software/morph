@@ -19,14 +19,20 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
 #include <string_view>
 
 #include "pinned_facts_generated.hpp"
+#include "test_support.hpp"
 
 // ── Key constants ────────────────────────────────────────────────────────────
 
@@ -144,4 +150,125 @@ TEST_CASE("pinned-facts: canonical Completion cancellation error strings", "[pin
             morph::pinned_facts::kExpected_BRIDGE_DESTROYED_ERROR_WHAT);
     REQUIRE(std::string_view{morph::backend::DisconnectedError{}.what()} ==
             morph::pinned_facts::kExpected_DISCONNECTED_ERROR_WHAT);
+}
+
+// ── Canonical RemoteServer reply strings ────────────────────────────────────
+//
+// A fresh dispatcher + registry per test file (not the process-level
+// singleton default) avoids type-id collisions with every other TU in the
+// suite -- the same pattern test_remote_extra.cpp and test_policy_hardening.cpp
+// already use. File-scope (not an anonymous namespace), matching the exact
+// convention those two files use for their own probe model/action types.
+
+struct DriftGuardEnv {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+};
+
+struct DriftGuardProbeAction {
+    int x = 0;
+};
+
+struct DriftGuardProbeModel {
+    int execute(const DriftGuardProbeAction& act) { return act.x; }
+};
+
+struct DenyAllAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context& /*ctx*/, std::string_view /*modelType*/,
+                                 std::string_view /*actionType*/) const override {
+        return false;
+    }
+};
+
+template <>
+struct morph::model::ModelTraits<DriftGuardProbeModel> {
+    static constexpr std::string_view typeId() { return "DG_ProbeModel"; }
+};
+
+template <>
+struct morph::model::ActionTraits<DriftGuardProbeAction> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "DG_ProbeAction"; }
+    static std::string toJson(const DriftGuardProbeAction& act) {
+        std::string out;
+        (void)glz::write_json(act, out);
+        return out;
+    }
+    static DriftGuardProbeAction fromJson(std::string_view json) {
+        DriftGuardProbeAction action{};
+        (void)glz::read_json(action, json);
+        return action;
+    }
+    static std::string resultToJson(const int& res) {
+        std::string out;
+        (void)glz::write_json(res, out);
+        return out;
+    }
+    static int resultFromJson(std::string_view json) {
+        int result{};
+        (void)glz::read_json(result, json);
+        return result;
+    }
+};
+
+static DriftGuardEnv& driftGuardEnv() {
+    static DriftGuardEnv env = [] {
+        DriftGuardEnv env2;
+        env2.registry.registerModel<DriftGuardProbeModel>("DG_ProbeModel");
+        env2.dispatcher.registerAction<DriftGuardProbeModel, DriftGuardProbeAction>("DG_ProbeModel", "DG_ProbeAction");
+        return env2;
+    }();
+    return env;
+}
+
+TEST_CASE("pinned-facts: RemoteServer denies with the canonical \"unauthorized\" reply", "[pinned-facts]") {
+    morph::testing::InlineExecutor pool;
+    auto& env = driftGuardEnv();
+    auto authz = std::make_shared<DenyAllAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, env.dispatcher, env.registry);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = 1;
+    req.modelType = "DG_ProbeModel";
+    req.actionType = "DG_ProbeAction";
+    req.body = "{}";
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == morph::pinned_facts::kExpected_UNAUTHORIZED_REPLY);
+}
+
+TEST_CASE("pinned-facts: RemoteServer replies \"model not found\" for an unknown model id", "[pinned-facts]") {
+    morph::testing::InlineExecutor pool;
+    auto& env = driftGuardEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.modelId = 999999;  // never registered
+    req.modelType = "DG_ProbeModel";
+    req.actionType = "DG_ProbeAction";
+    req.body = "{}";
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == morph::pinned_facts::kExpected_MODEL_NOT_FOUND_REPLY);
+}
+
+TEST_CASE("pinned-facts: RemoteServer replies \"register requires a typeId\" for an empty typeId", "[pinned-facts]") {
+    morph::testing::InlineExecutor pool;
+    auto& env = driftGuardEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    morph::wire::Envelope req;
+    req.kind = "register";
+    req.typeId = "";  // empty on purpose
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == morph::pinned_facts::kExpected_REGISTER_REQUIRES_TYPEID_REPLY);
 }
