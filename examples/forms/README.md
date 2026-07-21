@@ -97,6 +97,19 @@ for the same action (last-arrival wins on the displayed result) — acceptable f
 read-mostly compute actions, but worth knowing before reusing this pattern for actions with
 side effects.
 
+The window that opens (`AppShell.qml`) is a small app shell: a sidebar built
+from `morph::app::appSchemaJson<lab::LabApp>()`'s `app-menu` routes to either
+a plain action form (`ComputeDryDensity`, `RecordMeasurement`) or the
+"Intake" wizard — `morph::flows::wizardSchemaJson<lab::IntakeWizard>()` — a
+two-step flow (`RegisterSample` then `RecordMeasurement`) where step two's
+`sampleId` is prefilled from step one's returned id. `qml/Main.qml` (the
+flat "every schema on one scroll" renderer) still exists unchanged and is
+still buildable/importable; `AppShell.qml` is the new default entry point.
+See `docs/spec/forms/workflows_navigation.md` for the full `w-*`/`app-*`
+schema contract and the reference renderer's documented limitations
+(prefill does not visually resync a widget's displayed text; navigating
+away from a wizard screen and back resets its step).
+
 ## Tests
 
 The demo ships with its own test vectors (they run as part of `ctest`):
