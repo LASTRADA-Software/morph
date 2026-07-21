@@ -27,11 +27,8 @@ namespace {
 
 /// Fully-initialised LogEntry construction — mirrors test_action_log.cpp's helper
 /// so call sites only spell out what a given test actually cares about.
-/// [[maybe_unused]] only until Task 2's tests (below, added in a later commit)
-/// start calling this; strict compilation (-Wunused-function) errors on an
-/// unused free function otherwise.
-[[maybe_unused]] LogEntry makeEntry(std::string modelType, std::string entityKey, std::string actionType,
-                                    std::string payload = {}, std::string result = {}) {
+LogEntry makeEntry(std::string modelType, std::string entityKey, std::string actionType, std::string payload = {},
+                   std::string result = {}) {
     return LogEntry{
         .seq = 0,
         .modelType = std::move(modelType),
@@ -87,4 +84,89 @@ TEST_CASE("journal::fromJson: leniency does not tolerate syntactically malformed
     // Leniency only changes how *unknown keys* are handled — it must not paper
     // over genuinely broken JSON.
     REQUIRE_THROWS_AS(morph::journal::fromJson("not json"), morph::journal::SerializationError);
+}
+
+// ── kLogFormatVersion / LogEntry::v ─────────────────────────────────────────
+
+TEST_CASE("journal::kLogFormatVersion is 1", "[journal][format][version]") {
+    STATIC_REQUIRE(morph::journal::kLogFormatVersion == 1U);
+}
+
+TEST_CASE("journal::toJson/fromJson: a freshly-constructed entry round-trips v = kLogFormatVersion",
+          "[journal][format][version]") {
+    auto entry = makeEntry("M", "e", "A", "{}", "1");
+    REQUIRE(entry.v == morph::journal::kLogFormatVersion);  // default member initializer
+
+    auto json = morph::journal::toJson(entry);
+    auto decoded = morph::journal::fromJson(json);
+    REQUIRE(decoded.v == morph::journal::kLogFormatVersion);
+}
+
+TEST_CASE("journal::fromJson: a legacy line with no v key decodes as v == kLogFormatVersion",
+          "[journal][format][version]") {
+    auto legacyJson = std::string{R"({"seq":1,"modelType":"M","entityKey":"e","actionType":"A",)"
+                                  R"("payload":"{}","result":"","principal":"","timestampMs":100})"};
+    auto entry = morph::journal::fromJson(legacyJson);
+    REQUIRE(entry.v == morph::journal::kLogFormatVersion);
+    REQUIRE(entry.v == 1U);
+}
+
+TEST_CASE("journal::fromJson: throws SerializationError when v exceeds kLogFormatVersion",
+          "[journal][format][version]") {
+    auto futureJson = std::string{R"({"seq":1,"modelType":"M","entityKey":"e","actionType":"A",)"
+                                  R"("payload":"{}","result":"","principal":"","timestampMs":100,"v":)"} +
+                      std::to_string(morph::journal::kLogFormatVersion + 1) + "}";
+    REQUIRE_THROWS_AS(morph::journal::fromJson(futureJson), morph::journal::SerializationError);
+}
+
+// ── FileActionLog: v-too-new interacts with the existing torn-line rule ────
+
+TEST_CASE(
+    "FileActionLog::entries(): a trailing line with v newer than this build is skipped, "
+    "like any other malformed trailing line",
+    "[journal][format][version][file]") {
+    TempFile tmp{"version_trailing_future"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
+        log.flush();
+    }
+    {
+        std::ofstream raw{tmp.path, std::ios::app};
+        raw << R"({"seq":2,"modelType":"M","entityKey":"acct-2","actionType":"A","payload":"{}",)"
+            << R"("result":"2","principal":"","timestampMs":1,"v":)" << (morph::journal::kLogFormatVersion + 1)
+            << "}\n";
+    }
+
+    FileActionLog log{tmp.path};
+    auto all = log.entries();
+    REQUIRE(all.size() == 1);
+    REQUIRE(all[0].entityKey == "acct-1");
+}
+
+TEST_CASE(
+    "FileActionLog::entries(): a mid-file line with v newer than this build is genuine "
+    "corruption and is re-thrown",
+    "[journal][format][version][file]") {
+    TempFile tmp{"version_midfile_future"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
+        log.flush();
+    }
+    {
+        std::ofstream raw{tmp.path, std::ios::app};
+        raw << R"({"seq":2,"modelType":"M","entityKey":"acct-2","actionType":"A","payload":"{}",)"
+            << R"("result":"2","principal":"","timestampMs":1,"v":)" << (morph::journal::kLogFormatVersion + 1)
+            << "}\n";
+        raw << morph::journal::toJson(makeEntry("M", "acct-3", "A", "{}", "3")) << "\n";
+    }
+
+    // FileActionLog's constructor rebuilds its idempotencyKey dedup set by
+    // scanning entries() at open time (composing with B2's dedup logic), so a
+    // pre-existing interior corruption — including a too-new v — throws from
+    // construction itself, not just from a later explicit entries() call. See
+    // the identical pattern in test_action_log_phase2.cpp's own mid-file
+    // corruption test.
+    REQUIRE_THROWS_AS(FileActionLog(tmp.path), morph::journal::SerializationError);
 }

@@ -14,6 +14,15 @@
 
 namespace morph::journal {
 
+/// @brief Current line-format version stamped on every newly-written
+///        `LogEntry` (`LogEntry::v`'s default).
+///
+/// Bumped only on a **breaking** change to `LogEntry`'s on-disk/on-wire shape;
+/// an additive key (tolerated by `fromJson`'s lenient decode) does not bump
+/// it. A reader refuses to decode a line whose `v` exceeds this constant —
+/// see `fromJson`.
+inline constexpr std::uint32_t kLogFormatVersion = 1;
+
 /// @brief One recorded execution of an action against a model instance.
 ///
 /// Produced automatically by `morph::model::detail::IModelHolder::recordIfAttached`
@@ -52,6 +61,16 @@ struct LogEntry {
     ///        stored verbatim, stable across restarts for one logical outbox row.
     ///        See `journal::OutboxRelay` (`outbox.hpp`) for how it's used.
     std::string idempotencyKey{};
+
+    /// @brief Line-format version this entry was written at.
+    ///
+    /// Defaults to `kLogFormatVersion`, so every freshly-constructed entry
+    /// already carries the current version with no separate stamping step. A
+    /// legacy line (written before this field existed) has no `v` key; under
+    /// `fromJson`'s lenient decode that is just an absent key, so it decodes
+    /// with this same default — i.e. legacy data reads as `v == 1`, which is
+    /// correct: v1 is today's shape, `kLogFormatVersion` merely names it.
+    std::uint32_t v = kLogFormatVersion;
 };
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.
@@ -105,13 +124,22 @@ inline std::string toJson(const LogEntry& entry) {
 /// an unknown/extra JSON key (e.g. an additive field written by a newer morph
 /// build) is ignored rather than rejected. Same duplicate-key caveat as
 /// `wire::decode`: last-wins, not a security boundary (glaze offers no reject
-/// option). Syntactically malformed JSON still throws.
-/// @throws SerializationError if @p json is not valid JSON, or does not decode
-///         into a `LogEntry`.
+/// option). Syntactically malformed JSON still throws. After a successful
+/// decode, also enforces the line-format version rule: `v <= kLogFormatVersion`
+/// decodes normally, `v` greater than this build's `kLogFormatVersion` throws
+/// — a build refuses to guess at a line format newer than any it has seen.
+/// @throws SerializationError if @p json is not valid JSON, does not decode
+///         into a `LogEntry`, or decodes with `v` greater than
+///         `kLogFormatVersion`.
 inline LogEntry fromJson(std::string_view json) {
     LogEntry entry{};
     static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
     detail::throwOnGlazeError(glz::read<kLenient>(entry, json), json);
+    if (entry.v > kLogFormatVersion) {
+        throw SerializationError{
+            "journal::fromJson: line format v" + std::to_string(entry.v) +
+            " is newer than this build supports (kLogFormatVersion = " + std::to_string(kLogFormatVersion) + ")"};
+    }
     return entry;
 }
 
