@@ -573,7 +573,7 @@ struct Engaged {
 
     /// @brief Emits this condition's `x-rules` JSON node.
     /// @return `{"kind":"engaged","fields":["<wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -613,7 +613,7 @@ struct NotEngaged {
 
     /// @brief Emits this condition's `x-rules` JSON node.
     /// @return `{"kind":"notEngaged","fields":["<wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -670,7 +670,7 @@ struct Greater {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"greater","fields":["<lhs wire name>","<rhs wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -725,7 +725,7 @@ struct GreaterOrEqual {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"greaterOrEqual","fields":["<lhs wire name>","<rhs wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -780,7 +780,7 @@ struct Less {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"less","fields":["<lhs wire name>","<rhs wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -835,7 +835,7 @@ struct LessOrEqual {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"lessOrEqual","fields":["<lhs wire name>","<rhs wire name>"]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -904,7 +904,7 @@ struct Equals {
     /// @return `{"kind":"equals","fields":["<wire name>"],"value":...}`,
     ///         where `value` is `{"num":...,"den":...}` for a `Rational`
     ///         literal and the bare scalar otherwise.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
@@ -976,13 +976,13 @@ struct RequiredWhen {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"requiredWhen","fields":["<wire name>"],"when":{...}}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
         fields.emplace_back(detail::resolveFieldName(field));
         node["fields"] = fields;
-        node["when"] = when.emit();
+        node["when"] = when.emitNode();
         return node;
     }
 };
@@ -1027,7 +1027,7 @@ struct ExactlyOneOf {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"exactlyOneOf","fields":["<wire name>", ...]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t names{};
@@ -1074,7 +1074,7 @@ struct AtLeastOneOf {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"atLeastOneOf","fields":["<wire name>", ...]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t names{};
@@ -1121,7 +1121,7 @@ struct MutuallyExclusive {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"mutuallyExclusive","fields":["<wire name>", ...]}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t names{};
@@ -1174,13 +1174,13 @@ struct VisibleWhen {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"visibleWhen","fields":["<wire name>"],"when":{...}}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
         fields.emplace_back(detail::resolveFieldName(field));
         node["fields"] = fields;
-        node["when"] = when.emit();
+        node["when"] = when.emitNode();
         return node;
     }
 };
@@ -1228,13 +1228,13 @@ struct ReadonlyWhen {
 
     /// @brief Emits this rule's `x-rules` JSON node.
     /// @return `{"kind":"readonlyWhen","fields":["<wire name>"],"when":{...}}`.
-    [[nodiscard]] glz::generic_u64 emit() const {
+    [[nodiscard]] glz::generic_u64 emitNode() const {
         glz::generic_u64 node{};
         node["kind"] = std::string{detail::ruleKindName(kind)};
         glz::generic_u64::array_t fields{};
         fields.emplace_back(detail::resolveFieldName(field));
         node["fields"] = fields;
-        node["when"] = when.emit();
+        node["when"] = when.emitNode();
         return node;
     }
 };
@@ -1715,11 +1715,15 @@ template <typename A>
     // when the action declares `formRules`, so an unannotated action's
     // schema is byte-identical to before this feature existed. Walks
     // whatever rule node types A::formRules holds -- every node type past
-    // and future exposes the same emit() -> glz::generic_u64 shape, so this
-    // loop needs no changes as new rule kinds are added.
+    // and future exposes the same emitNode() -> glz::generic_u64 shape, so
+    // this loop needs no changes as new rule kinds are added. (Named
+    // emitNode(), not emit(), because Qt's <QObject> headers `#define emit`
+    // as an empty macro -- a bare `emit()` silently vanishes and fails to
+    // parse in any translation unit that includes both Qt and this header,
+    // e.g. examples/forms/gui_qml/FormsController.cpp.)
     if constexpr (HasFormRules<A>) {
         glz::generic_u64::array_t xRules{};
-        std::apply([&](const auto&... rule) { (xRules.emplace_back(rule.emit()), ...); }, A::formRules.rules);
+        std::apply([&](const auto&... rule) { (xRules.emplace_back(rule.emitNode()), ...); }, A::formRules.rules);
         dom["x-rules"] = xRules;
     }
 
