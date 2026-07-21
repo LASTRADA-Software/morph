@@ -28,15 +28,21 @@
 /// (added by `morph::forms::schemaJson`), so a client knows *which action to
 /// call* and *which result fields to use* without hardcoding anything.
 ///
+/// A `Choice` can also declare a `DependsOn` pack naming sibling fields whose
+/// current values parameterise the options action — a cascading picklist
+/// (e.g. the list of cities depends on the selected country). The options
+/// action then receives `{name: value, ...}` instead of an empty body, and
+/// the schema additionally carries `x-optionsDependsOn`. See
+/// `optionsDependsOn()` below; a `Choice` with no `DependsOn` is unaffected.
+///
 /// On the wire a `Choice` is its nullable underlying value (`T`); the
 /// options metadata never travels with payloads. Like `Quantity` and
 /// `Timestamp`, the blank state ("nothing selected") lives inside, and a
 /// non-optional `Choice` member is *required* by the `morph::forms` rules.
 
-#include <glaze/glaze.hpp>
-
 #include <array>
 #include <cstddef>
+#include <glaze/glaze.hpp>
 #include <optional>
 #include <string_view>
 #include <type_traits>
@@ -62,10 +68,19 @@ using FixedString = ::morph::detail::FixedString<N>;
 /// @tparam T             Underlying value type submitted on the wire (e.g.
 ///                       `std::int64_t` for ids, `std::string` for codes).
 /// @tparam OptionsAction Type id of the registered action whose result
-///                       provides the options (executed with an empty body).
+///                       provides the options. Executed with an empty body
+///                       when `DependsOn` is empty (the common case);
+///                       otherwise with a body built from the current
+///                       values of the named sibling fields.
 /// @tparam ValueField    Field of each result row submitted as the value.
 /// @tparam LabelField    Field of each result row shown to the user.
-template <typename T, FixedString OptionsAction, FixedString ValueField = "id", FixedString LabelField = "name">
+/// @tparam DependsOn     Wire (JSON) field names of sibling fields in the
+///                       same action whose current values parameterise the
+///                       options action — a cascading picklist. Empty by
+///                       default, which makes the options action
+///                       independent (today's behavior, unchanged).
+template <typename T, FixedString OptionsAction, FixedString ValueField = "id", FixedString LabelField = "name",
+          FixedString... DependsOn>
 struct Choice {
     /// @brief The payload; `std::nullopt` means "nothing selected".
     std::optional<T> value;
@@ -94,6 +109,14 @@ struct Choice {
     /// @return The field name declared in the field's type.
     [[nodiscard]] static constexpr std::string_view labelField() noexcept { return LabelField.view(); }
 
+    /// @brief Wire field names of sibling fields whose current values
+    ///        parameterise the options action (a cascading picklist).
+    /// @return The declared `DependsOn` names, in declaration order; empty
+    ///         for an independent `Choice` (the default).
+    [[nodiscard]] static constexpr std::array<std::string_view, sizeof...(DependsOn)> optionsDependsOn() noexcept {
+        return {DependsOn.view()...};
+    }
+
     /// @brief Whether a value has been selected.
     /// @return `true` if the payload is engaged.
     [[nodiscard]] constexpr bool hasValue() const noexcept { return value.has_value(); }
@@ -116,8 +139,9 @@ namespace detail {
 template <typename T>
 struct IsChoice : std::false_type {};
 
-template <typename T, FixedString OptionsAction, FixedString ValueField, FixedString LabelField>
-struct IsChoice<Choice<T, OptionsAction, ValueField, LabelField>> : std::true_type {};
+template <typename T, FixedString OptionsAction, FixedString ValueField, FixedString LabelField,
+          FixedString... DependsOn>
+struct IsChoice<Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>> : std::true_type {};
 
 }  // namespace detail
 
@@ -130,8 +154,8 @@ inline constexpr bool isChoice = detail::IsChoice<std::remove_cvref_t<T>>::value
 /// @brief On the wire a Choice is its nullable underlying value — the options
 ///        metadata lives in the C++ type and in generated schemas only.
 template <typename T, morph::forms::FixedString OptionsAction, morph::forms::FixedString ValueField,
-          morph::forms::FixedString LabelField>
-struct glz::meta<morph::forms::Choice<T, OptionsAction, ValueField, LabelField>> {
-    static constexpr auto value = &morph::forms::Choice<T, OptionsAction, ValueField, LabelField>::value;
+          morph::forms::FixedString LabelField, morph::forms::FixedString... DependsOn>
+struct glz::meta<morph::forms::Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>> {
+    static constexpr auto value = &morph::forms::Choice<T, OptionsAction, ValueField, LabelField, DependsOn...>::value;
     static constexpr std::string_view name = "Choice";
 };

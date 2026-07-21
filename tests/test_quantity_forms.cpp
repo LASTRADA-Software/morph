@@ -166,6 +166,40 @@ struct QFSchedule {
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };
 
+struct QFCountryInfo {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+struct QFCountryList {
+    std::vector<QFCountryInfo> countries;
+};
+
+struct QFListCountries {};
+
+struct QFCityInfo {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+struct QFCityList {
+    std::vector<QFCityInfo> cities;
+};
+
+// The options action for a dependent Choice is an ordinary registered action
+// whose input field ("country") is exactly the DependsOn name the sibling
+// Choice declares.
+struct QFListCities {
+    std::int64_t country = 0;
+};
+
+struct QFShippingAddress {
+    morph::forms::Choice<std::int64_t, "QFListCountries"> country;
+    morph::forms::Choice<std::int64_t, "QFListCities", "id", "name", "country"> city;
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+
 struct QFLabModel {
     Q<QFUnit::kg_per_m3> execute(const QFComputeDryDensity& action) { return action.massDry / action.volume; }
     std::int64_t execute(const QFRecordMeasurement& action) { return action.sampleId; }
@@ -177,6 +211,22 @@ struct QFLabModel {
     std::string execute(const QFSchedule& action) {
         return std::format("slot {} at {}", *action.slot, *action.startsAt);
     }
+    QFCountryList execute(const QFListCountries& action) {
+        static_cast<void>(action);
+        return QFCountryList{.countries = {{.id = 1, .name = "Wonderland"}, {.id = 2, .name = "Narnia"}}};
+    }
+    // Filtered by the sibling "country" value the caller sends as the body —
+    // exactly the same registered-action dispatch every other action uses.
+    QFCityList execute(const QFListCities& action) {
+        if (action.country == 1) {
+            return QFCityList{.cities = {{.id = 10, .name = "Looking-Glass City"}}};
+        }
+        if (action.country == 2) {
+            return QFCityList{.cities = {{.id = 20, .name = "Cair Paravel"}}};
+        }
+        return QFCityList{};
+    }
+    std::int64_t execute(const QFShippingAddress& action) { return *action.city; }
 };
 
 BRIDGE_REGISTER_MODEL(QFLabModel, "QFLabModel")
@@ -185,6 +235,9 @@ BRIDGE_REGISTER_ACTION(QFLabModel, QFRecordMeasurement, "QFRecordMeasurement")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFCalibrate, "QFCalibrate")
 BRIDGE_REGISTER_ACTION(QFLabModel, QFListSlots, "QFListSlots", morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(QFLabModel, QFSchedule, "QFSchedule")
+BRIDGE_REGISTER_ACTION(QFLabModel, QFListCountries, "QFListCountries", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(QFLabModel, QFListCities, "QFListCities", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(QFLabModel, QFShippingAddress, "QFShippingAddress")
 
 // ---------------------------------------------------------------------------
 // Arithmetic semantics.
@@ -435,15 +488,30 @@ namespace {
 
 using SlotChoice = morph::forms::Choice<std::int64_t, "QFListSlots">;
 using CodeChoice = morph::forms::Choice<std::string, "QFListCodes", "code", "title">;
+using CityChoice = morph::forms::Choice<std::int64_t, "QFListCities", "id", "name", "country">;
+// Compile-time check that the pack captures more than one name, in order.
+using RegionCityChoice = morph::forms::Choice<std::int64_t, "QFListRegionCities", "id", "name", "country", "region">;
 
 static_assert(SlotChoice::optionsAction() == "QFListSlots");
 static_assert(SlotChoice::valueField() == "id");
 static_assert(SlotChoice::labelField() == "name");
+static_assert(SlotChoice::optionsDependsOn().empty());  // independent Choice: unchanged
 static_assert(CodeChoice::valueField() == "code");
 static_assert(CodeChoice::labelField() == "title");
+static_assert(CodeChoice::optionsDependsOn().empty());
+static_assert(CityChoice::optionsAction() == "QFListCities");
+static_assert(CityChoice::valueField() == "id");
+static_assert(CityChoice::labelField() == "name");
+static_assert(CityChoice::optionsDependsOn().size() == 1);
+static_assert(CityChoice::optionsDependsOn()[0] == "country");
+static_assert(RegionCityChoice::optionsDependsOn().size() == 2);
+static_assert(RegionCityChoice::optionsDependsOn()[0] == "country");
+static_assert(RegionCityChoice::optionsDependsOn()[1] == "region");
 static_assert(morph::forms::isChoice<SlotChoice>);
+static_assert(morph::forms::isChoice<CityChoice>);
 static_assert(!morph::forms::isChoice<Q<QFUnit::kg>>);
 static_assert(morph::forms::EmptyCapableField<SlotChoice>);
+static_assert(morph::forms::EmptyCapableField<CityChoice>);
 static_assert(morph::forms::EmptyCapableField<morph::time::Timestamp>);
 static_assert(morph::forms::EmptyCapableField<Q<QFUnit::kg>>);
 static_assert(!morph::forms::EmptyCapableField<std::int64_t>);
@@ -483,6 +551,26 @@ TEST_CASE("Choice::EmptyStateAndWire", "[forms]") {
     // String-valued choices work the same way.
     CodeChoice code{std::string{"EN-13286"}};
     CHECK(*code == "EN-13286");
+}
+
+TEST_CASE("Choice::DependsOn::WireUnaffected", "[forms]") {
+    // A dependent Choice still serialises as a bare nullable value — the
+    // DependsOn names never travel with payloads, exactly like OptionsAction.
+    CityChoice const engaged{10};
+    CHECK(engaged.hasValue());
+    CHECK(*engaged == 10);
+
+    QFShippingAddress action;
+    action.country = 1;
+    action.city = 10;
+    auto const json = glz::write_json(action);
+    REQUIRE(json.has_value());
+    CHECK(*json == R"({"country":1,"city":10})");
+
+    QFShippingAddress restored{};
+    REQUIRE_FALSE(glz::read_json(restored, *json));
+    CHECK(restored.country == action.country);
+    CHECK(restored.city == action.city);
 }
 
 TEST_CASE("Choice::DrivesReadiness", "[forms]") {
