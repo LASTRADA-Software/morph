@@ -70,6 +70,7 @@ add_executable(morph_tests
     test_opaque_model_ids.cpp
     test_graceful_shutdown.cpp
     test_pinned_facts.cpp
+    test_version.cpp
 )
 
 target_link_libraries(morph_tests
@@ -79,6 +80,15 @@ target_link_libraries(morph_tests
 )
 
 apply_warnings(morph_tests)
+
+# Forwards CMakeLists.txt's project(VERSION ...) into tests/test_version.cpp
+# so it can static_assert the checked-in include/morph/version.hpp constants
+# never drift from the build system's declared version.
+target_compile_definitions(morph_tests PRIVATE
+    MORPH_CMAKE_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+    MORPH_CMAKE_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+    MORPH_CMAKE_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+)
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
