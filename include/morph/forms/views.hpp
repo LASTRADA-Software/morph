@@ -15,6 +15,7 @@
 /// docs/spec/forms/views.md.
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <span>
@@ -258,6 +259,117 @@ template <typename V, typename Row>
     return glz::write_json(columns).value_or("[]");
 }
 
+/// @brief Builds one `v-rowAction` / `v-actions` entry from an
+///        `ActionDescriptor`.
+/// @param descriptor          The descriptor to serialise.
+/// @param includeButtonFields `true` for `v-actions` entries (adds `label`,
+///                            `scope`, and `confirm` when set); `false` for
+///                            `v-rowAction` (only `action` and `bind`).
+/// @return The JSON node.
+[[nodiscard]] inline glz::generic_u64 buildActionNode(ActionDescriptor const& descriptor, bool includeButtonFields) {
+    glz::generic_u64 node{};
+    node["action"] = std::string{descriptor.actionTypeId};
+    if (includeButtonFields) {
+        node["label"] = std::string{descriptor.label.empty() ? descriptor.actionTypeId : descriptor.label};
+        node["scope"] = std::string{descriptor.scope == ActionScope::Row ? "row" : "collection"};
+        if (descriptor.confirm) {
+            node["confirm"] = true;
+        }
+    }
+    if (!descriptor.bind.empty()) {
+        glz::generic_u64 bindNode{};
+        for (auto const& entry : descriptor.bind) {
+            bindNode[std::string{entry.actionField}] = std::string{entry.rowField};
+        }
+        node["bind"] = bindNode;
+    }
+    return node;
+}
+
+/// @brief Builds the complete `viewSchemaJson<V>()` document.
+/// @tparam V View descriptor.
+/// @return The view-schema JSON, or an empty string on internal DOM failure
+///         (schema generation never throws — see docs/spec/forms/forms.md).
+template <typename V>
+[[nodiscard]] std::string buildViewSchema() {
+    using Query = typename V::query;
+    using Result = typename ::morph::model::ActionTraits<Query>::Result;
+
+    glz::generic_u64 dom{};
+    dom["v-kind"] = std::string{viewKindName<typename V::kind>};
+    dom["v-query"] = std::string{::morph::model::ActionTraits<Query>::typeId()};
+    if constexpr (HasViewTitle<V>) {
+        dom["v-title"] = std::string{V::title};
+    } else {
+        dom["v-title"] = std::string{::morph::model::ActionTraits<Query>::typeId()};
+    }
+    if constexpr (HasRowKey<V>) {
+        dom["v-rowKey"] = std::string{V::rowKey};
+    } else {
+        dom["v-rowKey"] = std::string{"id"};
+    }
+
+    // The row element type is the query result itself when it is a
+    // std::vector<...>, else its first array-valued member, in declaration
+    // order — the same two shapes Choice's optionRows reads (DynamicForm.qml).
+    std::string columnsJson = "[]";
+    if constexpr (isStdVector<Result>) {
+        using Row = typename std::remove_cvref_t<Result>::value_type;
+        columnsJson = deriveColumns<V, Row>();
+    } else {
+        Result probe{};
+        bool found = false;
+        ::morph::forms::detail::forEachNamedMember(probe,
+                                                   [&]<std::size_t I>(std::string_view name, const auto& member) {
+                                                       static_cast<void>(name);
+                                                       static_cast<void>(I);
+                                                       using Member = std::remove_cvref_t<decltype(member)>;
+                                                       if constexpr (isStdVector<Member>) {
+                                                           if (!found) {
+                                                               using Row = typename Member::value_type;
+                                                               columnsJson = deriveColumns<V, Row>();
+                                                               found = true;
+                                                           }
+                                                       }
+                                                   });
+    }
+    glz::generic_u64 columnsDom{};
+    if (!glz::read_json(columnsDom, columnsJson)) {
+        dom["v-columns"] = columnsDom;
+    }
+
+    if constexpr (HasRowActionDescriptor<V>) {
+        dom["v-rowAction"] = buildActionNode(V::rowAction, false);
+    }
+    if constexpr (HasViewActions<V>) {
+        glz::generic_u64::array_t actionsArray{};
+        for (auto const& descriptor : V::actions) {
+            actionsArray.emplace_back(buildActionNode(descriptor, true));
+        }
+        dom["v-actions"] = actionsArray;
+    }
+
+    return glz::write_json(dom).value_or(std::string{});
+}
+
 }  // namespace detail
+
+/// @brief Generates the view-schema JSON document for view descriptor @p V.
+///
+/// A **new, separate top-level document** from `morph::forms::schemaJson<A>()`
+/// — never merged into any action schema. Computed once per type and cached,
+/// exactly like `schemaJson<A>()`.
+/// @tparam V View descriptor: `using kind = CollectionView` (or
+///           `MasterDetailView`); `using query = <registered query action>`;
+///           optional `static constexpr std::string_view title`, `rowKey`,
+///           `std::array<ColumnOverride, N> columns`,
+///           `ActionDescriptor rowAction`, and
+///           `std::array<ActionDescriptor, N> actions`.
+/// @return The view-schema JSON.
+template <typename V>
+[[nodiscard]] std::string viewSchemaJson() {
+    static const std::string cached = detail::buildViewSchema<V>();
+    return cached;
+}
 
 }  // namespace morph::views

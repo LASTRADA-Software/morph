@@ -254,3 +254,107 @@ TEST_CASE("Views::DeriveColumns::HiddenColumnStillEmitted", "[views]") {
     CHECK(columns[0]["field"].get_string() == "id");
     CHECK(columns[0]["v-hidden"].get<bool>());
 }
+
+// ---------------------------------------------------------------------------
+// Task 3: full viewSchemaJson<V>() assembly.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct VtBasicView {
+    using kind = morph::views::CollectionView;
+    using query = vt::VtListRows;
+};
+
+struct VtFullView {
+    using kind = morph::views::MasterDetailView;
+    using query = vt::VtListRows;
+
+    static constexpr std::string_view title = "Rows (MD)";
+    static constexpr std::string_view rowKey = "id";
+
+    static constexpr std::array<morph::views::BindEntry, 2> kEditBind{
+        morph::views::BindEntry{.actionField = "id", .rowField = "id"},
+        morph::views::BindEntry{.actionField = "label", .rowField = "label"},
+    };
+    static constexpr auto rowAction =
+        morph::views::describeAction<vt::VtEditRow>({}, morph::views::ActionScope::Row, kEditBind);
+
+    static constexpr std::array<morph::views::BindEntry, 1> kDeleteBind{
+        morph::views::BindEntry{.actionField = "id", .rowField = "id"},
+    };
+    static constexpr std::array<morph::views::ActionDescriptor, 2> actions{
+        morph::views::describeAction<vt::VtDeleteRow>("Delete", morph::views::ActionScope::Row, kDeleteBind, true),
+        morph::views::describeAction<vt::VtCreateRow>("New", morph::views::ActionScope::Collection),
+    };
+};
+
+}  // namespace
+
+TEST_CASE("Views::ViewSchemaJson::BasicCollectionDefaults", "[views]") {
+    auto const schema = morph::views::viewSchemaJson<VtBasicView>();
+    REQUIRE_FALSE(schema.empty());
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    CHECK(dom["v-kind"].get_string() == "collection");
+    CHECK(dom["v-query"].get_string() == "VtListRows");
+    CHECK(dom["v-title"].get_string() == "VtListRows");  // default: falls back to v-query
+    CHECK(dom["v-rowKey"].get_string() == "id");         // default
+    REQUIRE(dom["v-columns"].is_array());
+    CHECK(dom["v-columns"].get_array().size() == 3);  // id, label, weight
+    CHECK_FALSE(dom.contains("v-rowAction"));
+    CHECK_FALSE(dom.contains("v-actions"));
+}
+
+TEST_CASE("Views::ViewSchemaJson::MasterDetailWithRowActionAndActions", "[views]") {
+    auto const schema = morph::views::viewSchemaJson<VtFullView>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    CHECK(dom["v-kind"].get_string() == "master-detail");
+    CHECK(dom["v-title"].get_string() == "Rows (MD)");
+    CHECK(dom["v-rowKey"].get_string() == "id");
+
+    // v-rowAction: only "action" and "bind", no label/scope/confirm.
+    REQUIRE(dom.contains("v-rowAction"));
+    auto const& rowAction = dom["v-rowAction"];
+    CHECK(rowAction["action"].get_string() == "VtEditRow");
+    CHECK(rowAction["bind"]["id"].get_string() == "id");
+    CHECK(rowAction["bind"]["label"].get_string() == "label");
+    CHECK_FALSE(rowAction.contains("label"));
+    CHECK_FALSE(rowAction.contains("scope"));
+    CHECK_FALSE(rowAction.contains("confirm"));
+
+    // v-actions: full button fields; confirm omitted when false.
+    REQUIRE(dom.contains("v-actions"));
+    auto const& actions = dom["v-actions"].get_array();
+    REQUIRE(actions.size() == 2);
+    CHECK(actions[0]["action"].get_string() == "VtDeleteRow");
+    CHECK(actions[0]["label"].get_string() == "Delete");
+    CHECK(actions[0]["scope"].get_string() == "row");
+    CHECK(actions[0]["bind"]["id"].get_string() == "id");
+    CHECK(actions[0]["confirm"].get<bool>());
+    CHECK(actions[1]["action"].get_string() == "VtCreateRow");
+    CHECK(actions[1]["scope"].get_string() == "collection");
+    CHECK_FALSE(actions[1].contains("confirm"));
+    CHECK_FALSE(actions[1].contains("bind"));
+}
+
+TEST_CASE("Views::ViewSchemaJson::Memoized", "[views]") {
+    CHECK(morph::views::viewSchemaJson<VtBasicView>() == morph::views::viewSchemaJson<VtBasicView>());
+}
+
+TEST_CASE("Views::ViewSchemaJson::SeparateDocumentFromActionSchemas", "[views]") {
+    // The view document is additive and NEVER merged into any action schema
+    // (docs/spec/forms/views.md, "A new, separate top-level document").
+    // Regression guard: no v-* key ever appears in an ordinary action schema.
+    auto const actionSchema = morph::forms::schemaJson<vt::VtEditRow>();
+    CHECK(actionSchema.find("\"v-kind\"") == std::string::npos);
+    CHECK(actionSchema.find("\"v-query\"") == std::string::npos);
+    CHECK(actionSchema.find("\"v-columns\"") == std::string::npos);
+    CHECK(actionSchema.find("\"v-rowAction\"") == std::string::npos);
+    CHECK(actionSchema.find("\"v-actions\"") == std::string::npos);
+}
