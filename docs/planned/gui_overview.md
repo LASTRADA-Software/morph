@@ -38,7 +38,8 @@ with "flexible":
 3. **Escape hatch always available.** The schema is a documented, stable
    contract ([forms.md](../spec/forms/forms.md) "Renderer contract"). Anything the
    generated GUI cannot express, an app builds by consuming the schema directly
-   or overriding one field's widget (see [gui_renderer_toolkit.md](gui_renderer_toolkit.md)).
+   or overriding one field's widget (see [forms.md](../spec/forms/forms.md)
+   "Theming / component-override registry").
 
 This is why the constraints the program puts on the user's model are light: flat,
 default-constructible, reflectable aggregates whose fields come from the known
@@ -81,7 +82,7 @@ from Tier-1 action-forms.
 
 | Spec | Adds |
 |---|---|
-| [gui_renderer_toolkit.md](gui_renderer_toolkit.md) | A reusable reference renderer (Qt/QML first), a renderer conformance test kit, and per-field widget-override / theming slots. |
+| [forms.md](../spec/forms/forms.md) ("Shipped Qt/QML reference renderer" / "Renderer conformance kit" / "Theming / component-override registry") | **Landed.** A reusable reference renderer (Qt/QML first, `src/qt/forms`), a renderer conformance test kit, and per-field widget-override / theming slots (`SlotRegistry`/`x-widget`). |
 
 ## Versioning stance (unchanged, deliberately)
 

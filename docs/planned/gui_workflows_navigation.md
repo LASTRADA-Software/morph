@@ -242,5 +242,7 @@ below, so every layer is independently ignorable — the additive-key contract o
   `BRIDGE_REGISTER_APP` mirrors.
 - [outbox.md](outbox.md) — where cross-action atomicity belongs (the wizard
   deliberately does not provide it).
-- [gui_renderer_toolkit.md](gui_renderer_toolkit.md) — the reference renderer and
-  conformance kit that would implement and verify the `w-*` / `app-*` contract.
+- [forms.md](../spec/forms/forms.md) ("Shipped Qt/QML reference renderer" /
+  "Renderer conformance kit") — the landed reference renderer and conformance
+  kit that would need extending to implement and verify the `w-*` / `app-*`
+  contract.

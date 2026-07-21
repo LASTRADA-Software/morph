@@ -18,6 +18,9 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
 - [Layout & grouping — sections, tabs, spans](#layout--grouping--sections-tabs-spans)
 - [Renderer contract: the schema key vocabulary](#renderer-contract-the-schema-key-vocabulary)
+- [Shipped Qt/QML reference renderer](#shipped-qtqml-reference-renderer)
+- [Renderer conformance kit](#renderer-conformance-kit)
+- [Theming / component-override registry](#theming--component-override-registry)
 - [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Support traits and helpers](#support-traits-and-helpers)
@@ -440,8 +443,8 @@ must resolve the `$ref` to see both:
 The **"Where"** column below names the node each key is written to. A renderer
 resolves the `$ref` into `$defs`, then merges: per-property `x-*` keys (from the
 property node) win, and `ExtUnits` (plus glaze's `type`/bounds/`description`) come
-from the resolved def. The `examples/forms` QML renderer's `resolveProp` does
-exactly this dual read.
+from the resolved def. The shipped `MorphForms` QML renderer's (`src/qt/forms`,
+below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
@@ -482,6 +485,150 @@ against. The vocabulary is therefore treated as a stable framework contract:
 altering how a value is interpreted) is a breaking change and ships only in a
 breaking framework release.** Adding a new, optional `x-*` key that older
 renderers can safely ignore is not breaking.
+
+## Shipped Qt/QML reference renderer
+
+The schema contract above is renderer-agnostic; morph ships one reference
+renderer for it, Qt/QML, as a reusable component rather than example code.
+
+- **`src/qt/forms`** builds the QML module `MorphForms` (CMake target
+  `morph_forms_module`, `qt_add_qml_module(... URI MorphForms VERSION 1.0)`):
+  `DynamicForm.qml` (the `Repeater`-over-`fields` form renderer: `$ref`
+  resolution/dual-read, the exact rational digit arithmetic, the unit
+  selector, the required-field submit gate, the options-fetch, layout/
+  grouping into sections/tabs, the widget-hint controls — textarea, slider,
+  radio group — and the localisation dual-read), `DateTimePicker.qml` (manual
+  ISO-8601 entry plus a calendar/time popup), `SlotRegistry.qml` (below), and
+  `I18nCatalog.hpp`/`.cpp` (a `QObject`/`QML_ELEMENT` in-memory
+  `TranslationProvider` realization — see
+  [Localisation](#localisation--message-keys-and-the-catalog-seam) — shipped
+  alongside the renderer rather than left in a demo, since it is
+  model-agnostic and `DynamicForm`'s `catalog` property consumes it
+  structurally, not by name). It builds whenever `-DMORPH_BUILD_FORMS_QML=ON`,
+  independent of `MORPH_BUILD_EXAMPLES` — an app depends on it directly
+  (`target_link_libraries(... morph_forms_moduleplugin)` plus `import
+  MorphForms` in its own QML) instead of copying or forking it.
+- **`include/morph/qt/forms/forms_controller_core.hpp`** ships
+  `morph::qt::forms::FormsControllerCore<Model>`, a header-only, model-agnostic
+  template (no `Q_OBJECT` — Qt cannot register a class *template* for QML) that
+  owns the `Bridge`/`BridgeHandler<Model>`/`QtExecutor` wiring an app's own
+  `QObject`/`QML_ELEMENT` controller subclass forwards to. It exposes
+  `schemasJson()`, `submitIfValid(actionType, bodyJson, onReply, onError)`, and
+  `fetchOptions(optionsAction, onReply, onError)` — both operations dispatch
+  generically via `BridgeHandler::executeJson`, so an app's controller never
+  hardcodes one action; `examples/forms/gui_qml/FormsController.hpp` is the
+  ~20-line reference wrapper (naming its own model type, since Qt cannot
+  register the template itself).
+- **`examples/forms/gui_qml`** is a *consumer* of the shipped module, not its
+  home: its own `LabFormsDemo` QML module carries only `Main.qml` and the
+  `FormsController` subclass naming `lab::LabModel`; `Main.qml` imports
+  `MorphForms` for `DynamicForm`/`I18nCatalog` like any other consumer would.
+
+This is packaging and factoring only: no `x-*` key changed, and a plain
+single-action form renders identically to before the renderer was extracted.
+
+## Renderer conformance kit
+
+A renderer proves it honors the contract above by consuming a **schema
+corpus** and satisfying a set of **expected-behavior assertions** — the
+executable form of this document's "normative" claim.
+
+- **C++ fixture corpus and drift guard**
+  (`tests/test_forms_conformance_corpus.cpp`): five fixture action types —
+  plain scalars + `required` (`CFScalarsAndRequired`), a `Quantity` with
+  convertible alternatives (`CFQuantityAlternatives`), a `Choice`
+  (`CFChoiceField`), a `Timestamp` (`CFTimestampField`), and two members of the
+  same `Quantity` type sharing one `$def` (`CFSharedDefFields`) — each
+  asserted against the **real**, generated `schemaJson<A>()` output (never
+  hand-authored), so a change to `mergeSchemaExtras`/`schemaJson` that alters
+  `x-order`, `required`, `x-decimalPlaces`, `x-unitAlternatives`,
+  `x-optionsAction`/`x-optionValue`/`x-optionLabel`, `format`, or `ExtUnits`
+  is caught here as a failing assertion (the corpus "drift guard").
+- **QML functional assertions** (`src/qt/forms/tests/tst_conformance.qml`)
+  hand-author schemas mirroring each C++ fixture by name and run them through
+  the shipped `DynamicForm`: fields render in `x-order`; submission is blocked
+  until every `required` field is engaged and enabled once they are; a
+  `Quantity` payload is `{num,den,dp}` exact and a unit switch recomputes it
+  exactly (no float drift); a `Choice` descriptor carries its declared
+  `x-optionsAction`/`x-optionValue`/`x-optionLabel`; a `Timestamp` renders as a
+  date-time control and gates on ISO-8601; two properties sharing one `$def`
+  each keep their own `x-order` while resolving the same `ExtUnits`. The
+  empty-body options-fetch itself (`Choice` executing its options action with
+  an empty body) is asserted separately, in
+  `src/qt/forms/tests/test_forms_controller_core.cpp` (a Catch2 + Qt
+  executable covering `FormsControllerCore<Model>` directly), since
+  `DynamicForm` never calls the options action directly — its controller
+  does.
+- **Accessibility slice** (`src/qt/forms/tests/tst_conformance_accessibility.qml`):
+  every control exposes an accessible name (the wire key — `title` from
+  `gui_field_metadata.md`, when declared, is the visible label but the
+  accessible-name fallback is always the wire key), a required field's
+  accessible description announces it, focus order follows `x-order`, and
+  every control (choice combo, radio group, date/time picker, text field,
+  multiline text area, slider, unit selector, and the calendar popup, which
+  gained arrow-key day navigation plus Enter/Escape for exactly this) is
+  keyboard-operable.
+- **Negative assertions** (`src/qt/forms/tests/tst_conformance_negative.qml`,
+  with test-only doubles `BrokenOrderForm.qml`/`BrokenQuantityForm.qml`, never
+  shipped in the `MorphForms` module): a renderer that ignores `x-order` fails
+  exactly the field-order assertion and no others; a renderer that silently
+  rounds an over-precise `Quantity` entry instead of rejecting it fails
+  exactly the exact-payload assertion and no others — proving the kit's
+  assertions are specific, not all-or-nothing.
+
+**Scope note.** The corpus above covers exactly the keys this document's
+renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
+below. It does **not** yet include a collection-view or wizard/app fixture
+(`v-*`/`w-*`/`app-*`): no emitter for those Tier-2 view-schema keys exists in
+the codebase (`gui_collections_views.md` / `gui_workflows_navigation.md` are
+themselves still planned) — those fixtures are deferred to whichever future
+work implements those emitters.
+
+## Theming / component-override registry
+
+A field's control is chosen by the renderer's built-in logic (`isChoice` → combo
+or radio group, `isQuantity` → number + unit selector, `format: date-time` →
+date/time picker, `x-widget: "textarea"`/`"slider"` → multiline/ranged
+controls). An app that wants a different control for one field, one unit, one
+`x-widget`, or one JSON type does so through a client-side registry, without
+forking the renderer:
+
+- **`x-widget` (optional property-level key).** A hint naming a control
+  variant when the type alone is ambiguous — e.g. `"textarea"`, `"slider"`,
+  `"radio"` (already dispatched on by the renderer's own widget-hint controls,
+  see [Widget hints](#widget-hints--multiline--ranged)), or an app-defined id
+  such as `"slider"`/`"rating"` a registered `SlotRegistry` slot recognises.
+  It is read with the same dual-read as every other property-level key
+  (`opt(raw["x-widget"], p["x-widget"])`). Absent, it resolves to `""` and
+  never matches `SlotRegistry`'s `byWidget` tier — purely additive and
+  ignorable.
+- **`SlotRegistry` (QML type, module `MorphForms`, entirely client-side).** A
+  lookup a host app populates at startup: `byField(action, field, component)`,
+  `byWidget(xWidget, component)`, `byUnit(unitAscii, component)`,
+  `byType(jsonType, component)`, and `resolve(action, field, xWidget,
+  unitAscii, jsonType)`, which returns the highest-priority match or `null`.
+  Resolution order is **field → `x-widget` → unit → type → built-in default**.
+  `DynamicForm` gains a `slotRegistry` property (`null` by default — no
+  behavior change for an app that never sets it); when a field resolves to a
+  registered `Component`, `DynamicForm` loads it via a `Loader` and hides its
+  own built-in control for that field (every built-in control — combo, radio
+  group, date/time picker, text field, text area, slider, unit selector — is
+  gated on the `Loader`'s `sourceComponent` being `null`). A registered slot
+  `Component` implements one small contract: it declares `property var field`
+  and `property var setValue`, both assigned by `DynamicForm`'s
+  `Loader.onLoaded` — `field` is the resolved, merged def+property descriptor,
+  and `setValue(text)` is the same set-value path (`setFieldValue`) the
+  built-in controls use, so an override participates in the required-gate and
+  auto-fire without special-casing. `SlotRegistry.revision` is bumped on every
+  `by*()` call and read inside `resolve()`, for the same reason
+  `I18nCatalog.revision` exists: `_byField`/`_byWidget`/`_byUnit`/`_byType` are
+  plain objects mutated in place, which does not by itself notify a binding
+  that already read them.
+
+The registry never appears in the schema or on the wire — two renderers of the
+same schema may register different slots. This is the "escape hatch always
+available" the GUI program's overview promises: swap one control without
+forking the renderer.
 
 ## Localisation — message keys and the catalog seam
 

@@ -233,5 +233,6 @@ not mandate the split.
   `BRIDGE_REGISTER_ACTION` pattern the proposed `BRIDGE_REGISTER_VIEW` mirrors.
 - [gui_workflows_navigation.md](gui_workflows_navigation.md) — the next tier up:
   sequencing screens/views into wizards and a navigable app shell.
-- [gui_renderer_toolkit.md](gui_renderer_toolkit.md) — the reference renderer and
-  conformance kit that would implement and verify the `v-*` contract.
+- [forms.md](../spec/forms/forms.md) ("Shipped Qt/QML reference renderer" /
+  "Renderer conformance kit") — the landed reference renderer and conformance
+  kit that would need extending to implement and verify the `v-*` contract.
