@@ -27,6 +27,12 @@ Frame {
     property var schema
     property var controller
 
+    // Client-side theming/override registry (docs/spec/forms/forms.md,
+    // "Theming / component-override registry"): null (the default) means no
+    // registry installed -- every field renders its built-in control exactly
+    // as it does today. See SlotRegistry.qml.
+    property var slotRegistry: null
+
     property var fieldValues: ({})
     property var fieldOptions: ({})
     property var fieldUnits: ({})
@@ -176,7 +182,15 @@ Frame {
                     isRadioChoice: (optionsAction !== undefined) && widget === "radio",
                     sliderMin: opt(sliderMin, 0),
                     sliderMax: opt(sliderMax, 100),
-                    sliderStep: opt(sliderStep, 1)
+                    sliderStep: opt(sliderStep, 1),
+                    // Renderer-toolkit override-slot keys (docs/spec/forms/
+                    // forms.md, "Theming / component-override registry"):
+                    // xWidget is advisory and additive -- absent, it resolves
+                    // to "" and SlotRegistry.resolve()'s byWidget tier never
+                    // matches.
+                    xWidget: opt(widget, ""),
+                    unitAscii: opt(extUnits.unitAscii, ""),
+                    jsonType: types.length > 0 ? types[0] : ""
                 }
             })
     }
@@ -514,10 +528,39 @@ Frame {
             }
 
             RowLayout {
+                id: controlsRow
                 Layout.fillWidth: true
 
+                // Resolution order: field -> x-widget -> unit -> type ->
+                // null (built-in). Entirely client-side -- see
+                // SlotRegistry.qml and docs/spec/forms/forms.md ("Theming /
+                // component-override registry").
+                property var overrideComponent: form.slotRegistry
+                    ? form.slotRegistry.resolve(form.actionType, fieldColumn.modelData.name,
+                                                 fieldColumn.modelData.xWidget,
+                                                 fieldColumn.modelData.unitAscii,
+                                                 fieldColumn.modelData.jsonType)
+                    : null
+
+                Loader {
+                    id: overrideLoader
+                    Layout.fillWidth: true
+                    sourceComponent: controlsRow.overrideComponent
+                    // Contract every registered slot Component implements: a
+                    // `field` property (the resolved, merged def+property
+                    // descriptor) and a `setValue(text)` function -- the
+                    // same set-value path the built-in controls use, so an
+                    // override participates in the required-gate and
+                    // auto-fire without special-casing.
+                    onLoaded: {
+                        item.field = fieldColumn.modelData
+                        item.setValue = function (text) { form.setFieldValue(fieldColumn.modelData.name, text) }
+                    }
+                }
+
                 ComboBox {
-                    visible: fieldColumn.modelData.isChoice && !fieldColumn.modelData.isRadioChoice
+                    visible: overrideLoader.sourceComponent === null
+                             && fieldColumn.modelData.isChoice && !fieldColumn.modelData.isRadioChoice
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
                     textRole: "label"
@@ -533,7 +576,8 @@ Frame {
                 ColumnLayout {
                     id: radioGroup
                     objectName: "radio_" + fieldColumn.modelData.name
-                    visible: fieldColumn.modelData.isChoice && fieldColumn.modelData.isRadioChoice
+                    visible: overrideLoader.sourceComponent === null
+                             && fieldColumn.modelData.isChoice && fieldColumn.modelData.isRadioChoice
                     Layout.fillWidth: true
                     spacing: 2
                     property int checkedIndex: -1
@@ -558,7 +602,7 @@ Frame {
                 }
 
                 DateTimePicker {
-                    visible: fieldColumn.modelData.isDateTime
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isDateTime
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
                     onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
@@ -567,7 +611,8 @@ Frame {
                 TextField {
                     id: entry
                     objectName: "field_" + fieldColumn.modelData.name
-                    visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
+                    visible: overrideLoader.sourceComponent === null
+                             && !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                              && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
@@ -586,7 +631,7 @@ Frame {
                 TextArea {
                     id: notesArea
                     objectName: "multiline_" + fieldColumn.modelData.name
-                    visible: fieldColumn.modelData.isMultiline
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isMultiline
                     Layout.fillWidth: true
                     Layout.preferredHeight: 72
                     readOnly: fieldColumn.modelData.readOnly
@@ -600,7 +645,7 @@ Frame {
                 Slider {
                     id: levelSlider
                     objectName: "slider_" + fieldColumn.modelData.name
-                    visible: fieldColumn.modelData.isSlider
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isSlider
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
                     from: fieldColumn.modelData.sliderMin
@@ -610,7 +655,7 @@ Frame {
                 }
 
                 Label {
-                    visible: fieldColumn.modelData.isSlider
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isSlider
                     text: fieldColumn.modelData.isSlider ? String(Math.round(levelSlider.value)) : ""
                     opacity: 0.6
                 }
@@ -618,7 +663,7 @@ Frame {
                 // Unit selector when the unit system declares convertible
                 // alternatives: switching recalculates the entry exactly.
                 ComboBox {
-                    visible: fieldColumn.modelData.isQuantity
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isQuantity
                              && fieldColumn.modelData.unitOptions.length > 1
                     enabled: !fieldColumn.modelData.readOnly
                     implicitWidth: 92
@@ -645,7 +690,7 @@ Frame {
                 }
 
                 Label {
-                    visible: fieldColumn.modelData.unit !== ""
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.unit !== ""
                              && !(fieldColumn.modelData.isQuantity
                                   && fieldColumn.modelData.unitOptions.length > 1)
                     text: fieldColumn.modelData.unit
