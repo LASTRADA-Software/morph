@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -144,13 +145,18 @@ struct IActionLog {
 /// @brief Thread-safe in-memory implementation of `IActionLog`.
 ///
 /// Suitable for testing and for applications that do not need cross-process
-/// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape.
+/// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape. Dedups
+/// `append()` on a non-empty `LogEntry::idempotencyKey` — see `IActionLog`'s
+/// class docs.
 class InMemoryActionLog : public IActionLog {
 public:
     /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
+        if (!entry.idempotencyKey.empty() && !_seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
+            return;  // already recorded once; a re-relayed duplicate is a safe no-op
+        }
         entry.seq = ++_nextSeq;
         _entries.push_back(std::move(entry));
     }
@@ -179,6 +185,7 @@ private:
     mutable std::mutex _mtx;
     std::vector<LogEntry> _entries;
     uint64_t _nextSeq{0};
+    std::unordered_set<std::string> _seenIdempotencyKeys;
 };
 
 namespace detail {
