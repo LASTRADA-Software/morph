@@ -21,6 +21,7 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
+#include <morph/journal/outbox.hpp>
 #include <span>
 #include <string>
 #include <string_view>
@@ -33,6 +34,8 @@ using morph::journal::FileActionLog;
 using morph::journal::IActionLog;
 using morph::journal::InMemoryActionLog;
 using morph::journal::LogEntry;
+using morph::journal::OutboxRelay;
+using morph::journal::OutboxRelayResult;
 
 namespace {
 
@@ -209,4 +212,161 @@ TEST_CASE("Bridge/LocalBackend: outbox-managed holder does not auto-append despi
     REQUIRE(depositResult.load() == 20);
 
     REQUIRE(log->entries().empty());
+}
+
+// ── journal::OutboxRelay ─────────────────────────────────────────────────────
+
+TEST_CASE("OutboxRelay::relay(): moves drained rows to sink and marks them relayed", "[outbox][relay]") {
+    std::vector<LogEntry> pending{
+        makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"),
+        makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-2"),
+    };
+    int markCalls = 0;
+    auto sink = std::make_shared<InMemoryActionLog>();
+
+    OutboxRelay relay;
+    relay.drainOutbox = [&] { return pending; };
+    relay.markRelayed = [&](std::span<const LogEntry> rows) {
+        ++markCalls;
+        REQUIRE(rows.size() == 2);
+        for (const auto& row : rows) {
+            std::erase_if(pending, [&](const LogEntry& e) { return e.idempotencyKey == row.idempotencyKey; });
+        }
+    };
+    relay.sink = sink;
+
+    auto result = relay.relay();
+
+    REQUIRE(result.relayed == 2);
+    REQUIRE(markCalls == 1);
+    REQUIRE(pending.empty());
+    REQUIRE(sink->entries().size() == 2);
+}
+
+TEST_CASE("OutboxRelay::relay(): no-op when drainOutbox returns nothing", "[outbox][relay]") {
+    bool markCalled = false;
+    auto sink = std::make_shared<InMemoryActionLog>();
+
+    OutboxRelay relay;
+    relay.drainOutbox = [] { return std::vector<LogEntry>{}; };
+    relay.markRelayed = [&](std::span<const LogEntry>) { markCalled = true; };
+    relay.sink = sink;
+
+    auto result = relay.relay();
+
+    REQUIRE(result.relayed == 0);
+    REQUIRE_FALSE(markCalled);
+    REQUIRE(sink->entries().empty());
+}
+
+TEST_CASE("OutboxRelay::relay(): re-relay after a simulated crash between append and markRelayed dedups",
+          "[outbox][relay]") {
+    // drainOutbox always returns the same fixed row, modeling an outbox table
+    // whose row never actually got marked relayed (the crash the spec's testing
+    // section describes: append succeeded, the mark-relayed commit did not).
+    std::vector<LogEntry> fixedRows{makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1")};
+    int markCalls = 0;
+    auto sink = std::make_shared<InMemoryActionLog>();
+
+    OutboxRelay relay;
+    relay.drainOutbox = [&] { return fixedRows; };
+    relay.markRelayed = [&](std::span<const LogEntry> rows) {
+        ++markCalls;
+        REQUIRE(rows.size() == 1);
+    };
+    relay.sink = sink;
+
+    auto first = relay.relay();
+    auto second = relay.relay();  // simulated retry after the "crash"
+
+    REQUIRE(first.relayed == 1);
+    REQUIRE(second.relayed == 1);
+    REQUIRE(markCalls == 2);
+    REQUIRE(sink->entries().size() == 1);  // dedup collapsed the retry
+}
+
+TEST_CASE("OutboxRelay::relay(): a null dependency is logged, not rejected, at call time", "[outbox][relay]") {
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::debug,
+    };
+
+    auto sink = std::make_shared<InMemoryActionLog>();
+    OutboxRelay relay;
+    relay.drainOutbox = [] { return std::vector<LogEntry>{makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1")}; };
+    relay.sink = sink;
+    // relay.markRelayed left null on purpose.
+
+    REQUIRE_THROWS_AS(relay.relay(), std::bad_function_call);
+
+    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
+        return line.find("markRelayed") != std::string::npos;
+    });
+    REQUIRE(sawWarning);
+    REQUIRE(sink->entries().size() == 1);  // the append + flush happened before markRelayed threw
+}
+
+TEST_CASE("OutboxRelay + journal::replay: relayed entries reconstruct state matching direct execution",
+          "[outbox][relay][journal]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    morph::model::detail::ActionDispatcher dispatcher;
+    registry.registerModel<OBModel>("OB_Model");
+    dispatcher.registerAction<OBModel, OBDeposit>("OB_Model", "OB_Deposit");
+
+    std::vector<LogEntry> pending{
+        makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"),
+        makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-2"),
+    };
+    pending[0].payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 10});
+    pending[1].payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 5});
+
+    auto sink = std::make_shared<InMemoryActionLog>();
+    OutboxRelay relay;
+    relay.drainOutbox = [&] { return pending; };
+    relay.markRelayed = [&](std::span<const LogEntry> rows) {
+        for (const auto& row : rows) {
+            std::erase_if(pending, [&](const LogEntry& e) { return e.idempotencyKey == row.idempotencyKey; });
+        }
+    };
+    relay.sink = sink;
+
+    auto result = relay.relay();
+    REQUIRE(result.relayed == 2);
+    REQUIRE(pending.empty());
+
+    auto reconstructed = morph::journal::replay("OB_Model", sink->entries(), registry, dispatcher);
+    REQUIRE(reconstructed->into<OBModel>().balance == 15);
+}
+
+TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process restart dedups via the sink",
+          "[outbox][relay][file_action_log]") {
+    TempFile tmp{"outbox_relay_restart"};
+    LogEntry row = makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1");
+    row.payload = morph::model::ActionTraits<OBDeposit>::toJson(OBDeposit{.amount = 7});
+
+    {
+        auto sink = std::make_shared<FileActionLog>(tmp.path);
+        OutboxRelay relay;
+        relay.drainOutbox = [&] { return std::vector<LogEntry>{row}; };
+        relay.markRelayed = [](std::span<const LogEntry>) {};  // simulate: mark-relayed commit never happened
+        relay.sink = sink;
+
+        auto result = relay.relay();
+        REQUIRE(result.relayed == 1);
+    }  // "process" ends; the FileActionLog and its fd are gone
+
+    {
+        auto sink = std::make_shared<FileActionLog>(tmp.path);  // "restart": rebuilds dedup set from disk
+        OutboxRelay relay;
+        relay.drainOutbox = [&] { return std::vector<LogEntry>{row}; };  // outbox table still shows it unrelayed
+        bool marked = false;
+        relay.markRelayed = [&](std::span<const LogEntry>) { marked = true; };
+        relay.sink = sink;
+
+        auto result = relay.relay();
+        REQUIRE(result.relayed == 1);
+        REQUIRE(marked);
+        REQUIRE(sink->entries().size() == 1);  // dedup: still exactly one entry on disk
+    }
 }
