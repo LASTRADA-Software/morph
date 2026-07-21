@@ -6,7 +6,7 @@ concerns:
 
 1. **Detecting** the connectivity state (`NetworkMonitor`).
 2. **Queuing** actions that could not be delivered (`IOfflineQueue`,
-   `InMemoryOfflineQueue`).
+   `InMemoryOfflineQueue`, `FileOfflineQueue`, `SqliteOfflineQueue`).
 3. **Replaying** queued actions on reconnect, with retry and dead-letter
    semantics (`SyncWorker`).
 4. **Orchestrating** the reconnect → activate → bind → replay sequence
@@ -19,8 +19,10 @@ All types live in `morph::offline`.
 | Type | Header | Role |
 |---|---|---|
 | `NetworkMonitor` / `NetworkMonitorConfig` | `network_monitor.hpp` | Background probe thread + online/offline state machine. |
-| `QueueItem`, `IOfflineQueue`, `InMemoryOfflineQueue` | `offline_queue.hpp` | Passive store of undelivered actions (opaque payloads). |
-| `SyncWorker` / `SyncResult` | `sync_worker.hpp` | Drains + replays a queue with retry/dead-letter. |
+| `QueueItem`, `IOfflineQueue`, `InMemoryOfflineQueue` | `offline_queue.hpp` | Passive store of undelivered actions (opaque payloads); durable retry-attempt tracking. |
+| `FileOfflineQueue` | `file_offline_queue.hpp` | Reference NDJSON-file-backed durable queue; no extra dependency, ships by default. |
+| `SqliteOfflineQueue` | `sqlite_offline_queue.hpp` | Reference SQLite-backed durable queue; opt-in (`MORPH_BUILD_OFFLINE_SQLITE`). |
+| `SyncWorker` / `SyncResult` / `SyncWorker::DeadLetterSink` | `sync_worker.hpp` | Drains + replays a queue with durable-attempt-aware retry/dead-letter. |
 | `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig`, `ReconnectCoordinator::Deps` | `reconnect_coordinator.hpp` | Orders reconnect → activate → bind → replay, with abort checks. |
 
 ## Contents
@@ -179,8 +181,62 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 
 Thread-safe in-memory implementation of `IOfflineQueue`. Items live in a
 `std::deque<QueueItem>` protected by a `std::mutex`. Ids are monotonically
-increasing. Suitable for testing and applications that do not require
-persistence across restarts.
+increasing. Overrides `setAttempts` to update the in-deque item, so the
+attempt count is current for as long as the queue object lives — but it has
+no persistence, so a process restart still resets it to `0`. Suitable for
+testing and applications that do not require persistence across restarts.
+
+### `FileOfflineQueue`
+
+Reference append-only, NDJSON-backed `IOfflineQueue` (`file_offline_queue.hpp`)
+that persists `payload`, `idempotencyKey`, and `attempts` across process
+restarts with **no extra dependency** — it ships in the default `morph` target
+alongside `InMemoryOfflineQueue`. Each mutation (`enqueue`, `markDone`,
+`setAttempts`, `setIdempotencyKey`) appends one JSON line
+(`{"op": "put"|"done", "id", "payload", "idempotencyKey", "attempts"}`) and
+immediately `fflush`+`fsync`s it. On open, the file is replayed
+last-write-wins-per-id and rewritten in compacted form — this both bounds file
+growth and heals a torn trailing line left by a crash mid-write, tolerating it
+the same way `FileActionLog` does (a malformed *trailing* line is logged and
+skipped; a malformed line anywhere else is genuine corruption and is
+rethrown). New ids resume from the highest id ever seen in the file (including
+tombstoned ones), so a fresh item never collides with an old tombstone. A
+keyed `enqueue`'s dedup is a linear scan over pending items — fine at modest
+queue depths; `SqliteOfflineQueue` is the index-backed alternative for
+high-volume keyed enqueues. Not safe for multiple processes to open the same
+path concurrently.
+
+### `SqliteOfflineQueue`
+
+Reference SQLite-backed `IOfflineQueue` (`sqlite_offline_queue.hpp`), built
+only when the host opts in via the `MORPH_BUILD_OFFLINE_SQLITE` CMake option
+(default `OFF`; resolved through CMake's bundled `FindSQLite3` module against a
+system SQLite3 package, not through `vcpkg.json`, so the default build and its
+dependency graph are unaffected). Backed by one table:
+
+```sql
+CREATE TABLE IF NOT EXISTS morph_offline_queue (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    payload         TEXT    NOT NULL,
+    idempotency_key TEXT    NOT NULL DEFAULT '',
+    attempts        INTEGER NOT NULL DEFAULT 0,
+    enqueued_at     INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ix_queue_idem
+    ON morph_offline_queue(idempotency_key) WHERE idempotency_key <> '';
+```
+
+`id` is `AUTOINCREMENT`: ids are never reused, and a re-opened queue
+re-presents each row under its **stored, stable** id — restarting does not
+renumber existing rows. (`QueueItem::id` is still queue-local per the general
+contract above; cross-restart identity is carried by `idempotencyKey`, not
+`id`.) The partial unique index gives insert-time dedup for a non-empty
+`idempotencyKey` — a re-enqueue of the same key is a no-op that returns the
+existing row's id; empty keys are exempt and are never deduplicated, matching
+`InMemoryOfflineQueue`. `drain()` never deletes, so a crash between `drain()`
+and `markDone()` loses nothing; every write is its own committed statement
+under `PRAGMA journal_mode=WAL`. All operations serialise on an internal
+mutex, so the queue is safe to share between the write and drain/replay paths.
 
 ## Ownership: who enqueues
 
@@ -526,14 +582,13 @@ overrides `setAttempts()` to update its in-deque item (so a fresh `SyncWorker`
 over the *same, still-alive* instance sees the persisted count — used to
 simulate a restart in tests), but it does not survive the *process* exiting.
 `setAttempts()`'s default is a no-op, so a queue that does not override it
-(and no queue ships here that persists to disk) always reports
-`attempts == 0` on `drain()`, and `SyncWorker`'s in-memory count is the only
-thing tracking retries — it resets whenever a fresh `SyncWorker` is
-constructed, exactly as before this hook existed. A SQL/file-backed
-`IOfflineQueue` that overrides `setAttempts()` to write the count to disk is
-the only way to make the retry budget — and therefore dead-lettering —
-survive an actual process restart; no such implementation ships in
-`morph::offline` (see [Limitations](#limitations)).
+always reports `attempts == 0` on `drain()`, and `SyncWorker`'s in-memory
+count is the only thing tracking retries — it resets whenever a fresh
+`SyncWorker` is constructed, exactly as before this hook existed.
+`FileOfflineQueue` and `SqliteOfflineQueue` both override `setAttempts()` to
+write the count to disk, so the retry budget — and therefore dead-lettering —
+genuinely survives a process restart when either is used as the
+`IOfflineQueue` behind `SyncWorker`.
 
 ### `Reconnected` can be returned without replaying
 
@@ -596,9 +651,13 @@ Honest boundaries of what ships today:
   "exactly-once" guarantee itself. **The replay function MUST still be
   idempotent** — either intrinsically, or by checking the key — and the spec
   cannot enforce it.
-- **Only an in-memory queue ships.** `InMemoryOfflineQueue` loses everything on
-  exit. A durable/SQL-backed `IOfflineQueue` is the caller's to write (the
-  interface is designed for it, but no implementation is provided here).
+- **Two durable reference queues ship, plus the in-memory default.**
+  `InMemoryOfflineQueue` loses everything on exit and remains the default.
+  `FileOfflineQueue` (NDJSON, no extra dependency, ships by default) and
+  `SqliteOfflineQueue` (opt-in via `MORPH_BUILD_OFFLINE_SQLITE`) persist
+  `payload`, `idempotencyKey`, and `attempts` across restarts. A host that
+  needs a different store (a different SQL engine, a remote queue service)
+  still writes its own `IOfflineQueue` — the interface remains the seam.
 - **Dead-lettering has an optional recovery hook, but no built-in dead-letter
   store.** A poison item that exhausts its 5 cumulative attempts is
   `markDone`-d (dropped); if the host set a `SyncWorker::DeadLetterSink`, it
@@ -627,6 +686,8 @@ Honest boundaries of what ships today:
 | SyncWorker retry count | **Hard-coded at 5, no public knob** | The framework guarantees obvious, safe defaults; apps that need different math wrap or replace `SyncWorker`. |
 | `QueueItem::attempts` / `setAttempts()` | **Opt-in durable retry count, no-op default** | Lets a durable queue make `SyncWorker`'s retry budget survive a restart without changing `InMemoryOfflineQueue`'s or existing `SyncWorker` call sites' behavior. |
 | `DeadLetterSink` | **Optional third constructor arg, replaces (not augments) the log line** | Gives a host a programmatic hand-off for a poisoned item; a throwing sink is caught and logged, the item is still removed — consistent with the framework's swallow-and-continue policy. |
+| Two shipped durable queues, split by dependency | **`FileOfflineQueue` in the default target; `SqliteOfflineQueue` opt-in** | A host that cannot add a SQLite dependency still gets restart-durability for free; a host that wants indexed dedup and can accept the dependency opts in via `MORPH_BUILD_OFFLINE_SQLITE`. |
+| Idempotency-key dedup strengthened in `SqliteOfflineQueue` only | **Partial unique index on non-empty `idempotency_key`** | The base `IOfflineQueue` contract only stores the key; the SQLite reference implementation additionally enforces insert-time dedup as a deliberate strengthening, not a contract change — `FileOfflineQueue` mirrors the same dedup behavior (linear scan) for parity, but neither is required by the interface. |
 | SyncWorker thread safety | **Internal mutex serialises `run()`** | Second caller blocks — safe to fire from multiple executors. |
 | Reconnect retry loop | **Synchronous, no background thread** | The host owns the executor; the coordinator is pure orchestration with no hidden threads. |
 | Reconnect step ordering | **Explicit in the `onOnline()` body** | The strict order (reconnect → activate → bind → replay) is the class's reason to exist — callers should never have to get it right themselves. |
@@ -655,6 +716,11 @@ Honest boundaries of what ships today:
   replay ordering only holds when every item succeeds (see
   [Failure modes](#failure-modes)). Do not conflate the offline queue's replay
   with journal replay.
+- **`file_action_log.hpp`** — `FileOfflineQueue`'s torn-trailing-line tolerance
+  and fsync-per-write durability directly mirror `FileActionLog`'s (see
+  `docs/spec/journal/journal.md`); the two differ in that `FileOfflineQueue`
+  also tombstones and reuses no id, since (unlike the append-only action log)
+  its rows are removed and its retry counts are mutated in place.
 - **`concurrency_and_lifetimes.md`** — the framework-wide rule that notification
   callbacks marshal work off the raising thread (the reason
   [NetworkMonitor callbacks must only post](#networkmonitor-callback-constraint)),
