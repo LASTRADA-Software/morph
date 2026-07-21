@@ -54,6 +54,7 @@ add_executable(morph_tests
     test_quantity.cpp
     test_quantity_forms.cpp
     test_forms_layout.cpp
+    test_widget_hints.cpp
     test_datetime.cpp
     test_session_auth.cpp
     test_policy_hardening.cpp
