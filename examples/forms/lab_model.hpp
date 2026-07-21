@@ -111,6 +111,60 @@ struct MeasurementAck {
     std::string summary;
 };
 
+/// @brief One selectable country (a row of `ListCountries`' result).
+struct CountryInfo {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+/// @brief Result of `ListCountries`.
+struct CountryList {
+    std::vector<CountryInfo> countries;
+};
+
+/// @brief Options provider for `ShippingAddress.country` — independent, like
+///        `ListSamples`.
+struct ListCountries {};
+
+/// @brief One selectable city (a row of `ListCities`' result).
+struct CityInfo {
+    std::int64_t id = 0;
+    std::string name;
+};
+
+/// @brief Result of `ListCities`.
+struct CityList {
+    std::vector<CityInfo> cities;
+};
+
+/// @brief Options provider for `ShippingAddress.city` — filtered by the
+///        sibling `country` value the renderer sends as the request body
+///        (declared via `Choice`'s `DependsOn`, surfaced as
+///        `x-optionsDependsOn` in the schema).
+struct ListCities {
+    std::int64_t country = 0;
+};
+
+/// @brief Ship to a city within a country: `city`'s options cascade from the
+///        selected `country`.
+struct ShippingAddress {
+    /// Independent Choice: options come from `ListCountries` with an empty body.
+    morph::forms::Choice<std::int64_t, "ListCountries"> country;
+
+    /// Dependent Choice: options come from `ListCities` with `{"country": <value>}`
+    /// as the body — the schema carries `x-optionsDependsOn: ["country"]`.
+    morph::forms::Choice<std::int64_t, "ListCities", "id", "name", "country"> city;
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
+};
+
+/// @brief Result of `ShippingAddress`.
+struct ShippingAck {
+    std::int64_t countryId = 0;
+    std::int64_t cityId = 0;
+    std::string summary;
+};
+
 /// @brief The business model behind the generated forms.
 class LabModel {
 public:
@@ -123,6 +177,27 @@ public:
         return SampleList{.samples = {{.id = 1, .name = "Proctor A"},
                                       {.id = 2, .name = "Proctor B"},
                                       {.id = 7, .name = "Crushed aggregate 0/32"}}};
+    }
+
+    /// @brief Serves the country combo-box options (a pure query,
+    ///        independent — like `ListSamples`).
+    CountryList execute(const ListCountries& action) {
+        static_cast<void>(action);
+        return CountryList{.countries = {{.id = 1, .name = "Wonderland"}, {.id = 2, .name = "Narnia"}}};
+    }
+
+    /// @brief Serves the city combo-box options, filtered by the sibling
+    ///        `country` value the renderer sends as the request body — a
+    ///        dependent `Choice`'s options action is an ordinary registered
+    ///        action whose body happens to be the parent selection.
+    CityList execute(const ListCities& action) {
+        if (action.country == 1) {
+            return CityList{.cities = {{.id = 10, .name = "Looking-Glass City"}, {.id = 11, .name = "Tulgey Wood"}}};
+        }
+        if (action.country == 2) {
+            return CityList{.cities = {{.id = 20, .name = "Cair Paravel"}}};
+        }
+        return CityList{};
     }
 
     MeasurementAck execute(const RecordMeasurement& action) {
@@ -143,6 +218,15 @@ public:
         }
         return {.sampleId = *action.sampleId, .summary = std::move(summary)};
     }
+
+    ShippingAck execute(const ShippingAddress& action) {
+        if (!action.validate()) {
+            throw std::invalid_argument{"ShippingAddress: country and city are required"};
+        }
+        return {.countryId = *action.country,
+                .cityId = *action.city,
+                .summary = std::format("ship to city {} in country {}", *action.city, *action.country)};
+    }
 };
 
 }  // namespace lab
@@ -162,12 +246,24 @@ struct glz::json_schema<lab::RecordMeasurement> {
     schema note{.description = "Free-text remark"};
 };
 
+template <>
+struct glz::json_schema<lab::ShippingAddress> {
+    schema country{.description = "Destination country"};
+    schema city{.description = "Destination city (options depend on country)"};
+};
+
 using lab::ComputeDryDensity;
 using lab::LabModel;
+using lab::ListCities;
+using lab::ListCountries;
 using lab::ListSamples;
 using lab::RecordMeasurement;
+using lab::ShippingAddress;
 
 BRIDGE_REGISTER_MODEL(LabModel, "LabModel")
 BRIDGE_REGISTER_ACTION(LabModel, ComputeDryDensity, "ComputeDryDensity")
 BRIDGE_REGISTER_ACTION(LabModel, RecordMeasurement, "RecordMeasurement")
 BRIDGE_REGISTER_ACTION(LabModel, ListSamples, "ListSamples", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(LabModel, ListCountries, "ListCountries", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(LabModel, ListCities, "ListCities", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(LabModel, ShippingAddress, "ShippingAddress")

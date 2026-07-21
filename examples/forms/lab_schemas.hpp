@@ -20,6 +20,8 @@ namespace lab {
     out += morph::forms::schemaJson<ComputeDryDensity>();
     out += ",\"RecordMeasurement\":";
     out += morph::forms::schemaJson<RecordMeasurement>();
+    out += ",\"ShippingAddress\":";
+    out += morph::forms::schemaJson<ShippingAddress>();
     out += "}";
     return out;
 }
