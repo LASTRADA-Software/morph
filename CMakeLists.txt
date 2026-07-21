@@ -322,6 +322,7 @@ if(MORPH_BUILD_NET)
                 include/morph/net/detail/base64.hpp
                 include/morph/net/detail/sha1.hpp
                 include/morph/net/detail/ws_handshake.hpp
+                include/morph/net/detail/tcp_socket.hpp
         )
 
         if(MORPH_BUILD_TESTS)
