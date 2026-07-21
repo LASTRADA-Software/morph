@@ -23,14 +23,20 @@
 /// docs/spec/forms/workflows_navigation.md.
 
 #include <cstddef>
+#include <exception>
+#include <functional>
 #include <glaze/glaze.hpp>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
 #include "../core/bridge.hpp"
+#include "../core/logger.hpp"
 #include "forms.hpp"
 
 namespace morph::flows {
@@ -166,6 +172,199 @@ template <typename W>
 
     return glz::write_json(dom).value_or(std::string{});
 }
+
+/// @brief Sequences an ordered list of registered actions (`Steps...`) as one
+///        multi-step flow sharing captured values across steps.
+///
+/// Each step is fired through the handler's ordinary reactive path
+/// (`BridgeHandler::set<>` / `subscribe<>`, bridge.hpp) — a `FlowSession`
+/// contributes only sequencing (`advance`/`back`) and a resolved-values map
+/// callers use to prefill a later step from an earlier one's submitted
+/// fields or result. `Steps...` must be pairwise distinct action types: each
+/// occupies one slot of the handler's per-action-type draft (bridge.md's
+/// "Subscription semantics" — exactly one `SubscriberEntry` per action type),
+/// so reusing the same action type twice in one flow would collide on that
+/// single slot.
+///
+/// @tparam Model Concrete model type owning the `BridgeHandler` this flow dispatches through.
+/// @tparam Steps Ordered, pairwise-distinct action types (the flow's steps).
+template <typename Model, typename... Steps>
+class FlowSession {
+    static_assert(sizeof...(Steps) > 0, "FlowSession: a flow needs at least one step");
+    static_assert(detail::AllDistinct<Steps...>::value, "FlowSession: step action types must be pairwise distinct");
+
+public:
+    /// @brief Constructs a flow over @p handler, starting at step 0.
+    /// @param handler Handler the flow dispatches every step through. Must
+    ///                outlive this `FlowSession` (only *destruction* order is
+    ///                unconstrained; see bridge.md's Lifetime & ownership).
+    /// @param onError Optional callback invoked when the current step's fire
+    ///                fails (e.g. `BackendChangedError` mid-flight). When
+    ///                absent, the error is logged via `morph::log::logError`,
+    ///                matching `BridgeHandler`'s own no-`errSink` default.
+    explicit FlowSession(::morph::bridge::BridgeHandler<Model>& handler,
+                         std::function<void(std::exception_ptr)> onError = nullptr)
+        : _handler{handler}, _onError{std::move(onError)} {
+        subscribeCurrent();
+    }
+
+    /// @brief Unsubscribes the current step so no callback captures a dangling `this`.
+    ~FlowSession() { unsubscribeCurrent(); }
+
+    FlowSession(const FlowSession&) = delete;
+    FlowSession& operator=(const FlowSession&) = delete;
+    FlowSession(FlowSession&&) = delete;
+    FlowSession& operator=(FlowSession&&) = delete;
+
+    /// @brief Sets one field of the current step's draft and forwards it to
+    ///        the handler's ordinary `set<>` (auto-fires when the step's
+    ///        `ActionValidator` is ready, exactly as a standalone form).
+    /// @tparam FieldPtr Pointer-to-data-member of the current step's action struct.
+    /// @param value New value for the field.
+    /// @throws std::logic_error if @p FieldPtr's action is not the current step.
+    template <auto FieldPtr>
+    void set(typename ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ValueType value) {
+        using A = typename ::morph::bridge::detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
+        static_assert((std::is_same_v<A, Steps> || ...),
+                      "FlowSession::set<>: field's action is not a step of this flow");
+        if (::morph::model::ActionTraits<A>::typeId() != currentActionType()) {
+            throw std::logic_error{"FlowSession::set<>: field belongs to an action that is not the current step"};
+        }
+        std::get<A>(_drafts).*FieldPtr = value;
+        _handler.template set<FieldPtr>(std::move(value));
+    }
+
+    /// @brief Moves to the next step, if the current step has already produced
+    ///        a successful result (a not-ready step does not advance).
+    /// @return `true` if the flow advanced, `false` if the current step is not
+    ///         ready or the flow is already `finished()`.
+    bool advance() {
+        if (!_currentReady || finished()) {
+            return false;
+        }
+        unsubscribeCurrent();
+        ++_index;
+        _currentReady = false;
+        if (!finished()) {
+            subscribeCurrent();
+        }
+        return true;
+    }
+
+    /// @brief Returns to the previous step. Its draft (and the handler's own
+    ///        per-action draft) were never reset, so its entered values are
+    ///        intact.
+    /// @return `true` if the flow moved back, `false` if already at step 0.
+    bool back() {
+        if (_index == 0) {
+            return false;
+        }
+        unsubscribeCurrent();
+        --_index;
+        _currentReady = true;  // this step already produced a result once, or it could not have been left
+        subscribeCurrent();
+        return true;
+    }
+
+    /// @brief Whether the flow has advanced past the last step.
+    /// @return `true` once `advance()` has been called successfully on the last step.
+    [[nodiscard]] bool finished() const noexcept { return _index >= sizeof...(Steps); }
+
+    /// @brief Whether the current step already has a captured, successful result.
+    /// @return `true` if `advance()` would move the flow forward right now.
+    [[nodiscard]] bool ready() const noexcept { return _currentReady; }
+
+    /// @brief The current 0-based step position.
+    /// @return `sizeof...(Steps)` once `finished()`.
+    [[nodiscard]] std::size_t currentIndex() const noexcept { return _index; }
+
+    /// @brief The number of steps in this flow.
+    /// @return `sizeof...(Steps)`.
+    [[nodiscard]] static constexpr std::size_t stepCount() noexcept { return sizeof...(Steps); }
+
+    /// @brief The registered type-id of the current step's action.
+    /// @return Empty when `finished()` (no current step).
+    [[nodiscard]] std::string_view currentActionType() const noexcept {
+        std::string_view id{};
+        detail::forStep<Steps...>(_index, [&id]<typename A> { id = ::morph::model::ActionTraits<A>::typeId(); });
+        return id;
+    }
+
+    /// @brief Looks up a value captured from an earlier step's submitted
+    ///        draft or result.
+    /// @param path `"<ActionTypeId>.<field>"`, matching a wizard step's
+    ///             declared `Bind::path()`.
+    /// @return The field's JSON-encoded value, or `std::nullopt` if @p path
+    ///         was never captured (the step never fired, or never had that field).
+    [[nodiscard]] std::optional<std::string> resolved(std::string_view path) const {
+        auto iter = _resolvedValues.find(std::string{path});
+        if (iter == _resolvedValues.end()) {
+            return std::nullopt;
+        }
+        return iter->second;
+    }
+
+private:
+    template <typename A>
+    void captureResult(const typename ::morph::model::ActionTraits<A>::Result& result) {
+        auto const typeId = ::morph::model::ActionTraits<A>::typeId();
+        auto record = [&](const auto& value) {
+            ::morph::forms::detail::forEachNamedMember(
+                value, [&]<std::size_t I>(std::string_view name, const auto& member) {
+                    static_cast<void>(I);
+                    std::string json;
+                    if (!glz::write_json(member, json)) {
+                        _resolvedValues[std::string{typeId} + "." + std::string{name}] = std::move(json);
+                    }
+                });
+        };
+        record(std::get<A>(_drafts));  // submitted draft fields first...
+        record(result);                // ...result fields win on name collision
+        _currentReady = true;
+    }
+
+    template <typename A>
+    void installSubscription() {
+        _handler.template subscribe<A>(
+            [this](typename ::morph::model::ActionTraits<A>::Result result) {
+                this->template captureResult<A>(result);
+            },
+            [this](std::exception_ptr err) {
+                _currentReady = false;
+                if (_onError) {
+                    _onError(err);
+                } else {
+                    logUnhandledError(::morph::model::ActionTraits<A>::typeId(), err);
+                }
+            });
+    }
+
+    static void logUnhandledError(std::string_view typeId, const std::exception_ptr& err) {
+        try {
+            std::rethrow_exception(err);
+        } catch (const std::exception& exc) {
+            ::morph::log::logError(std::string{"[flow:"} + std::string{typeId} +
+                                   "] unhandled exception: " + exc.what());
+        } catch (...) {
+            ::morph::log::logError(std::string{"[flow:"} + std::string{typeId} + "] unhandled unknown exception");
+        }
+    }
+
+    void subscribeCurrent() {
+        detail::forStep<Steps...>(_index, [this]<typename A> { this->template installSubscription<A>(); });
+    }
+
+    void unsubscribeCurrent() {
+        detail::forStep<Steps...>(_index, [this]<typename A> { _handler.template unsubscribe<A>(); });
+    }
+
+    ::morph::bridge::BridgeHandler<Model>& _handler;
+    std::function<void(std::exception_ptr)> _onError;
+    std::tuple<Steps...> _drafts{};
+    std::size_t _index{0};
+    bool _currentReady{false};
+    std::unordered_map<std::string, std::string> _resolvedValues;
+};
 
 }  // namespace morph::flows
 
