@@ -1,0 +1,39 @@
+name: Drift guard
+
+# Two independent gates for the "spec <-> code drift" class of bug (a
+# docs/spec/*.md file stating a mechanical fact -- an enum cardinality, a
+# constant, a canonical error string, a glaze parsing flag -- that silently
+# stops matching the code):
+#
+#   1. The compiled pinned-facts test (tests/test_pinned_facts.cpp) needs no
+#      job here: it is already part of the `morph_tests` target, so it runs
+#      in every job of the main CI workflow (.github/workflows/ci.yml) for
+#      free, and benefits from running under every compiler in that matrix
+#      (GCC, Clang, MSVC, clang-cl) since the enum-cardinality switch pins
+#      (see tests/test_pinned_facts.cpp) rely on compiler-specific warning
+#      behavior that is worth exercising on all of them, not just one.
+#   2. The prose-vs-manifest lint (scripts/check_spec_citations.sh) is a
+#      repo-wide text scan, unrelated to compilation -- it runs here, in its
+#      own fast, dependency-free job.
+#
+# Unlike .github/workflows/spec-sync.yml, this gate has no "no docs update"
+# label escape hatch: a wrong citation or a reintroduced banned term is never
+# a legitimate state to merge, so there is nothing to opt out of.
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  prose-lint:
+    name: Spec-citation & banned-terminology lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run prose-vs-manifest lint
+        run: bash scripts/check_spec_citations.sh
