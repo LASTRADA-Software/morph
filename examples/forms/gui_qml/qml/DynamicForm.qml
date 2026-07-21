@@ -44,6 +44,11 @@ Frame {
     property string displayLocale: "C"
     property var qtLocale: Qt.locale(displayLocale)
 
+    // The display zone for Timestamp entry/editing, in minutes east of UTC
+    // (e.g. 120 for UTC+2). 0 (the default) is the identity transform —
+    // today's "entered time is UTC" behavior.
+    property int displayOffsetMinutes: 0
+
     // --- schema helpers -----------------------------------------------------
 
     function opt(value, fallback) {
@@ -274,6 +279,24 @@ Frame {
         return (neg ? "-" : "") + grouped + (fracPart !== "" ? decimalSeparator + fracPart : "")
     }
 
+    // --- zoned Timestamp entry --------------------------------------------
+
+    // Converts a "YYYY-MM-DDTHH:MM[:SS]" wall-clock reading in the display
+    // zone (offsetMinutes minutes east of UTC) to the canonical UTC
+    // ISO-8601 wire string. offsetMinutes === 0 is the identity transform.
+    function zonedToUtcIso(text, offsetMinutes) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(text)
+        if (!m)
+            return null
+        const asUtcMillis = Date.UTC(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]),
+                                      parseInt(m[4]), parseInt(m[5]), m[6] === undefined ? 0 : parseInt(m[6]))
+        const utcMillis = asUtcMillis - offsetMinutes * 60000
+        const d = new Date(utcMillis)
+        const pad = (v, w) => String(v).padStart(w, "0")
+        return pad(d.getUTCFullYear(), 4) + "-" + pad(d.getUTCMonth() + 1, 2) + "-" + pad(d.getUTCDate(), 2)
+               + "T" + pad(d.getUTCHours(), 2) + ":" + pad(d.getUTCMinutes(), 2) + ":" + pad(d.getUTCSeconds(), 2) + "Z"
+    }
+
     // --- exact digit-string arithmetic (QML JS has no reliable BigInt) -----
 
     // digits * factor, both non-negative; factor stays well under 2^26 so the
@@ -373,10 +396,9 @@ Frame {
             if (f.isChoice) {
                 parts.push(JSON.stringify(f.name) + ":" + text)  // stored as a JSON literal
             } else if (f.isDateTime) {
-                if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(text)) { ok = false; continue }
-                // The demo treats the entered time as UTC.
-                parts.push(JSON.stringify(f.name) + ":"
-                           + JSON.stringify((text.length === 16 ? text + ":00" : text) + "Z"))
+                const utcIso = zonedToUtcIso(text, displayOffsetMinutes)
+                if (utcIso === null) { ok = false; continue }
+                parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(utcIso))
             } else if (f.isQuantity) {
                 const canonicalText = normalizeLocaleNumber(text, qtLocale.decimalPoint, qtLocale.groupSeparator)
                 if (canonicalText === null || !/^-?\d+(\.\d+)?$/.test(canonicalText)) { ok = false; continue }

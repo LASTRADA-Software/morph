@@ -78,6 +78,19 @@ Item {
         })
     }
 
+    DynamicForm {
+        id: zonedForm
+        actionType: "Probe"
+        controller: null
+        displayOffsetMinutes: 120  // a UTC+2 display zone
+        schema: ({
+            "properties": {
+                "when": { "type": ["string", "null"], "format": "date-time", "x-order": 0 }
+            },
+            "required": ["when"]
+        })
+    }
+
     TestCase {
         name: "I18nCatalog"
 
@@ -122,6 +135,12 @@ Item {
             localeForm.setFieldValue("mass", "1.050,25")
             verify(localeForm.ready)
             compare(localeForm.previewLine, '{"mass":{"num":1050250,"den":1000,"dp":3}}')
+        }
+
+        function test_zonedTimestampRoundTripsToUtc() {
+            zonedForm.setFieldValue("when", "2026-07-05T16:30:00")  // 16:30 in UTC+2
+            verify(zonedForm.ready)
+            compare(zonedForm.previewLine, '{"when":"2026-07-05T14:30:00Z"}')
         }
     }
 }
