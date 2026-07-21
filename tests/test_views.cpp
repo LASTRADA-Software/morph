@@ -8,6 +8,7 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/forms.hpp>
@@ -170,4 +171,86 @@ TEST_CASE("Views::DetectionConcepts", "[views]") {
     STATIC_REQUIRE(vd::HasRowActionDescriptor<WithRowActionAndTitle>);
     STATIC_REQUIRE_FALSE(vd::HasViewActions<NoRowActionOrTitle>);
     STATIC_REQUIRE(vd::HasViewActions<WithRowActionAndTitle>);
+}
+
+// ---------------------------------------------------------------------------
+// Task 2: column derivation.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct RowNoOverride {};
+
+struct RowWithOverride {
+    static constexpr std::array<morph::views::ColumnOverride, 2> columns{
+        morph::views::ColumnOverride{.field = "label", .label = "Name"},
+        morph::views::ColumnOverride{.field = "nonexistent"},
+    };
+};
+
+// A local (function-scope) class cannot have a static data member, so
+// (unlike the plan's original sketch) this fixture lives at namespace scope
+// alongside its siblings rather than inside
+// Views::DeriveColumns::HiddenColumnStillEmitted's body.
+struct RowHideId {
+    static constexpr std::array<morph::views::ColumnOverride, 2> columns{
+        morph::views::ColumnOverride{.field = "id", .hidden = true},
+        morph::views::ColumnOverride{.field = "label"},
+    };
+};
+
+}  // namespace
+
+TEST_CASE("Views::DeriveColumns::DefaultOrderAndQuantityMetadata", "[views]") {
+    auto const columnsJson = morph::views::detail::deriveColumns<RowNoOverride, vt::VtRow>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, columnsJson));
+    REQUIRE(dom.is_array());
+    auto const& columns = dom.get_array();
+    REQUIRE(columns.size() == 3);
+
+    // Declaration order: id, label, weight (VtRow's x-order).
+    CHECK(columns[0]["field"].get_string() == "id");
+    CHECK(columns[0]["label"].get_string() == "id");
+    CHECK_FALSE(columns[0].contains("v-hidden"));
+    CHECK(columns[1]["field"].get_string() == "label");
+    CHECK(columns[2]["field"].get_string() == "weight");
+
+    // The Quantity field carries the same ExtUnits/x-decimalPlaces its own
+    // form schema would (docs/spec/forms/views.md, "Column derivation").
+    CHECK(columns[2]["x-decimalPlaces"].get<std::uint64_t>() == 2);
+    CHECK(columns[2]["ExtUnits"]["unitAscii"].get_string() == "kg");
+    CHECK(columns[2]["ExtUnits"]["unitUnicode"].get_string() == "kg");
+}
+
+TEST_CASE("Views::DeriveColumns::OverrideReordersRelabelsHidesAndSubsets", "[views]") {
+    auto const columnsJson = morph::views::detail::deriveColumns<RowWithOverride, vt::VtRow>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, columnsJson));
+    auto const& columns = dom.get_array();
+    // Subset: only the two declared entries, "id"/"weight" suppressed.
+    REQUIRE(columns.size() == 2);
+
+    CHECK(columns[0]["field"].get_string() == "label");
+    CHECK(columns[0]["label"].get_string() == "Name");  // relabeled
+    CHECK_FALSE(columns[0].contains("v-hidden"));
+
+    // A field name the row type does not have: bare column, no crash.
+    CHECK(columns[1]["field"].get_string() == "nonexistent");
+    CHECK(columns[1]["label"].get_string() == "nonexistent");
+    CHECK_FALSE(columns[1].contains("x-decimalPlaces"));
+    CHECK_FALSE(columns[1].contains("ExtUnits"));
+}
+
+TEST_CASE("Views::DeriveColumns::HiddenColumnStillEmitted", "[views]") {
+    auto const columnsJson = morph::views::detail::deriveColumns<RowHideId, vt::VtRow>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, columnsJson));
+    auto const& columns = dom.get_array();
+    REQUIRE(columns.size() == 2);
+    CHECK(columns[0]["field"].get_string() == "id");
+    CHECK(columns[0]["v-hidden"].get<bool>());
 }

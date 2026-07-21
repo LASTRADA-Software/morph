@@ -14,13 +14,18 @@
 /// emitted alongside (never merged into) the action schemas. See
 /// docs/spec/forms/views.md.
 
+#include <algorithm>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <span>
+#include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "../core/registry.hpp"
+#include "forms.hpp"
 
 namespace morph::views {
 
@@ -165,6 +170,93 @@ concept HasViewActions = requires {
     std::begin(V::actions);
     std::end(V::actions);
 };
+
+/// @brief Builds one `v-columns` entry, copying `x-decimalPlaces` /
+///        `ExtUnits` off @p rowDom's property node (and, via its `$ref`, the
+///        resolved `$def`) when @p field names a `Quantity` property.
+/// @param rowDom  The row type's own `morph::forms::schemaJson<Row>()`,
+///                parsed into a DOM.
+/// @param field   Wire field name on the row type.
+/// @param label   Column header.
+/// @param hidden  Whether the column is present in the row model but not
+///                displayed.
+/// @return The `v-columns` entry.
+[[nodiscard]] inline glz::generic_u64 buildColumnEntry(glz::generic_u64 const& rowDom, std::string const& field,
+                                                       std::string const& label, bool hidden) {
+    glz::generic_u64 entry{};
+    entry["field"] = field;
+    entry["label"] = label;
+    if (hidden) {
+        entry["v-hidden"] = true;
+    }
+    auto const& propsObj = rowDom["properties"].get_object();
+    auto iter = propsObj.find(field);
+    if (iter == propsObj.end()) {
+        return entry;  // declared/derived field not on the row type: bare column, no crash
+    }
+    auto const& prop = iter->second;
+    if (prop.contains("x-decimalPlaces")) {
+        entry["x-decimalPlaces"] = prop["x-decimalPlaces"];
+    }
+    // A Quantity field's ExtUnits sits directly on the property node when its
+    // Quantity type occurs only once in Row (glaze inlines a single-use
+    // struct schema in place); glaze only promotes the schema to a `$defs`
+    // entry (referenced back via `$ref`) when the *same* Quantity type
+    // occurs on more than one property (see forms.md's "CFSharedDefFields"
+    // fixture) — deriveColumns must read whichever shape schemaJson<Row>()
+    // actually produced for this particular row type.
+    if (prop.contains("ExtUnits")) {
+        entry["ExtUnits"] = prop["ExtUnits"];
+    } else if (prop.contains("$ref") && rowDom.contains("$defs")) {
+        auto const ref = prop["$ref"].get_string();
+        auto const defName = ref.substr(ref.find_last_of('/') + 1);
+        auto const& defs = rowDom["$defs"].get_object();
+        auto defIter = defs.find(defName);
+        if (defIter != defs.end() && defIter->second.contains("ExtUnits")) {
+            entry["ExtUnits"] = defIter->second["ExtUnits"];
+        }
+    }
+    return entry;
+}
+
+/// @brief Derives (or, when `V::columns` is declared, overrides) the
+///        `v-columns` array for row type @p Row, reusing
+///        `morph::forms::schemaJson<Row>()` as the single source of each
+///        field's declaration order, `x-decimalPlaces`, and `ExtUnits` — the
+///        same schema a standalone form for `Row` would carry.
+/// @tparam V   View descriptor (only `HasColumnOverrides<V>` is consulted).
+/// @tparam Row The query action's row element type (a plain, reflectable,
+///             default-constructible aggregate).
+/// @return The `v-columns` array, JSON-encoded.
+template <typename V, typename Row>
+[[nodiscard]] std::string deriveColumns() {
+    glz::generic_u64 rowDom{};
+    if (glz::read_json(rowDom, ::morph::forms::schemaJson<Row>()) || !rowDom.contains("properties")) {
+        return "[]";
+    }
+    glz::generic_u64::array_t columns{};
+    if constexpr (HasColumnOverrides<V>) {
+        for (auto const& colOverride : V::columns) {
+            auto const label =
+                colOverride.label.empty() ? std::string{colOverride.field} : std::string{colOverride.label};
+            columns.emplace_back(buildColumnEntry(rowDom, std::string{colOverride.field}, label, colOverride.hidden));
+        }
+    } else {
+        auto const& propsObj = rowDom["properties"].get_object();
+        std::vector<std::pair<std::string, std::uint64_t>> ordered;
+        ordered.reserve(propsObj.size());
+        for (auto const& [name, prop] : propsObj) {
+            auto const order = prop.contains("x-order") ? prop["x-order"].template get<std::uint64_t>() : 0;
+            ordered.emplace_back(name, order);
+        }
+        std::ranges::sort(ordered, [](auto const& a, auto const& b) { return a.second < b.second; });
+        for (auto const& [name, order] : ordered) {
+            static_cast<void>(order);
+            columns.emplace_back(buildColumnEntry(rowDom, name, name, false));
+        }
+    }
+    return glz::write_json(columns).value_or("[]");
+}
 
 }  // namespace detail
 
