@@ -1,3 +1,9 @@
+include(${CMAKE_SOURCE_DIR}/cmake/pinned_facts.cmake)
+morph_generate_pinned_facts_header(
+    ${CMAKE_SOURCE_DIR}/docs/spec/pinned_facts.toml
+    ${CMAKE_BINARY_DIR}/generated/pinned_facts_generated.hpp
+)
+
 add_executable(morph_tests
     test_executor.cpp
     test_example.cpp
@@ -53,6 +59,7 @@ add_executable(morph_tests
     test_register_authorization.cpp
     test_opaque_model_ids.cpp
     test_graceful_shutdown.cpp
+    test_pinned_facts.cpp
 )
 
 target_link_libraries(morph_tests
@@ -62,6 +69,8 @@ target_link_libraries(morph_tests
 )
 
 apply_warnings(morph_tests)
+
+target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_tests ${AF_SANITIZER})
