@@ -86,8 +86,11 @@ Four exception types are thrown into in-flight `Completion`s:
 
 **Lifecycle:**
 - `registerModel` — atomically increments a counter, locks the registry mutex,
-  calls the factory, stores the holder, returns the new `ModelId`.
-- `deregisterModel` — locks the registry mutex, erases the entry.
+  calls the factory, records the new id in `_changeAware` if the holder's
+  `isBackendChangeAware()` is `true`, stores the holder, returns the new
+  `ModelId`.
+- `deregisterModel` — locks the registry mutex, erases the entry from both
+  `_models` and `_changeAware`.
 - `execute` — looks up the holder under the registry lock; if `mid` is unknown
   it immediately resolves the completion with
   `std::runtime_error("model not found: id=<n>")`. Otherwise it tracks the
@@ -99,12 +102,15 @@ Four exception types are thrown into in-flight `Completion`s:
   Both `registerModel` and `deregisterModel` emit `registerCount`/`deregisterCount`.
 - `cancelPending` — snapshots the pending list under the pending mutex, delivers
   `exc` to every still-live state.
-- `notifyBackendChanged` — under `_regMtx`, scans all models for holders that
-  implement `IBackendChangedSink` (via `dynamic_cast`) and collects them; then,
-  outside the lock, **posts** `onBackendChanged()` onto each such model's strand
-  (the holder captured by `shared_ptr`). Delivery is asynchronous and serialised
-  against that model's `execute` tasks; it never runs under `_regMtx` or
-  `Bridge::_mtx`, so a sink that re-enters the bridge cannot deadlock.
+- `notifyBackendChanged` — under `_regMtx`, looks up only the models recorded in
+  `_changeAware` (populated at registration from
+  `IModelHolder::isBackendChangeAware()` — a compile-time answer per model type,
+  no `dynamic_cast`); then, outside the lock, **posts** `holder->onBackendChanged()`
+  (the `IModelHolder` base virtual) onto each such model's strand (the holder
+  captured by `shared_ptr`). Cost is O(change-aware models), not O(all models).
+  Delivery is asynchronous and serialised against that model's `execute` tasks;
+  it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
+  bridge cannot deadlock.
 - `setReconnectHandler` — no-op (no transport to reconnect).
 
 Each model instance gets its own strand so actions are serialised per-model
@@ -749,9 +755,9 @@ onto the Qt thread before `sendTextMessage`.
 | Method | Notes |
 |---|---|
 | `explicit LocalBackend(IExecutor& workerPool)` | Constructs with a strand around `workerPool`. |
-| `registerModel(typeId, factory)` | Atomically increments `_nextId`, stores the holder under `_regMtx`. `typeId` is accepted for interface compatibility but not used. |
-| `deregisterModel(mid)` | Erases from `_models` under `_regMtx`. |
-| `notifyBackendChanged()` | Collects `IBackendChangedSink` holders under `_regMtx`, then posts `onBackendChanged()` onto each model's strand (outside the lock). |
+| `registerModel(typeId, factory)` | Atomically increments `_nextId`, stores the holder under `_regMtx`; also records the id in `_changeAware` when the holder is backend-change-aware. `typeId` is accepted for interface compatibility but not used. |
+| `deregisterModel(mid)` | Erases from `_models` and `_changeAware` under `_regMtx`. |
+| `notifyBackendChanged()` | Looks up the models recorded in `_changeAware` under `_regMtx`, then posts `onBackendChanged()` (the `IModelHolder` base virtual — no `dynamic_cast`) onto each such model's strand (outside the lock). Cost is O(change-aware models). |
 | `execute(mid, call, cbExec)` | Posts `call.localOp` on the model's strand with `ScopedContext`. Returns a `Completion`. |
 | `cancelPending(exc)` | Snapshots `_pending`, delivers `exc` to each live state. |
 
@@ -861,6 +867,7 @@ not a behavior change to the existing loopback-only default.
 | `executeTimeout` implementation | A dedicated, lazily-started background thread (`detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill, drop (not close) on empty | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Dropping (vs. closing) keeps a transient burst from taking down the connection — pair with `LimitPolicy::executeTimeout` if bounded caller-side waiting is also needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
+| Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |
 
 ## Cross-references
 
@@ -915,14 +922,6 @@ not a behavior change to the existing loopback-only default.
   explicit `deregister` or process exit, unchanged from before this feature.
   Deregistration therefore remains the caller's responsibility for any path
   that does not go through a scope-aware transport.
-- **`notifyBackendChanged` uses RTTI over every model under the registry lock.**
-  `LocalBackend::notifyBackendChanged` iterates the entire `_models` map holding
-  `_regMtx` and `dynamic_cast`s each holder to `IBackendChangedSink`. This
-  depends on RTTI being enabled and its cost (the cast scan) scales with the
-  number of live models while the registry lock is held; the resulting
-  `onBackendChanged()` calls are then posted to each model's strand outside the
-  lock. (`SimulatedRemoteBackend`'s override is a no-op — its models live in the
-  server.)
 - **WebSocket transport is single-threaded and Qt-bound.** `QtWebSocketBackend`
   must live on the Qt event loop thread; there is no way to drive it from a
   plain worker thread, and `waitForConnected` / the synchronous `register` path

@@ -272,6 +272,8 @@ implementation type — backends hold it, application code never names it).
 struct IModelHolder {
     virtual ~IModelHolder() = default;
     [[nodiscard]] virtual std::type_index type() const noexcept = 0;
+    [[nodiscard]] virtual bool isBackendChangeAware() const noexcept = 0;
+    virtual void onBackendChanged() {}
     template <typename Model> Model& into();
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog>, std::string contextKey);
     bool hasActionLog() const noexcept;
@@ -281,6 +283,14 @@ struct IModelHolder {
 };
 ```
 
+- `isBackendChangeAware()` / `onBackendChanged()` are the compile-time-known
+  backend-change-notification capability, exposed as base-class virtuals so a
+  backend can query and invoke it without `dynamic_cast`. `ModelHolder<M>`
+  answers `isBackendChangeAware()` from the `BackendChangedNotifiable<M>`
+  concept and forwards `onBackendChanged()` to `M::onBackendChanged()` only
+  when that concept holds; the base default is a no-op. See
+  [backend.md](backend.md#localbackend--in-process-execution) for how
+  `LocalBackend` uses this.
 - `into<Model>()` down-casts to a concrete `Model&`; throws `std::bad_cast` on
   mismatch.
 - `attachActionLog` sets the durable log sink and the instance's stable identity
@@ -306,6 +316,8 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
     Model model;
     template <typename... Args> explicit ModelHolder(Args&&... args);
     std::type_index type() const noexcept override;
+    bool isBackendChangeAware() const noexcept override;
+    void onBackendChanged() override;
 };
 ```
 
@@ -326,11 +338,17 @@ class ModelFactory {
 
 ### `IBackendChangedSink` and `BackendChangedMixin`
 
-Optional interface for models that need to react to backend switches. `Bridge::switchBackend`
-discovers this capability via `dynamic_cast`. `ModelHolder<M>` inherits
-`BackendChangedMixin<M>` which conditionally derives from `IBackendChangedSink`
-when `M` declares `void onBackendChanged()` (detected by the
-`BackendChangedNotifiable<M>` concept).
+Optional interface for models that need to react to backend switches.
+`ModelHolder<M>` inherits `BackendChangedMixin<M>` which conditionally derives
+from `IBackendChangedSink` when `M` declares `void onBackendChanged()` (detected
+by the `BackendChangedNotifiable<M>` concept) — this remains available to
+anyone holding an `IModelHolder*` who wants to `dynamic_cast` to it directly.
+`LocalBackend`, however, does not: it discovers and invokes the same capability
+through `IModelHolder::isBackendChangeAware()` / `IModelHolder::onBackendChanged()`
+— two base-class virtuals `ModelHolder<M>` answers from the same
+`BackendChangedNotifiable<M>` concept — so its `notifyBackendChanged()` sweep
+needs no RTTI and visits only models that opted in. See
+[backend.md](backend.md#localbackend--in-process-execution).
 
 ## Singleton registries
 
@@ -533,10 +551,10 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 
 | Symbol | Kind | Purpose |
 |---|---|---|
-| `IModelHolder` | abstract class | Type-erased model owner with an action log slot and an outbox-managed opt-out flag. |
-| `ModelHolder<M>` | class template | Concrete holder storing `M` by value; conditionally inherits `IBackendChangedSink`. |
+| `IModelHolder` | abstract class | Type-erased model owner with an action log slot, an outbox-managed opt-out flag, and a compile-time-answered backend-change-awareness bit. |
+| `ModelHolder<M>` | class template | Concrete holder storing `M` by value; conditionally inherits `IBackendChangedSink`; answers `isBackendChangeAware()`/`onBackendChanged()` from `BackendChangedNotifiable<M>`. |
 | `ModelFactory` | class | `static create<M>()` — default-constructs `ModelHolder<M>` and attaches the process-wide default log. |
-| `IBackendChangedSink` | abstract class | Optional interface for backend-switch notification, discovered via `dynamic_cast`. |
+| `IBackendChangedSink` | abstract class | Optional interface for backend-switch notification; reachable via `dynamic_cast`, though `LocalBackend` itself dispatches through `IModelHolder`'s virtuals instead. |
 | `BackendChangedMixin<M>` | class template | Conditionally inherits `IBackendChangedSink` when `M` has `onBackendChanged()`. |
 
 ### Singleton registries
@@ -690,8 +708,9 @@ testing obligation, not a compile-time guarantee.
   outbox this spec's `setOutboxManaged`/`isOutboxManaged` opt-out enables — see
   [Transactional outbox (opt-in)](../journal/journal.md#transactional-outbox-opt-in).
 - **[backend.md](backend.md)** — backends store `IModelHolder`s in a single map
-  and drive `IBackendChangedSink` / `BackendChangedMixin`; the model instances
-  created by `ModelRegistryFactory` land here.
+  and drive backend-change notification via `IModelHolder::isBackendChangeAware()`/
+  `onBackendChanged()` (in turn backed by `BackendChangedMixin`/`IBackendChangedSink`);
+  the model instances created by `ModelRegistryFactory` land here.
 - **[security.md](../security.md)** — the `session::current()` principal stamped onto
   every logged entry by `recordIfAttached`, and the trust boundary of the
   string-keyed remote dispatch surface.
