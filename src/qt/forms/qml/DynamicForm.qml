@@ -42,6 +42,13 @@ Frame {
     property string resultText: ""
     property bool resultOk: true
 
+    // Cross-field rules (docs/spec/forms/forms.md's x-rules): absent when
+    // the action declares no formRules, in which case every helper below is
+    // a no-op and behavior is byte-identical to a renderer with no rule
+    // support (the fallback the spec requires).
+    property var rules: schema["x-rules"] || []
+    property int rulesRevision: 0
+
     // i18n: a host-supplied translation catalog (see I18nCatalog.hpp) and the
     // BCP-47 locale to resolve against. `catalog: null` (the default) means
     // "no catalog installed" — every label/help/placeholder falls back to
@@ -241,6 +248,135 @@ Frame {
         return runs
     }
 
+    // --- cross-field rules (x-rules): condition/rule evaluation ------------
+
+    function fieldMeta(name) {
+        for (let i = 0; i < fields.length; ++i) {
+            if (fields[i].name === name)
+                return fields[i]
+        }
+        return null
+    }
+
+    function fieldEngaged(name) {
+        return (opt(fieldValues[name], "")).trim() !== ""
+    }
+
+    // A JS-comparable reading of a field's current text, or `undefined` when
+    // unengaged. Quantity and integer fields compare numerically; everything
+    // else (dates, choices, plain strings) compares as text -- ISO-8601
+    // date-time text sorts lexicographically in chronological order, so this
+    // is exact for a "greater(checkOut, checkIn)" style comparison without a
+    // full date parser here. This is an approximation for the live client
+    // gate only: the server re-validates the same rule exactly, over the
+    // declared-precision Rational (see forms.md), so no client rounding can
+    // let an invalid action through -- the correctness floor never depends
+    // on this function.
+    function comparableValue(name) {
+        const text = (opt(fieldValues[name], "")).trim()
+        if (text === "")
+            return undefined
+        const meta = fieldMeta(name)
+        if (meta && (meta.isQuantity || meta.isInteger))
+            return parseFloat(text)
+        return text
+    }
+
+    // Evaluates one condition node (`engaged` / `notEngaged` / `equals` / a
+    // comparison kind reused as a boolean). An unrecognised `kind` fails
+    // closed (`false`) -- the renderer defers enforcement to the server
+    // rather than passing an unknown validation condition.
+    function testCondition(cond) {
+        const kind = cond.kind
+        const names = cond.fields || []
+        if (kind === "engaged")
+            return fieldEngaged(names[0])
+        if (kind === "notEngaged")
+            return !fieldEngaged(names[0])
+        if (kind === "equals") {
+            if (!fieldEngaged(names[0]))
+                return false
+            const literal = (cond.value && cond.value.num !== undefined)
+                             ? (cond.value.num / cond.value.den) : cond.value
+            return comparableValue(names[0]) === literal
+        }
+        if (kind === "greater" || kind === "greaterOrEqual" || kind === "less" || kind === "lessOrEqual") {
+            const lv = comparableValue(names[0])
+            const rv = comparableValue(names[1])
+            if (lv === undefined || rv === undefined)
+                return true  // vacuously satisfied while an operand is unengaged
+            if (kind === "greater") return lv > rv
+            if (kind === "greaterOrEqual") return lv >= rv
+            if (kind === "less") return lv < rv
+            return lv <= rv
+        }
+        return false
+    }
+
+    // Evaluates one top-level x-rules entry. Presentation kinds
+    // (visibleWhen/readonlyWhen) always return true -- they never gate
+    // submission, only presentation (see fieldVisible/fieldReadonly below).
+    // An unrecognised rule kind fails closed: the renderer defers
+    // enforcement to the server rather than passing the rule.
+    function testRule(rule) {
+        const kind = rule.kind
+        const names = rule.fields || []
+        if (kind === "requiredWhen") {
+            if (!testCondition(rule.when))
+                return true
+            return fieldEngaged(names[0])
+        }
+        if (kind === "greater" || kind === "greaterOrEqual" || kind === "less" || kind === "lessOrEqual")
+            return testCondition(rule)
+        if (kind === "exactlyOneOf" || kind === "atLeastOneOf" || kind === "mutuallyExclusive") {
+            let count = 0
+            for (let i = 0; i < names.length; ++i) {
+                if (fieldEngaged(names[i]))
+                    count++
+            }
+            if (kind === "exactlyOneOf") return count === 1
+            if (kind === "atLeastOneOf") return count >= 1
+            return count <= 1
+        }
+        if (kind === "visibleWhen" || kind === "readonlyWhen")
+            return true
+        return false
+    }
+
+    // Whether `name` is required right now because some requiredWhen rule's
+    // condition currently holds for it (in addition to the schema's static
+    // `required` array).
+    function isDynamicallyRequired(name) {
+        for (let i = 0; i < rules.length; ++i) {
+            const rule = rules[i]
+            if (rule.kind === "requiredWhen" && rule.fields[0] === name)
+                return testCondition(rule.when)
+        }
+        return false
+    }
+
+    // Whether `name` should be shown. A field with no visibleWhen rule is
+    // always visible (renderer fallback per forms.md).
+    function fieldVisible(name) {
+        for (let i = 0; i < rules.length; ++i) {
+            const rule = rules[i]
+            if (rule.kind === "visibleWhen" && rule.fields.indexOf(name) !== -1)
+                return testCondition(rule.when)
+        }
+        return true
+    }
+
+    // Whether `name` should be read-only. A field with no readonlyWhen rule
+    // is always editable (renderer fallback).
+    function fieldReadonly(name) {
+        for (let i = 0; i < rules.length; ++i) {
+            const rule = rules[i]
+            if (rule.kind === "readonlyWhen" && rule.fields.indexOf(name) !== -1)
+                return testCondition(rule.when)
+        }
+        return false
+    }
+
     // --- draft state --------------------------------------------------------
 
     // --- locale numeric formatting (mirrors morph::render::locale_format.hpp)
@@ -403,7 +539,7 @@ Frame {
             const f = fields[i]
             const text = (opt(fieldValues[f.name], "")).trim()
             if (text === "") {
-                if (f.required)
+                if (f.required || isDynamicallyRequired(f.name))
                     ok = false
                 continue
             }
@@ -439,8 +575,21 @@ Frame {
                 parts.push(JSON.stringify(f.name) + ":" + JSON.stringify(text))
             }
         }
+        // Cross-field rules (x-rules): evaluated after the per-field checks
+        // above, over the same draft. Presentation kinds (visibleWhen /
+        // readonlyWhen) never fail this loop -- testRule always returns
+        // true for them.
+        if (ok) {
+            for (let r = 0; r < rules.length; ++r) {
+                if (!testRule(rules[r])) {
+                    ok = false
+                    break
+                }
+            }
+        }
         ready = ok
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
+        rulesRevision++
         if (ready && form.controller)
             form.controller.submitIfValid(form.actionType, form.previewLine)
     }
@@ -502,10 +651,12 @@ Frame {
 
         ColumnLayout {
             id: fieldColumn
+            objectName: "column_" + fieldColumn.modelData.name
             required property var modelData
             Layout.fillWidth: true
             Layout.columnSpan: fieldColumn.modelData.colspan
-            visible: !fieldColumn.modelData.hidden
+            visible: { form.rulesRevision; return !fieldColumn.modelData.hidden && form.fieldVisible(fieldColumn.modelData.name) }
+            enabled: { form.rulesRevision; return !form.fieldReadonly(fieldColumn.modelData.name) }
             spacing: 2
 
             RowLayout {
@@ -514,7 +665,7 @@ Frame {
                     font.bold: true
                 }
                 Label {
-                    visible: fieldColumn.modelData.required
+                    visible: { form.rulesRevision; return fieldColumn.modelData.required || form.isDynamicallyRequired(fieldColumn.modelData.name) }
                     text: "*"
                     color: "#d33"
                 }
