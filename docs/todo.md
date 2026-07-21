@@ -162,9 +162,9 @@ reference renderer, the schema contract stays renderer-agnostic).
   sections, tabs, accordions, column spans.
 - **E-G3 — Widget hints** · P1 · [spec: `planned/gui_widget_hints.md`] — control
   selection (multiline, slider, radio vs combo), type-derived where possible.
-- **E-G4 — Cross-field rules** · P1 · [spec: `planned/gui_cross_field_rules.md`] —
+- **E-G4 — Cross-field rules** · P1 · [spec: `spec/forms/forms.md`] —
   typed rule vocabulary evaluated on client **and** server; shares one
-  declaration with [validation.md](spec/core/registry.md).
+  declaration with [the server-side validator](spec/core/registry.md).
 - **E-G5 — Computed fields** · P2 · [spec: `planned/gui_computed_fields.md`] —
   derived read-only fields, recomputed live client-side, authoritative server-side.
 - **E-G6 — Dependent choices** · P2 · [spec: `planned/gui_dependent_choices.md`] —

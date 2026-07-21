@@ -153,8 +153,8 @@ table (additive, optional):
 The dependency names are the parent fields' **wire names**, matching the property
 keys a renderer already indexes (the same convention as `x-computed.inputs` in
 [gui_computed_fields.md](gui_computed_fields.md) and `fields` in
-[gui_cross_field_rules.md](gui_cross_field_rules.md)), so the renderer resolves
-each parent to a property it is already rendering.
+[forms.md](../spec/forms/forms.md)'s cross-field rules), so the renderer
+resolves each parent to a property it is already rendering.
 
 ### The options action's own schema drives its request body
 
@@ -189,7 +189,7 @@ guarantee [forms.md](../spec/forms/forms.md) makes.
   current list. `x-optionsDependsOn` improves the *client* experience (correct
   fetch, stale-selection clearing); a model that must reject an inconsistent
   parent/child pair does so in its `execute` (or via a cross-field rule,
-  [gui_cross_field_rules.md](gui_cross_field_rules.md), that both fields be
+  [forms.md](../spec/forms/forms.md) (implemented), that both fields be
   engaged — not that they are mutually consistent, which the closed vocabulary
   cannot express).
 - **Not a caching or debounce policy.** *When* to re-fetch (immediately on change,
@@ -252,10 +252,10 @@ already lists:
   obligations, and the staleness Failure mode this narrows client-side.
 - [forms.md](../spec/forms/forms.md) — `mergeSchemaExtras` and the property-node `x-*`
   placement where `x-optionsDependsOn` is emitted; the renderer-contract table
-  this key joins; the flat-actions scope.
-- [gui_cross_field_rules.md](gui_cross_field_rules.md) — a rule may require a
-  dependent `Choice` be engaged; parent/child *consistency* is a model concern the
-  closed rule vocabulary does not cover.
+  this key joins; the flat-actions scope. Also its cross-field rule vocabulary
+  (implemented) — a rule may require a dependent `Choice` be engaged;
+  parent/child *consistency* is a model concern the closed rule vocabulary does
+  not cover.
 - [gui_computed_fields.md](gui_computed_fields.md) — shares the "sibling field
   names as wire strings" and empty-input-propagation conventions.
 - [bridge.md](../spec/core/bridge.md) — the action-execute path the renderer uses to

@@ -184,6 +184,13 @@ struct ActionValidator {
 };
 ```
 
+A common `validate()` body composes `morph::forms::allRulesSatisfied(*this)`
+(an action's declared cross-field rules, [forms.md](../forms/forms.md)) with
+`morph::forms::allRequiredEngaged(*this)` (per-field required-ness). Neither
+requires any change to `ActionValidator`/`HasValidate` — both are ordinary
+`bool`-returning calls inside `validate()`, picked up the same way any other
+`validate()` body is.
+
 ### `ValidationError`
 
 Thrown by the two execution sites that receive an action without first passing
@@ -665,6 +672,9 @@ testing obligation, not a compile-time guarantee.
   `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s
   `localOp`, which enforces the same `ValidationError` gate as this spec's
   `ActionDispatcher::registerAction` for the local execution path.
+- **[forms.md](../forms/forms.md)** — `allRequiredEngaged`, and the closed
+  cross-field rule vocabulary (`allRulesSatisfied`, `x-rules`) that composes
+  into `validate()` alongside it.
 - **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the

@@ -23,6 +23,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [Theming / component-override registry](#theming--component-override-registry)
 - [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
+- [Cross-field rules — the `x-rules` vocabulary](#cross-field-rules--the-x-rules-vocabulary)
 - [Support traits and helpers](#support-traits-and-helpers)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -474,6 +475,11 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-group` | property node (sibling of `$ref`) | string | The title of the group this field belongs to. Omitted for a field in the implicit default group, or when `x-layout` is absent. |
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. |
+| `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
+| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
+| ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). |
+| ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on. Present only on these condition-bearing kinds. |
+| ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. |
 
 ### Versioning stance
 
@@ -704,9 +710,14 @@ realization: `I18nCatalog` (`examples/forms/gui_qml/I18nCatalog.hpp`), an
 in-memory `QObject` catalog (QML cannot hold a `std::function` directly),
 wired into `DynamicForm.qml`'s `resolveText`/`i18nFieldKey` JS mirrors of the
 functions above. It currently resolves only the field label/help/placeholder
-slot — group, rule, wizard, and app-menu rendering (and therefore their i18n
-wiring) land with `gui_layout_grouping.md`, `gui_cross_field_rules.md`, and
-`gui_workflows_navigation.md` respectively (see `docs/planned/`).
+slot — group, wizard, and app-menu rendering (and therefore their i18n
+wiring) land with `gui_layout_grouping.md` and `gui_workflows_navigation.md`
+respectively (see `docs/planned/`). Cross-field rules (above) are implemented
+but carry no translatable message text of their own — the `x-rules`
+vocabulary is structural (`kind`/`fields`/`when`/`value`) only, so a renderer
+builds any rule-violation message from that structure (or its own catalog
+entry, per "Rule messages come from the catalog, not the wire" below), never
+from a wire string.
 
 **Group membership is matched by index, never by translated text.** A
 field's `x-section` is the stable numeric handle into `x-layout.groups`; a
@@ -788,6 +799,141 @@ The predicate is `noexcept` and `constexpr`, and it inspects only the action's
 generation ([Scope: flat actions only](#scope-flat-actions-only)); it does not
 recurse into nested aggregates.
 
+## Cross-field rules — the `x-rules` vocabulary
+
+`allRequiredEngaged` is per-field and membership-blind by design. A condition
+spanning **two or more fields** — "end date must be after start date", "supply
+either an email or a phone but not both", "discount is required only when a
+promo code is entered" — is expressed with a **closed, typed rule vocabulary**
+declared once as an action's `static constexpr formRules` member, built with
+`morph::forms::ruleList(...)`:
+
+```cpp
+struct BookRoom {
+    morph::time::Timestamp checkIn;
+    morph::time::Timestamp checkOut;
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+    Quantity<Unit::money> promo;
+    Quantity<Unit::money> discount;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::greater(&BookRoom::checkOut, &BookRoom::checkIn),
+        morph::forms::exactlyOneOf(&BookRoom::email, &BookRoom::phone),
+        morph::forms::requiredWhen(&BookRoom::discount, morph::forms::engaged(&BookRoom::promo)),
+        morph::forms::visibleWhen(&BookRoom::discount, morph::forms::engaged(&BookRoom::promo)));
+
+    [[nodiscard]] bool validate() const {
+        return morph::forms::allRulesSatisfied(*this) && morph::forms::allRequiredEngaged(*this);
+    }
+};
+```
+
+One declaration drives three consumers: `schemaJson<A>()` emits it as a
+top-level `x-rules` array (alongside `required`); `allRulesSatisfied<A>(action)`
+evaluates it as the shared C++ predicate; and because `validate()` calls
+`allRulesSatisfied`, `ActionValidator<A>::ready` ([registry.md](../core/registry.md))
+picks it up automatically on every dispatch path that already enforces
+`ready()` — the reactive `set<>` gate, the client request/reply gate, and the
+server dispatch runner ([registry.md](../core/registry.md)) — with no extra
+code anywhere. The vocabulary is deliberately closed: adding a new rule kind is
+a framework change, never an application-supplied lambda, which is what lets
+the client and the server evaluate identically from the same serialized form.
+
+### The rule and condition kinds
+
+| Factory | Meaning | `x-rules` `kind` | Also valid as a condition? |
+|---|---|---|---|
+| `requiredWhen(field, cond)` | `field` must be engaged when `cond` holds. | `"requiredWhen"` | no (only ranges over conditions itself) |
+| `greater(a, b)` / `greaterOrEqual(a, b)` | `*a > *b` / `*a >= *b`. | `"greater"` / `"greaterOrEqual"` | yes |
+| `less(a, b)` / `lessOrEqual(a, b)` | `*a < *b` / `*a <= *b`. | `"less"` / `"lessOrEqual"` | yes |
+| `exactlyOneOf(f1, f2, ...)` | Exactly one listed field is engaged. | `"exactlyOneOf"` | no |
+| `atLeastOneOf(f1, f2, ...)` | At least one listed field is engaged. | `"atLeastOneOf"` | no |
+| `mutuallyExclusive(f1, f2, ...)` | At most one listed field is engaged. | `"mutuallyExclusive"` | no |
+| `visibleWhen(field, cond)` | **Presentation:** `field` is shown only while `cond` holds. | `"visibleWhen"` | no |
+| `readonlyWhen(field, cond)` | **Presentation:** `field` is editable only while `cond` does **not** hold. | `"readonlyWhen"` | no |
+| `engaged(field)` / `notEngaged(field)` | `field` is / is not engaged. | `"engaged"` / `"notEngaged"` | yes (condition-only) |
+| `equals(field, literal)` | `field`'s engaged value equals `literal`. | `"equals"` | yes (condition-only) |
+
+`engaged`/`notEngaged`/`requiredWhen`/the membership rules accept any
+`EngageableField` — an `EmptyCapableField` (`Quantity`/`Choice`/`Timestamp`) or
+a plain `std::optional<T>` (which does **not** satisfy `EmptyCapableField` —
+see "two exclusions" above — but does count as engageable for rule purposes).
+`greater`/`greaterOrEqual`/`less`/`lessOrEqual` are narrower: both operands
+must be the **same** `EmptyCapableField` type whose engaged value
+(`operator*()`) is three-way-comparable — `Quantity<U, Dec>` (compares the
+exact `math::Rational` payload, never a `double`) or `morph::time::Timestamp`
+(compares `DateTime`). An unengaged operand makes a comparison **vacuously
+satisfied** (`true`) — both as a top-level rule and when reused as a nested
+condition — so a form still being filled in never fails a comparison
+prematurely; the required-ness of the operand itself is a separate
+`required`/`requiredWhen` concern. `equals`, by contrast, is **not** vacuous:
+an unengaged field cannot equal anything, so it returns `false` until the
+field is engaged. A literal passed to `equals` is one of `std::int64_t`,
+`bool`, `std::string`, or the exact `math::Rational` (never a `double`), so it
+serialises losslessly into `x-rules`.
+
+### Presentation rules never gate
+
+`visibleWhen`/`readonlyWhen` are the only two **presentation** kinds: they
+never participate in `allRulesSatisfied` (skipped by construction, via each
+node's `isPresentation` flag), only in what a renderer shows/enables. While a
+field is hidden by `visibleWhen`, its current draft value still travels in the
+payload — hiding never clears it, exactly like a static `x-hidden` field. An
+author who wants "hidden ⇒ also not required" pairs `visibleWhen(f, c)` with
+`requiredWhen(f, c)` explicitly; neither implies the other.
+
+### The `x-rules` schema emission
+
+`mergeSchemaExtras` walks `A::formRules` (when declared) and emits a
+**top-level** `x-rules` array, alongside `required`. Each element is
+self-describing JSON a renderer (or the server) can evaluate without any C++
+type information:
+
+```json
+"x-rules": [
+  { "kind": "greater", "fields": ["checkOut", "checkIn"] },
+  { "kind": "exactlyOneOf", "fields": ["email", "phone"] },
+  { "kind": "requiredWhen", "fields": ["discount"],
+    "when": { "kind": "engaged", "fields": ["promo"] } },
+  { "kind": "visibleWhen", "fields": ["discount"],
+    "when": { "kind": "engaged", "fields": ["promo"] } }
+]
+```
+
+Field names are the **wire (JSON) field names**, resolved from the
+pointer-to-member the same way `x-order` is derived: a fresh probe instance of
+the action is walked and each rule's stored member pointer is matched against
+the probe's members by address. An action with no `formRules` emits no
+`x-rules` key at all — byte-identical to a version of the schema generated
+before this feature existed.
+
+### Server-side: the same list, evaluated in the dispatcher
+
+The server never trusts the client's evaluation of `x-rules`; it re-runs
+`A::formRules` itself. Because an action's `validate()` calls
+`allRulesSatisfied(*this)`, and `ActionValidator<A>::ready` auto-detects
+`validate()` via `HasValidate` ([registry.md](../core/registry.md)), the
+server dispatch runner evaluates the **exact same rule list** the client did —
+the same typed nodes over the same values — with zero extra server code. A
+hand-built envelope that violates a rule is rejected with
+`morph::model::ValidationError` ([registry.md](../core/registry.md)) on every
+dispatch path (local, simulated-remote, Qt WebSocket), before `Model::execute`
+runs.
+
+### Renderer fallback
+
+Every key here is additive and optional, consistent with the unversioned
+schema stance below. An action declaring no `formRules` emits no `x-rules` and
+behaves exactly as before this feature existed. A renderer that does not
+understand `x-rules` still produces a usable form: it honours the per-field
+`required` array and lets the **server** reject any cross-field violation —
+the correctness floor never depends on the client understanding the key. An
+unrecognised `kind` (a rule *or* a nested condition) must be treated as
+"cannot evaluate" by a client renderer, which defers enforcement to the
+server rather than passing the rule — the server, running the compiled C++
+rule list directly, has no such "unrecognised kind" case.
+
 ## Support traits and helpers
 
 | Symbol | Kind | Purpose |
@@ -840,6 +986,17 @@ expose the compile-time metadata that `mergeSchemaExtras` reads to emit
 `mergeSchemaExtras` and `allRequiredEngaged` branch on. See [choice.md](choice.md)
 for the exhaustive tables and design rationale.
 
+### Cross-field rules
+
+| Symbol | Kind | Purpose |
+|---|---|---|
+| `EngageableField<T>` | concept | `EmptyCapableField<T>` or `std::optional<...>` — the broader "has an empty state" test the rule vocabulary uses. |
+| `RuleList<Rules...>` | class template | Holds an action's declared rules, in declaration order. Built by `ruleList(...)`; never constructed directly. |
+| `ruleList(rules...)` | function template | Composes rule/condition nodes into the `RuleList` an action assigns to `formRules`. |
+| `HasFormRules<A>` | concept | `true` when `A` declares a `static constexpr formRules` member. |
+| `allRulesSatisfied<A>(action)` | function template | `true` when every **validation** rule in `A::formRules` holds (or there are none); skips presentation rules. `noexcept`. |
+| `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
+
 ## Design decisions
 
 | Decision | Choice | Why |
@@ -852,6 +1009,7 @@ for the exhaustive tables and design rationale.
 | Wire serialisation | **Glaze `meta` reflects `value` directly** | `Choice<T, ...>` serialises as `T \| null` — the options metadata never travels. |
 | Options action | **A registered action type id** | The same action dispatch mechanism handles queries for picklist data, so no separate protocol or endpoint is needed. |
 | `x-order` | **Always emitted, on every property** | JSON object key order is not reliable across DOM implementations; the explicit index gives renderers a deterministic layout. |
+| Cross-field rules | **Closed, typed vocabulary, one declaration → schema + client + server** | Client and server must evaluate cross-field conditions identically; a closed set of framework-owned node types (not application lambdas) is what makes that possible. Arbitrary logic that does not fit stays in `validate()`/`execute`, unreflected into `x-rules`, exactly as `allRequiredEngaged` already draws the line for per-field required-ness. |
 | `x-unitAlternatives` | **Derived from `UnitTraits::relations`** | The same `UnitRelation` entries that drive `convert` also drive the display-unit selector — no separate declaration to keep in sync. |
 | `Timestamp` | **Uses standard `"format": "date-time"`** | No extension annotation needed; standard JSON-Schema vocabulary is sufficient. |
 | Layout declaration | **`static constexpr formLayout` / `fieldSpans`, mirroring `optionalFields`** | Visual structure is a compile-time property of the action, exactly like the existing opt-out list; a renderer that ignores it degrades to the flat `x-order` form with no missing fields. |
@@ -928,6 +1086,10 @@ which is why the `examples/forms` model additionally calls
 `action.validate()` itself inside `execute(RecordMeasurement)` and throws
 `std::invalid_argument` on failure as a defense-in-depth model-level check.
 
+Because `allRulesSatisfied` (above) is typically one of the two conjuncts of
+`validate()`, a `formRules` declaration is enforced on exactly the same paths
+`ActionValidator<A>::ready` already is — no separate enforcement seam.
+
 ### Advertised precision is enforced on dispatch
 
 `x-decimalPlaces` advertises a field's **declared** precision
@@ -986,7 +1148,7 @@ wrong or un-merged schema rather than fail loudly.
 | [widget_hints.md](widget_hints.md) | Full `Multiline`/`Ranged` API and design (this spec cross-refs rather than duplicates it). |
 | [quantity_type.md](../util/quantity_type.md) | `Quantity`, its unit tags, `UnitTraits::relations`, and `convert` — the source of `x-decimalPlaces`, `x-unitAlternatives`, and `ExtUnits`. |
 | [datetime.md](../util/datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |
-| [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. |
+| [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. Also the comparison/equality `greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`equals` use for numeric fields, so client and server compare identical values. |
 | [security.md](../security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
 | [session.md](../session/session.md) | `Context::locale`, the server-side hook for data (not chrome) localisation — the one place `session::current()->locale` participates, for `Choice` option-row labels. |
 

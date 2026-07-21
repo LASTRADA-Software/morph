@@ -171,7 +171,7 @@ carried in `total` is discarded and replaced by `qty * price` computed from the
 - A hostile or buggy client that submits a tampered `total` cannot influence the
   stored value — the server derives it, exactly as it derives declared precision.
 - The value the validator and `Model::execute` see is the authoritative one, so a
-  cross-field rule ([gui_cross_field_rules.md](gui_cross_field_rules.md)) over a
+  cross-field rule ([forms.md](../spec/forms/forms.md), implemented) over a
   computed field evaluates on the server's own number, not the client's.
 - It is a **no-op** for actions with no `computedFields` — zero behaviour change,
   backward compatible — mirroring how `reconcileDeclaredPrecision` no-ops for
@@ -180,7 +180,8 @@ carried in `total` is discarded and replaced by `qty * price` computed from the
 Because the same `recomputeAll` runs on both ends over inputs normalised the same
 way, the field the client shows and the field the server stores agree by
 construction — a single-source-of-truth derivation, the computed-field analogue
-of the single rule declaration in [gui_cross_field_rules.md](gui_cross_field_rules.md).
+of the single rule declaration in [forms.md](../spec/forms/forms.md)'s
+cross-field rules.
 
 ## Additivity and renderer fallback
 
@@ -208,7 +209,7 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   free of an interpreter and avoids a second, drift-prone copy of the arithmetic.
 - **Not validation.** A computed field's requiredness does not apply (it is
   excluded from `required`); rules *about* a computed value belong to
-  [gui_cross_field_rules.md](gui_cross_field_rules.md), evaluated after
+  [forms.md](../spec/forms/forms.md)'s cross-field rules, evaluated after
   `recomputeAll`.
 - **No localisation.** `x-computed`/`x-readonly` carry structure, not display
   text, for the same reason the schema is un-localised ([forms.md](../spec/forms/forms.md));
@@ -246,7 +247,9 @@ value is the true derivation) never depends on the client honouring `x-readonly`
 - [forms.md](../spec/forms/forms.md) — `mergeSchemaExtras`, the property-node `x-*`
   placement, `required` derivation (computed fields are excluded),
   `optionalFields`, and `reconcileDeclaredPrecision` (the normalisation both
-  recomputes build on); the renderer-contract table this extends.
+  recomputes build on); the renderer-contract table this extends. Also its
+  cross-field rule vocabulary (implemented) — rules that may reference a
+  computed field evaluate on the server's authoritative value.
 - [validation.md](../spec/core/registry.md) — the dispatcher runner where the authoritative
   server-side `recomputeAll` slots in, alongside precision reconciliation and the
   `ready()` check.
@@ -254,8 +257,6 @@ value is the true derivation) never depends on the client honouring `x-readonly`
   (`operator*`/`operator/`, result-unit deduction) numeric derivations use.
 - [rational.md](../spec/util/rational.md) — the exact `Rational` payload that makes the
   client-displayed and server-stored values bit-identical.
-- [gui_cross_field_rules.md](gui_cross_field_rules.md) — rules that may reference a
-  computed field, evaluated on the server's authoritative value.
 - [gui_field_metadata.md](gui_field_metadata.md) — author-declared `x-readonly`
   for non-computed fields reuses the same key.
 - [todo.md](../todo.md) — execution order within the GUI program.
