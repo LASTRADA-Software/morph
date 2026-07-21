@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
 #include <morph/util/rational.hpp>
@@ -252,4 +254,131 @@ TEST_CASE("BridgeHandler::set<> does not fire before both computed inputs are en
     handler.set<&CFLineItem::qty>(Rational{Numerator{3}, Denominator{1}, dp2});
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     CHECK_FALSE(fired.load());  // price still missing -> total unengaged -> validate() is false
+}
+
+// ---------------------------------------------------------------------------
+// Authoritative server-side recompute: a tampered wire value is discarded on
+// every dispatch path, before Model::execute runs.
+// ---------------------------------------------------------------------------
+
+struct CFPlainModel {
+    CFPlainAction execute(const CFPlainAction& action) { return action; }
+};
+
+BRIDGE_REGISTER_MODEL(CFPlainModel, "Test_CF_PlainModel")
+BRIDGE_REGISTER_ACTION(CFPlainModel, CFPlainAction, "Test_CF_PlainAction")
+
+TEST_CASE("ActionDispatcher's runner overwrites a tampered computed field before Model::execute",
+          "[registry][computed]") {
+    auto holder = morph::model::detail::ModelFactory::create<CFModel>();
+    // qty=3, price=2 => true total = 6.00; the wire body lies and claims total=999.00.
+    auto const resultJson = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "Test_CF_Model", "Test_CF_LineItem", *holder,
+        R"({"qty":{"num":3,"den":1,"dp":2},"price":{"num":2,"den":1,"dp":2},)"
+        R"("total":{"num":99900,"den":100,"dp":2}})");
+
+    auto const result = morph::model::ActionTraits<CFLineItem>::resultFromJson(resultJson);
+    REQUIRE(result.total.hasValue());
+    CHECK(*result.total == Rational{6, dp2});
+}
+
+TEST_CASE("ActionDispatcher's runner reconciles declared Quantity precision too", "[registry][computed]") {
+    auto holder = morph::model::detail::ModelFactory::create<CFPlainModel>();
+    // qty's declared precision is 2; the wire claims dp:5.
+    auto const resultJson = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "Test_CF_PlainModel", "Test_CF_PlainAction", *holder,
+        R"({"qty":{"num":314,"den":100,"dp":5},"price":{"num":1,"den":1,"dp":2}})");
+
+    auto const result = morph::model::ActionTraits<CFPlainAction>::resultFromJson(resultJson);
+    REQUIRE(result.qty.hasValue());
+    CHECK((*result.qty).getDecimalPlaces() == dp2);  // declared precision, not the wire's dp:5
+}
+
+TEST_CASE("ActionDispatcher's runner dispatches an action with no computedFields unchanged", "[registry][computed]") {
+    auto holder = morph::model::detail::ModelFactory::create<CFPlainModel>();
+    auto const resultJson = morph::model::detail::ActionDispatcher::instance().dispatch(
+        "Test_CF_PlainModel", "Test_CF_PlainAction", *holder,
+        R"({"qty":{"num":5,"den":1,"dp":2},"price":{"num":7,"den":1,"dp":2}})");
+    auto const result = morph::model::ActionTraits<CFPlainAction>::resultFromJson(resultJson);
+    REQUIRE(result.qty.hasValue());
+    CHECK(*result.qty == Rational{5, dp2});
+    CHECK(*result.price == Rational{7, dp2});
+}
+
+TEST_CASE("Bridge::executeVia's localOp overwrites a tampered computed field on LocalBackend",
+          "[bridge][local][computed]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+
+    CFLineItem tampered{};
+    tampered.qty = Rational{Numerator{3}, Denominator{1}, dp2};
+    tampered.price = Rational{Numerator{2}, Denominator{1}, dp2};
+    tampered.total = Rational{Numerator{99900}, Denominator{100}, dp2};  // hand-built, wrong
+
+    std::atomic<bool> done{false};
+    Rational observedTotal{0, dp2};
+    handler.execute(tampered)
+        .then([&](CFLineItem result) {
+            if (result.total.hasValue()) {
+                observedTotal = *result.total;
+            }
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    CHECK(observedTotal == Rational{6, dp2});
+}
+
+TEST_CASE("BridgeHandler::executeJson overwrites a tampered computed field before dispatch", "[bridge][computed]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> done{false};
+    std::string resultJson;
+    handler
+        .executeJson("Test_CF_LineItem", R"({"qty":{"num":3,"den":1,"dp":2},"price":{"num":2,"den":1,"dp":2},)"
+                                         R"("total":{"num":99900,"den":100,"dp":2}})")
+        .then([&](std::string json) {
+            resultJson = std::move(json);
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    auto const result = morph::model::ActionTraits<CFLineItem>::resultFromJson(resultJson);
+    REQUIRE(result.total.hasValue());
+    CHECK(*result.total == Rational{6, dp2});
+}
+
+TEST_CASE("SimulatedRemoteBackend overwrites a tampered computed field before Model::execute",
+          "[bridge][remote][computed]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
+
+    CFLineItem tampered{};
+    tampered.qty = Rational{Numerator{4}, Denominator{1}, dp2};
+    tampered.price = Rational{Numerator{5}, Denominator{1}, dp2};
+    tampered.total = Rational{Numerator{100000}, Denominator{100}, dp2};  // hand-built; true = 20.00
+
+    std::atomic<bool> done{false};
+    Rational observedTotal{0, dp2};
+    handler.execute(tampered)
+        .then([&](CFLineItem result) {
+            if (result.total.hasValue()) {
+                observedTotal = *result.total;
+            }
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }, std::chrono::milliseconds{4000}));
+    CHECK(observedTotal == Rational{20, dp2});
 }

@@ -208,13 +208,15 @@ public:
     /// Qt WebSocket topology) — `Model::execute()` runs here, on whichever process
     /// actually owns @p holder. Before `Model::execute` runs, the runner reconciles
     /// any `Quantity` fields to their declared precision
-    /// (`morph::forms::reconcileDeclaredPrecision`) and enforces
-    /// `ActionValidator<Action>::ready(action)`, throwing `ValidationError` when it
-    /// returns `false` — the same two checks the client bridge dispatch path
-    /// (`ActionExecuteRegistry::registerAction`, `bridge.hpp`) already performs. If a
-    /// `journal::IActionLog` is attached to @p holder (via
-    /// `IModelHolder::attachActionLog`) and `Action` is loggable (the default), the
-    /// executed action is recorded automatically after it succeeds.
+    /// (`morph::forms::reconcileDeclaredPrecision`), overwrites any declared
+    /// computed fields from their inputs (`morph::forms::recomputeAll`,
+    /// `forms.hpp`), and enforces `ActionValidator<Action>::ready(action)`,
+    /// throwing `ValidationError` when it returns `false` — the same checks the
+    /// client bridge dispatch path (`ActionExecuteRegistry::registerAction`,
+    /// `bridge.hpp`) already performs. If a `journal::IActionLog` is attached to
+    /// @p holder (via `IModelHolder::attachActionLog`) and `Action` is loggable
+    /// (the default), the executed action is recorded automatically after it
+    /// succeeds.
     /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
@@ -228,6 +230,15 @@ public:
             // No-op for actions with no Quantity members. See
             // docs/spec/forms/forms.md.
             ::morph::forms::reconcileDeclaredPrecision(action);
+            // Overwrite any computed fields from their declared inputs. This is
+            // the true server-side execution site for every remote and Qt
+            // WebSocket topology (RemoteServer -> ActionDispatcher::dispatch) --
+            // the one path a hand-built wire envelope reaches directly,
+            // bypassing every client-side gate. A tampered computed value on
+            // the wire is discarded here, before the validator check and
+            // Model::execute run. No-op for actions with no computedFields. See
+            // docs/spec/forms/forms.md.
+            ::morph::forms::recomputeAll(action);
             // Enforce the action's validator on the server dispatch path — the
             // one path an untrusted remote client can drive directly with a
             // hand-built envelope, bypassing the client-side gates

@@ -361,12 +361,15 @@ public:
     /// the old backend still exists (its `shared_ptr` refcount is > 0) and the
     /// call either succeeds or fails with "model not found" — both are safe.
     ///
-    /// On `LocalBackend`, the `localOp` this method builds enforces
+    /// On `LocalBackend`, the `localOp` this method builds first overwrites any
+    /// declared computed fields from their inputs (`morph::forms::recomputeAll`,
+    /// a no-op for actions with no `computedFields`), then enforces
     /// `morph::model::ActionValidator<Action>::ready(action)` before calling
     /// `Model::execute`, mirroring `ActionDispatcher::registerAction`'s runner
     /// (`registry.hpp`) for the in-process path. A `false` result resolves the
     /// returned `Completion` through `onError` with a `morph::model::ValidationError`
-    /// instead of executing the action — see docs/spec/core/registry.md.
+    /// instead of executing the action — see docs/spec/core/registry.md and
+    /// docs/spec/forms/forms.md.
     ///
     /// @tparam Model  Model type that owns the handler.
     /// @tparam Action Action type to dispatch.
@@ -413,6 +416,17 @@ public:
             // unvalidated actions (zero behavior change). The thrown exception is
             // caught by LocalBackend::execute's strand task (backend.hpp) and
             // resolves this Completion through onError.
+            //
+            // Overwrite any computed fields from their declared inputs before the
+            // validator runs and the model ever sees the action -- the same
+            // authoritative recompute ActionDispatcher::registerAction's runner
+            // performs for remote topologies (registry.hpp), applied here for the
+            // in-process LocalBackend path (every execute<Action>()/executeJson
+            // call). Recompute must run before the validator check so a validator
+            // inspecting a computed field sees the authoritative value, not
+            // whatever the caller constructed the action with. No-op for actions
+            // with no computedFields. See docs/spec/forms/forms.md.
+            ::morph::forms::recomputeAll(*sharedAction);
             if (!::morph::model::ActionValidator<Action>::ready(*sharedAction)) {
                 throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
                                                       ::morph::model::ActionTraits<Action>::typeId()};
@@ -851,6 +865,10 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
             // silently keeping whatever runtime `dp` the client sent. No-op for
             // actions with no Quantity members. See docs/spec/forms.md.
             ::morph::forms::reconcileDeclaredPrecision(action);
+            // Overwrite any computed fields from their declared inputs -- a
+            // computed field is never trusted from the client, on any path.
+            // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
+            ::morph::forms::recomputeAll(action);
             // Enforce the action's validator on the request/reply dispatch path,
             // just as the reactive `set<>` path does via `tryFireImpl`. Without
             // this, a submitted action that fails its readiness/validity check
