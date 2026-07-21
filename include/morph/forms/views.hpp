@@ -17,11 +17,14 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -372,4 +375,103 @@ template <typename V>
     return cached;
 }
 
+/// @brief Traits specialisation that maps a view descriptor type to its
+///        string type-id. Specialise via `BRIDGE_REGISTER_VIEW`.
+/// @tparam V Concrete view descriptor type.
+template <typename V>
+struct ViewTraits;
+
+/// @brief Process-level registry mapping a view's string type-id to its
+///        `viewSchemaJson<V>()` provider, so a controller can enumerate every
+///        registered view by name — parallels `ActionExecuteRegistry` for
+///        actions (docs/spec/core/bridge.md), but a view registers no
+///        executor, only a schema provider.
+class ViewRegistry {
+public:
+    /// @brief Registers @p V's schema provider under @p viewId. A second
+    ///        registration for the same @p viewId silently replaces the
+    ///        first (last-write-wins, the same policy `ActionDispatcher`
+    ///        and `ModelRegistryFactory` use — see docs/spec/core/registry.md).
+    /// @tparam V     Concrete view descriptor type.
+    /// @param viewId String type-id (`ViewTraits<V>::typeId()`).
+    template <typename V>
+    void registerView(std::string_view viewId) {
+        _providers.insert_or_assign(std::string{viewId}, [] { return viewSchemaJson<V>(); });
+    }
+
+    /// @brief Returns the cached `viewSchemaJson<V>()` for @p viewId.
+    /// @param viewId String type-id previously passed to `registerView`.
+    /// @return The view-schema JSON.
+    [[nodiscard]] std::string schemaJson(std::string_view viewId) const {
+        auto iter = _providers.find(std::string{viewId});
+        if (iter == _providers.end()) {
+            throw std::runtime_error("unknown view: " + std::string{viewId});
+        }
+        return iter->second();
+    }
+
+    /// @brief Returns every registered view id, in unspecified order.
+    /// @return The registered view ids.
+    [[nodiscard]] std::vector<std::string> viewIds() const {
+        std::vector<std::string> ids;
+        ids.reserve(_providers.size());
+        for (auto const& entry : _providers) {
+            ids.push_back(entry.first);
+        }
+        return ids;
+    }
+
+    /// @brief Returns the process-level singleton registry.
+    /// @return Reference to the singleton.
+    static ViewRegistry& instance() {
+        static ViewRegistry inst;
+        return inst;
+    }
+
+private:
+    std::unordered_map<std::string, std::function<std::string()>> _providers;
+};
+
+namespace detail {
+
+/// @brief Static-init helper for `BRIDGE_REGISTER_VIEW`.
+/// @tparam V     Concrete view descriptor type.
+/// @param viewId String type-id to register @p V under.
+/// @return Always `true` (so it can be assigned to an anonymous-namespace
+///         `const bool` static initializer).
+template <typename V>
+inline bool registerViewOnce(std::string_view viewId) noexcept {
+    ViewRegistry::instance().registerView<V>(viewId);
+    return true;
+}
+
+}  // namespace detail
+
 }  // namespace morph::views
+
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) — registration macro is the intended public API
+// NOLINTBEGIN(bugprone-macro-parentheses)
+
+/// @brief Registers view descriptor @p V with the string id @p NAME.
+///
+/// Specialises `morph::views::ViewTraits<V>` and registers @p V's
+/// `viewSchemaJson<V>()` provider with the process-level `ViewRegistry` at
+/// static-init time — parallels `BRIDGE_REGISTER_ACTION` (registry.hpp), but
+/// a view has no dispatch path: it is metadata only, so this macro needs
+/// only `<morph/core/registry.hpp>`, never `<morph/core/bridge.hpp>`.
+/// @param V    Concrete, unqualified view descriptor type in scope at the
+///             call site (bring a namespaced type into scope with
+///             `using ns::V;` first — this macro pastes `V` into an
+///             identifier, so it cannot be namespace-qualified).
+/// @param NAME String literal used as the view's type-id.
+#define BRIDGE_REGISTER_VIEW(V, NAME)                                                                  \
+    template <>                                                                                        \
+    struct morph::views::ViewTraits<V> {                                                               \
+        static constexpr std::string_view typeId() noexcept { return NAME; }                           \
+    };                                                                                                 \
+    namespace {                                                                                        \
+    [[maybe_unused]] const bool bridge_view_reg_##V = morph::views::detail::registerViewOnce<V>(NAME); \
+    }
+
+// NOLINTEND(bugprone-macro-parentheses)
+// NOLINTEND(cppcoreguidelines-macro-usage)

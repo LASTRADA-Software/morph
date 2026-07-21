@@ -5,6 +5,7 @@
 // action and row/collection action buttons into a list/table or
 // master-detail screen descriptor.
 
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
@@ -14,6 +15,7 @@
 #include <morph/forms/forms.hpp>
 #include <morph/forms/views.hpp>
 #include <morph/util/quantity.hpp>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -357,4 +359,35 @@ TEST_CASE("Views::ViewSchemaJson::SeparateDocumentFromActionSchemas", "[views]")
     CHECK(actionSchema.find("\"v-columns\"") == std::string::npos);
     CHECK(actionSchema.find("\"v-rowAction\"") == std::string::npos);
     CHECK(actionSchema.find("\"v-actions\"") == std::string::npos);
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: ViewTraits / BRIDGE_REGISTER_VIEW / ViewRegistry.
+// ---------------------------------------------------------------------------
+
+struct VtRegisteredView {
+    using kind = morph::views::CollectionView;
+    using query = vt::VtListRows;
+};
+
+// Registered immediately after the type it specialises, and BEFORE any
+// TEST_CASE that references ViewTraits<VtRegisteredView> — the macro expands
+// to a namespace-scope explicit specialisation, which (like any declaration)
+// must be visible above the point it is used; placing it after the tests
+// that use it would be a compile error, not merely bad style.
+BRIDGE_REGISTER_VIEW(VtRegisteredView, "VtRegisteredView")
+
+TEST_CASE("Views::Registry::RegisteredViewMatchesDirectCall", "[views]") {
+    CHECK(morph::views::ViewTraits<VtRegisteredView>::typeId() == "VtRegisteredView");
+    CHECK(morph::views::ViewRegistry::instance().schemaJson("VtRegisteredView") ==
+          morph::views::viewSchemaJson<VtRegisteredView>());
+}
+
+TEST_CASE("Views::Registry::ViewIdsContainsRegisteredView", "[views]") {
+    auto const ids = morph::views::ViewRegistry::instance().viewIds();
+    CHECK(std::find(ids.begin(), ids.end(), "VtRegisteredView") != ids.end());
+}
+
+TEST_CASE("Views::Registry::UnknownViewThrows", "[views]") {
+    CHECK_THROWS_AS(morph::views::ViewRegistry::instance().schemaJson("NoSuchView"), std::runtime_error);
 }
