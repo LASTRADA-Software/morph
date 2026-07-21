@@ -19,16 +19,18 @@ Item {
         controller: null
         schema: ({
             "properties": {
-                "slot": { "type": ["integer", "null"], "x-order": 0,
+                "slot": { "type": ["integer", "null"], "x-order": 0, "title": "Slot",
                           "x-optionsAction": "ListSlots", "x-optionValue": "id", "x-optionLabel": "name" },
-                "mass": { "$ref": "#/$defs/q", "x-order": 1, "x-decimalPlaces": 3,
+                "mass": { "$ref": "#/$defs/q", "x-order": 1, "x-decimalPlaces": 3, "title": "Mass",
+                          "x-placeholder": "e.g. 1050",
                           "ExtUnits": { "unitAscii": "kg", "unitUnicode": "kg" },
                           "x-unitAlternatives": [
                               { "id": "g", "display": "g", "decimals": 1, "num": 1, "den": 1000 },
                               { "id": "t", "display": "t", "decimals": 4, "num": 1000, "den": 1 }
                           ] },
-                "when": { "type": ["string", "null"], "format": "date-time", "x-order": 2 },
-                "note": { "type": ["string", "null"], "x-order": 3 }
+                "when": { "type": ["string", "null"], "format": "date-time", "x-order": 2, "title": "When",
+                          "x-readonly": true },
+                "note": { "type": ["string", "null"], "x-order": 3, "title": "Notes", "x-hidden": true }
             },
             "$defs": { "q": { "type": ["object", "null"] } },
             "required": ["slot", "mass", "when"]
@@ -49,6 +51,8 @@ Item {
             compare(slot.valueField, "id")
             compare(slot.labelField, "name")
             verify(slot.required)
+            compare(slot.title, "Slot")
+            verify(!slot.readOnly && !slot.hidden)
 
             const mass = form.fields[1]
             verify(mass.isQuantity)
@@ -57,14 +61,20 @@ Item {
             compare(mass.unitOptions.length, 3)  // canonical + g + t
             compare(mass.unitOptions[1].display, "g")
             compare(mass.unitOptions[2].num, 1000)
+            compare(mass.title, "Mass")
+            compare(mass.placeholder, "e.g. 1050")
 
             const when = form.fields[2]
             verify(when.isDateTime)
             verify(when.required)
+            compare(when.title, "When")
+            verify(when.readOnly)
 
             const note = form.fields[3]
             verify(!note.isChoice && !note.isDateTime && !note.isQuantity && !note.isInteger)
             verify(!note.required)
+            compare(note.title, "Notes")
+            verify(note.hidden)
         }
 
         function test_longArithmetic() {

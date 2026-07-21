@@ -10,15 +10,14 @@
 ///   - required fields        -> member types + `optionalFields` opt-out
 ///   - readiness (validate)   -> morph::forms::allRequiredEngaged
 
-#include <morph/forms/choice.hpp>
-#include <morph/util/datetime.hpp>
-#include <morph/forms/forms.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/bridge.hpp>
-
 #include <array>
 #include <cstdint>
 #include <format>
+#include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/forms/choice.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/util/datetime.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -72,6 +71,17 @@ struct RecordMeasurement {
     std::optional<std::string> note{};
 
     static constexpr std::array optionalFields{std::string_view{"moisture"}};
+
+    // Illustrative field metadata (docs/spec/forms/forms.md, "Field
+    // metadata"): density gets an in-control placeholder; note (already
+    // optional) is hidden entirely — carried in the payload if some other
+    // client sets it, never shown to this renderer's operator. sampleId,
+    // measuredAt, and moisture keep their inferred titles and their existing
+    // glz::json_schema<RecordMeasurement> descriptions untouched.
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "density", .placeholder = "e.g. 1650.0"},
+        morph::forms::FieldMeta{.field = "note", .hidden = true},
+    };
 
     [[nodiscard]] bool validate() const { return morph::forms::allRequiredEngaged(*this); }
 };

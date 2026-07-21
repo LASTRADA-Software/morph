@@ -73,7 +73,11 @@ Frame {
                 }
                 return {
                     name: name,
+                    title: opt(raw["title"], opt(p.title, name)),
                     description: opt(p.description, ""),
+                    placeholder: opt(raw["x-placeholder"], opt(p["x-placeholder"], "")),
+                    readOnly: opt(raw["x-readonly"], opt(p["x-readonly"], false)),
+                    hidden: opt(raw["x-hidden"], opt(p["x-hidden"], false)),
                     unit: unitText,
                     unitOptions: unitOptions,
                     canonDp: opt(dp, 0),
@@ -300,11 +304,12 @@ Frame {
                 id: fieldColumn
                 required property var modelData
                 Layout.fillWidth: true
+                visible: !fieldColumn.modelData.hidden
                 spacing: 2
 
                 RowLayout {
                     Label {
-                        text: fieldColumn.modelData.name
+                        text: fieldColumn.modelData.title
                         font.bold: true
                     }
                     Label {
@@ -326,6 +331,7 @@ Frame {
 
                     ComboBox {
                         visible: fieldColumn.modelData.isChoice
+                        enabled: !fieldColumn.modelData.readOnly
                         Layout.fillWidth: true
                         textRole: "label"
                         currentIndex: -1
@@ -336,6 +342,7 @@ Frame {
 
                     DateTimePicker {
                         visible: fieldColumn.modelData.isDateTime
+                        enabled: !fieldColumn.modelData.readOnly
                         Layout.fillWidth: true
                         onEdited: text => form.setFieldValue(fieldColumn.modelData.name, text)
                     }
@@ -345,9 +352,12 @@ Frame {
                         objectName: "field_" + fieldColumn.modelData.name
                         visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                         Layout.fillWidth: true
-                        placeholderText: fieldColumn.modelData.isQuantity
-                                         ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
-                                         : (fieldColumn.modelData.isInteger ? "0" : "")
+                        readOnly: fieldColumn.modelData.readOnly
+                        placeholderText: fieldColumn.modelData.placeholder !== ""
+                                         ? fieldColumn.modelData.placeholder
+                                         : (fieldColumn.modelData.isQuantity
+                                            ? "0." + "0".repeat(Math.max(1, fieldColumn.modelData.decimals))
+                                            : (fieldColumn.modelData.isInteger ? "0" : ""))
                         inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                           ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                         onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
@@ -358,6 +368,7 @@ Frame {
                     ComboBox {
                         visible: fieldColumn.modelData.isQuantity
                                  && fieldColumn.modelData.unitOptions.length > 1
+                        enabled: !fieldColumn.modelData.readOnly
                         implicitWidth: 92
                         textRole: "display"
                         model: fieldColumn.modelData.unitOptions
