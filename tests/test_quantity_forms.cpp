@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/bridge.hpp>
-#include <morph/forms/choice.hpp>
-#include <morph/util/datetime.hpp>
-#include <morph/forms/forms.hpp>
-#include <morph/util/quantity.hpp>
-#include <morph/util/rational.hpp>
-#include <morph/core/registry.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
 #include <array>
+#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <concepts>
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <morph/core/bridge.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/forms/choice.hpp>
+#include <morph/forms/forms.hpp>
+#include <morph/util/datetime.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <span>
 #include <string>
@@ -38,13 +36,20 @@ template <>
 struct morph::units::UnitTraits<QFUnit> {
     static constexpr morph::units::UnitMeta meta(QFUnit unit) noexcept {
         switch (unit) {
-            case QFUnit::scalar:    return {.id = "scalar", .display = "", .defaultDecimals = 3};
-            case QFUnit::percent:   return {.id = "percent", .display = "%", .defaultDecimals = 1};
-            case QFUnit::kg:        return {.id = "kg", .display = "kg", .defaultDecimals = 3};
-            case QFUnit::m3:        return {.id = "m3", .display = "m³", .defaultDecimals = 3};
-            case QFUnit::kg_per_m3: return {.id = "kg_per_m3", .display = "kg/m³", .defaultDecimals = 1};
-            case QFUnit::g:         return {.id = "g", .display = "g", .defaultDecimals = 1};
-            default:                return {.id = "?", .display = "?", .defaultDecimals = 3};
+            case QFUnit::scalar:
+                return {.id = "scalar", .display = "", .defaultDecimals = 3};
+            case QFUnit::percent:
+                return {.id = "percent", .display = "%", .defaultDecimals = 1};
+            case QFUnit::kg:
+                return {.id = "kg", .display = "kg", .defaultDecimals = 3};
+            case QFUnit::m3:
+                return {.id = "m3", .display = "m³", .defaultDecimals = 3};
+            case QFUnit::kg_per_m3:
+                return {.id = "kg_per_m3", .display = "kg/m³", .defaultDecimals = 1};
+            case QFUnit::g:
+                return {.id = "g", .display = "g", .defaultDecimals = 1};
+            default:
+                return {.id = "?", .display = "?", .defaultDecimals = 3};
         }
     }
 
@@ -111,8 +116,8 @@ static_assert(Q<QFUnit::percent>::declaredDecimals == 1);
 static_assert(PreciseMass::declaredDecimals == 5);
 static_assert(morph::units::isQuantity<PreciseMass>);
 static_assert(std::same_as<decltype(std::declval<PreciseMass>() + std::declval<Q<QFUnit::kg>>()), Q<QFUnit::kg>>);
-static_assert(std::same_as<decltype(std::declval<PreciseMass>() / std::declval<Q<QFUnit::m3>>()),
-                           Q<QFUnit::kg_per_m3>>);
+static_assert(
+    std::same_as<decltype(std::declval<PreciseMass>() / std::declval<Q<QFUnit::m3>>()), Q<QFUnit::kg_per_m3>>);
 static_assert(std::same_as<decltype(-std::declval<PreciseMass>()), PreciseMass>);
 
 }  // namespace
@@ -270,8 +275,8 @@ TEST_CASE("Quantity::DeclaredPrecision", "[quantity]") {
     CHECK_FALSE(Q<QFUnit::kg>{}.withDecimalPlaces(DecimalPlaces{9}).hasValue());
 
     // Out-of-range runtime precision clamps silently (runtime data, no assert).
-    CHECK((*coarse.withDecimalPlaces(DecimalPlaces{99})).getDecimalPlaces()
-          == DecimalPlaces{morph::math::kMaxDecimalPlaces});
+    CHECK((*coarse.withDecimalPlaces(DecimalPlaces{99})).getDecimalPlaces() ==
+          DecimalPlaces{morph::math::kMaxDecimalPlaces});
 
     // Mixed declared precisions combine; the runtime tag max-propagates.
     auto const sum = fine + coarse;
@@ -409,7 +414,8 @@ TEST_CASE("Forms::MergeSchemaExtras::MalformedInputPassesThrough", "[forms]") {
 TEST_CASE("Forms::DispatchQuantityActionThroughRegistry", "[forms][quantity]") {
     using morph::model::ActionTraits;
 
-    QFComputeDryDensity action{.massDry = Q<QFUnit::kg>{Rational{Numerator{26505}, Denominator{10}, dp1}}, .volume = cubicMetres(1)};
+    QFComputeDryDensity action{.massDry = Q<QFUnit::kg>{Rational{Numerator{26505}, Denominator{10}, dp1}},
+                               .volume = cubicMetres(1)};
     auto const payload = ActionTraits<QFComputeDryDensity>::toJson(action);
 
     auto holder = morph::model::detail::ModelFactory::create<QFLabModel>();
@@ -455,9 +461,9 @@ TEST_CASE("Choice::EmptyStateAndWire", "[forms]") {
 
     QFSchedule action;
     action.slot = engaged;
-    action.startsAt = morph::time::Timestamp{morph::time::DateTime{
-        std::chrono::year{2026}, std::chrono::month{7}, std::chrono::day{6}, std::chrono::hours{9},
-        std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    action.startsAt = morph::time::Timestamp{morph::time::DateTime{std::chrono::year{2026}, std::chrono::month{7},
+                                                                   std::chrono::day{6}, std::chrono::hours{9},
+                                                                   std::chrono::minutes{0}, std::chrono::seconds{0}}};
 
     // On the wire a Choice is its bare underlying value; the options
     // metadata never travels.
@@ -513,8 +519,8 @@ TEST_CASE("Forms::DispatchChoiceActionThroughRegistry", "[forms]") {
     auto holder = morph::model::detail::ModelFactory::create<QFLabModel>();
 
     // The options provider is itself just an action.
-    auto const rows = morph::model::detail::ActionDispatcher::instance().dispatch("QFLabModel", "QFListSlots",
-                                                                                  *holder, "{}");
+    auto const rows =
+        morph::model::detail::ActionDispatcher::instance().dispatch("QFLabModel", "QFListSlots", *holder, "{}");
     CHECK(rows == R"({"slots":[{"id":4,"name":"Morning"},{"id":9,"name":"Afternoon"}]})");
 
     // Submitting the selected value round-trips through the same seam.
@@ -547,4 +553,131 @@ TEST_CASE("Forms::SchemaJson::UnitAlternativesSurface", "[forms]") {
     // Units without declared alternatives get no such key.
     auto const percentSchema = morph::forms::schemaJson<QFRecordMeasurement>();
     CHECK_FALSE(percentSchema.contains("x-unitAlternatives"));
+}
+
+// ---------------------------------------------------------------------------
+// Field metadata: labels, help, placeholder, read-only, hidden
+// (docs/spec/forms/forms.md, "Field metadata").
+// ---------------------------------------------------------------------------
+
+// No fieldMetadata at all: every property still gets an inferred title, and
+// no x-placeholder/x-readonly/x-hidden key appears anywhere (regression guard
+// — the rest of the schema is unaffected by this feature). Declared at file
+// scope, not inside an anonymous namespace — matching every other
+// action/data struct already in this file (QFRecordMeasurement,
+// QFComputeDryDensity, QFSlotInfo, ...), none of which use one either.
+struct QFNoFieldMeta {
+    std::int64_t dryMassPct = 0;
+    std::int64_t sample_id = 0;
+    std::int64_t notes = 0;
+};
+
+// Explicit literal FieldMeta overrides, including one entry naming a field
+// that does not exist on the action (must be silently ignored).
+struct QFFieldMetaLiteral {
+    std::int64_t dryMassPct = 0;
+    std::int64_t sample_id = 0;
+    std::int64_t notes = 0;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{
+            .field = "dryMassPct", .label = "Custom Label", .help = "Help text", .placeholder = "e.g. 42"},
+        morph::forms::FieldMeta{.field = "sample_id", .readOnly = true},
+        morph::forms::FieldMeta{.field = "notes", .hidden = true},
+        morph::forms::FieldMeta{.field = "doesNotExist"},  // ignored: no matching member
+    };
+};
+
+// A FieldMeta::help override must beat a glz::json_schema<A>-authored
+// description; a field with no FieldMeta entry keeps its glaze-authored
+// description untouched.
+struct QFHelpOverrideAction {
+    std::int64_t sampleId = 0;
+    std::int64_t plainField = 0;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "sampleId", .help = "Overridden help"},
+    };
+};
+
+template <>
+struct glz::json_schema<QFHelpOverrideAction> {
+    schema sampleId{.description = "Glaze-authored description"};
+    schema plainField{.description = "Untouched description"};
+};
+
+TEST_CASE("Forms::FieldMeta::InferredTitleWithNoDeclaration", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFNoFieldMeta>();
+    CHECK(schema.contains(R"("title":"Dry Mass Pct")"));
+    CHECK(schema.contains(R"("title":"Sample Id")"));
+    CHECK(schema.contains(R"("title":"Notes")"));
+    CHECK_FALSE(schema.contains("x-placeholder"));
+    CHECK_FALSE(schema.contains("x-readonly"));
+    CHECK_FALSE(schema.contains("x-hidden"));
+}
+
+TEST_CASE("Forms::FieldMeta::ExistingActionsGainInferredTitleOnly", "[forms][field_meta]") {
+    // A pre-existing, already-registered action with no fieldMetadata gains
+    // titles for free: zero-declaration inference, proven against a real
+    // action struct rather than a purpose-built one.
+    auto const schema = morph::forms::schemaJson<QFComputeDryDensity>();
+    CHECK(schema.contains(R"("title":"Mass Dry")"));
+    CHECK(schema.contains(R"("title":"Volume")"));
+}
+
+TEST_CASE("Forms::FieldMeta::LabelHelpPlaceholderOverride", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFFieldMetaLiteral>();
+    CHECK(schema.contains(R"("title":"Custom Label")"));
+    CHECK_FALSE(schema.contains(R"("title":"Dry Mass Pct")"));
+    CHECK(schema.contains(R"("description":"Help text")"));
+    CHECK(schema.contains(R"("x-placeholder":"e.g. 42")"));
+    // A field left undeclared in fieldMetadata still gets its inferred title.
+    CHECK(schema.contains(R"("title":"Notes")"));
+}
+
+TEST_CASE("Forms::FieldMeta::ReadOnlyAndHiddenEmitOnlyWhenTrue", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFFieldMetaLiteral>();
+    CHECK(schema.contains(R"("x-readonly":true)"));
+    CHECK(schema.contains(R"("x-hidden":true)"));
+    // dryMassPct has a FieldMeta entry (label/help/placeholder only) that
+    // leaves readOnly/hidden at their default false: its property must carry
+    // neither key, proving the omission is per-flag, not merely "no entry at
+    // all" (already covered by InferredTitleWithNoDeclaration above). The
+    // exact substring below is the whole property node, so no trailing
+    // x-readonly/x-hidden key can be hiding after it.
+    CHECK(schema.contains(
+        R"("dryMassPct":{"$ref":"#/$defs/int64_t","x-order":0,"title":"Custom Label","description":"Help text","x-placeholder":"e.g. 42"})"));
+}
+
+TEST_CASE("Forms::FieldMeta::UnknownFieldNameIsIgnored", "[forms][field_meta]") {
+    // The fourth fieldMetadata entry names a field that does not exist on the
+    // action; schema generation must not crash and must not emit a stray
+    // "doesNotExist" property.
+    auto const schema = morph::forms::schemaJson<QFFieldMetaLiteral>();
+    CHECK_FALSE(schema.contains("doesNotExist"));
+}
+
+TEST_CASE("Forms::FieldMeta::HelpOverridesGlazeDescription", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFHelpOverrideAction>();
+    CHECK(schema.contains(R"("description":"Overridden help")"));
+    CHECK_FALSE(schema.contains("Glaze-authored description"));
+    // plainField has no FieldMeta entry: its glaze-authored description survives.
+    CHECK(schema.contains(R"("description":"Untouched description")"));
+}
+
+TEST_CASE("Forms::FieldMeta::LabelInference", "[forms][field_meta]") {
+    CHECK(morph::forms::detail::inferTitle("dryMassPct") == "Dry Mass Pct");
+    CHECK(morph::forms::detail::inferTitle("sample_id") == "Sample Id");
+    CHECK(morph::forms::detail::inferTitle("notes") == "Notes");
+}
+
+TEST_CASE("Forms::FieldMeta::FluentBuildersComposeWithLiteralForm", "[forms][field_meta]") {
+    constexpr morph::forms::FieldMeta base{.field = "x"};
+    constexpr auto withPh = base.withPlaceholder("hint");
+    constexpr auto withRO = base.withReadOnly();
+    constexpr auto withHidden = base.withHidden();
+    static_assert(withPh.placeholder == "hint");
+    static_assert(withRO.readOnly);
+    static_assert(withHidden.hidden);
+    static_assert(!base.readOnly && !base.hidden && base.placeholder.empty());
 }

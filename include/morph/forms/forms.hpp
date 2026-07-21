@@ -63,19 +63,78 @@
 /// express "not filled in"; use a `Quantity` (or a custom `validate()`) when
 /// that distinction matters.
 
-#include <glaze/glaze.hpp>
-
+#include <cctype>
 #include <cstddef>
+#include <glaze/glaze.hpp>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
-#include "choice.hpp"
 #include "../util/quantity.hpp"
+#include "choice.hpp"
 
 namespace morph::forms {
+
+/// @brief Per-field presentation overrides: label, help, placeholder,
+///        read-only, hidden (docs/spec/forms/forms.md, "Field metadata").
+///
+/// An action opts in with a `static constexpr std::array<FieldMeta, N>`
+/// (or, for the `describe<>()` sugar, a `static const` array defined
+/// out-of-line — see `describe()`'s documentation) named `fieldMetadata`,
+/// mirroring the existing `optionalFields` convention. Every member other
+/// than `field` defaults to "not declared": an empty `label`/`help`/
+/// `placeholder` means "infer the title, omit the rest"; `readOnly`/`hidden`
+/// default to `false`. `mergeSchemaExtras` looks up the entry (if any)
+/// matching each reflected member by wire key and patches the property node;
+/// an entry naming a field that does not exist on the action is ignored.
+struct FieldMeta {
+    /// @brief Wire key of the member this entry describes.
+    std::string_view field;
+    /// @brief Display label; empty infers a title-cased name from `field`.
+    std::string_view label{};
+    /// @brief Help text; empty omits `description`.
+    std::string_view help{};
+    /// @brief In-control placeholder hint; empty omits `x-placeholder`.
+    std::string_view placeholder{};
+    /// @brief Reserved widget-selection override slot. Storage only: its
+    ///        semantics and the `x-widget` key it will emit belong to
+    ///        `docs/planned/gui_widget_hints.md`; this header never reads it.
+    std::string_view widget{};
+    /// @brief Displayed but not editable when `true`; emits `x-readonly`.
+    bool readOnly{false};
+    /// @brief Not shown at all when `true`; emits `x-hidden`. The field still
+    ///        travels in the payload (see `docs/spec/forms/forms.md`,
+    ///        "Field metadata is not a security control").
+    bool hidden{false};
+
+    /// @brief Returns a copy with `placeholder` set to @p text.
+    /// @param text The placeholder hint.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withPlaceholder(std::string_view text) const noexcept {
+        FieldMeta copy = *this;
+        copy.placeholder = text;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `readOnly` set to `true`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withReadOnly() const noexcept {
+        FieldMeta copy = *this;
+        copy.readOnly = true;
+        return copy;
+    }
+
+    /// @brief Returns a copy with `hidden` set to `true`.
+    /// @return The updated descriptor.
+    [[nodiscard]] constexpr FieldMeta withHidden() const noexcept {
+        FieldMeta copy = *this;
+        copy.hidden = true;
+        return copy;
+    }
+};
 
 /// @brief Concept: a field type with an internal empty state (`Quantity`,
 ///        `Choice`, `Timestamp`, or any user type exposing `hasValue()`).
@@ -125,16 +184,70 @@ template <typename A>
     return false;
 }
 
+/// @brief Concept: action declares a `static constexpr`/`static const`
+///        iterable `fieldMetadata` list of `FieldMeta` entries.
+template <typename A>
+concept HasFieldMetadata = requires {
+    std::begin(A::fieldMetadata);
+    std::end(A::fieldMetadata);
+};
+
+/// @brief Returns the `FieldMeta` entry naming @p fieldName in
+///        `A::fieldMetadata`, or `nullptr` if @p A declares no such list or
+///        no entry names @p fieldName.
+template <typename A>
+[[nodiscard]] const FieldMeta* findFieldMeta(std::string_view fieldName) noexcept {
+    if constexpr (HasFieldMetadata<A>) {
+        for (auto const& candidate : A::fieldMetadata) {
+            if (candidate.field == fieldName) {
+                return &candidate;
+            }
+        }
+    } else {
+        static_cast<void>(fieldName);
+    }
+    return nullptr;
+}
+
+/// @brief Splits @p fieldName on camelCase/underscore boundaries and
+///        title-cases each word (`dryMassPct` -> `"Dry Mass Pct"`,
+///        `sample_id` -> `"Sample Id"`, `notes` -> `"Notes"`).
+inline std::string inferTitle(std::string_view fieldName) {
+    std::string result;
+    bool startOfWord = true;
+    for (std::size_t i = 0; i < fieldName.size(); ++i) {
+        char const c = fieldName[i];
+        if (c == '_') {
+            startOfWord = true;
+            continue;
+        }
+        bool const isUpper = std::isupper(static_cast<unsigned char>(c)) != 0;
+        bool const prevUpper = i > 0 && std::isupper(static_cast<unsigned char>(fieldName[i - 1])) != 0;
+        if (i > 0 && isUpper && !prevUpper) {
+            startOfWord = true;
+        }
+        if (startOfWord && !result.empty()) {
+            result += ' ';
+        }
+        result += startOfWord ? static_cast<char>(std::toupper(static_cast<unsigned char>(c)))
+                              : static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        startOfWord = false;
+    }
+    return result;
+}
+
 /// @brief Invokes `visitor.operator()<I>(name, member)` for every reflected
 ///        member of @p action (glaze pure reflection).
 template <typename A, typename Visitor>
-// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — member-tie iteration
+// NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward, cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+// — member-tie iteration
 constexpr void forEachNamedMember(A&& action, Visitor&& visitor) {
     using Plain = std::remove_cvref_t<A>;
     constexpr auto memberCount = glz::reflect<Plain>::size;
     auto memberTie = glz::to_tie(action);
     [&]<std::size_t... I>(std::index_sequence<I...>) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index bounded by reflect::size
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index bounded by
+        // reflect::size
         (visitor.template operator()<I>(glz::reflect<Plain>::keys[I], glz::get_member(action, get<I>(memberTie))),
          ...);
     }(std::make_index_sequence<memberCount>{});
@@ -166,6 +279,32 @@ template <typename A>
         }
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
+
+        // Label/help/placeholder/read-only/hidden: an explicit FieldMeta
+        // entry overrides the inferred title and adds the rest; absent, every
+        // field still gets an inferred title and nothing else (Field
+        // metadata is additive/optional per gui_overview.md's versioning
+        // stance — a renderer that ignores these keys shows the raw wire key
+        // as the caption, no helper/placeholder text, every field editable
+        // and visible, exactly as before this feature).
+        const FieldMeta* fieldMeta = findFieldMeta<A>(name);
+        std::string_view const declaredLabel = fieldMeta != nullptr ? fieldMeta->label : std::string_view{};
+        property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};
+        if (fieldMeta != nullptr) {
+            if (!fieldMeta->help.empty()) {
+                property["description"] = std::string{fieldMeta->help};
+            }
+            if (!fieldMeta->placeholder.empty()) {
+                property["x-placeholder"] = std::string{fieldMeta->placeholder};
+            }
+            if (fieldMeta->readOnly) {
+                property["x-readonly"] = true;
+            }
+            if (fieldMeta->hidden) {
+                property["x-hidden"] = true;
+            }
+        }
+
         if constexpr (units::isQuantity<Member>) {
             // The field's *declared* precision: the unit default unless the
             // field's type overrides it (Quantity<Unit::m3, 4>).
@@ -176,7 +315,8 @@ template <typename A>
             if (!alternatives.empty()) {
                 glz::generic_u64::array_t list{};
                 for (auto const& alternative : alternatives) {
-                    auto const meta = units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
+                    auto const meta =
+                        units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
                     glz::generic_u64 entry{};
                     entry["id"] = std::string{meta.id};
                     entry["display"] = std::string{meta.display};
