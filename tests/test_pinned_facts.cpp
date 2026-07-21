@@ -272,3 +272,27 @@ TEST_CASE("pinned-facts: RemoteServer replies \"register requires a typeId\" for
     REQUIRE(waiter.env.kind == "err");
     REQUIRE(waiter.env.message == morph::pinned_facts::kExpected_REGISTER_REQUIRES_TYPEID_REPLY);
 }
+
+// ── Glaze parsing-behavior pins ──────────────────────────────────────────────
+//
+// wire::decode's glz::opts (wire.hpp:161) is a function-local static
+// constexpr -- no symbol a test TU can reach. These facts can only be pinned
+// by observing decode()'s actual behavior against a probe payload, matching
+// docs/spec/core/wire.md's "Encode and decode" and "Duplicate JSON keys are
+// accepted (last-wins)" sections.
+
+TEST_CASE("pinned-facts: wire::decode ignores an unknown/extra top-level key", "[pinned-facts]") {
+    const std::string json =
+        R"({"kind":"execute","callId":7,"bogusFutureField":"ignored-by-a-forward-compatible-peer"})";
+    morph::wire::Envelope env;
+    REQUIRE_NOTHROW(env = morph::wire::decode(json));
+    REQUIRE(env.kind == "execute");
+    REQUIRE(env.callId == 7);
+}
+
+TEST_CASE("pinned-facts: wire::decode accepts a duplicate top-level key, last-wins", "[pinned-facts]") {
+    const std::string json = R"({"kind":"ok","kind":"err"})";
+    morph::wire::Envelope env;
+    REQUIRE_NOTHROW(env = morph::wire::decode(json));
+    REQUIRE(env.kind == "err");
+}
