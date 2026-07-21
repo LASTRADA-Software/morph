@@ -601,6 +601,230 @@ template <typename V, typename A>
     return NotEngaged<V, A>{field};
 }
 
+/// @brief Rule/condition: `*lhs > *rhs` when both operands are engaged;
+/// vacuously satisfied when either is unengaged (a form still being filled
+/// in must not fail this comparison prematurely — see forms.md). Compares
+/// the operands' **engaged values** (`operator*()`) directly — e.g. the
+/// underlying `math::Rational` for `Quantity`, or `DateTime` for
+/// `Timestamp` — never the field type's own (possibly throwing, for
+/// `Quantity`) `operator<=>`.
+/// @tparam V Field member type shared by both operands (must satisfy
+///           `detail::ComparableField`).
+/// @tparam A Action type both fields belong to.
+template <typename V, typename A>
+struct Greater {
+    /// @brief Pointer to the left-hand member.
+    V A::* lhs;
+    /// @brief Pointer to the right-hand member.
+    V A::* rhs;
+    /// @brief The wire `"kind"` this node emits: `"greater"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Greater;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the comparison against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when either operand is unengaged, or `*lhs > *rhs`.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        const auto& lv = action.*lhs;
+        const auto& rv = action.*rhs;
+        if (!lv.hasValue() || !rv.hasValue()) {
+            return true;
+        }
+        return (*lv <=> *rv) == std::strong_ordering::greater;
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"greater","fields":["<lhs wire name>","<rhs wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(lhs));
+        fields.emplace_back(detail::resolveFieldName(rhs));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds a `Greater<V, A>` rule/condition: `*lhs > *rhs`.
+/// @tparam V Field member type shared by both operands (deduced; must
+///           satisfy `detail::ComparableField`).
+/// @tparam A Action type (deduced).
+/// @param lhs Pointer to the left-hand member.
+/// @param rhs Pointer to the right-hand member.
+/// @return The rule/condition node.
+template <typename V, typename A>
+    requires detail::ComparableField<V>
+[[nodiscard]] constexpr auto greater(V A::* lhs, V A::* rhs) {
+    return Greater<V, A>{lhs, rhs};
+}
+
+/// @brief Rule/condition: `*lhs >= *rhs` when both operands are engaged;
+/// vacuously satisfied when either is unengaged. See `Greater` for the
+/// exact-value / vacuous-operand rationale.
+/// @tparam V Field member type shared by both operands (must satisfy
+///           `detail::ComparableField`).
+/// @tparam A Action type both fields belong to.
+template <typename V, typename A>
+struct GreaterOrEqual {
+    /// @brief Pointer to the left-hand member.
+    V A::* lhs;
+    /// @brief Pointer to the right-hand member.
+    V A::* rhs;
+    /// @brief The wire `"kind"` this node emits: `"greaterOrEqual"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::GreaterOrEqual;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the comparison against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when either operand is unengaged, or `*lhs >= *rhs`.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        const auto& lv = action.*lhs;
+        const auto& rv = action.*rhs;
+        if (!lv.hasValue() || !rv.hasValue()) {
+            return true;
+        }
+        return std::is_gteq(*lv <=> *rv);
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"greaterOrEqual","fields":["<lhs wire name>","<rhs wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(lhs));
+        fields.emplace_back(detail::resolveFieldName(rhs));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds a `GreaterOrEqual<V, A>` rule/condition: `*lhs >= *rhs`.
+/// @tparam V Field member type shared by both operands (deduced; must
+///           satisfy `detail::ComparableField`).
+/// @tparam A Action type (deduced).
+/// @param lhs Pointer to the left-hand member.
+/// @param rhs Pointer to the right-hand member.
+/// @return The rule/condition node.
+template <typename V, typename A>
+    requires detail::ComparableField<V>
+[[nodiscard]] constexpr auto greaterOrEqual(V A::* lhs, V A::* rhs) {
+    return GreaterOrEqual<V, A>{lhs, rhs};
+}
+
+/// @brief Rule/condition: `*lhs < *rhs` when both operands are engaged;
+/// vacuously satisfied when either is unengaged. See `Greater` for the
+/// exact-value / vacuous-operand rationale.
+/// @tparam V Field member type shared by both operands (must satisfy
+///           `detail::ComparableField`).
+/// @tparam A Action type both fields belong to.
+template <typename V, typename A>
+struct Less {
+    /// @brief Pointer to the left-hand member.
+    V A::* lhs;
+    /// @brief Pointer to the right-hand member.
+    V A::* rhs;
+    /// @brief The wire `"kind"` this node emits: `"less"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Less;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the comparison against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when either operand is unengaged, or `*lhs < *rhs`.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        const auto& lv = action.*lhs;
+        const auto& rv = action.*rhs;
+        if (!lv.hasValue() || !rv.hasValue()) {
+            return true;
+        }
+        return std::is_lt(*lv <=> *rv);
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"less","fields":["<lhs wire name>","<rhs wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(lhs));
+        fields.emplace_back(detail::resolveFieldName(rhs));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds a `Less<V, A>` rule/condition: `*lhs < *rhs`.
+/// @tparam V Field member type shared by both operands (deduced; must
+///           satisfy `detail::ComparableField`).
+/// @tparam A Action type (deduced).
+/// @param lhs Pointer to the left-hand member.
+/// @param rhs Pointer to the right-hand member.
+/// @return The rule/condition node.
+template <typename V, typename A>
+    requires detail::ComparableField<V>
+[[nodiscard]] constexpr auto less(V A::* lhs, V A::* rhs) {
+    return Less<V, A>{lhs, rhs};
+}
+
+/// @brief Rule/condition: `*lhs <= *rhs` when both operands are engaged;
+/// vacuously satisfied when either is unengaged. See `Greater` for the
+/// exact-value / vacuous-operand rationale.
+/// @tparam V Field member type shared by both operands (must satisfy
+///           `detail::ComparableField`).
+/// @tparam A Action type both fields belong to.
+template <typename V, typename A>
+struct LessOrEqual {
+    /// @brief Pointer to the left-hand member.
+    V A::* lhs;
+    /// @brief Pointer to the right-hand member.
+    V A::* rhs;
+    /// @brief The wire `"kind"` this node emits: `"lessOrEqual"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::LessOrEqual;
+    /// @brief Validation rule (not presentation): participates in the gate.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the comparison against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when either operand is unengaged, or `*lhs <= *rhs`.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        const auto& lv = action.*lhs;
+        const auto& rv = action.*rhs;
+        if (!lv.hasValue() || !rv.hasValue()) {
+            return true;
+        }
+        return std::is_lteq(*lv <=> *rv);
+    }
+
+    /// @brief Emits this rule's `x-rules` JSON node.
+    /// @return `{"kind":"lessOrEqual","fields":["<lhs wire name>","<rhs wire name>"]}`.
+    [[nodiscard]] glz::generic_u64 emit() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t fields{};
+        fields.emplace_back(detail::resolveFieldName(lhs));
+        fields.emplace_back(detail::resolveFieldName(rhs));
+        node["fields"] = fields;
+        return node;
+    }
+};
+
+/// @brief Builds a `LessOrEqual<V, A>` rule/condition: `*lhs <= *rhs`.
+/// @tparam V Field member type shared by both operands (deduced; must
+///           satisfy `detail::ComparableField`).
+/// @tparam A Action type (deduced).
+/// @param lhs Pointer to the left-hand member.
+/// @param rhs Pointer to the right-hand member.
+/// @return The rule/condition node.
+template <typename V, typename A>
+    requires detail::ComparableField<V>
+[[nodiscard]] constexpr auto lessOrEqual(V A::* lhs, V A::* rhs) {
+    return LessOrEqual<V, A>{lhs, rhs};
+}
+
 /// @brief Rule: `field` must be engaged whenever @p Cond holds; vacuously
 /// satisfied (not required) while the condition does not hold.
 /// @tparam V    Field member type (must satisfy `EngageableField`).
