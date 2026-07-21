@@ -18,11 +18,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
+#include <morph/core/backend.hpp>
 #include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <morph/offline/reconnect_coordinator.hpp>
 #include <morph/session/session_auth.hpp>
 #include <morph/util/rational.hpp>
+#include <string_view>
 
 #include "pinned_facts_generated.hpp"
 
@@ -126,4 +128,20 @@ TEST_CASE("pinned-facts: ReconnectOutcome has exactly 3 enumerators", "[pinned-f
     pinReconnectOutcomeSwitch(morph::offline::ReconnectOutcome::Aborted);
     STATIC_REQUIRE(static_cast<int>(morph::offline::ReconnectOutcome::Aborted) ==
                    static_cast<int>(morph::pinned_facts::kExpected_RECONNECT_OUTCOME_CARDINALITY) - 1);
+}
+
+// ── Canonical error `what()` strings ────────────────────────────────────────
+//
+// These are runtime, not compile-time, pins: std::runtime_error::what() is
+// not constexpr, so a static_assert cannot compare it. This is the "genuine
+// fork" the plan for this feature calls out explicitly: pick static_assert
+// where the type system allows it (Tasks 1–2), REQUIRE where it does not.
+
+TEST_CASE("pinned-facts: canonical Completion cancellation error strings", "[pinned-facts]") {
+    REQUIRE(std::string_view{morph::backend::BackendChangedError{}.what()} ==
+            morph::pinned_facts::kExpected_BACKEND_CHANGED_ERROR_WHAT);
+    REQUIRE(std::string_view{morph::backend::BridgeDestroyedError{}.what()} ==
+            morph::pinned_facts::kExpected_BRIDGE_DESTROYED_ERROR_WHAT);
+    REQUIRE(std::string_view{morph::backend::DisconnectedError{}.what()} ==
+            morph::pinned_facts::kExpected_DISCONNECTED_ERROR_WHAT);
 }

@@ -20,3 +20,8 @@ CLOCK_SKEW_MS = 60000          # morph::session::kClockSkewMs (60s); include/mor
 AUTH_ERROR_CARDINALITY = 4          # morph::session::AuthError: Malformed/BadSignature/Expired/NotYetValid
 LOG_LEVEL_CARDINALITY = 5           # morph::log::LogLevel: debug/info/warn/error/off
 RECONNECT_OUTCOME_CARDINALITY = 3   # morph::offline::ReconnectOutcome: Reconnected/GaveUp/Aborted
+
+# ── Canonical error `what()` strings ────────────────────────────────────────
+BACKEND_CHANGED_ERROR_WHAT = "backend changed before completion resolved"
+BRIDGE_DESTROYED_ERROR_WHAT = "bridge destroyed before completion resolved"
+DISCONNECTED_ERROR_WHAT = "transport disconnected before completion resolved"
