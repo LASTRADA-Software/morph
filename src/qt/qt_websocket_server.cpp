@@ -6,6 +6,7 @@
 #include <QPointer>
 #include <QString>
 #include <algorithm>
+#include <chrono>
 #include <morph/core/logger.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
 #include <vector>
@@ -64,6 +65,61 @@ void QtWebSocketServer::close() {
         socket->deleteLater();
     }
     _clients.clear();
+}
+
+bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
+    auto const absoluteDeadline = std::chrono::steady_clock::now() + deadline;
+
+    // Step 1: stop taking new connections.
+    _wsServer.pauseAccepting();
+    // Step 2: new register/execute envelopes now fail fast on every existing
+    // connection.
+    _server.beginShutdown();
+
+    // Step 3: wait for in-flight replies without blocking the event loop.
+    // drainedWithin(0) is a non-blocking poll of the current state; pumping
+    // processEvents between polls lets the reply callbacks RemoteServer
+    // already queued via QMetaObject::invokeMethod (see onTextMessage) run,
+    // which is what actually delivers those replies over the still-open
+    // sockets.
+    bool drained = _server.drainedWithin(std::chrono::milliseconds{0});
+    while (!drained && std::chrono::steady_clock::now() < absoluteDeadline) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        drained = _server.drainedWithin(std::chrono::milliseconds{0});
+    }
+
+    // The in-flight counter can reach zero a hair before the strand task's
+    // reply callback actually reaches the Qt event queue (dispatchExecute's
+    // `complete` decrements the counter, then invokes `reply`), and actually
+    // delivering that reply over the socket needs a couple more event-loop
+    // round trips beyond that (this side's write, then the peer's read). Give
+    // a reply that just landed a short, bounded window to flush before this
+    // method starts sending close frames out from under it — bounded by
+    // whatever is left of `deadline` so a caller's budget is never exceeded.
+    auto const settleDeadline =
+        std::min(absoluteDeadline, std::chrono::steady_clock::now() + std::chrono::milliseconds{50});
+    while (std::chrono::steady_clock::now() < settleDeadline) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+
+    // Step 4: whatever is still connected gets a proper close frame instead
+    // of an abort, so the client can tell an orderly stop from a crash.
+    for (const auto& entry : _clients) {
+        entry.first->close(QWebSocketProtocol::CloseCodeGoingAway, QStringLiteral("server shutting down"));
+    }
+
+    // Let whatever remains of the deadline flush the close handshake over the
+    // event loop before the hard stop below reclaims any stragglers. If the
+    // drain step above already consumed the whole deadline, this loop body
+    // never runs and close() below fires immediately.
+    while (!_clients.empty() && std::chrono::steady_clock::now() < absoluteDeadline) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
+
+    // Step 5: hard stop for stragglers — identical to today's close() (also
+    // reclaims each remaining client's connection scope).
+    close();
+    return drained;
 }
 
 void QtWebSocketServer::onNewConnection() {

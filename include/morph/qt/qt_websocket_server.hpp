@@ -139,6 +139,33 @@ public:
     /// @brief Stops accepting new connections and closes the server socket.
     void close();
 
+    /// @brief Gracefully stops the server: refuse new work, let in-flight
+    ///        replies deliver, close each client with a proper WebSocket
+    ///        close frame, then hard-stop anything still connected.
+    ///
+    /// Sequence: `QWebSocketServer::pauseAccepting()` (no new connections),
+    /// `RemoteServer::beginShutdown()` (new `register`/`execute` now fail
+    /// fast with `"server shutting down"`), waiting up to @p deadline for
+    /// `RemoteServer::drainedWithin()` to report every in-flight execute has
+    /// replied, sending each still-connected client a real close frame
+    /// (`CloseCodeGoingAway`, reason `"server shutting down"`) instead of an
+    /// abort, and finally running the existing `close()` hard stop for
+    /// whatever @p deadline did not leave time to finish gracefully.
+    ///
+    /// Pumps the Qt event loop internally while it waits, so it is safe to
+    /// call from the Qt thread — which is also the thread that must run
+    /// `sendTextMessage` for replies and close frames to actually reach
+    /// clients. Purely additive and opt-in: a server that never calls this
+    /// behaves exactly as it does today, and `close()` itself is unchanged.
+    ///
+    /// @param deadline Total time budget for the whole sequence, measured
+    ///                 from the moment this call starts. Whatever the drain
+    ///                 and graceful-close steps have not finished within it
+    ///                 is hard-stopped exactly as `close()` does.
+    /// @return `true` if every in-flight execute drained before @p deadline
+    ///         elapsed; `false` if the hard stop had to reclaim stragglers.
+    bool closeGracefully(std::chrono::milliseconds deadline);
+
     /// @brief Qt slot called when a new client connects.
     Q_SLOT void onNewConnection();
 

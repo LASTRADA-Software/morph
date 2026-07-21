@@ -488,6 +488,91 @@ TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected si
     (void)rawBackend;
 }
 
+// ── Graceful shutdown tests (closeGracefully) ────────────────────────────────
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully closes idle clients with a going-away frame",
+          "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    QWebSocket client;
+    client.open(url);
+    pumpUntil([&] { return client.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(client.state() == QAbstractSocket::ConnectedState);
+
+    QWebSocketProtocol::CloseCode observedCode = QWebSocketProtocol::CloseCodeNormal;
+    QObject::connect(&client, &QWebSocket::disconnected, [&] { observedCode = client.closeCode(); });
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{500});
+    REQUIRE(drained);
+
+    pumpUntil([&] { return client.state() == QAbstractSocket::UnconnectedState; }, 100);
+    REQUIRE(client.state() == QAbstractSocket::UnconnectedState);
+    REQUIRE(observedCode == QWebSocketProtocol::CloseCodeGoingAway);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully waits for an in-flight execute before closing",
+          "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    std::atomic<bool> completed{false};
+    std::atomic<int> result{-1};
+    handler.execute(WsSlowAction{200})
+        .then([&](int val) {
+            result.store(val);
+            completed.store(true);
+        })
+        .onError([](const std::exception_ptr&) {});
+
+    // Give the execute a moment to actually reach the server and start
+    // running on its strand before beginning the graceful shutdown.
+    pumpUntil([] { return false; }, 5);
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{2000});
+    REQUIRE(drained);
+    REQUIRE(completed.load());
+    REQUIRE(result.load() == 200);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully hard-stops once the deadline elapses", "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    handler.execute(WsSlowAction{2000}).onError([](const std::exception_ptr&) {});
+
+    pumpUntil([] { return false; }, 5);
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{100});
+    REQUIRE_FALSE(drained);
+}
+
 // ── Malformed-protocol tests (raw QWebSocket) ────────────────────────────────
 //
 // These tests use a bare QWebSocket so they can send arbitrary garbage that the
