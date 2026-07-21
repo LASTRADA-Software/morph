@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_set>
 #include <vector>
 
@@ -43,6 +44,11 @@ namespace morph::journal {
 /// All public methods are thread-safe (guarded by an internal mutex). Safe to
 /// use from multiple threads within one process; not safe for multiple
 /// processes to append to the same path concurrently.
+///
+/// @par Rotation
+/// `rotate()` seals the active file (rename to a host-chosen path) and
+/// reopens a fresh, empty one at the original path — the seam a host uses to
+/// implement its own retention policy. See `rotate()`'s own docs.
 class FileActionLog : public IActionLog {
 public:
     /// @brief Opens (creating if necessary) @p path for appending.
@@ -153,6 +159,68 @@ public:
             }
         }
         return out;
+    }
+
+    /// @brief Seals the active file and reopens a fresh, empty one at the same path.
+    ///
+    /// Flushes (`fflush` + `fsync`/`_commit`) and closes the current active
+    /// file, renames it to @p sealedPath, then reopens a fresh, empty active
+    /// file at the original path. Thread-safe — guarded by the same mutex as
+    /// `append()`/`flush()`/`entries()`, so no in-flight `append()` call is
+    /// ever split across the sealed and the new active file. `entries()`
+    /// keeps reading only the (post-rotation, empty) active file; composing
+    /// full history across a rotation is a host-side recipe (concatenate each
+    /// sealed segment's `entries()` oldest-to-newest, then the active file's),
+    /// not a new API.
+    ///
+    /// @par Crash safety
+    /// The rename is a single atomic filesystem operation. A crash before it
+    /// completes leaves the pre-rotation active file untouched, as if
+    /// `rotate()` was never called; a crash after leaves the sealed file plus
+    /// a freshly recreated, empty active file. Either way no line is ever torn
+    /// across the two files, so the existing torn-line rule keeps applying
+    /// independently per file.
+    ///
+    /// @param sealedPath Destination path for the sealed segment. Platform
+    ///        `rename` semantics decide what happens if a filesystem entry
+    ///        already exists there (POSIX silently replaces it) — pass a path
+    ///        that does not collide with an existing segment.
+    /// @throws std::runtime_error if renaming to @p sealedPath fails — in that
+    ///         case the *original* active file is reopened in place (still
+    ///         holding every entry recorded before the call, so no data is
+    ///         lost; the rotation simply did not happen) — or if reopening the
+    ///         active path afterward fails outright (only possible if the
+    ///         rename itself succeeded and the original path's directory then
+    ///         became unwritable).
+    void rotate(const std::filesystem::path& sealedPath) {
+        std::scoped_lock const lock{_mtx};
+        // Same durability steps as flush()'s body, inlined here because
+        // flush() itself takes _mtx and this is already under it.
+        std::fflush(_file);
+#ifdef _WIN32
+        _commit(_fileno(_file));
+#else
+        ::fsync(fileno(_file));
+#endif
+        std::fclose(_file);
+        _file = nullptr;
+
+        std::error_code ec;
+        std::filesystem::rename(_path, sealedPath, ec);
+
+        // Reopen the active path regardless of the rename's outcome: on
+        // success this creates a fresh empty file; on failure it reopens the
+        // same pre-rotation file (still holding every prior entry), so a
+        // failed rotation never leaves the log unusable.
+        _file = std::fopen(_path.string().c_str(), "a");
+        if (_file == nullptr) {
+            throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
+                                     (ec ? "a failed" : "a successful") + " rename to " + sealedPath.string());
+        }
+        if (ec) {
+            throw std::runtime_error("FileActionLog::rotate: failed to rename " + _path.string() + " to " +
+                                     sealedPath.string() + ": " + ec.message());
+        }
     }
 
 private:

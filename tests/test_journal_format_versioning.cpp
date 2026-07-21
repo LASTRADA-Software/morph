@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <morph/core/bridge.hpp>
 #include <morph/core/model.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -169,4 +170,144 @@ TEST_CASE(
     // the identical pattern in test_action_log_phase2.cpp's own mid-file
     // corruption test.
     REQUIRE_THROWS_AS(FileActionLog(tmp.path), morph::journal::SerializationError);
+}
+
+// ── FileActionLog::rotate() ─────────────────────────────────────────────────
+
+// Model/action for the replay-equivalence test below. "JV_" is a fresh prefix,
+// distinct from every other test_*.cpp's BRIDGE_REGISTER_MODEL/ACTION type ids
+// (those are process-wide singleton registrations shared by the whole
+// morph_tests binary, so ids must not collide across translation units).
+struct JVDeposit {
+    int amount = 0;
+};
+struct JVModel {
+    int balance = 0;
+    int execute(const JVDeposit& a) {
+        balance += a.amount;
+        return balance;
+    }
+};
+BRIDGE_REGISTER_MODEL(JVModel, "JV_Model")
+BRIDGE_REGISTER_ACTION(JVModel, JVDeposit, "JV_Deposit")
+
+TEST_CASE("FileActionLog::rotate: seals the active file, reopens a fresh empty one", "[journal][format][rotate]") {
+    TempFile active{"rotate_basic_active"};
+    TempFile sealed{"rotate_basic_sealed"};
+
+    FileActionLog log{active.path};
+    log.append(makeEntry("M", "acct-1", "A", "{}", "1"));
+    log.append(makeEntry("M", "acct-2", "A", "{}", "2"));
+    log.flush();
+
+    log.rotate(sealed.path);
+
+    REQUIRE(log.entries().empty());  // active file is fresh and empty
+
+    log.append(makeEntry("M", "acct-3", "A", "{}", "3"));
+    log.flush();
+    auto activeEntries = log.entries();
+    REQUIRE(activeEntries.size() == 1);
+    REQUIRE(activeEntries[0].entityKey == "acct-3");
+
+    FileActionLog sealedReader{sealed.path};
+    auto sealedEntries = sealedReader.entries();
+    REQUIRE(sealedEntries.size() == 2);
+    REQUIRE(sealedEntries[0].entityKey == "acct-1");
+    REQUIRE(sealedEntries[1].entityKey == "acct-2");
+}
+
+TEST_CASE("FileActionLog::rotate: a failed rename leaves the log open and unrotated", "[journal][format][rotate]") {
+    TempFile active{"rotate_fail_active"};
+    FileActionLog log{active.path};
+    log.append(makeEntry("M", "e", "A", "{}", "1"));
+    log.flush();
+
+    REQUIRE_THROWS_AS(log.rotate(std::filesystem::path{"/no/such/directory/at/all/sealed.ndjson"}),
+                      std::runtime_error);
+
+    // The log is still usable and has not lost the entry recorded before the
+    // failed rotate.
+    REQUIRE(log.entries().size() == 1);
+    log.append(makeEntry("M", "e", "A", "{}", "2"));
+    log.flush();
+    REQUIRE(log.entries().size() == 2);
+}
+
+TEST_CASE("FileActionLog::rotate: concurrent append during rotation is safe", "[journal][format][rotate]") {
+    TempFile active{"rotate_concurrent_active"};
+    TempFile sealed{"rotate_concurrent_sealed"};
+    FileActionLog log{active.path};
+
+    constexpr int kAppends = 500;
+    std::atomic<int> appended{0};
+    std::thread appender{[&] {
+        for (int i = 0; i < kAppends; ++i) {
+            log.append(makeEntry("M", "e", "A", "{}", std::to_string(i)));
+            ++appended;
+        }
+    }};
+
+    while (appended.load() < kAppends / 4) { /* let the appender get a head start */
+    }
+    log.rotate(sealed.path);
+
+    appender.join();
+    log.flush();
+
+    FileActionLog sealedReader{sealed.path};
+    auto sealedCount = sealedReader.entries().size();
+    auto activeCount = log.entries().size();
+    // Every append() call is fully guarded by the same mutex rotate() takes, so
+    // none can be torn by a concurrent rotate — each one lands entirely before
+    // or entirely after the rename, and the total is exactly kAppends either way.
+    REQUIRE(sealedCount + activeCount == static_cast<std::size_t>(kAppends));
+}
+
+TEST_CASE(
+    "FileActionLog::rotate: replay over sealed-then-active segments equals "
+    "replay over a never-rotated log",
+    "[journal][format][rotate]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<JVModel>("JV_Model");
+    dispatcher.registerAction<JVModel, JVDeposit>("JV_Model", "JV_Deposit");
+
+    auto depositJson = [](int amount) {
+        return morph::model::ActionTraits<JVDeposit>::toJson(JVDeposit{.amount = amount});
+    };
+
+    // Baseline: three deposits in one never-rotated file.
+    TempFile baseline{"rotate_replay_baseline"};
+    {
+        FileActionLog log{baseline.path};
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(10)));
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(5)));
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(7)));
+        log.flush();
+    }
+    FileActionLog baselineLog{baseline.path};
+    auto baselineHolder = morph::journal::replay("JV_Model", baselineLog.entries(), registry, dispatcher);
+
+    // Same three deposits, rotated after the first two.
+    TempFile active{"rotate_replay_active"};
+    TempFile sealed{"rotate_replay_sealed"};
+    {
+        FileActionLog log{active.path};
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(10)));
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(5)));
+        log.flush();
+        log.rotate(sealed.path);
+        log.append(makeEntry("JV_Model", "", "JV_Deposit", depositJson(7)));
+        log.flush();
+    }
+    FileActionLog sealedLog{sealed.path};
+    FileActionLog activeLog{active.path};
+    auto combined = sealedLog.entries();  // oldest segment first
+    auto tail = activeLog.entries();      // then the active file
+    combined.insert(combined.end(), tail.begin(), tail.end());
+    auto rotatedHolder = morph::journal::replay("JV_Model", combined, registry, dispatcher);
+
+    REQUIRE(rotatedHolder->into<JVModel>().balance == baselineHolder->into<JVModel>().balance);
+    REQUIRE(rotatedHolder->into<JVModel>().balance == 22);
 }
