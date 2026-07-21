@@ -500,3 +500,50 @@ TEST_CASE(
     sink->onBackendChanged();
     REQUIRE(holder->model.notifyCount == 2);
 }
+
+// ── morph::backend::LocalBackend: _changeAware register/deregister bookkeeping ──
+
+TEST_CASE("morph::backend::LocalBackend::notifyBackendChanged: no change-aware models means zero posts",
+          "[backend][notify]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    backend.registerModel("Silent", [] { return std::make_unique<morph::model::detail::ModelHolder<SilentModel>>(); });
+
+    // No model in _changeAware: the loop body in notifyBackendChanged never
+    // runs. Nothing to assert beyond "does not crash" — there is no observable
+    // side effect from a silent model either way.
+    REQUIRE_NOTHROW(backend.notifyBackendChanged());
+}
+
+TEST_CASE(
+    "morph::backend::LocalBackend: notifyBackendChanged only notifies the currently-registered change-aware "
+    "models across a deregister/register cycle",
+    "[backend][notify]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto counterA = std::make_shared<std::atomic<int>>(0);
+    auto midA = backend.registerModel("A", [counterA] { return makeAwareCounterHolder(counterA); });
+
+    backend.notifyBackendChanged();
+    REQUIRE(morph::testing::waitUntil([&] { return counterA->load() == 1; }));
+
+    // Deregister the aware model, then register a fresh aware model under a
+    // new id — mirroring what Bridge::switchBackend does per-handler on a
+    // backend swap, but exercised directly at the LocalBackend level.
+    backend.deregisterModel(midA);
+    auto counterB = std::make_shared<std::atomic<int>>(0);
+    auto midB = backend.registerModel("B", [counterB] { return makeAwareCounterHolder(counterB); });
+
+    backend.notifyBackendChanged();
+    REQUIRE(morph::testing::waitUntil([&] { return counterB->load() == 1; }));
+
+    // counterA must not have grown further: midA left _changeAware (and
+    // _models) when it was deregistered, so this second notifyBackendChanged
+    // call never reaches it.
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    REQUIRE(counterA->load() == 1);
+
+    (void)midB;
+}
