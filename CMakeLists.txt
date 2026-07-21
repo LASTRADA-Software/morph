@@ -147,22 +147,41 @@ target_sources(morph
         include/morph/render/locale_format.hpp
 )
 
-# ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
+# ── Qt/QML forms renderer setup (optional) ───────────────────────────────────
 # Ships the reference Qt/QML renderer (MorphForms, src/qt/forms) as a reusable
 # component, independent of MORPH_BUILD_EXAMPLES. examples/forms/gui_qml
 # (added from examples/forms/CMakeLists.txt, itself still gated on
-# MORPH_BUILD_EXAMPLES, added further below) is a *consumer* of this module,
-# not its home -- this block must run before the "Demo executable" section
-# below (which conditionally adds examples/forms/gui_qml), since that demo's
-# CMakeLists.txt relies on qt_add_library/qt_add_qml_module/qt_add_executable
-# already being defined (via find_package(Qt6 ... Quick)/
-# qt_standard_project_setup() below) and on morph_forms_moduleplugin already
-# existing as a target.
+# MORPH_BUILD_EXAMPLES, added further below in "Demo executable") is a
+# *consumer* of this module, not its home -- the find_package/
+# qt_standard_project_setup() call and the morph::qt_forms interface target
+# below must both exist before the "Demo executable" section runs, since that
+# demo's CMakeLists.txt relies on qt_add_library/qt_add_qml_module/
+# qt_add_executable already being defined and links against morph::qt_forms
+# (a namespaced target, which -- unlike a plain target name such as
+# morph_forms_moduleplugin below -- CMake requires to already exist at the
+# point it is named). add_subdirectory(src/qt/forms) itself (which builds the
+# actual MorphForms module/plugin, plus a Catch2-linked test executable) is
+# deferred to just after the "Tests" section further below, since Catch2 is
+# only found/fetched there and its test executable names Catch2::Catch2
+# directly.
 if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
     qt_standard_project_setup(REQUIRES 6.5)
 
-    add_subdirectory(src/qt/forms)
+    # Header-only, model-agnostic controller core (no Q_OBJECT -- Qt cannot
+    # register a class template for QML); an app's own QObject/QML_ELEMENT
+    # controller subclass forwards to it. See
+    # include/morph/qt/forms/forms_controller_core.hpp.
+    add_library(morph_qt_forms INTERFACE)
+    add_library(morph::qt_forms ALIAS morph_qt_forms)
+    target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
+    target_sources(morph_qt_forms
+        INTERFACE
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/qt/forms/forms_controller_core.hpp
+    )
 endif()
 
 # ── Demo executable ──────────────────────────────────────────────────────────
@@ -208,6 +227,19 @@ if(MORPH_BUILD_TESTS)
     endif()
 
     add_subdirectory(tests)
+endif()
+
+# ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
+# The actual MorphForms module/plugin (src/qt/forms), deferred to here (after
+# Catch2 is found/fetched above) since its own CMakeLists.txt links a Catch2
+# test executable directly against Catch2::Catch2 when MORPH_BUILD_TESTS is
+# ON -- the same condition that guards both. Qt6 Quick/Qml was already found
+# and morph::qt_forms already created earlier (before "Demo executable"), so
+# examples/forms/gui_qml (a consumer, added above) only forward-references
+# the plain (non-namespaced) morph_forms_moduleplugin target this creates,
+# which CMake resolves once this subdirectory is processed.
+if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+    add_subdirectory(src/qt/forms)
 endif()
 
 # ── Fuzz harnesses (optional) ────────────────────────────────────────────────

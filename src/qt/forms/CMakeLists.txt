@@ -60,4 +60,10 @@ if(MORPH_BUILD_TESTS)
              COMMAND morph_forms_qml_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests)
     set_tests_properties(forms_qml_logic PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    # Catch2 (own main, controls QCoreApplication lifetime -- same rationale
+    # as tests/qt/test_qt_websocket.cpp) coverage of FormsControllerCore<Model>.
+    qt_add_executable(morph_forms_controller_core_tests tests/test_forms_controller_core.cpp)
+    target_link_libraries(morph_forms_controller_core_tests PRIVATE morph::qt_forms Catch2::Catch2)
+    add_test(NAME forms_controller_core COMMAND morph_forms_controller_core_tests)
 endif()
