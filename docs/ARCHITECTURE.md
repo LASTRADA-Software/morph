@@ -11,8 +11,10 @@ The framework is header-only (C++23, namespace `morph`), depends on Glaze for JS
 > subsystem, capturing invariants, API surface, and the reasoning behind each
 > design. Consult the matching spec before changing a public type: e.g.
 > `docs/spec/security.md` (authenticated sessions and the trust model),
-> `docs/spec/core/completion.md`, `docs/spec/core/executor.md`, `docs/spec/core/bridge.md`,
-> `docs/spec/journal/journal.md`, `docs/spec/offline/offline.md`, `docs/spec/session/session.md`,
+> `docs/spec/VERSIONING.md` (the semantic-versioning / deprecation-window
+> commitment), `docs/spec/core/completion.md`, `docs/spec/core/executor.md`,
+> `docs/spec/core/bridge.md`, `docs/spec/journal/journal.md`,
+> `docs/spec/offline/offline.md`, `docs/spec/session/session.md`,
 > `docs/spec/core/wire.md`. Where this document and a spec disagree, the spec wins.
 
 ## Namespace map
@@ -22,6 +24,7 @@ The public surface is split per topic so callers always know whether a name is p
 | Namespace | Purpose | Public symbols |
 |---|---|---|
 | `morph::` | Macros only at this level | `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`, `BRIDGE_REGISTER_VALIDATOR` (at file scope, but specialise `morph::model::*` templates) |
+| `morph::version` | Release version constants | `kMajor`, `kMinor`, `kPatch`, `kString` (see `docs/spec/VERSIONING.md`) |
 | `morph::log` | Configurable logging | `LogLevel`, `setLogger`, `setLogLevel`, `getLogLevel`, `logDebug`, `logInfo`, `logWarn`, `logError` |
 | `morph::exec` | Executor primitives | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` |
 | `morph::async` | Async result handle | `Completion<T>` |
@@ -579,7 +582,11 @@ Two further field types follow the same one-kind-of-empty pattern:
 
 The headers are grouped into per-sub-domain subdirectories that mirror the
 namespaces. Design specs live under `docs/spec/<sub-domain>/` with the same
-folder names.
+folder names. One exception: `include/morph/version.hpp` sits directly under
+`include/morph/`, with no subdirectory — it is cross-cutting library
+metadata rather than part of any one sub-domain, so it is documented in the
+top-level `docs/spec/VERSIONING.md` instead of a `docs/spec/<sub-domain>/`
+folder.
 
 ### Library headers (`include/morph/`)
 
@@ -668,6 +675,19 @@ An abandoned **error**, however, is not silenced by a null executor: `onErrAttac
 ### `MainThreadExecutor::runFor` does not drain on timeout
 
 If `runFor(timeout)` returns because the timeout expired rather than because the queue emptied, any remaining tasks stay enqueued. A subsequent `runFor` call will process them. This is intentional — `runFor` is a pump, not a flush.
+
+## Versioning & compatibility
+
+morph is `0.1.0` and pre-1.0: per [Semantic Versioning](https://semver.org/)'s
+own rule for major version `0`, any release may still change anything without
+a major bump. The semantic-versioning, stable-surface, and deprecation-window
+commitment morph makes **starting at 1.0** is fully specified in
+`docs/spec/VERSIONING.md` — this section is only a
+pointer, not a substitute. In short: the per-topic public namespaces above
+(everything outside a `detail` namespace) are the stable surface; because
+morph is header-only there is no ABI to preserve, so the promise is *source*
+compatibility, checked against both a symbol's signature and its `docs/spec/`
+documented behavior.
 
 ## Key design decisions
 

@@ -129,10 +129,7 @@ cardinalities, key constants (`kMaxDecimalPlaces`, `kMaxEnvelopeBytes`,
 `kClockSkewMs`), canonical error-message strings, and glaze
 `error_on_unknown_keys` behavior — so future drift fails the build.
 
-### D2 — API stability / 1.0 commitment · P2 · [spec: `planned/api_stability.md`]
-The API is still being corrected (this branch is `fix/spec-audit-remediation`).
-Before production adoption at scale, declare a supported version, a deprecation
-policy, and ABI/source-compat expectations (header-only eases ABI but not source).
+### D2 — API stability / 1.0 commitment · P2 · **Implemented** — see `docs/spec/VERSIONING.md`.
 
 ---
 

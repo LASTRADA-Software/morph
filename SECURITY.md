@@ -16,9 +16,10 @@ and ask for coordinated disclosure until a fix ships.
 
 ## Supported versions
 
-morph is pre-1.0: only the latest `master` is supported, and fixes are not
-backported. A formal supported-version and deprecation policy is planned —
-see `docs/planned/api_stability.md`.
+morph is pre-1.0 (`0.x`, per [Semantic Versioning](https://semver.org/)): only
+the latest `master` is supported, and fixes are not backported. The
+supported-version and deprecation policy morph commits to **starting at
+1.0** is published — see `docs/spec/VERSIONING.md`.
 
 ## Scope
 

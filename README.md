@@ -404,12 +404,19 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
 - **Registration is global and macro-driven** (per-TU, static-init, string type
   ids); there is no runtime deregistration and unknown ids fail at runtime, not
   compile time.
+- **No 1.0 compatibility promise yet.** morph is `0.1.0`; per semver's own rule
+  for major version `0`, anything may still change in any release without a
+  major bump. The semantic-versioning, stable-surface, and deprecation-window
+  policy morph commits to **starting at 1.0** is already published — see
+  [`docs/spec/VERSIONING.md`](docs/spec/VERSIONING.md).
 
 ## Learn more
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — namespace map, layer diagram,
   wire protocol, deployment topologies, and design rationale.
 - [`docs/spec/`](docs/spec) — the authoritative per-type/subsystem design specs.
+- [`docs/spec/VERSIONING.md`](docs/spec/VERSIONING.md) — the semantic-versioning,
+  stable-surface, and deprecation-window policy.
 
 ## License
 
