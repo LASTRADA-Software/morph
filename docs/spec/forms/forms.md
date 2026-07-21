@@ -18,6 +18,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
 - [Layout & grouping — sections, tabs, spans](#layout--grouping--sections-tabs-spans)
 - [Renderer contract: the schema key vocabulary](#renderer-contract-the-schema-key-vocabulary)
+- [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Support traits and helpers](#support-traits-and-helpers)
 - [API reference](#api-reference)
@@ -482,6 +483,136 @@ altering how a value is interpreted) is a breaking change and ships only in a
 breaking framework release.** Adding a new, optional `x-*` key that older
 renderers can safely ignore is not breaking.
 
+## Localisation — message keys and the catalog seam
+
+The schema stays one cached, un-localised instance per type (see
+[One cached schema per type — no localisation](#one-cached-schema-per-type--no-localisation)):
+translation is a renderer-side catalog lookup over **stable, mechanically
+derived message keys**, never a per-locale schema variant. Two small
+header-only libraries carry this:
+
+- **`morph::forms::i18n`** (`include/morph/forms/i18n.hpp`) — the key
+  derivation vocabulary.
+- **`morph::render`** (`include/morph/render/i18n.hpp`,
+  `include/morph/render/locale_format.hpp`) — the renderer-side catalog seam
+  and the locale numeric-entry contract. `morph::render` is client-side only
+  and never appears on the wire.
+
+### Message-key derivation
+
+A key is derived from identifiers the schema (or the `actionType` label a
+renderer already has) already carries — no declaration needed in the common
+case:
+
+| Text slot | Derived key | Function |
+|---|---|---|
+| field label / help / placeholder | `<actionTypeId>.<wireField>.label` / `.help` / `.placeholder` | `morph::forms::i18n::fieldKey(actionTypeId, wireField, FieldSlot)` |
+| layout group title | `<actionTypeId>.group.<index>` | `groupKey(actionTypeId, groupIndex)` |
+| cross-field rule message | `<actionTypeId>.rule.<index>` | `ruleKey(actionTypeId, ruleIndex)` |
+| wizard title / step title | `<wizardId>.title` / `<wizardId>.step.<index>.title` | `wizardTitleKey(wizardId)` / `wizardStepTitleKey(wizardId, stepIndex)` |
+| app title / menu label | `<appId>.title` / `<appId>.menu.<index>.label` | `appTitleKey(appId)` / `appMenuLabelKey(appId, menuIndex)` |
+
+`actionTypeId` is `ActionTraits<A>::typeId()`; `wireField` is the member's
+reflected wire key (the same name `mergeSchemaExtras` iterates via
+`forEachNamedMember`); group/rule/step/menu indexes are the 0-based position
+in their respective schema arrays. None of these keys are written into the
+schema — a renderer derives them itself from data it already has (the schema
+plus the `actionType` label it is rendering under), so declaring nothing
+changes zero bytes of any schema.
+
+**Declare to override.** A field declares an explicit key stem via
+`FieldMeta::i18nKey` (see [Field metadata](#field-metadata--fieldmeta)),
+emitted as `x-i18nKey` on its schema node; group, rule, wizard step, and menu
+descriptors gain the same optional `i18nKey` member on their own types, owned
+by each descriptor's own spec. For a **field**, the override replaces only
+the `<actionTypeId>.<wireField>` stem; each of the three per-field suffixes
+(`.label` / `.help` / `.placeholder`) still applies on top of it —
+`morph::forms::i18n::explicitFieldKey(i18nKeyOverride, slot)` computes
+`"<i18nKeyOverride>.<slot>"`. For a group, rule, wizard step, or menu entry —
+each of which carries exactly one piece of text — the override *is* the
+complete key, used in place of the derived one.
+
+### The catalog seam
+
+```cpp
+// namespace morph::render — client-side only; never on the wire.
+using TranslationProvider =
+    std::function<std::optional<std::string>(std::string_view key, std::string_view bcp47Locale)>;
+```
+
+`morph::render::resolveText(provider, bcp47Locale, explicitKey, derivedKey,
+schemaLiteral)` resolves one display slot's text, most specific first: the
+explicit key (when declared) is tried first, then the derived key, and a
+miss at both falls back to `schemaLiteral` — the schema's authored `title` /
+`description` / `x-placeholder` / group or step title, unchanged. A
+default-constructed (empty) `provider` — no catalog installed — skips
+straight to `schemaLiteral`, so an unconfigured renderer behaves exactly as
+it did before this spec. morph ships the seam and this resolution algorithm
+only; it defines no translation storage format — a host adapts whatever
+catalog it already owns (Qt `QTranslator`/`.qm`, a JSON bundle, a database)
+into the one `TranslationProvider` signature.
+
+The `examples/forms/gui_qml` reference renderer hosts a concrete, minimal
+realization: `I18nCatalog` (`examples/forms/gui_qml/I18nCatalog.hpp`), an
+in-memory `QObject` catalog (QML cannot hold a `std::function` directly),
+wired into `DynamicForm.qml`'s `resolveText`/`i18nFieldKey` JS mirrors of the
+functions above. It currently resolves only the field label/help/placeholder
+slot — group, rule, wizard, and app-menu rendering (and therefore their i18n
+wiring) land with `gui_layout_grouping.md`, `gui_cross_field_rules.md`, and
+`gui_workflows_navigation.md` respectively (see `docs/planned/`).
+
+**Group membership is matched by index, never by translated text.** A
+field's `x-section` is the stable numeric handle into `x-layout.groups`; a
+renderer translates a group's *displayed* title but places fields by index.
+
+**Rule messages come from the catalog, not the wire.** For a rule the client
+can evaluate, the renderer shows its catalog message (falling back to a
+renderer-built neutral message from the rule's structure); canonical
+server-side error strings ([error_handling.md](../error_handling.md)) stay
+untranslated protocol vocabulary, surfaced only for conditions the client
+could not pre-empt.
+
+### Locale data formatting
+
+Display formatting is the renderer's duty; the wire stays canonical:
+
+- **Numbers.** `morph::render::normalizeLocaleNumber(text, decimalSeparator,
+  groupSeparator)` (`include/morph/render/locale_format.hpp`) converts a
+  locale-formatted entry (`"1.050,25"`) to the canonical `.`-decimal text
+  `Quantity`'s exact digit routines already consume (`"1050.25"`); malformed
+  input yields `std::nullopt` rather than a best-effort guess.
+  `formatCanonicalNumber` is the display-direction inverse, with
+  display-only thousands grouping. The exact `Rational`/`Quantity` digit
+  arithmetic ([rational.md](../util/rational.md)) never sees a
+  locale-formatted string — the conversion happens at the control edge only.
+- **Timestamps.** The wire value is strict UTC ISO-8601
+  ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
+  user's zone by shifting a `morph::time::DateTime` with its existing
+  duration-arithmetic operators (`dt + std::chrono::minutes{offset}` for
+  display, `dt - std::chrono::minutes{offset}` back to canonical UTC before
+  submission) — no new arithmetic is needed, only the offset the renderer
+  chooses to display in. A locale-formatted entry must round-trip to the
+  identical canonical wire value.
+- **Choice option labels are data, not chrome.** Option rows come from
+  executing the options action ([choice.md](choice.md)); the catalog never
+  sees them. A model that wants localised rows reads
+  `session::current()->locale` server-side
+  ([session.md](../session/session.md)) — the one place server-side locale
+  participates.
+
+### Non-goals
+
+- No per-locale schema variants — `schemaJson<A>()` keeps its one cached,
+  un-localised schema.
+- No translation storage format — the `TranslationProvider` signature is the
+  whole contract.
+- No server-side message localisation — canonical error strings stay
+  diagnostic/protocol vocabulary.
+- No RTL / layout mirroring engine.
+- Not machine translation, locale negotiation, or plural rules — the catalog
+  is a lookup; anything richer lives inside the host's provider
+  implementation.
+
 ## `allRequiredEngaged<A>()` — readiness check
 
 ```cpp
@@ -677,7 +808,8 @@ nothing). This baking-in **precludes localised / i18n schemas**: the human
 display strings that land in the schema (unit `display`/`unitUnicode`, and any
 `description` text) are fixed at first call. There is no per-request or
 per-locale schema variant — a translated form would need a different mechanism
-entirely.
+entirely. See [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam)
+for that mechanism.
 
 ### Load-bearing assumptions about glaze's schema shape
 
@@ -709,6 +841,7 @@ wrong or un-merged schema rather than fail loudly.
 | [datetime.md](../util/datetime.md) | `DateTime` / `Timestamp`, the ISO-8601 wire format, and the `"format": "date-time"` schema annotation. |
 | [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. |
 | [security.md](../security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
+| [session.md](../session/session.md) | `Context::locale`, the server-side hook for data (not chrome) localisation — the one place `session::current()->locale` participates, for `Choice` option-row labels. |
 
 ## Out of scope
 
