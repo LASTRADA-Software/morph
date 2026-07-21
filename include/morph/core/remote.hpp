@@ -548,6 +548,28 @@ public:
         }
     }
 
+    /// @brief Blocks until every in-flight `execute` has delivered its reply,
+    ///        or @p deadline elapses.
+    ///
+    /// "In-flight" is one counter (`_inFlightExecutes`), incremented when
+    /// `dispatchExecute` admits a call for dispatch (right before posting to
+    /// the model's strand) and decremented right before its reply is sent, on
+    /// every resolving path (`ok`, `err`, or a `LimitPolicy::executeTimeout`
+    /// firing first) — the same state `LimitPolicy::maxInFlightExecutes` (if
+    /// configured) gates and `health()`'s `inFlight` field reads, shared
+    /// rather than double-counted. Waits on a condition variable signalled
+    /// when the counter reaches zero — not a busy poll. Safe to call from any
+    /// thread, independently of `beginShutdown()` (it only observes the
+    /// counter; it does not itself stop new work from arriving).
+    /// @param deadline Maximum time to wait.
+    /// @return `true` if the in-flight count reached zero before @p deadline
+    ///         elapsed; `false` on timeout.
+    [[nodiscard]] bool drainedWithin(std::chrono::milliseconds deadline) {
+        std::unique_lock lock{_drainMtx};
+        return _drainCv.wait_for(lock, deadline,
+                                 [this] { return _inFlightExecutes.load(std::memory_order_acquire) == 0; });
+    }
+
 private:
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
@@ -764,8 +786,9 @@ private:
         // client Completion hangs forever. See docs/spec/concurrency_and_lifetimes.md.
         // Concurrent in-flight executes: this is the same counter
         // LimitPolicy::maxInFlightExecutes checks above, reused (not duplicated)
-        // as the executeInFlight metric's gauge and health()'s inFlight field —
-        // one counter, three consumers, never double-counted.
+        // as the executeInFlight metric's gauge, health()'s inFlight field, and
+        // drainedWithin()'s drain-detection condition — one counter, four
+        // consumers, never double-counted.
         auto const inFlightAfterInc = _inFlightExecutes.fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
@@ -784,6 +807,15 @@ private:
                 auto const inFlightAfterDec = self->_inFlightExecutes.fetch_sub(1, std::memory_order_relaxed) - 1;
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                                      static_cast<double>(inFlightAfterDec));
+                if (inFlightAfterDec == 0) {
+                    // Wakes any drainedWithin() waiter blocked on the in-flight
+                    // count reaching zero. Locking _drainMtx here (rather than
+                    // just notifying) closes the classic lost-wakeup window: it
+                    // guarantees this notify cannot land between a waiter's
+                    // predicate check and its wait_for() call.
+                    std::scoped_lock const drainLock{self->_drainMtx};
+                    self->_drainCv.notify_all();
+                }
                 (*replySlot)(std::move(msg));
             }
         };
@@ -911,8 +943,8 @@ private:
     // call for dispatch (post-authorization), decremented exactly once when
     // its reply is delivered (see `complete`, above) — regardless of whether
     // the winning path was the strand's dispatch or a LimitPolicy::executeTimeout
-    // firing first. Shared by the executeInFlight metric and health()'s
-    // inFlight field: one counter, never double-counted.
+    // firing first. Shared by the executeInFlight metric, health()'s inFlight
+    // field, and drainedWithin(): one counter, never double-counted.
     std::atomic<std::size_t> _inFlightExecutes{0};
     std::unique_ptr<detail::TimeoutScheduler> _timeoutScheduler;
     // Set once by beginShutdown() and never cleared — there is no
@@ -924,6 +956,10 @@ private:
     std::atomic<bool> _ready{true};
     std::mutex _healthMtx;
     std::function<void(const HealthStatus&)> _healthHandler;
+    // Guards the condition variable drainedWithin() waits on; signalled by
+    // dispatchExecute's `complete` whenever _inFlightExecutes reaches zero.
+    std::mutex _drainMtx;
+    std::condition_variable _drainCv;
 };
 
 /// @brief `IBackend` adapter that routes all calls through a `RemoteServer` as
