@@ -36,6 +36,13 @@ Frame {
     property string resultText: ""
     property bool resultOk: true
 
+    // i18n: a host-supplied translation catalog (see I18nCatalog.hpp) and the
+    // BCP-47 locale to resolve against. `catalog: null` (the default) means
+    // "no catalog installed" — every label/help/placeholder falls back to
+    // its schema literal, exactly as today.
+    property var catalog: null
+    property string displayLocale: "C"
+
     // --- schema helpers -----------------------------------------------------
 
     function opt(value, fallback) {
@@ -50,6 +57,47 @@ Frame {
             return Object.assign({}, def, prop)
         }
         return opt(prop, {})
+    }
+
+    // --- i18n: field-slot key derivation and resolution ------------------
+    // Mirrors morph::forms::i18n::fieldKey/explicitFieldKey (forms/i18n.hpp)
+    // and morph::render::resolveText (render/i18n.hpp) for the one slot this
+    // renderer consumes (field label/help/placeholder) — group/rule/wizard/
+    // app keys have no consumer here yet.
+
+    function i18nFieldKey(field, slot) {
+        return actionType + "." + field + "." + slot
+    }
+
+    // A field's x-i18nKey (when declared) replaces the derived
+    // "<actionType>.<field>" stem; the slot suffix still applies.
+    function i18nExplicitFieldKey(i18nKeyOverride, slot) {
+        return i18nKeyOverride ? (i18nKeyOverride + "." + slot) : undefined
+    }
+
+    // Resolution: explicit key, then derived key, then the schema literal.
+    // `explicitKey` may be undefined (no x-i18nKey declared). No catalog
+    // installed (or a full miss) resolves to `literal` unchanged.
+    function resolveText(explicitKey, derivedKey, literal) {
+        if (!catalog)
+            return literal
+        // Reading catalog.revision (bumped on every addTranslation) makes
+        // `fields` (which calls this) a dependency of the catalog's
+        // contents, not just its identity — otherwise a translation seeded
+        // after `fields` first evaluates (e.g. from the catalog's own
+        // Component.onCompleted, which runs after the initial binding pass)
+        // would go unnoticed. Same cache-invalidation idiom as
+        // `optionsRevision` below, for `fieldOptions`.
+        catalog.revision
+        if (explicitKey !== undefined) {
+            const hit = catalog.lookup(displayLocale, explicitKey)
+            if (hit !== undefined && hit !== null)
+                return hit
+        }
+        const hit2 = catalog.lookup(displayLocale, derivedKey)
+        if (hit2 !== undefined && hit2 !== null)
+            return hit2
+        return literal
     }
 
     // Flat field descriptors, in declaration (x-order) order.
@@ -82,11 +130,23 @@ Frame {
                 const sliderMin = opt(raw["x-min"], p["x-min"])
                 const sliderMax = opt(raw["x-max"], p["x-max"])
                 const sliderStep = opt(raw["x-step"], p["x-step"])
+                // x-i18nKey (FieldMeta::i18nKey, when declared) replaces the
+                // derived "<actionType>.<field>" stem for all three of this
+                // field's text slots; a field with no override falls
+                // through to the derived key, then to the schema literal.
+                const i18nOverride = opt(raw["x-i18nKey"], opt(p["x-i18nKey"], ""))
+                const literalTitle = opt(raw["title"], opt(p.title, name))
+                const literalHelp = opt(p.description, "")
+                const literalPlaceholder = opt(raw["x-placeholder"], opt(p["x-placeholder"], ""))
                 return {
                     name: name,
-                    title: opt(raw["title"], opt(p.title, name)),
-                    description: opt(p.description, ""),
-                    placeholder: opt(raw["x-placeholder"], opt(p["x-placeholder"], "")),
+                    title: literalTitle,
+                    label: resolveText(i18nExplicitFieldKey(i18nOverride, "label"),
+                                       i18nFieldKey(name, "label"), literalTitle),
+                    description: resolveText(i18nExplicitFieldKey(i18nOverride, "help"),
+                                              i18nFieldKey(name, "help"), literalHelp),
+                    placeholder: resolveText(i18nExplicitFieldKey(i18nOverride, "placeholder"),
+                                              i18nFieldKey(name, "placeholder"), literalPlaceholder),
                     readOnly: opt(raw["x-readonly"], opt(p["x-readonly"], false)),
                     hidden: opt(raw["x-hidden"], opt(p["x-hidden"], false)),
                     unit: unitText,
@@ -362,7 +422,7 @@ Frame {
 
             RowLayout {
                 Label {
-                    text: fieldColumn.modelData.title
+                    text: fieldColumn.modelData.label
                     font.bold: true
                 }
                 Label {

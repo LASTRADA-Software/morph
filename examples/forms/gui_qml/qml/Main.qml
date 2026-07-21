@@ -23,8 +23,23 @@ ApplicationWindow {
     // QML ids outrank scope properties, shadowing them invites confusion.
     property var schemas: JSON.parse(formsController.schemasJson)
 
+    // "C" (the default) is the locale-free identity transform: no translated
+    // labels, plain "." decimals, no grouping — exactly today's rendering.
+    // Selecting "de" demonstrates a catalog hit (RecordMeasurement.sampleId's
+    // label) and decimal-comma numeric entry.
+    property string uiLocale: "C"
+
     FormsController {
         id: formsController
+    }
+
+    I18nCatalog {
+        id: i18nCatalog
+        Component.onCompleted: {
+            // One seeded translation proves the catalog-hit path; every
+            // other key misses and falls back to its schema literal.
+            addTranslation("de", "RecordMeasurement.sampleId.label", "Probe")
+        }
     }
 
     ScrollView {
@@ -46,6 +61,17 @@ ApplicationWindow {
                       + "through an in-process RemoteServer."
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Label { text: "Display locale:" }
+                ComboBox {
+                    model: ["C", "de"]
+                    onActivated: root.uiLocale = currentText
+                }
+            }
+
             Repeater {
                 model: Object.keys(root.schemas)
 
@@ -57,6 +83,8 @@ ApplicationWindow {
                     actionType: modelData
                     schema: root.schemas[modelData]
                     controller: formsController
+                    catalog: i18nCatalog
+                    displayLocale: root.uiLocale
                 }
             }
 
