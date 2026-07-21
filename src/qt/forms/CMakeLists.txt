@@ -23,6 +23,7 @@ qt_add_qml_module(morph_forms_module
         qml/DynamicForm.qml
         qml/DateTimePicker.qml
         qml/SlotRegistry.qml
+        qml/CollectionView.qml
     SOURCES
         I18nCatalog.hpp
         I18nCatalog.cpp
