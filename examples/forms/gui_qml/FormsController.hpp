@@ -15,6 +15,8 @@
 
 #include <QObject>
 #include <QString>
+#include <string>
+#include <unordered_map>
 
 // Guarded like examples/bank/gui/controllers/AccountController.hpp: MOC only
 // needs the Q_OBJECT/QML_ELEMENT macros above and the Q_INVOKABLE/Q_PROPERTY
@@ -38,6 +40,13 @@ class FormsController : public QObject {
     ///        existing action forms; see docs/spec/forms/views.md).
     Q_PROPERTY(QString viewsJson READ viewsJson CONSTANT)
 
+    /// @brief `{wizardId: schema}` JSON for every registered wizard the demo
+    ///        app shell references (see docs/spec/forms/workflows_navigation.md).
+    Q_PROPERTY(QString wizardSchemasJson READ wizardSchemasJson CONSTANT)
+
+    /// @brief The `app-*` document for the demo's app shell (menu -> screens).
+    Q_PROPERTY(QString appSchemaJson READ appSchemaJson CONSTANT)
+
 public:
     explicit FormsController(QObject* parent = nullptr);
 
@@ -47,6 +56,12 @@ public:
     ///        (`morph::views::viewSchemaJson` output per registered view),
     ///        keyed by view type id.
     [[nodiscard]] QString viewsJson() const;
+
+    /// @brief `{wizardId: schema}` JSON for every registered wizard.
+    [[nodiscard]] QString wizardSchemasJson() const;
+
+    /// @brief The app shell's `app-*` document.
+    [[nodiscard]] QString appSchemaJson() const;
 
     /// @brief Dispatches @p bodyJson as the body of @p actionType if the
     ///        body is complete. Called by QML on every field edit once the
@@ -63,6 +78,14 @@ public:
     ///        `optionsReceived` on the GUI thread.
     Q_INVOKABLE void fetchOptions(const QString& optionsAction, const QString& bodyJson);
 
+    /// @brief Returns the JSON-encoded value last captured at @p path
+    ///        (`"<ActionTypeId>.<field>"`), populated automatically by
+    ///        `submitIfValid` from each action's submitted body and reply.
+    ///        Used by the app shell's wizard view to prefill a later step
+    ///        from an earlier one. Returns an empty string if @p path was
+    ///        never captured.
+    Q_INVOKABLE QString resolvedValue(const QString& path) const;
+
 signals:
     /// @brief Emitted once per `submitIfValid` call. @p payload is the
     ///        result JSON when @p ok, otherwise the error message.
@@ -74,4 +97,8 @@ signals:
 
 private:
     morph::qt::forms::FormsControllerCore<lab::LabModel> _core;
+
+    /// @brief `"<ActionTypeId>.<field>"` -> last captured JSON value, filled
+    ///        in by `submitIfValid` from every successful submit/reply pair.
+    std::unordered_map<std::string, std::string> _resolved;
 };
