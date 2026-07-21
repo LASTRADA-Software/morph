@@ -4,7 +4,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
+#include <glaze/glaze.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/forms/layout.hpp>
+#include <string>
 #include <string_view>
 
 using morph::forms::FieldGroup;
@@ -62,8 +65,12 @@ TEST_CASE("FieldSpan defaults colspan to 1", "[forms][layout]") {
 // HasFormLayout / HasFieldSpans concepts
 // ---------------------------------------------------------------------------
 
-namespace {
-
+// Deliberately at file scope, not inside an anonymous namespace: Task 2 below
+// reuses PlainAction with morph::forms::schemaJson<PlainAction>(), which
+// (like every other schemaJson<> fixture in tests/test_quantity_forms.cpp,
+// e.g. QFRecordMeasurement) needs external linkage for glaze's reflection
+// name-mangling (glz::detail::get_name_impl) to resolve — an anonymous-
+// namespace type has no linkage and fails to compile there.
 struct PlainAction {
     std::int64_t sampleId = 0;
 };
@@ -81,11 +88,133 @@ struct SpansOnlyAction {
     static constexpr std::array fieldSpans{FieldSpan{.field = "sampleId", .colspan = 2}};
 };
 
-}  // namespace
-
 static_assert(!morph::forms::detail::HasFormLayout<PlainAction>);
 static_assert(!morph::forms::detail::HasFieldSpans<PlainAction>);
 static_assert(morph::forms::detail::HasFormLayout<LayoutOnlyAction>);
 static_assert(!morph::forms::detail::HasFieldSpans<LayoutOnlyAction>);
 static_assert(!morph::forms::detail::HasFormLayout<SpansOnlyAction>);
 static_assert(morph::forms::detail::HasFieldSpans<SpansOnlyAction>);
+
+// ---------------------------------------------------------------------------
+// schemaJson<A>(): x-layout / x-group / x-section
+// ---------------------------------------------------------------------------
+
+// Also at file scope, for the same reason as PlainAction above — every type
+// below is used with schemaJson<>().
+struct LayoutGrouped {
+    std::int64_t sampleId = 0;
+    std::int64_t density = 0;
+    std::int64_t moisture = 0;
+    std::string notes;
+    std::string remarks;  // deliberately not named in any group
+
+    static constexpr std::array<std::string_view, 1> kIdent{"sampleId"};
+    static constexpr std::array<std::string_view, 2> kMeas{"density", "moisture"};
+    static constexpr std::array<std::string_view, 1> kNote{"notes"};
+
+    static constexpr std::array formLayout{
+        FieldGroup{.title = "Identity", .fields = kIdent},
+        FieldGroup{.title = "Measurement", .fields = kMeas},
+        FieldGroup{.title = "Notes", .kind = GroupKind::Accordion, .fields = kNote},
+    };
+};
+
+struct LayoutWithTabs {
+    std::int64_t a = 0;
+    std::int64_t b = 0;
+
+    static constexpr std::array<std::string_view, 1> kA{"a"};
+    static constexpr std::array<std::string_view, 1> kB{"b"};
+    static constexpr std::array formLayout{
+        FieldGroup{.title = "One", .kind = GroupKind::Tab, .fields = kA},
+        FieldGroup{.title = "Two", .kind = GroupKind::Tab, .fields = kB},
+    };
+};
+
+struct LayoutBadGroupField {
+    std::int64_t sampleId = 0;
+
+    static constexpr std::array<std::string_view, 1> kBad{"doesNotExist"};
+    static constexpr std::array formLayout{
+        FieldGroup{.title = "Ghost", .fields = kBad},
+    };
+};
+
+struct LayoutDuplicateMembership {
+    std::int64_t sampleId = 0;
+
+    static constexpr std::array<std::string_view, 1> kOnce{"sampleId"};
+    static constexpr std::array formLayout{
+        FieldGroup{.title = "First", .fields = kOnce},
+        FieldGroup{.title = "Second", .fields = kOnce},
+    };
+};
+
+TEST_CASE("Forms::SchemaJson::NoFormLayoutOrFieldSpansEmitsNoLayoutKeys", "[forms][layout]") {
+    // Regression guard: an action declaring neither formLayout nor
+    // fieldSpans must not gain any of the four new keys — schemaJson<A>()
+    // stays exactly what it was before this feature existed.
+    auto const schema = morph::forms::schemaJson<PlainAction>();
+    CHECK_FALSE(schema.contains("x-layout"));
+    CHECK_FALSE(schema.contains("x-group"));
+    CHECK_FALSE(schema.contains("x-section"));
+    CHECK_FALSE(schema.contains("x-colspan"));
+}
+
+TEST_CASE("Forms::SchemaJson::FormLayoutEmitsXLayoutGroupsInDeclarationOrder", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<LayoutGrouped>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));  // still valid JSON
+
+    // The top-level wrapper, and three declared groups each carrying
+    // title/kind/fields in that order.
+    CHECK(schema.contains(R"("x-layout":{"groups":[)"));
+    CHECK(schema.contains(R"({"title":"Identity","kind":"section","fields":["sampleId"]})"));
+    CHECK(schema.contains(R"({"title":"Measurement","kind":"section","fields":["density","moisture"]})"));
+    CHECK(schema.contains(R"({"title":"Notes","kind":"accordion","fields":["notes"]})"));
+
+    // Every grouped field carries its group title and 0-based section index.
+    CHECK(schema.contains(R"("x-group":"Identity")"));
+    CHECK(schema.contains(R"("x-group":"Measurement")"));
+    CHECK(schema.contains(R"("x-group":"Notes")"));
+    CHECK(schema.contains(R"("x-section":0)"));
+    CHECK(schema.contains(R"("x-section":1)"));
+    CHECK(schema.contains(R"("x-section":2)"));
+
+    // "remarks" is the 5th declared member (index 4) and belongs to no
+    // group: it keeps its ordinary x-order but gets no x-group/x-section —
+    // the implicit trailing default group is a renderer-side concept, not a
+    // schema tag.
+    CHECK(schema.contains(R"("x-order":4)"));
+    CHECK_FALSE(schema.contains(R"("x-section":3)"));
+}
+
+TEST_CASE("Forms::SchemaJson::TabKindSurfacesInXLayout", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<LayoutWithTabs>();
+    CHECK(schema.contains(R"({"title":"One","kind":"tab","fields":["a"]})"));
+    CHECK(schema.contains(R"({"title":"Two","kind":"tab","fields":["b"]})"));
+}
+
+TEST_CASE("Forms::SchemaJson::GroupNamingNonexistentFieldIsIgnored", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<LayoutBadGroupField>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));  // never throws, stays valid JSON
+
+    // The group survives (title/kind) but its "fields" array is empty — the
+    // phantom name never became a schema property.
+    CHECK(schema.contains(R"({"title":"Ghost","kind":"section","fields":[]})"));
+    CHECK_FALSE(schema.contains("doesNotExist"));
+}
+
+TEST_CASE("Forms::SchemaJson::FieldClaimedByTwoGroupsKeepsTheFirst", "[forms][layout]") {
+    auto const schema = morph::forms::schemaJson<LayoutDuplicateMembership>();
+    // "First" claims sampleId in its "fields" array; "Second" declares the
+    // same field but does not re-claim it.
+    CHECK(schema.contains(R"({"title":"First","kind":"section","fields":["sampleId"]})"));
+    CHECK(schema.contains(R"({"title":"Second","kind":"section","fields":[]})"));
+    // The property is tagged with the first group's identity, not the second's.
+    CHECK(schema.contains(R"("x-group":"First")"));
+    CHECK_FALSE(schema.contains(R"("x-group":"Second")"));
+}

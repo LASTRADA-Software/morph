@@ -34,6 +34,13 @@
 ///   options, and which result-row fields carry the submitted value and the
 ///   display label. Renderers turn these into combo boxes populated by
 ///   executing the named action.
+/// - **`x-layout` / `x-group` / `x-section` / `x-colspan`** — for actions
+///   declaring a `static constexpr` `formLayout` and/or `fieldSpans`
+///   (`morph::forms::FieldGroup` / `FieldSpan`, `forms/layout.hpp`): visual
+///   structure (sections, tabs, an accordion) over the flat field list, and
+///   per-field grid column spans. Absent either declaration, none of these
+///   keys are emitted and a renderer lays fields out exactly as it does
+///   today.
 ///
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
@@ -63,6 +70,7 @@
 /// express "not filled in"; use a `Quantity` (or a custom `validate()`) when
 /// that distinction matters.
 
+#include <algorithm>
 #include <cctype>
 #include <cstddef>
 #include <glaze/glaze.hpp>
@@ -72,9 +80,11 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "../util/quantity.hpp"
 #include "choice.hpp"
+#include "layout.hpp"
 
 namespace morph::forms {
 
@@ -309,10 +319,16 @@ template <typename A>
     }
 
     glz::generic_u64::array_t requiredNames{};
+    // Wire keys of every reflected member, in declaration order — reused
+    // below to silently ignore a formLayout/fieldSpans entry that names a
+    // field the action does not actually have (schema generation never
+    // throws over an author's declaration mistake).
+    std::vector<std::string_view> memberNames{};
     A probe{};
     forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
         using Member = std::remove_cvref_t<decltype(member)>;
         static_cast<void>(member);
+        memberNames.push_back(name);
         const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name);
         if (!isOptional) {
             requiredNames.emplace_back(std::string{name});
@@ -379,6 +395,54 @@ template <typename A>
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
     dom["required"] = requiredNames;
+
+    // Layout & grouping (docs/spec/forms/forms.md, "Layout & grouping"):
+    // purely additive over the required/x-order pass above; a no-op unless
+    // the action declares a static constexpr `formLayout`.
+    if constexpr (detail::HasFormLayout<A>) {
+        glz::generic_u64::array_t groupsJson{};
+        // wire key -> 0-based index into A::formLayout; a field claimed by
+        // two groups keeps the first (declaration order wins, silently —
+        // schema generation never throws over an author's declaration
+        // mistake).
+        std::vector<std::pair<std::string_view, std::size_t>> sectionOf{};
+        std::size_t groupIndex = 0;
+        for (auto const& group : A::formLayout) {
+            glz::generic_u64::array_t fieldsJson{};
+            for (std::string_view fieldName : group.fields) {
+                bool const isMember =
+                    std::find(memberNames.begin(), memberNames.end(), fieldName) != memberNames.end();
+                if (!isMember) {
+                    continue;  // names a field the action does not have: ignored, never thrown
+                }
+                bool alreadyPlaced = false;
+                for (auto const& placed : sectionOf) {
+                    if (placed.first == fieldName) {
+                        alreadyPlaced = true;
+                        break;
+                    }
+                }
+                if (alreadyPlaced) {
+                    continue;  // first group to claim a field wins
+                }
+                fieldsJson.emplace_back(std::string{fieldName});
+                sectionOf.emplace_back(fieldName, groupIndex);
+            }
+            glz::generic_u64 groupJson{};
+            groupJson["title"] = std::string{group.title};
+            groupJson["kind"] = std::string{groupKindName(group.kind)};
+            groupJson["fields"] = fieldsJson;
+            groupsJson.emplace_back(std::move(groupJson));
+            ++groupIndex;
+        }
+        dom["x-layout"]["groups"] = groupsJson;
+
+        for (auto const& placed : sectionOf) {
+            auto& property = dom["properties"][std::string{placed.first}];
+            property["x-group"] = std::string{A::formLayout[placed.second].title};
+            property["x-section"] = std::uint64_t{placed.second};
+        }
+    }
 
     // value_or without a move: the copy is irrelevant (schemaJson memoises),
     // and keeping the fallback branch inside glaze's expected avoids an
