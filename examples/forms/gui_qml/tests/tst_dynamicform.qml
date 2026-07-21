@@ -81,6 +81,26 @@ Item {
         })
     }
 
+    // A fourth, independent form probing x-widget/x-min/x-max/x-step — kept
+    // separate from `form`/`layoutForm`/`tabForm` above so these fields never
+    // perturb their assertions (field count, previewLine, readiness gate).
+    DynamicForm {
+        id: whForm
+        actionType: "WidgetHintsProbe"
+        controller: null
+        schema: ({
+            "properties": {
+                "summary": { "type": ["string", "null"], "x-order": 0, "x-widget": "textarea" },
+                "level": { "type": ["integer", "null"], "x-order": 1,
+                           "x-widget": "slider", "x-min": 0, "x-max": 100, "x-step": 5 },
+                "mode": { "type": ["integer", "null"], "x-order": 2, "x-widget": "radio",
+                          "x-optionsAction": "ListModes", "x-optionValue": "id", "x-optionLabel": "name" },
+                "plain": { "type": ["string", "null"], "x-order": 3 }
+            },
+            "required": ["summary", "level", "mode"]
+        })
+    }
+
     TestCase {
         name: "DynamicFormLogic"
 
@@ -119,6 +139,28 @@ Item {
             verify(!note.required)
             compare(note.title, "Notes")
             verify(note.hidden)
+        }
+
+        function test_widgetHintFieldDescriptors() {
+            compare(whForm.fields.length, 4)
+
+            const summary = whForm.fields[0]
+            verify(summary.isMultiline)
+            verify(!summary.isSlider && !summary.isRadioChoice)
+
+            const level = whForm.fields[1]
+            verify(level.isSlider)
+            verify(!level.isMultiline)
+            compare(level.sliderMin, 0)
+            compare(level.sliderMax, 100)
+            compare(level.sliderStep, 5)
+
+            const mode = whForm.fields[2]
+            verify(mode.isChoice)
+            verify(mode.isRadioChoice)
+
+            const plain = whForm.fields[3]
+            verify(!plain.isMultiline && !plain.isSlider && !plain.isRadioChoice)
         }
 
         function test_longArithmetic() {

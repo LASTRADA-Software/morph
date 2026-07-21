@@ -7,6 +7,9 @@
 //   x-optionsAction  -> combo box (options fetched by executing that action)
 //   x-unitAlternatives -> unit selector with exact recalculation on switch
 //   format date-time -> date-time input with a calendar/time picker
+//   x-widget         -> control choice (textarea/slider/radio); unknown ids
+//                       and a missing key both fall back to the type default
+//   x-min/x-max/x-step -> slider track bounds + increment (Ranged fields)
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
@@ -71,6 +74,14 @@ Frame {
                     unitOptions.push({ display: opt(alt.display, alt.id), decimals: alt.decimals,
                                        num: alt.num, den: alt.den })
                 }
+                // x-widget chooses the control; a missing key or an id this
+                // renderer does not recognise both fall back to the type
+                // default (plain text field / combo box), since none of the
+                // flags below are set in that case.
+                const widget = opt(raw["x-widget"], p["x-widget"])
+                const sliderMin = opt(raw["x-min"], p["x-min"])
+                const sliderMax = opt(raw["x-max"], p["x-max"])
+                const sliderStep = opt(raw["x-step"], p["x-step"])
                 return {
                     name: name,
                     title: opt(raw["title"], opt(p.title, name)),
@@ -93,7 +104,13 @@ Frame {
                     minimum: p.minimum,
                     maximum: p.maximum,
                     section: opt(raw["x-section"], p["x-section"]),
-                    colspan: opt(opt(raw["x-colspan"], p["x-colspan"]), 1)
+                    colspan: opt(opt(raw["x-colspan"], p["x-colspan"]), 1),
+                    isMultiline: widget === "textarea",
+                    isSlider: widget === "slider" && sliderMin !== undefined && sliderMax !== undefined,
+                    isRadioChoice: (optionsAction !== undefined) && widget === "radio",
+                    sliderMin: opt(sliderMin, 0),
+                    sliderMax: opt(sliderMax, 100),
+                    sliderStep: opt(sliderStep, 1)
                 }
             })
     }
@@ -366,7 +383,7 @@ Frame {
                 Layout.fillWidth: true
 
                 ComboBox {
-                    visible: fieldColumn.modelData.isChoice
+                    visible: fieldColumn.modelData.isChoice && !fieldColumn.modelData.isRadioChoice
                     enabled: !fieldColumn.modelData.readOnly
                     Layout.fillWidth: true
                     textRole: "label"
@@ -374,6 +391,36 @@ Frame {
                     displayText: currentIndex < 0 ? "— select —" : currentText
                     model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
                     onActivated: form.setFieldValue(fieldColumn.modelData.name, model[currentIndex].valueJson)
+                }
+
+                // x-widget: "radio" turns a Choice into a radio group instead
+                // of a combo box; the options come from the same
+                // fetchOptions() call either way.
+                ColumnLayout {
+                    id: radioGroup
+                    objectName: "radio_" + fieldColumn.modelData.name
+                    visible: fieldColumn.modelData.isChoice && fieldColumn.modelData.isRadioChoice
+                    Layout.fillWidth: true
+                    spacing: 2
+                    property int checkedIndex: -1
+
+                    ButtonGroup { id: radioButtons }
+
+                    Repeater {
+                        model: { form.optionsRevision; return form.fieldOptions[fieldColumn.modelData.name] || [] }
+                        delegate: RadioButton {
+                            required property var modelData
+                            required property int index
+                            text: modelData.label
+                            enabled: !fieldColumn.modelData.readOnly
+                            ButtonGroup.group: radioButtons
+                            checked: radioGroup.checkedIndex === index
+                            onToggled: {
+                                radioGroup.checkedIndex = index
+                                form.setFieldValue(fieldColumn.modelData.name, modelData.valueJson)
+                            }
+                        }
+                    }
                 }
 
                 DateTimePicker {
@@ -387,6 +434,7 @@ Frame {
                     id: entry
                     objectName: "field_" + fieldColumn.modelData.name
                     visible: !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
+                             && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
                     placeholderText: fieldColumn.modelData.placeholder !== ""
@@ -397,6 +445,40 @@ Frame {
                     inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                       ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                }
+
+                // x-widget: "textarea" (a Multiline field) — same wire string
+                // as an ordinary TextField, just edited over multiple lines.
+                TextArea {
+                    id: notesArea
+                    objectName: "multiline_" + fieldColumn.modelData.name
+                    visible: fieldColumn.modelData.isMultiline
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 72
+                    readOnly: fieldColumn.modelData.readOnly
+                    wrapMode: TextArea.Wrap
+                    onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                }
+
+                // x-widget: "slider" (a Ranged field) — track bounds and step
+                // come from x-min/x-max/x-step, never from glaze's own
+                // minimum/maximum (those stay validation-only).
+                Slider {
+                    id: levelSlider
+                    objectName: "slider_" + fieldColumn.modelData.name
+                    visible: fieldColumn.modelData.isSlider
+                    enabled: !fieldColumn.modelData.readOnly
+                    Layout.fillWidth: true
+                    from: fieldColumn.modelData.sliderMin
+                    to: fieldColumn.modelData.sliderMax
+                    stepSize: fieldColumn.modelData.sliderStep
+                    onMoved: form.setFieldValue(fieldColumn.modelData.name, String(Math.round(value)))
+                }
+
+                Label {
+                    visible: fieldColumn.modelData.isSlider
+                    text: fieldColumn.modelData.isSlider ? String(Math.round(levelSlider.value)) : ""
+                    opacity: 0.6
                 }
 
                 // Unit selector when the unit system declares convertible
