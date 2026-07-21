@@ -14,6 +14,7 @@ metadata from `glz::json_schema<A>`, and `ExtUnits` from
 - [`Choice` — server-sourced picklist](#choice--server-sourced-picklist)
 - [`FixedString` — NTTP compile-time string](#fixedstring--nttp-compile-time-string)
 - [`schemaJson<A>()` — schema generation](#schemajsona--schema-generation)
+- [Field metadata — `FieldMeta`](#field-metadata--fieldmeta)
 - [Renderer contract: the schema key vocabulary](#renderer-contract-the-schema-key-vocabulary)
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Support traits and helpers](#support-traits-and-helpers)
@@ -146,14 +147,136 @@ iterates reflected members via `forEachNamedMember`, and patches the DOM in
 place. If the input schema is not valid JSON the raw string passes through
 unchanged.
 
+## Field metadata — `FieldMeta`
+
+An action declares per-field presentation — label, help, placeholder,
+read-only, hidden — with a `static constexpr std::array<FieldMeta, N>` (or,
+for the `describe<>()` sugar, a `static const` array defined out-of-line —
+see below) named `fieldMetadata`, mirroring the `optionalFields` convention
+above: a compile-time declaration on the action type, surfaced through the
+schema.
+
+```cpp
+struct FieldMeta {
+    std::string_view field;                 // wire key of the member
+    std::string_view label{};               // "" = infer from name
+    std::string_view help{};                // "" = omit description
+    std::string_view placeholder{};         // "" = omit x-placeholder
+    std::string_view widget{};              // reserved for the widget-hints spec
+    bool readOnly{false};
+    bool hidden{false};
+};
+
+struct RecordMeasurement {
+    Choice<std::int64_t, "ListSamples"> sampleId;
+    Density density{};
+    Moisture moisture{};
+
+    static constexpr std::array fieldMetadata{
+        FieldMeta{.field = "sampleId", .label = "Sample",
+                  .help = "Which logged sample this measurement belongs to."},
+        FieldMeta{.field = "density",  .placeholder = "e.g. 1050"},
+        FieldMeta{.field = "moisture", .readOnly = true},
+    };
+};
+```
+
+Absence of `fieldMetadata` leaves every field at its inferred default: a
+`title` derived from the member name, nothing else. `mergeSchemaExtras`
+looks up (via `detail::findFieldMeta<A>`) the entry, if any, whose `field`
+matches each reflected member and patches the property node — the same
+property node that already carries `x-order` and the `Choice`/`Quantity`
+keys (see "Where the keys physically land" below). An entry naming a field
+that does not exist on the action is silently ignored: no crash, no stray
+property.
+
+### Label inference
+
+When no descriptor overrides a field's label, `detail::inferTitle` derives a
+title from the wire key: split on camelCase and underscore boundaries,
+capitalise each word — `dryMassPct` → `"Dry Mass Pct"`, `sample_id` →
+`"Sample Id"`, a single-word `notes` → `"Notes"`. This is a pure function of
+the member name, so it costs nothing per action and needs no declaration. A
+descriptor's non-empty `label` always wins over the inferred title, and
+`title` is **always emitted** — an unannotated action gains only this key,
+otherwise unchanged.
+
+### `describe<&Action::field>(...)` — deriving the field name from the member
+
+`describe<MemberPtr>(label, help)` builds a `FieldMeta` whose `field` is
+resolved from the pointer-to-member itself (`detail::memberWireName`), so the
+wire key is never restated as a string:
+
+```cpp
+static const std::array<morph::forms::FieldMeta, 2> fieldMetadata;
+// ... after the class's closing brace:
+inline const std::array<morph::forms::FieldMeta, 2> RecordMeasurement::fieldMetadata{
+    morph::forms::describe<&RecordMeasurement::sampleId>("Sample", "Which logged sample…"),
+    morph::forms::describe<&RecordMeasurement::moisture>().withReadOnly(),
+};
+```
+
+`FieldMeta::withPlaceholder(text)`, `::withReadOnly()`, and `::withHidden()`
+each return a modified copy, so `describe<>()`'s result can be extended
+fluently as shown above. `describe<>()` produces the exact same property
+annotations as the equivalent hand-written `FieldMeta{.field = "…", ...}`
+literal.
+
+`describe<>()` is deliberately **not** `constexpr`/`consteval`, and a
+`fieldMetadata` array built from it must be **declared inside the class and
+defined just after its closing brace** rather than as a single in-class
+initializer, for two reasons verified while implementing this feature:
+
+1. **Incomplete-type self-reference.** A static data member's in-class
+   initializer is evaluated while the enclosing class is still incomplete
+   (unlike a member function body or a default member initializer, neither
+   of which this is); resolving `&RecordMeasurement::sampleId`'s wire name
+   requires constructing a probe `RecordMeasurement` instance, which an
+   incomplete type cannot do.
+2. **glaze's reflection is not `constexpr` for reflectable aggregates.**
+   `glz::get_member`, which `detail::forEachNamedMember` calls, is an
+   ordinary runtime function — so even resolving the name outside the class
+   cannot happen inside a `constexpr`/`consteval` function.
+
+The plain `FieldMeta{.field = "sampleId", ...}` literal form is unaffected by
+either restriction (it never references the enclosing class) and stays a
+single in-class `static constexpr` array.
+
+### Field metadata is not a security control
+
+`x-readonly` and `x-hidden` are presentation only. The field still travels in
+the payload — a hand-built wire envelope can set it freely regardless of
+either flag. Enforcement of anything security-sensitive stays server-side
+(see [security.md](../security.md)); a truly secret field must not be a
+member of the action at all.
+
+### Emitted keys
+
+| Key | Where | JSON type | Meaning / renderer obligation |
+|---|---|---|---|
+| `title` | property node (sibling of `$ref`) | string | The field's display label — an explicit `FieldMeta::label`, else the inferred title-cased member name. **Always emitted.** |
+| `description` | property node (sibling of `$ref`) | string | Help text, from `FieldMeta::help`. Omitted when empty. A non-empty `help` overrides any `description` glaze stamped from a `glz::json_schema<A>` block; an empty `help` leaves an existing glaze-authored `description` untouched. |
+| `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty. Never submitted. |
+| `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. |
+| `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. |
+
+All five keys are additive and non-breaking, extending the renderer-contract
+table below without renaming or retyping any existing key, per this program's
+versioning stance ([gui_overview.md](../../planned/gui_overview.md)). A
+renderer that ignores them falls back to today's behavior exactly: it shows
+the raw wire key as the caption, no helper/placeholder text, and every field
+editable and visible.
+
 ## Renderer contract: the schema key vocabulary
 
 This is the **normative** list of every key a renderer must understand to build
 a form from a morph action schema. Standard JSON-Schema keywords (`type`,
-`properties`, `$defs`, `$ref`, numeric bounds, `description`, …) are emitted by
+`properties`, `$defs`, `$ref`, numeric bounds, …) are emitted by
 glaze and behave per the JSON-Schema 2020-12 spec; the table below covers the
-keys morph either **synthesises** (`required`, the `x-*` extensions) or **relies
-on glaze to stamp** (`format`, `ExtUnits`). A renderer that ignores an `x-*` key
+keys morph either **synthesises** (`required`, `title`, `description` when a
+`FieldMeta::help` is declared, the `x-*` extensions) or **relies on glaze to
+stamp** (`format`, `ExtUnits`, `description` when no `FieldMeta::help` overrides
+it). A renderer that ignores an `x-*` key
 still produces a usable form — it just loses the affordance that key carries
 (unit selector, field order, combo box, decimal step).
 
@@ -203,6 +326,10 @@ exactly this dual read.
 | `x-optionsAction` | property node (sibling of `$ref`) | string | Type id of the registered action whose result rows populate this field's combo box (executed with an empty body). |
 | `x-optionValue` | property node (sibling of `$ref`) | string | Which result-row field carries the value submitted on the wire (default `"id"`). |
 | `x-optionLabel` | property node (sibling of `$ref`) | string | Which result-row field carries the display label (default `"name"`). |
+| `title` | property node (sibling of `$ref`) | string | The field's display label — an explicit `FieldMeta::label`, else a title-cased member name (`dryMassPct` → "Dry Mass Pct"). Standard JSON-Schema vocabulary, not an `x-*` key. **Always emitted.** See "Field metadata" above. |
+| `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty; never submitted. |
+| `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. Not a security control — see "Field metadata is not a security control" above. |
+| `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. Not a security control. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
 | `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
 
@@ -254,8 +381,13 @@ recurse into nested aggregates.
 | `detail::HasOptionalFields<A>` | concept | `true` when `A` has a `static constexpr` iterable `optionalFields`. |
 | `detail::declaredOptional<A>(name)` | constexpr function | `true` when `name` appears in `A::optionalFields`. |
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
-| `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction` etc. onto the property nodes. Called by `schemaJson<A>()`. |
+| `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
 | `reconcileDeclaredPrecision<A>(action)` | function | Retags every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`), so a decoded wire value matches the schema's advertised `x-decimalPlaces`. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on the `executeJson` dispatch path (`bridge.hpp`). |
+| `FieldMeta` | struct | Per-field presentation descriptor: `field`, `label`, `help`, `placeholder`, `widget` (reserved), `readOnly`, `hidden`, plus `withPlaceholder`/`withReadOnly`/`withHidden` fluent copies. See "Field metadata" above. |
+| `detail::HasFieldMetadata<A>` | concept | `true` when `A` has a `static constexpr`/`static const` iterable `fieldMetadata`. |
+| `detail::findFieldMeta<A>(name)` | function | Returns the `FieldMeta` entry naming `name`, or `nullptr`. |
+| `detail::inferTitle(name)` | function | Title-cases a wire key on camelCase/underscore boundaries. |
+| `describe<MemberPtr>(label, help)` | function template | Builds a `FieldMeta` whose `field` is resolved from the pointer-to-member `MemberPtr` at runtime. Not `constexpr` — see "Field metadata" above for why, and for the out-of-line declaration a `describe<>()`-based `fieldMetadata` array needs. |
 
 ## API reference
 

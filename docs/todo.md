@@ -156,8 +156,8 @@ reference renderer, the schema contract stays renderer-agnostic).
 
 ### Tier 1 — richer forms (additive metadata/logic on the single-action form)
 
-- **E-G1 — Field metadata** · P1 · [spec: `planned/gui_field_metadata.md`] —
-  labels, help, placeholder, read-only, hidden.
+- **E-G1 — Field metadata** · P1 · **Implemented** — see
+  `spec/forms/forms.md` ("Field metadata — `FieldMeta`").
 - **E-G2 — Layout & grouping** · P1 · [spec: `planned/gui_layout_grouping.md`] —
   sections, tabs, accordions, column spans.
 - **E-G3 — Widget hints** · P1 · [spec: `planned/gui_widget_hints.md`] — control
