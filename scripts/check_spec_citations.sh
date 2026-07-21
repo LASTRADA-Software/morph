@@ -23,15 +23,15 @@
 # Scope note (deviation from the original design): the banned-terminology
 # scan is restricted to docs/spec, docs/ARCHITECTURE.md, and include -- the
 # repo's *authoritative*, currently-in-force prose and code -- rather than
-# all of docs/. A blanket `docs/` scan false-positives on this very feature's
-# own historical planning documents: docs/superpowers/plans/*.md is a
-# permanent, append-only record of past implementation plans (never deleted,
-# per repo convention -- see git history), and at least one such plan
-# discusses the banned phrase *as an example of what to look for* while
-# describing this exact check, which trips a naive recursive grep despite
-# being neither a spec nor code. Historical planning prose is not something
-# this lint can meaningfully enforce against; only the standing design
-# reference and the code it describes can regress.
+# all of docs/. A blanket `docs/` scan false-positives on docs/planned/, which
+# tracks not-yet-implemented designs in prose: docs/planned/drift_guard.md
+# (the very design doc this feature implements, in the repo until this
+# feature's final task deletes it) discusses the banned phrase *as a worked
+# example* while describing this exact check, tripping a naive recursive grep
+# despite being neither a spec nor code. Planning prose that merely discusses
+# a superseded term, rather than reintroducing it into live docs or code, is
+# not something this lint can meaningfully enforce against -- only the
+# standing design reference and the code it describes can regress.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
