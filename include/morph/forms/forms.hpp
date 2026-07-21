@@ -117,6 +117,18 @@ struct FieldMeta {
     std::string_view help{};
     /// @brief In-control placeholder hint; empty omits `x-placeholder`.
     std::string_view placeholder{};
+    /// @brief Explicit message-key **stem** override for this field's i18n
+    ///        catalog keys; empty means "derive the stem from the action's
+    ///        `ActionTraits<A>::typeId()` and this field's wire key" (see
+    ///        `morph::forms::i18n::fieldKey`, `forms/i18n.hpp`). A non-empty
+    ///        stem replaces only the `<actionTypeId>.<wireField>` portion of
+    ///        the key — the per-slot `.label` / `.help` / `.placeholder`
+    ///        suffix is still appended on top of it (see
+    ///        `morph::forms::i18n::explicitFieldKey`), so `"myKey"` expands
+    ///        to `"myKey.label"` / `"myKey.help"` / `"myKey.placeholder"`,
+    ///        never to a single complete key on its own. Emitted as
+    ///        `x-i18nKey` only when non-empty.
+    std::string_view i18nKey{};
     /// @brief Widget-selection override; empty means "use the field type's
     ///        own `widget()`, if any". A non-empty value replaces that
     ///        type-derived default and is emitted as `x-widget`
@@ -433,6 +445,9 @@ template <typename A>
             }
             if (fieldMeta->hidden) {
                 property["x-hidden"] = true;
+            }
+            if (!fieldMeta->i18nKey.empty()) {
+                property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
             }
         }
 

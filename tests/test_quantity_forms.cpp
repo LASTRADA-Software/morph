@@ -657,6 +657,38 @@ TEST_CASE("Forms::FieldMeta::UnknownFieldNameIsIgnored", "[forms][field_meta]") 
     CHECK_FALSE(schema.contains("doesNotExist"));
 }
 
+// FieldMeta::i18nKey — a stem override for morph::forms::i18n's explicit-key
+// derivation (docs/spec/forms/forms.md, "Field metadata"): consumed as a
+// *stem*, not a complete key (docs/superpowers/plans/2026-07-20-gui-i18n.md's
+// resolved key-derivation contract), and emitted verbatim as x-i18nKey only
+// when non-empty.
+struct QFFieldMetaI18nKey {
+    std::int64_t sampleId = 0;
+    std::int64_t plainField = 0;
+    std::int64_t untouchedField = 0;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "sampleId", .i18nKey = "catalog.sample"},
+        morph::forms::FieldMeta{.field = "plainField", .label = "Plain"},  // i18nKey left at "" (no override)
+    };
+};
+
+TEST_CASE("Forms::FieldMeta::I18nKeyEmitsOnlyWhenNonEmpty", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFFieldMetaI18nKey>();
+    // The whole property node, so no stray x-i18nKey key can be hiding
+    // elsewhere in it.
+    CHECK(schema.contains(
+        R"("sampleId":{"$ref":"#/$defs/int64_t","x-order":0,"title":"Sample Id","x-i18nKey":"catalog.sample"})"));
+    // A FieldMeta entry that leaves i18nKey at its default ("") must not
+    // emit the key at all -- proving the omission is per-field, not merely
+    // "no fieldMetadata entry at all" (already covered by
+    // InferredTitleWithNoDeclaration above).
+    CHECK(schema.contains(R"("plainField":{"$ref":"#/$defs/int64_t","x-order":1,"title":"Plain"})"));
+    // A field with no fieldMetadata entry whatsoever also gets no x-i18nKey.
+    CHECK(schema.contains(R"("untouchedField":{"$ref":"#/$defs/int64_t","x-order":2,"title":"Untouched Field"})"));
+    CHECK_FALSE(schema.contains("x-i18nKey\":\"\""));
+}
+
 TEST_CASE("Forms::FieldMeta::HelpOverridesGlazeDescription", "[forms][field_meta]") {
     auto const schema = morph::forms::schemaJson<QFHelpOverrideAction>();
     CHECK(schema.contains(R"("description":"Overridden help")"));

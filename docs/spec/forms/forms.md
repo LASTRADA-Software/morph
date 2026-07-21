@@ -213,9 +213,10 @@ struct FieldMeta {
     std::string_view label{};               // "" = infer from name
     std::string_view help{};                // "" = omit description
     std::string_view placeholder{};         // "" = omit x-placeholder
-    std::string_view widget{};              // reserved for the widget-hints spec
+    std::string_view widget{};              // widget-selection override (see widget_hints.md)
     bool readOnly{false};
     bool hidden{false};
+    std::string_view i18nKey{};             // "" = derive the key stem; see below
 };
 
 struct RecordMeasurement {
@@ -310,8 +311,9 @@ member of the action at all.
 | `x-placeholder` | property node (sibling of `$ref`) | string | In-control placeholder/hint shown while the field is empty, from `FieldMeta::placeholder`. Omitted when empty. Never submitted. |
 | `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. |
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. |
+| `x-i18nKey` | property node (sibling of `$ref`) | string | An explicit message-key **stem** override, from `FieldMeta::i18nKey`. Omitted when empty. Not a complete key by itself — see [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam) for how a renderer expands it per text slot. |
 
-All five keys are additive and non-breaking, extending the renderer-contract
+All six keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
 versioning stance ([gui_overview.md](../../planned/gui_overview.md)). A
 renderer that ignores them falls back to today's behavior exactly: it shows
