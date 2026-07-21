@@ -324,6 +324,7 @@ if(MORPH_BUILD_NET)
                 include/morph/net/detail/ws_handshake.hpp
                 include/morph/net/detail/tcp_socket.hpp
                 include/morph/net/detail/ws_frame.hpp
+                include/morph/net/socket_server.hpp
         )
 
         if(MORPH_BUILD_TESTS)
