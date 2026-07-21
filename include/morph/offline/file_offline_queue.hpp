@@ -224,7 +224,8 @@ private:
     }
 
     void appendDone(uint64_t itemId) {
-        detail::FileQueueRecord const record{.op = "done", .id = itemId};
+        detail::FileQueueRecord const record{
+            .op = "done", .id = itemId, .payload = {}, .idempotencyKey = {}, .attempts = 0};
         writeLine(detail::toJson(record));
     }
 

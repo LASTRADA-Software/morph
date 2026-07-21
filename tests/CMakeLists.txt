@@ -31,6 +31,7 @@ add_executable(morph_tests
     test_switch_backend.cpp
     test_network_monitor.cpp
     test_offline_queue.cpp
+    test_file_offline_queue.cpp
     test_sync_worker.cpp
     test_reconnect_coordinator.cpp
     test_offline_integration.cpp
