@@ -143,6 +143,7 @@ target_sources(morph
         include/morph/util/rational.hpp
         include/morph/util/quantity.hpp
         include/morph/util/datetime.hpp
+        include/morph/render/i18n.hpp
 )
 
 # ── Demo executable ──────────────────────────────────────────────────────────
