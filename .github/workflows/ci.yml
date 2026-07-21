@@ -374,3 +374,13 @@ jobs:
         with:
           name: clang-tidy-report
           path: clang-tidy-report.txt
+
+  # ── Deprecation-marker format lint ────────────────────────────────────
+  deprecation-lint:
+    name: Deprecation marker format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check [[deprecated]] markers cite a replacement and removal version
+        run: bash scripts/check_deprecated_markers.sh include/morph
