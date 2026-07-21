@@ -36,9 +36,9 @@ void FormsController::submitIfValid(const QString& actionType, const QString& bo
         [this, actionType](const std::exception_ptr& err) { emit replyReceived(actionType, false, errorText(err)); });
 }
 
-void FormsController::fetchOptions(const QString& optionsAction) {
+void FormsController::fetchOptions(const QString& optionsAction, const QString& bodyJson) {
     _core.fetchOptions(
-        optionsAction.toStdString(),
+        optionsAction.toStdString(), bodyJson.toStdString(),
         [this, optionsAction](std::string resultJson) {
             emit optionsReceived(optionsAction, true, QString::fromStdString(resultJson));
         },

@@ -45,10 +45,13 @@ public:
     ///        on the GUI thread.
     Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
 
-    /// @brief Executes @p optionsAction with an empty body to fetch combo-box
-    ///        options (a `Choice` field's declared provider). The reply
-    ///        arrives via `optionsReceived` on the GUI thread.
-    Q_INVOKABLE void fetchOptions(const QString& optionsAction);
+    /// @brief Executes @p optionsAction with @p bodyJson to fetch combo-box
+    ///        options (a `Choice` field's declared provider). @p bodyJson is
+    ///        `"{}"` for an independent `Choice`, or `{parentField: value, ...}`
+    ///        built by the QML layer from a dependent `Choice`'s declared
+    ///        `x-optionsDependsOn` sibling fields. The reply arrives via
+    ///        `optionsReceived` on the GUI thread.
+    Q_INVOKABLE void fetchOptions(const QString& optionsAction, const QString& bodyJson);
 
 signals:
     /// @brief Emitted once per `submitIfValid` call. @p payload is the

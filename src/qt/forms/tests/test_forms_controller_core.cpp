@@ -48,15 +48,30 @@ struct ListWidgetsResult {
 
 struct ListWidgets {};
 
+// An options action that takes an input field — the shape a dependent
+// Choice's options action has (docs/spec/forms/choice.md's "Dependent
+// (cascading) options"): fetchOptions must forward the caller's body to it,
+// not just its name.
+struct ListFilteredWidgets {
+    std::string category;
+};
+
 class PingModel {
 public:
     std::string execute(const EchoAction& action) { return "echo: " + action.text; }
     ListWidgetsResult execute(const ListWidgets&) { return ListWidgetsResult{.widgets = {{1, "alpha"}, {2, "beta"}}}; }
+    ListWidgetsResult execute(const ListFilteredWidgets& action) {
+        if (action.category == "greek") {
+            return ListWidgetsResult{.widgets = {{3, "gamma"}}};
+        }
+        return ListWidgetsResult{};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(PingModel, "PingModel")
 BRIDGE_REGISTER_ACTION(PingModel, EchoAction, "EchoAction")
 BRIDGE_REGISTER_ACTION(PingModel, ListWidgets, "ListWidgets")
+BRIDGE_REGISTER_ACTION(PingModel, ListFilteredWidgets, "ListFilteredWidgets")
 
 namespace {
 
@@ -94,7 +109,7 @@ TEST_CASE("morph::qt::forms::FormsControllerCore fetches options for the NAMED a
     std::atomic<bool> done{false};
     std::string reply;
     core.fetchOptions(
-        "ListWidgets",
+        "ListWidgets", "{}",
         [&](std::string resultJson) {
             reply = std::move(resultJson);
             done.store(true);
@@ -104,6 +119,28 @@ TEST_CASE("morph::qt::forms::FormsControllerCore fetches options for the NAMED a
     pumpUntil([&] { return done.load(); });
     CHECK(reply.find("alpha") != std::string::npos);
     CHECK(reply.find("beta") != std::string::npos);
+}
+
+TEST_CASE("morph::qt::forms::FormsControllerCore forwards fetchOptions' body, not just its action name",
+          "[forms_controller_core]") {
+    // A dependent Choice's options action needs the parent's current value as
+    // its request body (docs/spec/forms/choice.md); fetchOptions must be a
+    // true name+body pass-through, not an empty-body-only call.
+    morph::qt::forms::FormsControllerCore<PingModel> core{std::string{}};
+
+    std::atomic<bool> done{false};
+    std::string reply;
+    core.fetchOptions(
+        "ListFilteredWidgets", R"({"category":"greek"})",
+        [&](std::string resultJson) {
+            reply = std::move(resultJson);
+            done.store(true);
+        },
+        [&](const std::exception_ptr&) { done.store(true); });
+
+    pumpUntil([&] { return done.load(); });
+    CHECK(reply.find("gamma") != std::string::npos);
+    CHECK(reply.find("alpha") == std::string::npos);
 }
 
 int main(int argc, char** argv) {

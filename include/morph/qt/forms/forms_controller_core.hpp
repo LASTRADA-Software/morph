@@ -57,19 +57,23 @@ public:
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
     }
 
-    /// @brief Executes @p optionsAction with an empty JSON body (`"{}"`) to
-    ///        fetch a `Choice` field's combo-box options, via the same
-    ///        generic `executeJson` path `submitIfValid` uses -- @p
-    ///        optionsAction is never hardcoded, unlike the pre-factoring
-    ///        example controller.
+    /// @brief Executes @p optionsAction with @p bodyJson to fetch a `Choice`
+    ///        field's combo-box options, via the same generic `executeJson`
+    ///        path `submitIfValid` uses -- @p optionsAction is never
+    ///        hardcoded, unlike the pre-factoring example controller, and
+    ///        @p bodyJson is a true pass-through (not always `"{}"`), so a
+    ///        dependent `Choice` (`x-optionsDependsOn`) can send
+    ///        `{parentField: value, ...}` instead of an empty body.
     /// @tparam OnReply Callable invoked with the options-action result JSON on success.
     /// @tparam OnError Callable invoked with the `std::exception_ptr` on failure.
     /// @param optionsAction Registered action type id that serves the options.
+    /// @param bodyJson      Fully-assembled JSON body for the options action
+    ///                      (`"{}"` for an independent `Choice`).
     /// @param onReply       Success callback.
     /// @param onError       Failure callback.
     template <typename OnReply, typename OnError>
-    void fetchOptions(std::string optionsAction, OnReply onReply, OnError onError) {
-        _handler.executeJson(optionsAction, "{}")
+    void fetchOptions(std::string optionsAction, std::string bodyJson, OnReply onReply, OnError onError) {
+        _handler.executeJson(optionsAction, bodyJson)
             .then([onReply = std::move(onReply)](std::string resultJson) mutable { onReply(std::move(resultJson)); })
             .onError([onError = std::move(onError)](const std::exception_ptr& err) mutable { onError(err); });
     }
