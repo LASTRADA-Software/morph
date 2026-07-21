@@ -209,8 +209,11 @@ TEST_CASE("FileActionLog: entries() rethrows on a malformed line that is NOT the
         raw << morph::journal::toJson(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "2")) << "\n";
     }
 
-    FileActionLog log{tmp.path};
-    REQUIRE_THROWS_AS(log.entries(), morph::journal::SerializationError);
+    // FileActionLog's constructor now rebuilds its idempotencyKey dedup set by
+    // scanning entries() at open time (Task 3, transactional-outbox plan), so a
+    // pre-existing interior corruption throws from construction itself, not just
+    // from a later explicit entries() call.
+    REQUIRE_THROWS_AS(FileActionLog(tmp.path), morph::journal::SerializationError);
 }
 
 // ── Save action end-to-end: SessionLog + FileActionLog, the pattern the design

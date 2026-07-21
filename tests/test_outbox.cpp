@@ -108,3 +108,32 @@ TEST_CASE("InMemoryActionLog::append: empty idempotencyKey never dedups", "[outb
 
     REQUIRE(log.entries().size() == 2);  // backward compatible: no key means no dedup
 }
+
+// ── FileActionLog: idempotencyKey dedup ─────────────────────────────────────
+
+TEST_CASE("FileActionLog::append: dedups a repeated non-empty idempotencyKey within one process",
+          "[outbox][file_action_log]") {
+    TempFile tmp{"outbox_dedup"};
+    FileActionLog log{tmp.path};
+    log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
+    log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
+    log.flush();
+
+    REQUIRE(log.entries().size() == 1);
+}
+
+TEST_CASE("FileActionLog: idempotencyKey dedup survives reopening the same file (simulated restart)",
+          "[outbox][file_action_log]") {
+    TempFile tmp{"outbox_restart"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));
+        log.flush();
+    }  // "process" ends here — the FileActionLog and its fd are gone
+
+    FileActionLog reopened{tmp.path};  // "restart": rebuilds the seen-key set from disk
+    reopened.append(makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1"));  // re-relay after crash
+    reopened.flush();
+
+    REQUIRE(reopened.entries().size() == 1);
+}

@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include "action_log.hpp"
-#include "../core/logger.hpp"
-
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -11,7 +8,11 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
+
+#include "../core/logger.hpp"
+#include "action_log.hpp"
 
 #ifdef _WIN32
 #include <io.h>
@@ -27,7 +28,9 @@ namespace morph::journal {
 /// the C stdio buffer and then issues a real fsync (POSIX `fsync` / Windows
 /// `_commit`), so a crash immediately after `flush()` returns cannot lose data —
 /// this is the "local file" sink from the original request, and the natural
-/// target for `SessionLog::checkpoint()` at a "Save" action.
+/// target for `SessionLog::checkpoint()` at a "Save" action. Dedups `append()` on
+/// a non-empty `LogEntry::idempotencyKey`, rebuilding the seen-key set from disk
+/// at open time — see `IActionLog`'s class docs and the constructor's docs.
 ///
 /// @par Process-local `seq`
 /// Like `InMemoryActionLog`, `seq` is assigned fresh per process instance — it
@@ -43,12 +46,30 @@ namespace morph::journal {
 class FileActionLog : public IActionLog {
 public:
     /// @brief Opens (creating if necessary) @p path for appending.
+    ///
+    /// Also rebuilds the `idempotencyKey` dedup set (see `append()`) from
+    /// whatever is already on disk at @p path — an O(n) scan of the existing
+    /// file's contents, paid once here, not on every `append()`.
     /// @param path File to append entries to.
     /// @throws std::runtime_error if the file cannot be opened.
+    /// @throws SerializationError if an existing file at @p path has a malformed
+    ///         *interior* line (a malformed trailing line is tolerated — see
+    ///         `entries()`).
     explicit FileActionLog(std::filesystem::path path) : _path{std::move(path)} {
         _file = std::fopen(_path.string().c_str(), "a");
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
+        }
+        // Rebuild the idempotencyKey dedup set from whatever is already durably on
+        // disk, so a re-relayed outbox row is recognised even after this process
+        // restarts (not just within one FileActionLog instance's lifetime). Reuses
+        // entries()'s existing torn-trailing-line tolerance; a malformed *interior*
+        // line still throws SerializationError here, same as calling entries()
+        // directly would (see entries()'s docs).
+        for (const auto& existing : entries()) {
+            if (!existing.idempotencyKey.empty()) {
+                _seenIdempotencyKeys.insert(existing.idempotencyKey);
+            }
         }
     }
 
@@ -70,6 +91,9 @@ public:
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
+        if (!entry.idempotencyKey.empty() && !_seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
+            return;  // already durably recorded; a re-relayed duplicate is a safe no-op
+        }
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
@@ -118,8 +142,8 @@ public:
                 // *trailing* line so the rest of the log stays readable — but a
                 // malformed line mid-file is genuine corruption and is re-thrown.
                 if (i + 1 == lines.size()) {
-                    ::morph::log::logWarn("FileActionLog: skipping malformed trailing line in " +
-                                          _path.string() + ": " + std::string{exc.what()});
+                    ::morph::log::logWarn("FileActionLog: skipping malformed trailing line in " + _path.string() +
+                                          ": " + std::string{exc.what()});
                     break;
                 }
                 throw;
@@ -136,6 +160,7 @@ private:
     std::FILE* _file = nullptr;
     mutable std::mutex _mtx;
     uint64_t _nextSeq{0};
+    std::unordered_set<std::string> _seenIdempotencyKeys;
 };
 
 }  // namespace morph::journal
