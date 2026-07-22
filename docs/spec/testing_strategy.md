@@ -66,28 +66,43 @@ directory — review and keep genuinely new, interesting cases; move anything
 that crashes into `findings/` instead, once the underlying bug is fixed (see
 below).
 
-**Known findings (open, not yet fixed).** A short campaign run while this
-harness was built surfaced two real, reproducible issues in `morph::wire`'s
-glaze-based parsing, neither of which this test-infrastructure change fixes
-(this plan's scope is test/harness code only — see Global Constraints):
+**Known findings (fixed).** A short campaign run while this harness was built
+surfaced two real, reproducible issues in `morph::wire`'s glaze-based parsing.
+Both are now fixed, with the original crashing inputs preserved as permanent
+regression cases under `tests/fuzz/findings/`:
 
-- A 5-byte input (`{"{k` as raw bytes, no closing quote/brace) makes
-  `morph::wire::decode` trip an AddressSanitizer heap-buffer-overflow inside
-  glaze 7.4's `skip_ws`, reached while parsing `morph::session::Context`'s
-  trailing field on a buffer that ends exactly at the overrun point. Reachable
-  by any peer sending 5 bytes to a `RemoteServer`.
-- Certain malformed/non-UTF-8 input makes `RemoteServer`'s own `err` reply
-  (built from `exc.what()`, which can echo a slice of the offending bytes)
-  fail to round-trip through `wire::encode` + `wire::decode` — i.e. the
-  server can emit a reply that is not itself valid wire JSON, discovered via
-  `fuzz_dispatch_execute`'s post-reply `decode()` check.
+- **`skip_ws` heap-buffer-overflow** (`tests/fuzz/findings/wire_decode/skip_ws_heap_overflow.bin`).
+  `morph::wire::decode` (and the other `glz::read<>` call sites accepting an
+  arbitrary `string_view` — `journal::fromJson`, `BRIDGE_REGISTER_ACTION`'s
+  generated `fromJson`/`resultFromJson`, `FileOfflineQueue`'s `fromJson`) left
+  glaze's `null_terminated` option at its default (`true`), so `skip_ws`
+  assumed it could scan past the buffer's real end looking for a terminator
+  byte that a `string_view` — unlike a `std::string`, which always has one at
+  `data()[size()]` — never guarantees exists. A 5-byte input (`{"{k`, no
+  closing quote/brace) was enough to trip an AddressSanitizer
+  heap-buffer-overflow, reachable by any peer sending a handful of bytes to a
+  `RemoteServer`. Fixed by setting `.null_terminated = false` on every such
+  call site — the correct, documented way to tell glaze the buffer isn't
+  guaranteed null-terminated; costs nothing beyond disabling an optimization
+  that never legitimately applied. `session_auth.hpp`'s token-claims decode
+  was checked and needed no change: it parses a `const std::string&` (a real
+  owned string with the standard's null-terminator guarantee), not a view.
+- **Unescaped control bytes broke the `err`-reply round-trip**
+  (`tests/fuzz/findings/dispatch_execute/err_reply_control_char_roundtrip.bin`).
+  Glaze's writer escapes `"` and `\` but not ASCII control bytes (0x00-0x1F,
+  0x7F); an `err` reply whose `message` echoed untrusted text containing one
+  (e.g. an unrecognized `Envelope::kind`, or a caught exception's `what()`,
+  either of which can carry attacker-controlled bytes) served syntactically
+  invalid JSON that glaze's own reader then rejected on decode — the server
+  could emit a reply that wasn't itself valid wire JSON. Fixed in
+  `wire::makeErr` (the single choke point every `err` reply goes through):
+  `detail::sanitizeControlChars` replaces each control byte with a printable
+  `\xHH` placeholder before it reaches the writer. Diagnostic text doesn't
+  need byte-for-byte fidelity; guaranteed-valid JSON does.
 
-Both are deliberately **not** copied into `tests/fuzz/findings/` yet: that
-directory is a regression guard for bugs that have already been fixed (its
-whole purpose is proving a fix stays fixed), and committing a still-crashing
-input there would make `fuzz_*_replay` permanently red. Fixing either issue
-requires touching `wire.hpp` (or glaze's own parsing), out of scope for this
-plan; both are logged here as follow-up work.
+Both fixes are covered by dedicated regression tests in
+`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D") in addition to the
+`fuzz_*_replay` findings above.
 
 ## Soak tests (`tests/soak/`)
 

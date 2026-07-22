@@ -126,8 +126,11 @@ the Qt transport's TLS support (A4) directly. See `spec/core/backend.md`'s
 switchBackend/reconnect soak tests and the throughput/latency benchmark
 (`MORPH_BUILD_LOAD_TESTS=ON`), and the adversarial cross-socket run
 (`MORPH_BUILD_QT=ON`) are implemented, all opt-in/default-off. The fuzz
-harness surfaced two real, still-open `morph::wire` bugs on first run — see
-`spec/testing_strategy.md`'s "Known findings" for details and reproduction.
+harness surfaced two real `morph::wire` bugs on first run (a `skip_ws`
+heap-buffer-overflow, and unescaped control bytes breaking the `err`-reply
+round-trip) — both are now fixed; see `spec/testing_strategy.md`'s "Known
+findings" for details and the permanent regression cases under
+`tests/fuzz/findings/`.
 
 ### C4 — Compile-time `onBackendChanged` dispatch · P2 · shipped
 `LocalBackend::notifyBackendChanged` no longer `dynamic_cast`s every live
@@ -220,9 +223,9 @@ stays renderer-agnostic) is now documented in
   existing behavior unless enabled.
 - `docs/planned/` no longer holds any implemented-item specs; the
   authoritative current-state specs are entirely in `docs/spec/`.
-- One open item surfaced *by* this program, not originally on it: C3's fuzz
-  harness found two real bugs in `morph::wire`'s glaze-based parsing (a
-  heap-buffer-overflow reachable by a 5-byte input, and a case where
-  `RemoteServer`'s own error reply doesn't round-trip through `encode`/`decode`).
-  Tracked in `docs/spec/testing_strategy.md`'s "Known findings" section as
-  follow-up work.
+- Two items surfaced *by* this program, not originally on it, and fixed before
+  it closed out: C3's fuzz harness found two real bugs in `morph::wire`'s
+  glaze-based parsing (a heap-buffer-overflow reachable by a 5-byte input, and
+  a case where `RemoteServer`'s own error reply didn't round-trip through
+  `encode`/`decode`). See `docs/spec/testing_strategy.md`'s "Known findings"
+  section.

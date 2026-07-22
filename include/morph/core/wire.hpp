@@ -141,12 +141,53 @@ inline Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t mode
     return env;
 }
 
+namespace detail {
+
+/// @brief Replaces every ASCII control byte (0x00-0x1F, 0x7F) in @p text with a
+///        printable `\xHH` textual placeholder.
+///
+/// Glaze 7.4's JSON writer escapes `"` and `\` correctly but does not escape
+/// control characters, so a `std::string` field containing one serializes to
+/// syntactically invalid JSON that glaze's own reader then rejects on decode —
+/// found by the `fuzz_dispatch_execute` harness via an `err` reply whose
+/// `message` echoed an unrecognized `Envelope::kind` verbatim (see
+/// docs/spec/testing_strategy.md, "Known findings"). `makeErr`'s `message` is
+/// diagnostic text, not data that must round-trip byte-for-byte, so replacing
+/// (rather than preserving) these bytes is an acceptable, guaranteed-safe fix:
+/// the replacement is plain printable ASCII, which glaze already escapes
+/// correctly wherever it needs to (verified: `\` and `"` round-trip).
+/// @param text Untrusted text that may contain raw control bytes.
+/// @return @p text with every control byte replaced by `\xHH`.
+[[nodiscard]] inline std::string sanitizeControlChars(std::string_view text) {
+    std::string out;
+    out.reserve(text.size());
+    for (char c : text) {
+        auto byte = static_cast<unsigned char>(c);
+        if (byte < 0x20 || byte == 0x7F) {
+            static constexpr char kHex[] = "0123456789abcdef";
+            out += "\\x";
+            out += kHex[(byte >> 4) & 0xF];
+            out += kHex[byte & 0xF];
+        } else {
+            out += c;
+        }
+    }
+    return out;
+}
+
+}  // namespace detail
+
 /// @brief Builds an `err` reply envelope.
+///
+/// @p message may embed untrusted content (e.g. an unrecognized `Envelope::kind`
+/// or a caught exception's `what()`) — any raw control byte it contains is
+/// replaced with a `\xHH` placeholder so the encoded envelope is always valid,
+/// re-decodable JSON (see `detail::sanitizeControlChars`).
 inline Envelope makeErr(std::string message, uint64_t callId = 0) {
     Envelope env;
     env.kind = "err";
     env.callId = callId;
-    env.message = std::move(message);
+    env.message = detail::sanitizeControlChars(message);
     return env;
 }
 
@@ -201,7 +242,14 @@ inline Envelope decode(std::string_view json) {
     // add fields a older peer does not know, and vice versa, without a hard parse
     // failure. Duplicate keys are still accepted last-wins (glaze offers no reject
     // option) — see docs/spec/wire.md "Parsing guarantees and hardening".
-    static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+    // `null_terminated = false` is required, not cosmetic: `json` is a caller-supplied
+    // `string_view` with no guarantee of a trailing '\0' (e.g. a raw socket read).
+    // Left at glaze's default (true), `skip_ws` assumes it can scan past `end`
+    // looking for a terminator that may not exist — a heap-buffer-overflow on
+    // adversarial input (found by the wire_decode fuzz harness, see
+    // docs/spec/testing_strategy.md). This costs nothing: it only disables an
+    // optimization that never applied to us.
+    static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
     if (auto errCode = glz::read<kLenient>(env, json)) {
         throw std::runtime_error("envelope decode failed: " + glz::format_error(errCode, json));
     }

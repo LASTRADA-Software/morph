@@ -433,48 +433,52 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 #define BRIDGE_REGISTER_ACTION_3(M, A, NAME) BRIDGE_REGISTER_ACTION_4(M, A, NAME, ::morph::model::Loggable::Yes)
 
-#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                        \
-    template <>                                                                                               \
-    struct morph::model::ActionTraits<A> {                                                                    \
-        using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                               \
-        static constexpr std::string_view typeId() { return NAME; }                                           \
-        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                      \
-        static std::string toJson(const A& action) {                                                          \
-            std::string out;                                                                                  \
-            if (auto errCode = glz::write_json(action, out)) {                                                \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                      \
-            }                                                                                                 \
-            return out;                                                                                       \
-        }                                                                                                     \
-        static A fromJson(std::string_view jsonStr) {                                                         \
-            A action{};                                                                                       \
-            static constexpr glz::opts kLenientRead{.error_on_unknown_keys = false};                          \
-            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                    \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
-            }                                                                                                 \
-            return action;                                                                                    \
-        }                                                                                                     \
-        static std::string resultToJson(const Result& result) {                                               \
-            std::string out;                                                                                  \
-            if (auto errCode = glz::write_json(result, out)) {                                                \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                      \
-            }                                                                                                 \
-            return out;                                                                                       \
-        }                                                                                                     \
-        static Result resultFromJson(std::string_view jsonStr) {                                              \
-            Result result{};                                                                                  \
-            static constexpr glz::opts kLenientRead{.error_on_unknown_keys = false};                          \
-            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                    \
-                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                  \
-            }                                                                                                 \
-            return result;                                                                                    \
-        }                                                                                                     \
-    };                                                                                                        \
-    namespace {                                                                                               \
-    [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                                 \
-        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);         \
-    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                            \
-        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME); \
+#define BRIDGE_REGISTER_ACTION_4(M, A, NAME, LOGGABLE)                                                         \
+    template <>                                                                                                \
+    struct morph::model::ActionTraits<A> {                                                                     \
+        using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                                \
+        static constexpr std::string_view typeId() { return NAME; }                                            \
+        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
+        static std::string toJson(const A& action) {                                                           \
+            std::string out;                                                                                   \
+            if (auto errCode = glz::write_json(action, out)) {                                                 \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
+            }                                                                                                  \
+            return out;                                                                                        \
+        }                                                                                                      \
+        static A fromJson(std::string_view jsonStr) {                                                          \
+            A action{};                                                                                        \
+            /* null_terminated=false: jsonStr is a caller-supplied view with no      */                        \
+            /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
+            /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
+            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
+            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
+            }                                                                                                  \
+            return action;                                                                                     \
+        }                                                                                                      \
+        static std::string resultToJson(const Result& result) {                                                \
+            std::string out;                                                                                   \
+            if (auto errCode = glz::write_json(result, out)) {                                                 \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
+            }                                                                                                  \
+            return out;                                                                                        \
+        }                                                                                                      \
+        static Result resultFromJson(std::string_view jsonStr) {                                               \
+            Result result{};                                                                                   \
+            /* null_terminated=false: see the identical fix on fromJson() above. */                            \
+            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
+            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                     \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
+            }                                                                                                  \
+            return result;                                                                                     \
+        }                                                                                                      \
+    };                                                                                                         \
+    namespace {                                                                                                \
+    [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                                  \
+        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);          \
+    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                             \
+        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
 /// @endcond
 

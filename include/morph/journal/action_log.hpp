@@ -133,7 +133,11 @@ inline std::string toJson(const LogEntry& entry) {
 ///         `kLogFormatVersion`.
 inline LogEntry fromJson(std::string_view json) {
     LogEntry entry{};
-    static constexpr glz::opts kLenient{.error_on_unknown_keys = false};
+    // `null_terminated = false`: `json` is a caller-supplied view (a line read from a
+    // journal file, with no guaranteed trailing '\0') — see the identical rationale on
+    // `morph::wire::decode` (`wire.hpp`), whose fuzz harness found the resulting
+    // heap-buffer-overflow in glaze's `skip_ws`.
+    static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
     detail::throwOnGlazeError(glz::read<kLenient>(entry, json), json);
     if (entry.v > kLogFormatVersion) {
         throw SerializationError{

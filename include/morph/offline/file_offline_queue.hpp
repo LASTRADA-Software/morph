@@ -64,7 +64,13 @@ inline std::string toJson(const FileQueueRecord& record) {
 
 inline FileQueueRecord fromJson(std::string_view json) {
     FileQueueRecord record{};
-    throwOnGlazeError(glz::read_json(record, json), json);
+    // null_terminated=false: json is a caller-supplied view with no guaranteed
+    // trailing '\0' — see the identical fix + rationale on morph::wire::decode
+    // (wire.hpp), whose fuzz harness found the resulting heap-buffer-overflow in
+    // glaze's skip_ws. glz::read_json (used elsewhere in this file) hardcodes
+    // glz::opts{} and offers no way to override this, hence the explicit glz::read<>.
+    static constexpr glz::opts kUnpadded{.null_terminated = false};
+    throwOnGlazeError(glz::read<kUnpadded>(record, json), json);
     return record;
 }
 
