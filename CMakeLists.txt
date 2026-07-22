@@ -211,6 +211,7 @@ if(MORPH_BUILD_EXAMPLES)
         endif()
 
         add_subdirectory(examples/forms)
+        add_subdirectory(examples/concepts)
     endif()
 
     if(MORPH_BUILD_BANK_EXAMPLE)
