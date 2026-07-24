@@ -62,20 +62,26 @@ public:
     ///         *interior* line (a malformed trailing line is tolerated — see
     ///         `entries()`).
     explicit FileActionLog(std::filesystem::path path) : _path{std::move(path)} {
-        _file = std::fopen(_path.string().c_str(), "a");
-        if (_file == nullptr) {
-            throw std::runtime_error("FileActionLog: failed to open " + _path.string());
-        }
         // Rebuild the idempotencyKey dedup set from whatever is already durably on
         // disk, so a re-relayed outbox row is recognised even after this process
         // restarts (not just within one FileActionLog instance's lifetime). Reuses
         // entries()'s existing torn-trailing-line tolerance; a malformed *interior*
         // line still throws SerializationError here, same as calling entries()
         // directly would (see entries()'s docs).
+        //
+        // Done before _file is opened: entries() reads through its own
+        // std::ifstream, independent of _file, so a throw here leaves no file
+        // handle open. Opening _file first and rebuilding the dedup set after
+        // would leak it on this path -- the constructor never completes, so
+        // the destructor never runs to close what fopen() already opened.
         for (const auto& existing : entries()) {
             if (!existing.idempotencyKey.empty()) {
                 _seenIdempotencyKeys.insert(existing.idempotencyKey);
             }
+        }
+        _file = std::fopen(_path.string().c_str(), "a");
+        if (_file == nullptr) {
+            throw std::runtime_error("FileActionLog: failed to open " + _path.string());
         }
     }
 

@@ -107,13 +107,15 @@ TEST_CASE("morph::offline::FileOfflineQueue: re-enqueue with the same idempotenc
           "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
-    morph::offline::FileOfflineQueue queue{path};
+    {
+        morph::offline::FileOfflineQueue queue{path};
 
-    auto id1 = queue.enqueue("first-payload", "op-1");
-    auto id2 = queue.enqueue("second-payload", "op-1");
+        auto id1 = queue.enqueue("first-payload", "op-1");
+        auto id2 = queue.enqueue("second-payload", "op-1");
 
-    REQUIRE(id1 == id2);
-    REQUIRE(queue.drain().size() == 1);
+        REQUIRE(id1 == id2);
+        REQUIRE(queue.drain().size() == 1);
+    }  // close the queue's file handle before removing it -- required on Windows
     std::filesystem::remove(path);
 }
 
