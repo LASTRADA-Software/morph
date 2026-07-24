@@ -7,15 +7,13 @@
 // IAuthorizer that rejects one action type.
 
 #include <catch2/catch_test_macros.hpp>
-
+#include <filesystem>
+#include <memory>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/session/session.hpp>
-
-#include <filesystem>
-#include <memory>
 #include <string>
 #include <string_view>
 
@@ -30,8 +28,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 /// Authorizer that forbids closing accounts but allows everything else.
@@ -39,6 +36,21 @@ struct NoCloseAuthorizer : morph::session::IAuthorizer {
     [[nodiscard]] bool authorize(const morph::session::Context& /*ctx*/, std::string_view /*model*/,
                                  std::string_view actionType) const override {
         return actionType != "CloseAccount";
+    }
+
+    // This test-only authorizer does no real token verification, but it must
+    // still vouch for the caller: the base IAuthorizer::authenticate()
+    // returns nullopt, and RemoteServer clears Context::principal to empty
+    // for any authorizer that does not authenticate (see
+    // docs/spec/session/session.md, "The `authorizeRegister` hook"), so the
+    // model would otherwise never see "olivia-remote" as the owner. A real
+    // deployment would verify a token here (see SigningAuthorizer,
+    // session_auth.hpp) instead of trusting the client's claim outright.
+    [[nodiscard]] std::optional<std::string> authenticate(const morph::session::Context& ctx) const override {
+        if (ctx.principal.empty()) {
+            return std::nullopt;
+        }
+        return ctx.principal;
     }
 };
 
@@ -51,8 +63,7 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     morph::exec::ThreadPoolExecutor serverPool{2};
     morph::exec::MainThreadExecutor gui;
 
-    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool,
-                                                                 std::make_shared<NoCloseAuthorizer>());
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool, std::make_shared<NoCloseAuthorizer>());
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
 
     morph::session::Context ctx;
@@ -75,8 +86,7 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     }
 
     SECTION("the authorizer rejects the forbidden action") {
-        auto info =
-            await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), gui);
+        auto info = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), gui);
         REQUIRE_THROWS(await(accounts.execute(bank::dto::CloseAccount{.id = info.id}), gui));
     }
 }

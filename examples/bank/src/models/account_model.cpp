@@ -4,7 +4,6 @@
 
 #include <Lightweight/Lightweight.hpp>
 #include <morph/core/registry.hpp>
-
 #include <random>
 #include <string>
 
@@ -48,9 +47,7 @@ dto::AccountInfo toInfo(const db::AccountRecord& rec, const std::string& owner) 
 }
 
 /// Default annual interest for savings accounts (1.5% = 150 bps); others earn 0.
-int defaultInterestBps(int kind) {
-    return kind == static_cast<int>(AccountKind::Savings) ? 150 : 0;
-}
+int defaultInterestBps(int kind) { return kind == static_cast<int>(AccountKind::Savings) ? 150 : 0; }
 
 }  // namespace
 

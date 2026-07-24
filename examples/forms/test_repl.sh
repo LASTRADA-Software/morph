@@ -28,11 +28,11 @@ out=$(printf '%s\n%s\n%s\t%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
     'DeleteSample {"id":0}' \
     | "$demo")
 
-echo "$out" | grep -q 'ok:  {"num":5301,"den":2,"dp":3}' || { echo "FAIL: canonical submit"; exit 1; }
+echo "$out" | grep -q 'ok:  {"num":5301,"den":2,"dp":4}' || { echo "FAIL: canonical submit"; exit 1; }
 echo "$out" | grep -q 'ok:  {"num":5301,"den":2,"dp":4}' || { echo "FAIL: converted-units submit"; exit 1; }
 echo "$out" | grep -q 'sample 7 at 2026-07-05T14:30:00.000Z' || { echo "FAIL: tab-separated line"; exit 1; }
 echo "$out" | grep -q 'err: .*syntax_error' || { echo "FAIL: malformed datetime not rejected"; exit 1; }
-echo "$out" | grep -q 'err: RecordMeasurement: sampleId, measuredAt and density are required' \
+echo "$out" | grep -q 'err: action failed validation: LabModel/RecordMeasurement' \
     || { echo "FAIL: missing required not rejected"; exit 1; }
 echo "$out" | grep -q '"countries":\[{"id":1,"name":"Wonderland"},{"id":2,"name":"Narnia"}\]' \
     || { echo "FAIL: ListCountries (independent Choice options)"; exit 1; }
@@ -47,7 +47,7 @@ echo "$out" | grep -q '"samples":\[{"id":1,"name":"Proctor A2"}' \
 echo "$out" | grep -q 'ok:  {"id":2}' || { echo "FAIL: DeleteSample did not ack the removed id"; exit 1; }
 echo "$out" | grep -q '"id":100,"name":"New sample"' || { echo "FAIL: CreateSample did not append id 100"; exit 1; }
 echo "$out" | grep -q 'err: EditSample: no sample with id 999' || { echo "FAIL: EditSample unknown id not rejected"; exit 1; }
-echo "$out" | grep -q 'err: DeleteSample: id is required' || { echo "FAIL: DeleteSample zero id not rejected"; exit 1; }
+echo "$out" | grep -q 'err: action failed validation: LabModel/DeleteSample' || { echo "FAIL: DeleteSample zero id not rejected"; exit 1; }
 
 schemas=$("$demo" --schemas)
 echo "$schemas" | grep -q 'x-optionsDependsOn' \

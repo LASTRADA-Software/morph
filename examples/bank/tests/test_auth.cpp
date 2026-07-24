@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -19,8 +17,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -32,21 +29,19 @@ TEST_CASE("AuthModel register/login/change-password flow", "[auth]") {
     const std::string user = "carol-" + std::to_string(std::filesystem::hash_value("carol"));
 
     SECTION("registering then logging in succeeds; wrong password fails") {
-        auto reg = await(auth.execute(bank::dto::RegisterUser{.username = user,
-                                                              .password = "hunter2",
-                                                              .displayName = "Carol"}),
-                         app.guiLoop());
+        auto reg = await(
+            auth.execute(bank::dto::RegisterUser{.username = user, .password = "hunter2", .displayName = "Carol"}),
+            app.guiLoop());
         REQUIRE(reg.ok);
         REQUIRE(reg.principal == user);
         REQUIRE(reg.displayName == "Carol");
 
-        auto good = await(auth.execute(bank::dto::LoginRequest{.username = user, .password = "hunter2"}),
-                          app.guiLoop());
+        auto good =
+            await(auth.execute(bank::dto::LoginRequest{.username = user, .password = "hunter2"}), app.guiLoop());
         REQUIRE(good.ok);
         REQUIRE(good.principal == user);
 
-        auto bad = await(auth.execute(bank::dto::LoginRequest{.username = user, .password = "wrong"}),
-                         app.guiLoop());
+        auto bad = await(auth.execute(bank::dto::LoginRequest{.username = user, .password = "wrong"}), app.guiLoop());
         REQUIRE_FALSE(bad.ok);
     }
 
@@ -59,25 +54,26 @@ TEST_CASE("AuthModel register/login/change-password flow", "[auth]") {
     }
 
     SECTION("a short password fails validation") {
+        // RegisterUser::validate() already rejects a too-short password, so
+        // morph's ActionValidator gate catches this before AuthModel::
+        // execute() runs -- see docs/spec/forms/forms.md, "Security / trust
+        // boundary".
         REQUIRE_THROWS_AS(
-            await(auth.execute(bank::dto::RegisterUser{.username = user + "-x", .password = "no"}),
-                  app.guiLoop()),
-            bank::ValidationError);
+            await(auth.execute(bank::dto::RegisterUser{.username = user + "-x", .password = "no"}), app.guiLoop()),
+            morph::model::ValidationError);
     }
 
     SECTION("changing the password requires the old one") {
         const std::string cpUser = user + "-cp";
         await(auth.execute(bank::dto::RegisterUser{.username = cpUser, .password = "first"}), app.guiLoop());
 
-        REQUIRE_THROWS_AS(await(auth.execute(bank::dto::ChangePassword{.username = cpUser,
-                                                                       .oldPassword = "nope",
-                                                                       .newPassword = "second"}),
+        REQUIRE_THROWS_AS(await(auth.execute(bank::dto::ChangePassword{
+                                    .username = cpUser, .oldPassword = "nope", .newPassword = "second"}),
                                 app.guiLoop()),
                           bank::Unauthorized);
 
-        auto ok = await(auth.execute(bank::dto::ChangePassword{.username = cpUser,
-                                                               .oldPassword = "first",
-                                                               .newPassword = "second"}),
+        auto ok = await(auth.execute(bank::dto::ChangePassword{
+                            .username = cpUser, .oldPassword = "first", .newPassword = "second"}),
                         app.guiLoop());
         REQUIRE(ok.ok);
 
