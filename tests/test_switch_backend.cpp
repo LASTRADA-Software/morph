@@ -481,6 +481,24 @@ TEST_CASE("morph::model::detail::IModelHolder::onBackendChanged is a no-op for a
     REQUIRE_NOTHROW(base->onBackendChanged());
 }
 
+namespace {
+
+/// @brief Minimal `IModelHolder` that leaves `onBackendChanged` at its base
+/// default. `ModelHolder<Model>` always overrides it (its body only varies
+/// via `if constexpr`), so the base's own no-op body is otherwise
+/// unreachable through any real holder; this stub exercises it directly.
+struct BareModelHolder : morph::model::detail::IModelHolder {
+    [[nodiscard]] std::type_index type() const noexcept override { return typeid(BareModelHolder); }
+    [[nodiscard]] bool isBackendChangeAware() const noexcept override { return false; }
+};
+
+}  // namespace
+
+TEST_CASE("morph::model::detail::IModelHolder::onBackendChanged base default is a no-op", "[model][concept]") {
+    BareModelHolder holder;
+    REQUIRE_NOTHROW(holder.onBackendChanged());
+}
+
 TEST_CASE(
     "morph::model::detail::ModelHolder: the IModelHolder::onBackendChanged path and the "
     "dynamic_cast<IBackendChangedSink*> path both reach the same underlying call",

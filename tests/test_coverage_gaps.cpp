@@ -4,14 +4,7 @@
 // case names the file:line range it is meant to cover so future readers can
 // understand why an unusual edge case is being exercised here.
 
-#include <morph/core/bridge.hpp>
-#include <morph/core/completion.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/core/logger.hpp>
-#include <morph/offline/network_monitor.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/core/wire.hpp>
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -19,9 +12,18 @@
 #include <functional>
 #include <future>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/completion.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/offline/network_monitor.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <variant>
 
 #include "test_support.hpp"
 
@@ -54,15 +56,21 @@ struct CovParseModel {
 BRIDGE_REGISTER_MODEL(CovParseModel, "Cov_ParseModel")
 BRIDGE_REGISTER_ACTION(CovParseModel, CovParseAction, "Cov_ParseAction")
 
-TEST_CASE("morph::model::ActionTraits (macro-expanded): fromJson throws morph::model::detail::ParseError on garbage", "[coverage][registry]") {
-    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovParseAction>::fromJson("not-json"), morph::model::detail::ParseError);
+TEST_CASE("morph::model::ActionTraits (macro-expanded): fromJson throws morph::model::detail::ParseError on garbage",
+          "[coverage][registry]") {
+    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovParseAction>::fromJson("not-json"),
+                      morph::model::detail::ParseError);
 }
 
-TEST_CASE("morph::model::ActionTraits (macro-expanded): resultFromJson throws morph::model::detail::ParseError on garbage", "[coverage][registry]") {
-    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovParseAction>::resultFromJson("not-a-number"), morph::model::detail::ParseError);
+TEST_CASE(
+    "morph::model::ActionTraits (macro-expanded): resultFromJson throws morph::model::detail::ParseError on garbage",
+    "[coverage][registry]") {
+    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovParseAction>::resultFromJson("not-a-number"),
+                      morph::model::detail::ParseError);
 }
 
-TEST_CASE("morph::model::ActionTraits (macro-expanded): toJson/resultToJson round-trip succeeds", "[coverage][registry]") {
+TEST_CASE("morph::model::ActionTraits (macro-expanded): toJson/resultToJson round-trip succeeds",
+          "[coverage][registry]") {
     auto json = morph::model::ActionTraits<CovParseAction>::toJson(CovParseAction{7});
     REQUIRE_FALSE(json.empty());
     auto back = morph::model::ActionTraits<CovParseAction>::fromJson(json);
@@ -70,6 +78,55 @@ TEST_CASE("morph::model::ActionTraits (macro-expanded): toJson/resultToJson roun
 
     auto resJson = morph::model::ActionTraits<CovParseAction>::resultToJson(42);
     REQUIRE(morph::model::ActionTraits<CovParseAction>::resultFromJson(resJson) == 42);
+}
+
+// ── registry.hpp: BRIDGE_REGISTER_ACTION toJson/resultToJson write-error paths (lines 445, 463)
+//
+// glz::write_json's only reachable failure for a plain (non-partial) write is
+// error_code::invalid_variant_object: a *tagged* variant whose active
+// alternative is a null smart pointer (see glaze's docs/variant-handling.md,
+// "Variants with Smart Pointers" -- "Null smart pointers during serialization
+// will result in an error").
+
+struct CovWriteFailPayload {
+    std::string message;
+};
+
+using CovWriteFailVariant = std::variant<std::shared_ptr<CovWriteFailPayload>>;
+
+template <>
+struct glz::meta<CovWriteFailVariant> {
+    static constexpr std::string_view tag = "type";
+    static constexpr auto ids = std::array{"payload"};
+};
+
+struct CovWriteFailAction {
+    // Default-constructed to index 0 holding a null shared_ptr -- exactly the
+    // state glaze's writer rejects.
+    CovWriteFailVariant data;
+};
+struct CovWriteFailModel {
+    CovWriteFailVariant execute(const CovWriteFailAction& act) { return act.data; }
+};
+
+BRIDGE_REGISTER_MODEL(CovWriteFailModel, "Cov_WriteFailModel")
+BRIDGE_REGISTER_ACTION(CovWriteFailModel, CovWriteFailAction, "Cov_WriteFailAction")
+
+TEST_CASE(
+    "morph::model::ActionTraits (macro-expanded): toJson throws morph::model::detail::ParseError on a null tagged "
+    "variant alternative",
+    "[coverage][registry]") {
+    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovWriteFailAction>::toJson(CovWriteFailAction{}),
+                      morph::model::detail::ParseError);
+}
+
+TEST_CASE(
+    "morph::model::ActionTraits (macro-expanded): resultToJson throws morph::model::detail::ParseError on a null "
+    "tagged variant alternative",
+    "[coverage][registry]") {
+    CovWriteFailVariant const result{};
+    REQUIRE_THROWS_AS(morph::model::ActionTraits<CovWriteFailAction>::resultToJson(result),
+                      morph::model::detail::ParseError);
 }
 
 // ── remote.hpp: execute err reply envelope echoes the callId
@@ -153,11 +210,10 @@ TEST_CASE("morph::backend::RemoteServer: execute err reply preserves callId", "[
     // Register a model first
     std::string regReplyRaw;
     std::atomic<bool> regDone{false};
-    server->handle(morph::wire::encode(morph::wire::makeRegister("Cov_RemoteModel")),
-                   [&](const std::string& reply) {
-                       regReplyRaw = reply;
-                       regDone.store(true);
-                   });
+    server->handle(morph::wire::encode(morph::wire::makeRegister("Cov_RemoteModel")), [&](const std::string& reply) {
+        regReplyRaw = reply;
+        regDone.store(true);
+    });
     REQUIRE(waitFor([&] { return regDone.load(); }));
     auto regReply = morph::wire::decode(regReplyRaw);
     REQUIRE(regReply.kind == "ok");
@@ -200,7 +256,8 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: registerModel propagates serv
 
 // ── remote.hpp: morph::backend::SimulatedRemoteBackend execute error reply path
 
-TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delivered via onError", "[coverage][remote]") {
+TEST_CASE("morph::backend::SimulatedRemoteBackend: execute error reply is delivered via onError",
+          "[coverage][remote]") {
     // Exercises the err-prefixed reply branch (line 234) and confirms the
     // catch(...) -> setException path is wired up end-to-end.
     morph::exec::ThreadPoolExecutor pool{2};
@@ -275,7 +332,8 @@ TEST_CASE("CompletionState orphan dtor swallows exceptions from a throwing logge
 
 // ── logger.hpp: morph::log::detail::levelName fallback for an out-of-range enum value (line 41)
 
-TEST_CASE("morph::log::detail::levelName returns ?    for an out-of-range morph::log::LogLevel", "[coverage][logger]") {
+TEST_CASE("morph::log::detail::levelName returns ?    for an out-of-range morph::log::LogLevel",
+          "[coverage][logger]") {
     // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange) — exercises the default-branch fallback.
     auto bogus = static_cast<morph::log::LogLevel>(static_cast<std::uint8_t>(99));
     REQUIRE(morph::log::detail::levelName(bogus) == "?    ");
@@ -298,7 +356,8 @@ TEST_CASE("Default logger sink lambda body is invoked", "[coverage][logger]") {
 
 // ── network_monitor.hpp: stop() called from inside the probe → destructor spin-wait (lines 81-82, 113)
 
-TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and dtor spin-waits", "[coverage][monitor]") {
+TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and dtor spin-waits",
+          "[coverage][monitor]") {
     // The probe is invoked on the monitor's own thread. If the probe calls
     // stop(), the thread cannot join itself — stop() detaches instead, and the
     // destructor spin-yields on _runExited until run() finishes.
@@ -321,8 +380,9 @@ TEST_CASE("morph::offline::NetworkMonitor: stop() from inside probe detaches and
     };
 
     {
-        morph::offline::NetworkMonitor monitor{std::move(probe), [] {}, [] {},
-                               morph::offline::NetworkMonitor::Config{.probeInterval = 5ms, .failureThreshold = 1}};
+        morph::offline::NetworkMonitor monitor{
+            std::move(probe), [] {}, [] {},
+            morph::offline::NetworkMonitor::Config{.probeInterval = 5ms, .failureThreshold = 1}};
         monPtr.store(&monitor);
         REQUIRE(waitFor([&] { return stopCalled.load(); }));
         // Destructor here — stopCalled is true, run() is still sleeping inside
@@ -551,7 +611,8 @@ TEST_CASE("morph::async::Completion: null-state ctor with non-null executor is a
 
 // ── backend.hpp:138: morph::backend::LocalBackend::execute with an unregistered morph::exec::detail::ModelId
 
-TEST_CASE("morph::backend::LocalBackend: execute with an unknown morph::exec::detail::ModelId reports model-not-found", "[coverage][backend]") {
+TEST_CASE("morph::backend::LocalBackend: execute with an unknown morph::exec::detail::ModelId reports model-not-found",
+          "[coverage][backend]") {
     // Drives the false arm of `if (iter != _models.end())` at line 138 by
     // passing a morph::exec::detail::ModelId that was never registered.
     morph::exec::ThreadPoolExecutor pool{2};
@@ -649,8 +710,7 @@ TEST_CASE("morph::bridge::BridgeHandler: refire fires again after a failed actio
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
 
     std::atomic<int> errorsSeen{0};
-    handler.subscribe<ThrowSubAction>([](int) {},
-                                      [&](const std::exception_ptr&) { errorsSeen.fetch_add(1); });
+    handler.subscribe<ThrowSubAction>([](int) {}, [&](const std::exception_ptr&) { errorsSeen.fetch_add(1); });
 
     // First trigger — dispatch starts, may already be in flight.
     handler.set<&ThrowSubAction::trigger>(1);

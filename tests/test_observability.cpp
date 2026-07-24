@@ -108,6 +108,22 @@ TEST_CASE("morph::observe::setTraceSink: a sink missing either callback stays di
     REQUIRE(morph::observe::detail::beginSpan("req", "M", "A") == 0);
 }
 
+TEST_CASE("morph::observe::detail::beginSpan: falls back to the sentinel if traceOn is set without a beginSpan hook",
+          "[observability]") {
+    ObserveGuard guard;
+    // setTraceSink() only ever sets traceOn together with a fully-populated
+    // sink, so this combination is unreachable through the public API --
+    // reach into the singleton directly to exercise detail::beginSpan's own
+    // defensive check of state.traceSink.beginSpan.
+    auto& state = morph::observe::detail::observeState();
+    {
+        std::scoped_lock const lock{state.traceMtx};
+        state.traceSink = morph::observe::TraceSink{};
+    }
+    state.traceOn.store(true, std::memory_order_relaxed);
+    REQUIRE(morph::observe::detail::beginSpan("req", "M", "A") == 0);
+}
+
 TEST_CASE("morph::observe::detail::endSpan: sentinel id 0 is always a no-op", "[observability]") {
     ObserveGuard guard;
     bool endCalled = false;
