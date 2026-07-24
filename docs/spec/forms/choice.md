@@ -47,7 +47,9 @@ struct Choice {
 | `DependsOn` | Optional trailing pack of wire (JSON) field names of sibling fields whose current values parameterise the options action — a cascading picklist. Defaults to empty (no dependency), which is today's independent `Choice`, unchanged. |
 
 The four template parameters — the type parameter `T` plus the three
-`FixedString` NTTPs — make every `Choice<T, "ListPayees">` a distinct type
+[`FixedString`](forms.md#fixedstring--nttp-compile-time-string) NTTPs (a
+structural type letting string literals act as non-type template parameters —
+see the link for the full definition) — make every `Choice<T, "ListPayees">` a distinct type
 whose options source is known at compile time. The same action name can appear
 in multiple `Choice` fields across different form types. `DependsOn` is a
 fifth, trailing, defaulted-empty pack: it adds no new distinctness rule beyond
@@ -94,11 +96,13 @@ struct ShippingAddress {
 
 `optionsDependsOn()` returns the declared names as
 `std::array<std::string_view, N>`, in declaration order — the accessor
-`mergeSchemaExtras` ([forms.md](forms.md)) reads to emit `x-optionsDependsOn`
+`mergeSchemaExtras` ([forms.md#renderer-contract-the-schema-key-vocabulary](forms.md#renderer-contract-the-schema-key-vocabulary))
+reads to emit `x-optionsDependsOn`
 on the property, and the same accessor a renderer reads to know which sibling
 fields to watch. *Fetching* on that dependency (waiting for every parent to be
 engaged, re-fetching on change, clearing a stale child selection) is a
-renderer concern documented in [forms.md](forms.md)'s renderer contract, not
+renderer concern documented in
+[forms.md's renderer contract](forms.md#renderer-contract-the-schema-key-vocabulary), not
 part of the `Choice` type itself — `Choice` only carries the declaration.
 
 ## Wire and schema
@@ -256,12 +260,14 @@ system cannot check, because the strings are opaque NTTPs:
 ### Validation & staleness
 
 `Choice` participates in `morph::forms` required-field validation only through
-`hasValue()`, which reports **engagement** — whether *some* value is selected —
+`hasValue()`, which reports **engagement**
+([defined in forms.md](forms.md#empty-state--emptycapablefield-concept)) — whether *some* value is selected —
 and nothing more. That leaves gaps neither the client nor the server closes:
 
 - **A required `Choice` with an empty options list is permanently
   unsubmittable.** If the `OptionsAction` returns zero rows, there is nothing to
-  select, so `hasValue()` can never become `true`, so `allRequiredEngaged`
+  select, so `hasValue()` can never become `true`, so
+  [`allRequiredEngaged`](forms.md#allrequiredengageda--readiness-check)
   never passes. The form cannot be submitted until the options action yields at
   least one row — there is no "no valid options" escape hatch for a required
   field.
@@ -304,10 +310,11 @@ and nothing more. That leaves gaps neither the client nor the server closes:
 ## Cross-references
 
 - **[forms.md](forms.md)** — how a `Choice` member becomes *required* (the
-  `EmptyCapableField` concept plus the not-`std::optional`/not-`optionalFields`
-  rule), and where `mergeSchemaExtras` emits the `x-optionsAction` /
+  [`EmptyCapableField` concept](forms.md#empty-state--emptycapablefield-concept)
+  plus the [not-`std::optional`/not-`optionalFields` rule](forms.md#required-ness-rule)),
+  and where `mergeSchemaExtras` emits the `x-optionsAction` /
   `x-optionValue` / `x-optionLabel` / `x-optionsDependsOn` property
-  annotations.
+  annotations ([renderer contract](forms.md#renderer-contract-the-schema-key-vocabulary)).
 - **[quantity_type.md](../util/quantity_type.md)** and **[datetime.md](../util/datetime.md)** —
   `Quantity` and `Timestamp` share the *one kind of empty* pattern: the blank
   state lives inside the value as `std::optional`, `hasValue()` reports

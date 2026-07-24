@@ -7,6 +7,12 @@ master-detail **screen** from. Where `morph::forms::schemaJson<A>()`
 describes one action, a view describes a *set* of related actions — a query,
 an edit, a delete — and how to choreograph their already-generated forms.
 
+> **Terminology note.** "Screen" here is the informal, UI sense — whatever a
+> view renders into. It is a different, not-yet-connected concept from the
+> app-shell layer's formal `Screen` family (`FormScreen`/`WizardScreen`/`kind`,
+> [workflows_navigation.md](workflows_navigation.md)): a view is not yet one
+> of that layer's declarable screen kinds (see [Non-goals](#non-goals)).
+
 ## Contents
 
 - [The gap this closes](#the-gap-this-closes)
@@ -30,7 +36,8 @@ an edit, a delete — and how to choreograph their already-generated forms.
 The forms layer is **one action → one flat form**
 ([forms.md](forms.md)). Nothing says "run query action `ListSamples`, show
 its rows as a table, let a row open the edit form for action `EditSample`,
-and let a button run `DeleteSample`" — every CRUD screen had to be hand-wired,
+and let a button run `DeleteSample`" — every create/read/update/delete
+(CRUD) screen had to be hand-wired,
 even though all three actions are already registered
 ([registry.md](../core/registry.md)) and each already generates its own form.
 `Choice` ([choice.md](choice.md)) already proves the smaller version of this
@@ -42,7 +49,8 @@ rows" from a combo box to a full table with per-row actions.
 
 `schemaJson<A>()` describes one action; `viewSchemaJson<V>()` describes a
 *view* — a **separate JSON document**, never merged into any action schema.
-An action schema a Tier-1 renderer consumes is byte-for-byte unchanged by this
+An action schema a [Tier-1](forms.md#renderer-conformance-kit) (per-action
+`x-*` schema) renderer consumes is byte-for-byte unchanged by this
 layer; a renderer that knows nothing about views still renders every
 referenced action as a plain form. The view document only *references* action
 type-ids (the same string ids `ActionTraits<A>::typeId()` and
@@ -55,6 +63,11 @@ is a `morph::views::ActionDescriptor`, always built by
 `describeAction<Action>(...)`, never constructed by hand:
 
 ```cpp
+struct BindEntry {
+    std::string_view actionField;   // wire field on the target action
+    std::string_view rowField;      // wire field on the row to read the prefill from
+};
+
 struct ActionDescriptor {
     std::string_view actionTypeId;   // resolved from ActionTraits<Action>::typeId()
     std::string_view label{};        // "" = use the action type id as-is
@@ -74,7 +87,7 @@ consteval ActionDescriptor describeAction(std::string_view label = {},
 complete specialisation (i.e. `BRIDGE_REGISTER_ACTION` for `Action` must
 already have run earlier in the translation unit) — a typo'd or unregistered
 action is a **compile error** here, not the runtime-only failure
-`Choice`'s unchecked `OptionsAction` `FixedString` NTTP allows (see
+`Choice`'s unchecked `OptionsAction` [`FixedString`](forms.md#fixedstring--nttp-compile-time-string) NTTP allows (see
 [choice.md](choice.md), "Limitations"). `BindEntry{actionField, rowField}`
 maps one target-action wire field to one row wire field; `bind` is a pure
 client-side prefill — the wire payload the action eventually fires is the
@@ -142,9 +155,11 @@ type it is instantiated on. Each derived column carries:
   struct schema in place); glaze only promotes the nested schema to a
   `$defs` entry (referenced back via the property's `$ref`) when the *same*
   `Quantity` type occurs on more than one property of `Row` (see
-  [forms.md](forms.md)'s "CFSharedDefFields" fixture) — column derivation
-  reads whichever shape `schemaJson<Row>()` actually produced, trying the
-  inlined property first and falling back to the `$ref`/`$defs` indirection.
+  [forms.md's renderer conformance kit](forms.md#renderer-conformance-kit),
+  whose `CFSharedDefFields` fixture covers exactly this case) — column
+  derivation reads whichever shape `schemaJson<Row>()` actually produced,
+  trying the inlined property first and falling back to the `$ref`/`$defs`
+  indirection.
 
 `V::columns` (a `static constexpr std::array<ColumnOverride, N>`) is the
 declare-to-override escape hatch: supplying it emits **exactly** the declared
@@ -167,6 +182,30 @@ have is emitted as a bare `{field, label}` column with no `x-decimalPlaces` /
 | `v-columns` | top-level | array | Ordered column descriptors: `{field, label, "v-hidden"?, "x-decimalPlaces"?, ExtUnits?}`. Derived from the row type unless `V::columns` overrides it. |
 | `v-rowAction` | top-level | object | `{action, bind?}` — the action a row activation opens. Omitted when `V` declares no `rowAction`. Carries only `action`/`bind`, never `label`/`scope`/`confirm`. |
 | `v-actions` | top-level | array | `{action, label, scope, bind?, confirm?}` per entry — buttons that run an action. `scope` is `"row"` or `"collection"`; `confirm` is omitted when `false`; `bind` is omitted when empty. Omitted entirely when `V` declares no `actions`. |
+
+A concrete `viewSchemaJson<SamplesView>()` output, for the `SamplesView`
+declared above (row type carrying `id`/`name`):
+
+```json
+{
+  "v-kind": "collection",
+  "v-title": "Samples",
+  "v-query": "ListSamples",
+  "v-rowKey": "id",
+  "v-columns": [
+    { "field": "id", "label": "Id" },
+    { "field": "name", "label": "Name" }
+  ],
+  "v-rowAction": {
+    "action": "EditSample",
+    "bind": { "id": "id" }
+  },
+  "v-actions": [
+    { "action": "DeleteSample", "label": "Delete", "scope": "row", "bind": { "id": "id" }, "confirm": true },
+    { "action": "CreateSample", "label": "New", "scope": "collection" }
+  ]
+}
+```
 
 `bind`, wherever it appears (`v-rowAction.bind` or a `v-actions` entry's
 `bind`), is a plain JSON **object** mapping each target-action wire field to
@@ -237,7 +276,7 @@ path a user's own typing takes (via that control's own `onTextChanged`),
 rather than reaching into `DynamicForm`'s internal `fieldValues` state
 directly, since `DynamicForm.qml` has no external "set a field's displayed
 value" API (every other control already owns writing its own text/selection
-from the user's input, and none of the Tier-1 features preceding this one
+from the user's input, and none of the [Tier-1](forms.md#renderer-conformance-kit) features preceding this one
 ever needed to prefill a field programmatically). See "Limitations" for what
 this does not reach.
 
@@ -255,7 +294,7 @@ nothing renders twice.
 
 | Signature | Returns |
 |---|---|
-| `template <typename V> std::string viewSchemaJson()` | The view-schema JSON. Cached per type. Never throws — internal DOM failure yields an empty string, matching `schemaJson<A>()`. |
+| `template <typename V> std::string viewSchemaJson()` | The view-schema JSON. Cached per type. Never throws — internal DOM (parsed JSON document tree) failure yields an empty string, matching `schemaJson<A>()`. |
 
 ### `ActionDescriptor` / `describeAction<Action>()` / `ColumnOverride`
 

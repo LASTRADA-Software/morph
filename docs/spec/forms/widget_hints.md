@@ -216,7 +216,7 @@ harmless for a renderer that ignores them.
 |---|---|---|
 | Wire representation | **Bare payload, no wrapper metadata** | Same rule as `Choice`/`Quantity`: rendering intent lives in the type and the schema, never the payload. |
 | Empty state | **`Multiline`: none; `Ranged`: `std::optional`** | `Multiline` wraps a type (`std::string`) with no framework-recognised empty state of its own; `Ranged` wraps a scalar, which needs an explicit optional to have one. |
-| Widget default | **Type-derived, via a `widget()` static function** | Matches the umbrella program's "infer from the type" principle; any user type can opt in the same way `Multiline`/`Ranged` do, with no registration step. |
+| Widget default | **Type-derived, via a `widget()` static function** | Matches the ["infer by default, declare to override"](forms.md#design-principle-infer-by-default-declare-to-override) design principle; any user type can opt in the same way `Multiline`/`Ranged` do, with no registration step. |
 | Widget override | **Duck-typed on `fieldMetadata`'s `.field`/`.widget`** | Lets the override live in a descriptor whose canonical definition is owned by a different feature ([forms.md, "Field metadata"](forms.md#field-metadata--fieldmeta)) without `forms.hpp` gaining a named dependency on that type. |
 | Range subfields | **Not overridable via `fieldMetadata`** | `x-min`/`x-max`/`x-step` describe the *type's* declared bounds; overriding the widget choice must not silently change what those bounds mean. |
 | `$defs` naming | **Fixed `name` per wrapper (`"Multiline"`, `"Ranged"`)** | Same trade-off as `Choice`: instantiations collapse into one shared `$def`, harmless because the differentiating data (bounds, widget) is property-level. |

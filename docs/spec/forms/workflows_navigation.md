@@ -11,6 +11,7 @@ execution mode.
 
 ## Contents
 
+- [The gap this closes](#the-gap-this-closes)
 - [The `w-*` wizard document](#the-w--wizard-document)
 - [The `app-*` app-shell document](#the-app--app-shell-document)
 - [C++ descriptors](#c-descriptors)
@@ -21,6 +22,20 @@ execution mode.
 - [Limitations](#limitations)
 - [Testing](#testing)
 - [Cross-references](#cross-references)
+
+## The gap this closes
+
+A single form ([forms.md](forms.md)) gates on its own fields only — nothing
+sequences one action's result into the next action's prefill, or groups a set
+of already-registered actions into one navigable menu. Before this layer, a
+multi-step flow ("register a sample, then record its first measurement,
+carrying the new sample's id forward as a prefill") had to be hand-wired: a
+bespoke controller tracking a step index, manually reading one action's reply
+to seed the next request body, with no shared, introspectable vocabulary a
+renderer could build a generic stepper from. `morph::flows` and `morph::app`
+name that sequencing and menu structure declaratively — the same move
+[views.md](views.md) makes for "a query action plus its row actions" instead
+of a hand-wired list screen.
 
 ## The `w-*` wizard document
 
@@ -90,6 +105,13 @@ Declared in `include/morph/forms/flows.hpp` (namespace `morph::flows`) and
 `include/morph/util/` already hosts three distinct namespaces
 (`morph::time`, `morph::math`, `morph::units`) under one directory, and how
 `views.hpp` (E-G7) landed the same way for the same reasons.
+
+Both descriptor sets are built entirely from
+[`FixedString`](forms.md#fixedstring--nttp-compile-time-string) NTTPs (the
+same compile-time-string vehicle `Choice` uses), so a step's action, a bind's
+field/path, a screen's id, and a menu's label are all part of the type itself
+— compile-time-checked shape, though (like `Choice`'s `OptionsAction`) the
+*names* they carry are still resolved at runtime.
 
 ```cpp
 // namespace morph::flows

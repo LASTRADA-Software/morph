@@ -1,12 +1,14 @@
 # `morph::forms` — schema generation & readiness for action types
 
-Given a plain-aggregate action type `A` (registered with `BRIDGE_REGISTER_ACTION`),
+Given a plain-aggregate action type `A` (registered with
+[`BRIDGE_REGISTER_ACTION`](../core/registry.md#bridge_register_action)),
 `morph::forms` produces a standard JSON Schema a client can render a form from,
 and provides a compile-time `validate()` body that gates submission until every
 required empty-capable field is filled in. It builds on glaze's
 `write_json_schema<A>` (which already contributes types, `$defs`, per-field
-metadata from `glz::json_schema<A>`, and `ExtUnits` from
-`morph::units::Quantity`) and closes the gaps glaze leaves open.
+metadata from `glz::json_schema<A>`, and `ExtUnits` — glaze's per-unit metadata
+block, detailed under [Renderer contract](#renderer-contract-the-schema-key-vocabulary)
+below — from `morph::units::Quantity`) and closes the gaps glaze leaves open.
 
 ## Design principle: infer by default, declare to override
 
@@ -77,7 +79,10 @@ terms so a web, ImGui, or other renderer can implement the same contract.
 
 A field type that has an internal blank state (nothing entered / nothing
 selected) exposes `hasValue() -> bool`. This is the **only** thing the forms
-module needs to know about a field to decide whether it counts as "engaged".
+module needs to know about a field to decide whether it counts as "engaged" —
+**a field is engaged exactly when `hasValue()` returns `true`.** Every later
+use of "engaged" in this document (required-ness, cross-field rules, computed
+fields) means precisely this.
 
 ```cpp
 template <typename T>
@@ -121,7 +126,9 @@ struct Choice {
 };
 ```
 
-- `T` — the value type submitted on the wire (`int64_t` for ids, `string` for codes).
+- `T` — the value type submitted **on the wire** (the JSON payload exchanged
+  between client and server over the transport — see [wire.md](../core/wire.md)
+  for the envelope this travels inside; `int64_t` for ids, `string` for codes).
 - `OptionsAction` — the registered action type id whose result provides options
   (executed with an empty body when `DependsOn` is empty, or with
   `{name: value, ...}` built from the `DependsOn` names otherwise; returns
@@ -226,8 +233,10 @@ Schema generation never throws.
 
 ### Required-ness rule
 
-Required is the default. A member is *optional* (and therefore not added to
-`required`) when any of:
+Required is the default — the safer choice for domain forms, since forgetting
+to mark a field optional loses data rather than silently accepting a gap (see
+[Design decisions](#design-decisions) for the full rationale). A member is
+*optional* (and therefore not added to `required`) when any of:
 1. Its type is `std::optional<...>`, or
 2. Its name appears in `A::optionalFields` — a `static constexpr` iterable of
    `std::string_view` that the action declares, or
@@ -368,8 +377,9 @@ member of the action at all.
 | `x-readonly` | property node (sibling of `$ref`) | boolean | `true` when the field should be displayed but not editable. Emitted only when `true`. |
 | `x-hidden` | property node (sibling of `$ref`) | boolean | `true` when the field should not be shown at all; the field remains part of the action payload. Emitted only when `true`. |
 | `x-i18nKey` | property node (sibling of `$ref`) | string | An explicit message-key **stem** override, from `FieldMeta::i18nKey`. Omitted when empty. Not a complete key by itself — see [Localisation — message keys and the catalog seam](#localisation--message-keys-and-the-catalog-seam) for how a renderer expands it per text slot. |
+| `x-widget` | property node (sibling of `$ref`) | string | Control-selection override, from `FieldMeta::widget`. Omitted when empty. Full mechanism, precedence over a type's own derived `widget()`, and design rationale are in [Widget hints](#widget-hints--multiline--ranged). |
 
-All six keys are additive and non-breaking, extending the renderer-contract
+All seven keys are additive and non-breaking, extending the renderer-contract
 table below without renaming or retyping any existing key, per this program's
 versioning stance (see "Design principle" above). A
 renderer that ignores them falls back to today's behavior exactly: it shows
@@ -466,6 +476,13 @@ it). A renderer that ignores an `x-*` key
 still produces a usable form — it just loses the affordance that key carries
 (unit selector, field order, combo box, decimal step).
 
+This table is the complete reference for every key; two rows (`x-rules`,
+`x-computed`/`inputs`) name concepts — cross-field rules and computed fields —
+that get their own full explanation later in this document
+([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary),
+[Computed fields](#computed-fields)). Skip ahead to those sections first if
+the two rows below aren't self-explanatory on a first read.
+
 ### Where the keys physically land — `$ref` resolution is mandatory
 
 A `Quantity` (or any aggregate) member is **not** inlined into its property.
@@ -501,7 +518,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
-| `required` | top-level (object) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>` or appears in `A::optionalFields`. Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
+| `required` | top-level (object) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
 | `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path retags each submitted `Quantity` to this precision before storing it (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
@@ -627,8 +644,8 @@ executable form of this document's "normative" claim.
   does.
 - **Accessibility slice** (`src/qt/forms/tests/tst_conformance_accessibility.qml`):
   every control exposes an accessible name (the wire key — `title` from
-  `gui_field_metadata.md`, when declared, is the visible label but the
-  accessible-name fallback is always the wire key), a required field's
+  [Field metadata](#field-metadata--fieldmeta), when declared, is the visible
+  label but the accessible-name fallback is always the wire key), a required field's
   accessible description announces it, focus order follows `x-order`, and
   every control (choice combo, radio group, date/time picker, text field,
   multiline text area, slider, unit selector, and the calendar popup, which
@@ -644,8 +661,11 @@ executable form of this document's "normative" claim.
 
 **Scope note.** The corpus above covers exactly the keys this document's
 renderer contract currently defines, plus the `x-widget`/`SlotRegistry` keys
-below. It does **not** include a wizard/app-shell fixture (`w-*`/`app-*`):
-although the emitters for those Tier-2 keys now exist
+below — informally, "**Tier-1**": the per-action `x-*` schema vocabulary this
+document specifies. It does **not** include a wizard/app-shell fixture
+(`w-*`/`app-*`): although the emitters for those "**Tier-2**" keys (the
+wizard/app-shell layer built atop Tier-1, one level up the composition —
+[workflows_navigation.md](workflows_navigation.md)) now exist
 (`morph::flows::wizardSchemaJson`/`morph::app::appSchemaJson`, see
 [workflows_navigation.md](workflows_navigation.md)), no conformance-kit
 fixture exercises them yet — that coverage is deferred to future work,
@@ -700,8 +720,8 @@ forking the renderer:
 
 The registry never appears in the schema or on the wire — two renderers of the
 same schema may register different slots. This is the "escape hatch always
-available" the GUI program's overview promises: swap one control without
-forking the renderer.
+available" design principle ([above](#design-principle-infer-by-default-declare-to-override))
+in practice: swap one control without forking the renderer.
 
 ## Localisation — message keys and the catalog seam
 
@@ -777,8 +797,9 @@ realization: `I18nCatalog` (`examples/forms/gui_qml/I18nCatalog.hpp`), an
 in-memory `QObject` catalog (QML cannot hold a `std::function` directly),
 wired into `DynamicForm.qml`'s `resolveText`/`i18nFieldKey` JS mirrors of the
 functions above. It currently resolves only the field label/help/placeholder
-slot — group rendering (and its i18n wiring) lands with
-`gui_layout_grouping.md`. The wizard/app-shell layer
+slot — group-title i18n wiring for the already-implemented
+[Layout & grouping](#layout--grouping--sections-tabs-spans) feature remains
+future work. The wizard/app-shell layer
 ([workflows_navigation.md](workflows_navigation.md)) is implemented, but its
 QML renderer (`WizardView.qml`/`AppShell.qml`) does not yet accept an
 `I18nCatalog` either, matching `CollectionView.qml`'s own gap (see
@@ -850,11 +871,12 @@ template <typename A>
 ```
 
 Returns `true` when every **required** empty-capable member of `action` has
-`hasValue() == true`. Required means: not `std::optional<...>` and not listed
-in `A::optionalFields`. Non-empty-capable members (plain ints, strings, etc.)
-are skipped — they cannot express "not filled in". Intended as the body of the
-action's `validate()` (the `ActionValidator` machinery picks it up
-automatically).
+`hasValue() == true`. Required has the same meaning as in the
+[Required-ness rule](#required-ness-rule): not `std::optional<...>`, not
+listed in `A::optionalFields`, and not a `computedFields` destination.
+Non-empty-capable members (plain ints, strings, etc.) are skipped — they
+cannot express "not filled in". Intended as the body of the action's
+`validate()` (the `ActionValidator` machinery picks it up automatically).
 
 The two exclusions are enforced by **different mechanisms**, and only one is an
 explicit test. A member is inspected at all only when it satisfies
@@ -1115,7 +1137,7 @@ validator check on every dispatch path.
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
 | `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
 | `reconcileDeclaredPrecision<A>(action)` | function | Retags every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`), so a decoded wire value matches the schema's advertised `x-decimalPlaces`. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on the `executeJson` dispatch path (`bridge.hpp`). |
-| `FieldMeta` | struct | Per-field presentation descriptor: `field`, `label`, `help`, `placeholder`, `widget` (reserved), `readOnly`, `hidden`, plus `withPlaceholder`/`withReadOnly`/`withHidden` fluent copies. See "Field metadata" above. |
+| `FieldMeta` | struct | Per-field presentation descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, plus `withPlaceholder`/`withReadOnly`/`withHidden` fluent copies. See "Field metadata" above. |
 | `detail::HasFieldMetadata<A>` | concept | `true` when `A` has a `static constexpr`/`static const` iterable `fieldMetadata`. |
 | `detail::findFieldMeta<A>(name)` | function | Returns the `FieldMeta` entry naming `name`, or `nullptr`. |
 | `detail::inferTitle(name)` | function | Title-cases a wire key on camelCase/underscore boundaries. |
