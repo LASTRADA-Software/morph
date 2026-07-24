@@ -191,7 +191,18 @@ public:
     OpaqueIdGenerator() {
         std::random_device rd;
         for (auto& key : _roundKeys) {
+            // std::random_device::result_type is unsigned int on this platform's
+            // standard library, so the cast below is a no-op here -- but the
+            // standard does not guarantee that, so it stays for portability to a
+            // standard library where result_type is wider than uint32_t.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wuseless-cast"
+#endif
             key = static_cast<uint32_t>(rd());
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
         }
     }
 

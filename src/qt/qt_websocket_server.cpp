@@ -104,8 +104,17 @@ bool QtWebSocketServer::closeGracefully(std::chrono::milliseconds deadline) {
 
     // Step 4: whatever is still connected gets a proper close frame instead
     // of an abort, so the client can tell an orderly stop from a crash.
+    // Snapshot the sockets first (same reason as onHousekeepingTick's toClose
+    // vector below): closing an idle, already-primed loopback socket can
+    // complete synchronously, reentrantly firing onDisconnected -- which
+    // erases from _clients -- while this loop is still iterating it.
+    std::vector<QWebSocket*> toClose;
+    toClose.reserve(_clients.size());
     for (const auto& entry : _clients) {
-        entry.first->close(QWebSocketProtocol::CloseCodeGoingAway, QStringLiteral("server shutting down"));
+        toClose.push_back(entry.first);
+    }
+    for (auto* socket : toClose) {
+        socket->close(QWebSocketProtocol::CloseCodeGoingAway, QStringLiteral("server shutting down"));
     }
 
     // Let whatever remains of the deadline flush the close handshake over the

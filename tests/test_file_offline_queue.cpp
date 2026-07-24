@@ -120,12 +120,14 @@ TEST_CASE("morph::offline::FileOfflineQueue: re-enqueue with the same idempotenc
 TEST_CASE("morph::offline::FileOfflineQueue: empty idempotencyKey items are never deduplicated", "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
-    morph::offline::FileOfflineQueue queue{path};
+    {
+        morph::offline::FileOfflineQueue queue{path};
 
-    queue.enqueue("a");
-    queue.enqueue("b");
+        queue.enqueue("a");
+        queue.enqueue("b");
 
-    REQUIRE(queue.drain().size() == 2);
+        REQUIRE(queue.drain().size() == 2);
+    }  // close the queue's file handle before removing it -- required on Windows
     std::filesystem::remove(path);
 }
 

@@ -22,10 +22,13 @@
 /// dispatch path: no new wire format, no new execution mode. See
 /// docs/spec/forms/workflows_navigation.md.
 
+#include <atomic>
 #include <cstddef>
 #include <exception>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -208,8 +211,19 @@ public:
         subscribeCurrent();
     }
 
-    /// @brief Unsubscribes the current step so no callback captures a dangling `this`.
-    ~FlowSession() { unsubscribeCurrent(); }
+    /// @brief Flags this session as gone, then unsubscribes the current step.
+    ///
+    /// `unsubscribe()` only removes the sink from the handler's map; it does
+    /// not guarantee a callback already copied out of that map (in flight on
+    /// another thread when this runs) won't still execute afterward. `_alive`
+    /// is a separate, independently-lifetimed flag the installed callbacks
+    /// check *before* touching `this`, so a callback that is still in flight
+    /// when this destructor runs sees it cleared and returns instead of
+    /// touching a partially- or fully-destroyed object.
+    ~FlowSession() {
+        _alive->store(false, std::memory_order_release);
+        unsubscribeCurrent();
+    }
 
     FlowSession(const FlowSession&) = delete;
     FlowSession& operator=(const FlowSession&) = delete;
@@ -230,7 +244,10 @@ public:
         if (::morph::model::ActionTraits<A>::typeId() != currentActionType()) {
             throw std::logic_error{"FlowSession::set<>: field belongs to an action that is not the current step"};
         }
-        std::get<A>(_drafts).*FieldPtr = value;
+        {
+            std::scoped_lock const lock{_mtx};
+            std::get<A>(_drafts).*FieldPtr = value;
+        }
         _handler.template set<FieldPtr>(std::move(value));
     }
 
@@ -239,12 +256,20 @@ public:
     /// @return `true` if the flow advanced, `false` if the current step is not
     ///         ready or the flow is already `finished()`.
     bool advance() {
-        if (!_currentReady || finished()) {
+        bool ready = false;
+        {
+            std::scoped_lock const lock{_mtx};
+            ready = _currentReady;
+        }
+        if (!ready || finished()) {
             return false;
         }
         unsubscribeCurrent();
         ++_index;
-        _currentReady = false;
+        {
+            std::scoped_lock const lock{_mtx};
+            _currentReady = false;
+        }
         if (!finished()) {
             subscribeCurrent();
         }
@@ -261,7 +286,10 @@ public:
         }
         unsubscribeCurrent();
         --_index;
-        _currentReady = true;  // this step already produced a result once, or it could not have been left
+        {
+            std::scoped_lock const lock{_mtx};
+            _currentReady = true;  // this step already produced a result once, or it could not have been left
+        }
         subscribeCurrent();
         return true;
     }
@@ -272,7 +300,10 @@ public:
 
     /// @brief Whether the current step already has a captured, successful result.
     /// @return `true` if `advance()` would move the flow forward right now.
-    [[nodiscard]] bool ready() const noexcept { return _currentReady; }
+    [[nodiscard]] bool ready() const noexcept {
+        std::scoped_lock const lock{_mtx};
+        return _currentReady;
+    }
 
     /// @brief The current 0-based step position.
     /// @return `sizeof...(Steps)` once `finished()`.
@@ -297,6 +328,7 @@ public:
     /// @return The field's JSON-encoded value, or `std::nullopt` if @p path
     ///         was never captured (the step never fired, or never had that field).
     [[nodiscard]] std::optional<std::string> resolved(std::string_view path) const {
+        std::scoped_lock const lock{_mtx};
         auto iter = _resolvedValues.find(std::string{path});
         if (iter == _resolvedValues.end()) {
             return std::nullopt;
@@ -307,6 +339,7 @@ public:
 private:
     template <typename A>
     void captureResult(const typename ::morph::model::ActionTraits<A>::Result& result) {
+        std::scoped_lock const lock{_mtx};
         auto const typeId = ::morph::model::ActionTraits<A>::typeId();
         auto record = [&](const auto& value) {
             ::morph::forms::detail::forEachNamedMember(
@@ -323,14 +356,30 @@ private:
         _currentReady = true;
     }
 
+    /// @brief Installs the result/error sinks for step @p A.
+    ///
+    /// Both closures capture `_alive` (a copy of the `shared_ptr`, so it
+    /// outlives `this` if the two race) and check it before touching
+    /// anything on `this` — see `~FlowSession()`'s doc comment for why
+    /// `unsubscribe()` alone is not enough.
     template <typename A>
     void installSubscription() {
+        auto alive = _alive;
         _handler.template subscribe<A>(
-            [this](typename ::morph::model::ActionTraits<A>::Result result) {
+            [this, alive](typename ::morph::model::ActionTraits<A>::Result result) {
+                if (!alive->load(std::memory_order_acquire)) {
+                    return;
+                }
                 this->template captureResult<A>(result);
             },
-            [this](std::exception_ptr err) {
-                _currentReady = false;
+            [this, alive](std::exception_ptr err) {
+                if (!alive->load(std::memory_order_acquire)) {
+                    return;
+                }
+                {
+                    std::scoped_lock const lock{_mtx};
+                    _currentReady = false;
+                }
                 if (_onError) {
                     _onError(err);
                 } else {
@@ -360,10 +409,21 @@ private:
 
     ::morph::bridge::BridgeHandler<Model>& _handler;
     std::function<void(std::exception_ptr)> _onError;
-    std::tuple<Steps...> _drafts{};
+    // _index/_handler/_onError are touched only from the thread that owns
+    // this FlowSession (constructor, destructor, set/advance/back); guarded
+    // separately below is the state a subscription's result/error callback
+    // also touches, which runs on whatever thread/executor resolves the
+    // underlying BridgeHandler completion -- not necessarily this same
+    // thread. See docs/spec/core/bridge.md's executor/callback model.
     std::size_t _index{0};
+    mutable std::mutex _mtx;
+    std::tuple<Steps...> _drafts{};
     bool _currentReady{false};
     std::unordered_map<std::string, std::string> _resolvedValues;
+    // Outlives `this`: a late callback (see installSubscription) checks this
+    // before touching anything else, so it survives even if `this` is
+    // already gone by the time it runs.
+    std::shared_ptr<std::atomic<bool>> _alive = std::make_shared<std::atomic<bool>>(true);
 };
 
 }  // namespace morph::flows

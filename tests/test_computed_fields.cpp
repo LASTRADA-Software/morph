@@ -28,33 +28,39 @@ using morph::math::Rational;
 // file (Tasks 2-4 append models/actions built on the same CFQ/CFLineItem).
 // ---------------------------------------------------------------------------
 
-enum class CFUnit : std::uint8_t { qty, price, total };
+// Named CFLineUnit, not CFUnit: test_forms_conformance_corpus.cpp's own
+// unrelated CFUnit is also file-scope (not anonymous-namespaced, deliberately
+// -- see that file's comment), so an identically-named enum here would be an
+// ODR violation (two conflicting definitions of the same external-linkage
+// symbol across translation units, silently resolved to just one of them by
+// the linker) rather than a harmless prefix collision.
+enum class CFLineUnit : std::uint8_t { qty, price, total };
 
 template <>
-struct morph::units::UnitTraits<CFUnit> {
-    static constexpr morph::units::UnitMeta meta(CFUnit unit) noexcept {
+struct morph::units::UnitTraits<CFLineUnit> {
+    static constexpr morph::units::UnitMeta meta(CFLineUnit unit) noexcept {
         switch (unit) {
-            case CFUnit::qty:
+            case CFLineUnit::qty:
                 return {.id = "qty", .display = "qty", .defaultDecimals = 2};
-            case CFUnit::price:
+            case CFLineUnit::price:
                 return {.id = "price", .display = "$/u", .defaultDecimals = 2};
-            case CFUnit::total:
+            case CFLineUnit::total:
                 return {.id = "total", .display = "$", .defaultDecimals = 2};
             default:
                 return {.id = "?", .display = "?", .defaultDecimals = 2};
         }
     }
-    static constexpr std::array<morph::units::UnitRelation<CFUnit>, 0> relations{};
+    static constexpr std::array<morph::units::UnitRelation<CFLineUnit>, 0> relations{};
 };
 
-consteval CFUnit operator*(CFUnit lhs, CFUnit rhs) {
-    if ((lhs == CFUnit::qty && rhs == CFUnit::price) || (lhs == CFUnit::price && rhs == CFUnit::qty)) {
-        return CFUnit::total;
+consteval CFLineUnit operator*(CFLineUnit lhs, CFLineUnit rhs) {
+    if ((lhs == CFLineUnit::qty && rhs == CFLineUnit::price) || (lhs == CFLineUnit::price && rhs == CFLineUnit::qty)) {
+        return CFLineUnit::total;
     }
     throw "unsupported unit product";
 }
 
-template <CFUnit U, std::uint32_t Dec = morph::units::UnitTraits<CFUnit>::meta(U).defaultDecimals>
+template <CFLineUnit U, std::uint32_t Dec = morph::units::UnitTraits<CFLineUnit>::meta(U).defaultDecimals>
 using CFQ = morph::units::Quantity<U, Dec>;
 
 namespace {
@@ -67,9 +73,9 @@ constexpr DecimalPlaces dp4{4};
 // ---------------------------------------------------------------------------
 
 struct CFLineItem {
-    CFQ<CFUnit::qty> qty;
-    CFQ<CFUnit::price> price;
-    CFQ<CFUnit::total> total;
+    CFQ<CFLineUnit::qty> qty;
+    CFQ<CFLineUnit::price> price;
+    CFQ<CFLineUnit::total> total;
 
     // A generic (auto) lambda parameter, not `const CFLineItem&`: this
     // initializer runs while CFLineItem is still incomplete (a static data
@@ -88,9 +94,9 @@ struct CFLineItem {
 // to prove the result is retagged to the *destination's* declared precision,
 // not the multiplication result's.
 struct CFPreciseLineItem {
-    CFQ<CFUnit::qty> qty;
-    CFQ<CFUnit::price> price;
-    CFQ<CFUnit::total, 4> total;
+    CFQ<CFLineUnit::qty> qty;
+    CFQ<CFLineUnit::price> price;
+    CFQ<CFLineUnit::total, 4> total;
 
     static constexpr auto computedFields = morph::forms::computeList(
         morph::forms::computed<&CFPreciseLineItem::total, &CFPreciseLineItem::qty, &CFPreciseLineItem::price>(
@@ -100,8 +106,8 @@ struct CFPreciseLineItem {
 // An action with no computedFields, to prove recomputeAll/allRequiredEngaged
 // (and, from Task 2, mergeSchemaExtras) are true no-ops for it.
 struct CFPlainAction {
-    CFQ<CFUnit::qty> qty;
-    CFQ<CFUnit::price> price;
+    CFQ<CFLineUnit::qty> qty;
+    CFQ<CFLineUnit::price> price;
 };
 
 static_assert(morph::forms::detail::HasComputedFields<CFLineItem>);
