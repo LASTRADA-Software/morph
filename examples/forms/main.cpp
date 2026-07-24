@@ -14,11 +14,10 @@
 /// the REPL — which dispatches it through the same type-erased
 /// `ActionDispatcher` seam `RemoteServer` uses — and read the model's reply.
 
-#include <morph/core/bridge.hpp>
-
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <morph/core/bridge.hpp>
 #include <print>
 #include <string>
 #include <string_view>
@@ -50,6 +49,10 @@ using lab::schemasJson;
 // The demo page, split around the embedded schemas object. Everything is
 // inline (no CDN, no framework): the point is that the schema alone carries
 // enough to build the GUI.
+//
+// Readers focused on the C++ Forms API (schemaJson/optionsJson/the REPL
+// dispatch) rather than the JS renderer can skip past kHtmlHead/kHtmlTail
+// below and resume at optionsJson() (line ~344).
 constexpr std::string_view kHtmlHead = R"HTML(<!doctype html>
 <html lang="en">
 <head>
@@ -426,11 +429,11 @@ build();
 void runRepl() {
     std::println("morph forms demo — REPL (model: LabModel)");
     std::println("paste a line from the HTML page, or try:");
-    std::cout << R"(  ComputeDryDensity {"massDry":{"num":26505,"den":10,"dp":1},"volume":{"num":1,"den":1,"dp":3}})"
-              << '\n'
-              << R"(  RecordMeasurement {"sampleId":7,"measuredAt":"2026-07-05T14:30:00Z","density":{"num":5301,"den":2,"dp":1},"note":"demo"})"
-              << '\n'
-              << R"(  ListSamples {})" << '\n';
+    std::cout
+        << R"(  ComputeDryDensity {"massDry":{"num":26505,"den":10,"dp":1},"volume":{"num":1,"den":1,"dp":3}})" << '\n'
+        << R"(  RecordMeasurement {"sampleId":7,"measuredAt":"2026-07-05T14:30:00Z","density":{"num":5301,"den":2,"dp":1},"note":"demo"})"
+        << '\n'
+        << R"(  ListSamples {})" << '\n';
     std::println("(quit with 'exit' or Ctrl-D; schemas via --schemas)");
 
     // The same type-erased seam RemoteServer dispatches through: string ids
@@ -483,8 +486,8 @@ int main(int argc, char** argv) {
             std::println(stderr, "error: cannot write {}", path);
             return 1;
         }
-        file << kHtmlHead << escapeForScriptEmbed(schemasJson()) << ";\nconst OPTIONS = "
-             << escapeForScriptEmbed(optionsJson()) << kHtmlTail;
+        file << kHtmlHead << escapeForScriptEmbed(schemasJson())
+             << ";\nconst OPTIONS = " << escapeForScriptEmbed(optionsJson()) << kHtmlTail;
         std::println("wrote {} — open it in a browser, then run ./morph_forms_demo for the REPL", path);
         return 0;
     }

@@ -87,6 +87,13 @@ struct DeleteSampleAck {
 struct CreateSample {};
 
 /// @brief Record a measured density (moisture and note are optional).
+///
+/// Deliberately the demo's kitchen-sink action: it combines a dependent-free
+/// `Choice`, a `Timestamp`, an `optionalFields` opt-out, `fieldMetadata`
+/// (placeholder + hidden), and `formLayout`/`fieldSpans` (sections + an
+/// accordion + a spanning field) in one place, so a reader can see every
+/// annotation feature interact on a single action. `ComputeDryDensity` above
+/// is the plain, single-feature baseline to contrast it with.
 struct RecordMeasurement {
     /// Not free input: options come from executing `ListSamples` — the
     /// schema carries x-optionsAction/x-optionValue/x-optionLabel and the
@@ -338,6 +345,13 @@ private:
 
 }  // namespace lab
 
+// glz::json_schema<A> supplies human-readable `description` text (and, for
+// moisture, validation bounds) that schemaJson<A>() merges onto the
+// generated schema -- see docs/spec/forms/forms.md, "schemaJson<A>() --
+// schema generation". Only these four actions get a specialization: their
+// free-text/numeric fields benefit from a description; the id-only actions
+// below (EditSample, DeleteSample, CreateSample, the three List* queries)
+// have nothing a description would add beyond their already-inferred titles.
 template <>
 struct glz::json_schema<lab::ComputeDryDensity> {
     schema massDry{.description = "Oven-dry mass of the specimen"};
@@ -376,6 +390,14 @@ using lab::RecordMeasurement;
 using lab::RegisterSample;
 using lab::ShippingAddress;
 
+// BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION (docs/spec/core/registry.md)
+// specialize ModelTraits<LabModel>/ActionTraits<Action> and wire each
+// action's dispatch entry at static-init time -- this is what makes
+// schemaJson<Action>() and the bridge's executeJson path work for these
+// types. Loggable::No opts the three pure-query/options-provider actions
+// below (ListSamples, ListCountries, ListCities) out of the action log:
+// they have no side effects worth journaling, unlike every other action
+// registered here.
 BRIDGE_REGISTER_MODEL(LabModel, "LabModel")
 BRIDGE_REGISTER_ACTION(LabModel, ComputeDryDensity, "ComputeDryDensity")
 BRIDGE_REGISTER_ACTION(LabModel, RecordMeasurement, "RecordMeasurement")

@@ -26,6 +26,11 @@ namespace lab {
 ///        `v-query` — exactly the existing convention for the two other
 ///        options providers.
 [[nodiscard]] inline std::string schemasJson() {
+    // Hand-unrolled, not a loop over an {name, schema} list: there is no
+    // runtime registry of action types to iterate here (each schemaJson<A>()
+    // call names its own compile-time type), so a loop would need its own
+    // parallel name/type table -- more indirection than this fixed, sub-ten
+    // entry list is worth.
     std::string out;
     out += "{\"ComputeDryDensity\":";
     out += morph::forms::schemaJson<ComputeDryDensity>();

@@ -11,10 +11,17 @@ lab_units.hpp     the application's unit system: enum + UnitTraits metadata
                   + consteval algebra (kg / m3 -> kg_per_m3 at compile time)
 lab_model.hpp     actions (Quantity fields, optionalFields opt-out, validate())
                   + LabModel + glz::json_schema descriptions + registration
-lab_schemas.hpp   the {actionType: schema} object every client consumes
+lab_wizard.hpp    IntakeWizard (a two-step flow over lab_model.hpp's actions)
+                  + LabApp, the app-shell descriptor (menu -> screens)
+lab_schemas.hpp   {actionType: schema}, {wizardId: schema}, the app-* document,
+                  and SamplesView (a list/master-detail view over ListSamples)
+                  -- every client-facing schema the demo serves, in one place
 main.cpp          console demo: --schemas | --emit-html | REPL
 gui_qml/          Qt Quick renderer of the same schemas (MORPH_BUILD_FORMS_QML=ON)
 ```
+
+Suggested reading order: `lab_units.hpp` → `lab_model.hpp` → `lab_wizard.hpp` →
+`lab_schemas.hpp` — each only names types the previous file already declared.
 
 ## Build
 
@@ -45,7 +52,7 @@ in `optionalFields`, `note` because it is `std::optional`:
     "x-decimalPlaces": 1
 },
 …
-"required": ["sampleId", "density"]
+"required": ["sampleId", "measuredAt", "density"]
 ```
 
 ## 2. HTML renderer + REPL round trip
@@ -109,6 +116,20 @@ See `docs/spec/forms/workflows_navigation.md` for the full `w-*`/`app-*`
 schema contract and the reference renderer's documented limitations
 (prefill does not visually resync a widget's displayed text; navigating
 away from a wizard screen and back resets its step).
+
+## 4. Views: the SamplesView list/master-detail screen
+
+`AppShell.qml` (above) doesn't route to it, so it's easy to miss:
+`lab_schemas.hpp`'s `SamplesView` — a `morph::views::CollectionView` over
+`ListSamples`, with row-open-to-edit (`EditSample`), a confirm-guarded row
+delete (`DeleteSample`), and a "New" collection action (`CreateSample`) — is
+rendered by `qml/Main.qml` (still buildable/importable, just no longer the
+default entry point), via `CollectionView.qml` (the shipped `MorphForms`
+reference renderer for the `v-*` view-schema layer). To see it, change
+`main.cpp`'s `engine.loadFromModule("LabFormsDemo", "AppShell")` to
+`"Main"` and rebuild `morph_forms_qml`.
+
+See `docs/spec/forms/views.md` for the full `v-*` schema contract.
 
 ## Tests
 
