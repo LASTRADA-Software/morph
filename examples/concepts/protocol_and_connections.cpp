@@ -37,6 +37,7 @@ struct InlineExecutor : morph::exec::IExecutor {
     void post(std::function<void()> task) override { task(); }
 };
 
+// Captures the single reply a RemoteServer::handle() call produces.
 struct CapturedReply {
     morph::wire::Envelope env;
     void operator()(const std::string& raw) { env = morph::wire::decode(raw); }
@@ -44,7 +45,10 @@ struct CapturedReply {
 
 }  // namespace
 
-// "ConnDemo" is this file's unique type-id prefix.
+// "ConnDemo" is this file's unique type-id prefix. File-scope, not the
+// anonymous namespace above: Glaze's reflection needs external linkage for
+// a registered model/action type (see journal_and_outbox.cpp's file-scope
+// comment for why), even though nothing outside this file uses these types.
 
 struct ConnDemoAction {
     int x = 0;
@@ -73,6 +77,8 @@ TEST_CASE("protocol negotiation: hello returns the server's supported version ra
 
     REQUIRE(reply.env.kind == "ok");
     morph::wire::ProtocolRange range;
+    // glz::read_json returns a falsy error code on success (a truthy value
+    // means a parse error), so REQUIRE_FALSE asserts the parse succeeded.
     REQUIRE_FALSE(glz::read_json(range, reply.env.body));
     REQUIRE(range.min == morph::wire::kProtocolVersion);
     REQUIRE(range.max == morph::wire::kProtocolVersion);

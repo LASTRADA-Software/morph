@@ -37,6 +37,7 @@ struct InlineExecutor : morph::exec::IExecutor {
     void post(std::function<void()> task) override { task(); }
 };
 
+// Captures the single reply a RemoteServer::handle() call produces.
 struct CapturedReply {
     morph::wire::Envelope env;
     void operator()(const std::string& raw) { env = morph::wire::decode(raw); }
@@ -44,7 +45,10 @@ struct CapturedReply {
 
 }  // namespace
 
-// "ObsDemo" is this file's unique type-id prefix.
+// "ObsDemo" is this file's unique type-id prefix. File-scope, not the
+// anonymous namespace above: Glaze's reflection needs external linkage for
+// a registered model/action type (see journal_and_outbox.cpp's file-scope
+// comment for why), even though nothing outside this file uses these types.
 
 struct ObsDemoAction {
     int x = 0;

@@ -40,7 +40,10 @@ struct CapturedReply {
 
 }  // namespace
 
-// "ValidationDemo" is this file's unique type-id prefix.
+// "ValidationDemo" is this file's unique type-id prefix. File-scope, not the
+// anonymous namespace above: Glaze's reflection needs external linkage for
+// a registered model/action type (see journal_and_outbox.cpp's file-scope
+// comment for why), even though nothing outside this file uses these types.
 
 struct ValidationDemoAction {
     std::string name;
@@ -56,6 +59,13 @@ struct ValidationDemoModel {
 
 BRIDGE_REGISTER_MODEL(ValidationDemoModel, "ValidationDemo_Model")
 BRIDGE_REGISTER_ACTION(ValidationDemoModel, ValidationDemoAction, "ValidationDemo_Action")
+
+// ── Server-side validation ───────────────────────────────────────────────────
+//
+// Reach for this when an action must satisfy a precondition regardless of
+// how it was submitted (a well-behaved GUI, a hand-crafted request, a buggy
+// client): a `validate()` member is enforced on the server dispatch path
+// itself, so a remote client cannot bypass it by skipping client-side checks.
 
 TEST_CASE("server-side validation: RemoteServer rejects an invalid action with ValidationError",
           "[concepts][validation]") {

@@ -7,6 +7,12 @@ observability, and graceful shutdown. Each file is a small, self-contained
 Catch2 test with heavily-commented golden-path usage; see `docs/spec/` for the
 full design reference of each feature.
 
+Start with `journal_and_outbox.cpp`: it explains (in a file-scope comment
+above its model/action structs) why every file below registers its demo
+types at file scope rather than in the anonymous namespace next to their
+`InlineExecutor`/`CapturedReply` scaffolding — a detail the other files
+don't repeat. The rest can be read in any order.
+
 - `journal_and_outbox.cpp` — attaching an action log, idempotency-key dedup,
   the transactional outbox pattern. See `docs/spec/journal/journal.md`.
 - `offline_queue_and_sync.cpp` — enqueue/drain/markDone, SyncWorker's retry

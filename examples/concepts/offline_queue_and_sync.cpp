@@ -34,7 +34,10 @@ using morph::offline::SyncWorker;
 //
 // Reach for this whenever an action can't be sent right now (no network, a
 // backend call failed) but must not be lost: park it in the queue instead of
-// discarding it, and replay it later once connectivity is back.
+// discarding it, and replay it later once connectivity is back. In a real
+// client, enqueue() is called from wherever a `Bridge`/`BridgeHandler` send
+// attempt fails (a caught connection error, not shown here) rather than
+// standing alone as it does in this example.
 
 TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") {
     InMemoryOfflineQueue queue;
@@ -64,7 +67,7 @@ TEST_CASE("offline queue: enqueue -> drain -> markDone", "[concepts][offline]") 
 
 TEST_CASE("offline queue: SyncWorker dead-letters an item that always fails to replay", "[concepts][offline][sync]") {
     InMemoryOfflineQueue queue;
-    queue.enqueue("poison-payload", "op-1");
+    queue.enqueue("poison-payload", "op-1");  // "op-1" is this item's idempotencyKey
 
     std::vector<QueueItem> deadLettered;
     SyncWorker worker{

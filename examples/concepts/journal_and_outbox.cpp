@@ -140,7 +140,7 @@ TEST_CASE("journal: setOutboxManaged suppresses auto-append; OutboxRelay deliver
         .actionType = "JournalDemo_Deposit",
         .payload = depositJson,
         .result = "20",
-        .principal = {},
+        .principal = {},  // the authenticated caller identity, if any (session::Context::principal); unused here
         .timestampMs = 0,
         .idempotencyKey = "acct-1-op-1",
     }};

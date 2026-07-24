@@ -8,7 +8,9 @@
 // pre-existing behavior exactly until a deployer calls `setLimitPolicy()`.
 // This example demonstrates `maxLiveModels`: the simplest knob to exercise
 // deterministically, with no timing involved (unlike `executeTimeout`/
-// `maxInFlightExecutes`, which need a slow action running concurrently).
+// `maxInFlightExecutes`, which need a slow action running concurrently --
+// out of scope for this deterministic example; see docs/spec/core/backend.md
+// for those two knobs).
 //
 // Full design reference: docs/spec/core/backend.md ("`LimitPolicy` — opt-in
 // resource limits").
@@ -31,6 +33,7 @@ struct InlineExecutor : morph::exec::IExecutor {
     void post(std::function<void()> task) override { task(); }
 };
 
+// Captures the single reply a RemoteServer::handle() call produces.
 struct CapturedReply {
     morph::wire::Envelope env;
     void operator()(const std::string& raw) { env = morph::wire::decode(raw); }
@@ -38,7 +41,10 @@ struct CapturedReply {
 
 }  // namespace
 
-// "LimitsDemo" is this file's unique type-id prefix.
+// "LimitsDemo" is this file's unique type-id prefix. File-scope, not the
+// anonymous namespace above: Glaze's reflection needs external linkage for
+// a registered model/action type (see journal_and_outbox.cpp's file-scope
+// comment for why), even though nothing outside this file uses these types.
 
 struct LimitsDemoAction {
     int x = 0;
@@ -49,6 +55,13 @@ struct LimitsDemoModel {
 
 BRIDGE_REGISTER_MODEL(LimitsDemoModel, "LimitsDemo_Model")
 BRIDGE_REGISTER_ACTION(LimitsDemoModel, LimitsDemoAction, "LimitsDemo_Action")
+
+// ── maxLiveModels ────────────────────────────────────────────────────────────
+//
+// Reach for this when a deployment must cap how many instances of a model can
+// be live at once (bounding memory/resource use per server): configure it
+// once via setLimitPolicy(), then every register is checked against the cap
+// automatically, with no per-call code at the call site.
 
 TEST_CASE("transport limits: maxLiveModels rejects a register beyond the cap", "[concepts][limits]") {
     InlineExecutor pool;
