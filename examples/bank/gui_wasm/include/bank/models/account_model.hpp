@@ -2,21 +2,36 @@
 #pragma once
 
 // WASM shadow of include/bank/models/account_model.hpp (in-memory backend).
+// Kept in lockstep with the desktop model: one account per instance, held in
+// memory, keyed by account id.
 
-#include <morph/core/registry.hpp>
+#include <cstdint>
 #include <morph/core/bridge.hpp>
+#include <morph/core/model_key.hpp>
+#include <morph/core/registry.hpp>
+#include <string>
 
 #include "bank/dto/account_dto.hpp"
+#include "bank/wasm/store.hpp"
 
 namespace bank {
 
-/// @brief Opens, lists, inspects, and closes customer accounts (in-memory).
+/// @brief One customer account, cached in the instance (in-memory backend).
 class AccountModel {
 public:
-    dto::AccountInfo execute(const dto::OpenAccount& action);
-    dto::AccountList execute(const dto::ListAccounts& action);
+    /// @brief Account id. Declaring this alias is what makes the model keyed.
+    using PrimaryKey = std::int64_t;
+
     dto::AccountInfo execute(const dto::GetAccount& action);
     dto::CommandResult execute(const dto::CloseAccount& action);
+
+private:
+    void hydrate(std::int64_t accountId);
+
+    wasm::AccountRow _row{};
+    std::string _owner;
+    std::int64_t _loadedId = 0;
+    std::uint64_t _seenVersion = 0;
 };
 
 }  // namespace bank
@@ -24,11 +39,10 @@ public:
 using bank::AccountModel;
 using bank::dto::CloseAccount;
 using bank::dto::GetAccount;
-using bank::dto::ListAccounts;
-using bank::dto::OpenAccount;
 
 BRIDGE_REGISTER_MODEL(AccountModel, "AccountModel")
-BRIDGE_REGISTER_ACTION(AccountModel, OpenAccount, "OpenAccount")
-BRIDGE_REGISTER_ACTION(AccountModel, ListAccounts, "ListAccounts")
 BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount")
 BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
+
+BRIDGE_KEY_FROM(GetAccount, &GetAccount::id);
+BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);

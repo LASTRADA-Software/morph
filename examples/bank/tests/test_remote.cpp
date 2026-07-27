@@ -20,6 +20,7 @@
 #include "bank/core/types.hpp"
 #include "bank/dto/account_dto.hpp"
 #include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank_test_support.hpp"
 
 using bank::testing::await;
@@ -73,9 +74,10 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     bank::testing::ensurePrincipal("olivia-remote");
 
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{bridge, &gui};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{bridge, &gui};
 
     SECTION("opening an account round-trips through JSON serialisation") {
-        auto info = await(accounts.execute(bank::dto::OpenAccount{
+        auto info = await(accountsOwner.execute(bank::dto::OpenAccount{
                               .kind = static_cast<int>(bank::AccountKind::Savings),
                               .currency = static_cast<int>(bank::Currency::GBP),
                           }),
@@ -86,7 +88,7 @@ TEST_CASE("AccountModel runs unchanged over a remote backend", "[remote]") {
     }
 
     SECTION("the authorizer rejects the forbidden action") {
-        auto info = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), gui);
+        auto info = await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), gui);
         REQUIRE_THROWS(await(accounts.execute(bank::dto::CloseAccount{.id = info.id}), gui));
     }
 }

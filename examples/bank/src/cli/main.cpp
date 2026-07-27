@@ -36,7 +36,7 @@
 #include "bank/dto/payment_dto.hpp"
 #include "bank/dto/statement_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/auth_model.hpp"
 #include "bank/models/budget_model.hpp"
 #include "bank/models/card_model.hpp"
@@ -79,7 +79,7 @@ void runScenario(morph::bridge::Bridge& bridge, morph::exec::MainThreadExecutor&
     std::println("\n========== {} ==========", label);
 
     morph::bridge::BridgeHandler<bank::AuthModel> auth{bridge, &gui};
-    morph::bridge::BridgeHandler<bank::AccountModel> accounts{bridge, &gui};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accounts{bridge, &gui};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{bridge, &gui};
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{bridge, &gui};
     morph::bridge::BridgeHandler<bank::PaymentModel> payments{bridge, &gui};

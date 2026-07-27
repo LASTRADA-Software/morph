@@ -10,7 +10,7 @@
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
 
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/payee_model.hpp"
 #include "bank/models/payment_model.hpp"
 #endif
@@ -46,7 +46,7 @@ private:
     void reloadAccounts();
 
     morph::bridge::BridgeHandler<bank::PayeeModel> _payeeModel;
-    morph::bridge::BridgeHandler<bank::AccountModel> _accountModel;
+    morph::bridge::BridgeHandler<bank::CustomerModel> _accountModel;
     morph::bridge::BridgeHandler<bank::PaymentModel> _paymentModel;
     QVariantList _payees;
     QVariantList _accounts;

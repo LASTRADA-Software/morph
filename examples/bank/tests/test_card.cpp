@@ -10,7 +10,7 @@
 #include "bank/core/types.hpp"
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/card_dto.hpp"
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/card_model.hpp"
 #include "bank_test_support.hpp"
 
@@ -28,7 +28,7 @@ std::string testConnection() {
 TEST_CASE("CardModel issues and manages cards", "[card]") {
     bank::app::App app{testConnection()};
     app.login("judy-card");
-    morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CardModel> cards{app.bridge(), app.gui()};
 
     const auto account = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;

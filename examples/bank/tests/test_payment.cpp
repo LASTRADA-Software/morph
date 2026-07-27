@@ -14,6 +14,7 @@
 #include "bank/dto/payee_dto.hpp"
 #include "bank/dto/payment_dto.hpp"
 #include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/payee_model.hpp"
 #include "bank/models/payment_model.hpp"
 #include "bank/models/transaction_model.hpp"
@@ -35,12 +36,13 @@ TEST_CASE("PaymentModel pays bills, schedules, and cancels", "[payment]") {
     bank::app::App app{testConnection()};
     app.login("ivan-pay");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::PaymentModel> payments{app.bridge(), app.gui()};
 
     const auto account =
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
+        await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
     await(txns.execute(bank::dto::Deposit{.accountId = account, .amountMinor = 50000}), app.guiLoop());
     const auto payee = await(payees.execute(bank::dto::AddPayee{.name = "Electric Co",
                                                                .iban = "DE89370400440532013000"}),

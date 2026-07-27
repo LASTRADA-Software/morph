@@ -9,7 +9,7 @@
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
 
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #endif
 
 namespace bankgui {
@@ -37,7 +37,7 @@ signals:
     void accountsChanged();
 
 private:
-    morph::bridge::BridgeHandler<bank::AccountModel> _model;
+    morph::bridge::BridgeHandler<bank::CustomerModel> _model;
     QVariantList _accounts;
     QString _totalBalance{QStringLiteral("—")};
     int _openCount{0};
