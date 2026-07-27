@@ -302,9 +302,20 @@ TEST_CASE("morph::bridge::Bridge: concurrent executeVia under repeated switchBac
 
     REQUIRE(resolved.load() == totalActions);
     REQUIRE(succeeded.load() + failed.load() == totalActions);
-    // Some actions must succeed — if every single one failed something is
-    // structurally broken (the snapshot-and-dispatch path never resolved).
-    REQUIRE(succeeded.load() > 0);
+
+    // The structural claim is that the snapshot-and-dispatch path still
+    // *resolves successfully* after repeated backend switching — not that it
+    // wins any particular race. Assert it against the now-quiesced bridge
+    // rather than against the churn above: under a thread-serialising tool
+    // (Valgrind runs every thread on one core) the switcher can legitimately
+    // cancel all 200 in-flight calls, which made a `succeeded > 0` check on the
+    // churn a coin flip rather than an invariant.
+    std::atomic<int> afterSwitching{0};
+    constexpr int settledActions = 5;
+    for (int idx = 0; idx < settledActions; ++idx) {
+        handler.execute(LoadCountAction{1}).then([&](int) { afterSwitching.fetch_add(1); });
+    }
+    REQUIRE(waitUntil([&] { return afterSwitching.load() == settledActions; }, 10s));
 }
 
 // ── morph::offline::NetworkMonitor: stop() called from onOnline does not deadlock ─────────────

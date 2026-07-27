@@ -381,6 +381,7 @@ public:
             }
         }
         _subscriptions.push_back({.binding = binding, .type = type, .sink = std::move(sink), .exec = exec});
+        _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
     }
 
     /// @brief Removes @p binding's subscription for @p type, if any.
@@ -392,6 +393,21 @@ public:
             auto owner = entry.binding.lock();
             return !owner || (owner.get() == binding.get() && entry.type == type);
         });
+        _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
+    }
+
+    /// @brief Whether any subscription is currently registered on this bridge.
+    ///
+    /// A single relaxed atomic load, so the overwhelmingly common case — a
+    /// process with no subscribers at all — pays nothing per result. Without
+    /// this, every successful action would build a `std::type_index`, copy its
+    /// result into a `std::any`, take `_subMtx` and walk the (empty)
+    /// subscription list before its `Completion` could resolve: a throughput
+    /// regression for every existing caller, on the hot path, to serve a feature
+    /// they are not using.
+    /// @return `true` if at least one subscription exists.
+    [[nodiscard]] bool hasSubscribers() const noexcept {
+        return _subscriptionCount.load(std::memory_order_relaxed) != 0U;
     }
 
     /// @brief Delivers @p value to every subscriber attached to instance @p mid.
@@ -421,6 +437,7 @@ public:
             // add/removeSubscription, which in a long-lived app with many
             // transient handlers is never.
             std::erase_if(_subscriptions, [](const InstanceSubscription& entry) { return entry.binding.expired(); });
+            _subscriptionCount.store(_subscriptions.size(), std::memory_order_relaxed);
             for (const auto& entry : _subscriptions) {
                 auto owner = entry.binding.lock();
                 if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
@@ -705,7 +722,7 @@ public:
                     // bridge's liveness token: a completion can in principle
                     // resolve after the Bridge is gone.
                     if constexpr (std::is_copy_constructible_v<R>) {
-                        if (!alive.expired()) {
+                        if (hasSubscribers() && !alive.expired()) {
                             publishResult(::morph::exec::detail::ModelId{raw}, std::type_index{typeid(R)},
                                           std::any{*typedResult});
                         }
@@ -797,6 +814,10 @@ private:
     };
     std::mutex _subMtx;
     std::vector<InstanceSubscription> _subscriptions;
+    // Mirrors _subscriptions.size() for the lock-free hasSubscribers() probe.
+    // Maintained under _subMtx; read relaxed off it. A stale-by-one read is
+    // harmless: publishResult re-checks under the lock and finds nothing.
+    std::atomic<std::size_t> _subscriptionCount{0};
     // Destroyed with the Bridge; handlers hold weak_ptrs to it (see liveness()).
     std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };
