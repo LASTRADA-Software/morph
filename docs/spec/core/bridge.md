@@ -380,6 +380,13 @@ existing subscriber.
 - **Only copy-constructible results are published.** A result type that cannot
   be copied is delivered to its caller's `Completion` as usual but is never
   boxed for subscribers.
+- **Fan-out is per `Bridge`, i.e. per client process.** This is the one place
+  subscriptions are narrower than instance sharing: an instance really is shared
+  across clients ([shared_instances.md](shared_instances.md)), but a result
+  produced by *another client* on that instance does not reach this client's
+  subscribers — there is no server-initiated frame, and both transports would
+  need an unsolicited-message path to carry one. Two handlers in one process see
+  each other's work; two clients do not, and must re-read to notice a change.
 
 
 ## Thread safety
