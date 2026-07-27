@@ -97,8 +97,17 @@ public:
             _clients.clear();
         }
         for (auto& client : clients) {
+            // `closed` first, so no client thread starts a *new* send; then
+            // shutdown without taking writeMtx. Taking it here would deadlock
+            // exactly when the shutdown is most needed: a client thread blocked
+            // in sendAll against a stalled peer's full socket buffer holds
+            // writeMtx for as long as that send is stuck, and close() has no
+            // timeout -- it is reached from the destructor. shutdownBoth() is
+            // documented safe from any thread and is itself the mechanism that
+            // unblocks that send (it fails, sendText catches, the thread exits
+            // and releases the lock). Locking to "protect" the socket would
+            // therefore wait on the very thing it is trying to interrupt.
             client->closed.store(true);
-            std::scoped_lock lock{client->writeMtx};
             client->socket.shutdownBoth();
         }
         for (auto& t : threads) {
@@ -110,8 +119,12 @@ public:
 
 private:
     struct ClientConnection {
-        explicit ClientConnection(::morph::net::detail::TcpSocket s) : socket{std::move(s)} {}
+        ClientConnection(::morph::net::detail::TcpSocket sock, ::morph::backend::ConnectionId connectionId)
+            : socket{std::move(sock)}, cid{connectionId} {}
         ::morph::net::detail::TcpSocket socket;
+        /// Scope every `register` on this connection belongs to, so dropping
+        /// the connection reclaims its models. See `RemoteServer::openConnection`.
+        ::morph::backend::ConnectionId cid{0};
         std::mutex writeMtx;
         std::atomic<bool> closed{false};
 
@@ -141,7 +154,7 @@ private:
             if (_closing.load()) {
                 return;
             }
-            auto conn = std::make_shared<ClientConnection>(std::move(clientSocket));
+            auto conn = std::make_shared<ClientConnection>(std::move(clientSocket), _server.openConnection());
             std::thread clientThread{[this, conn] { clientLoop(conn); }};
             {
                 std::scoped_lock lock{_clientsMtx};
@@ -152,6 +165,26 @@ private:
     }
 
     void clientLoop(const std::shared_ptr<ClientConnection>& conn) {
+        // Reclaim this connection's models however the loop exits — failed
+        // handshake, peer close, read error, or shutdown via close(). Without
+        // it every model registered over this transport outlived its connection
+        // forever: the scope machinery was wired into QtWebSocketServer only,
+        // and this server dispatched through the unscoped two-argument
+        // handle(). closeConnection() is idempotent, so the redundant call
+        // during close() (which joins these threads) is harmless.
+        struct ScopeGuard {
+            ScopeGuard(::morph::backend::RemoteServer& srv, ::morph::backend::ConnectionId connectionId)
+                : server{srv}, cid{connectionId} {}
+            ~ScopeGuard() { server.closeConnection(cid); }
+            ScopeGuard(const ScopeGuard&) = delete;
+            ScopeGuard& operator=(const ScopeGuard&) = delete;
+            ScopeGuard(ScopeGuard&&) = delete;
+            ScopeGuard& operator=(ScopeGuard&&) = delete;
+
+            ::morph::backend::RemoteServer& server;
+            ::morph::backend::ConnectionId cid;
+        } const guard{_server, conn->cid};
+
         std::string leftover;
         try {
             leftover = ::morph::net::detail::performServerHandshake(conn->socket);
@@ -181,6 +214,22 @@ private:
         }
     }
 
+    /// Best-effort control-frame write (a Close echo or a Pong). Failure to
+    /// send one is never worth propagating: the connection is either already
+    /// going away or will be noticed as gone by the next read.
+    static void sendControlFrame(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsOpcode opcode,
+                                 std::string_view payload) {
+        std::scoped_lock const lock{conn->writeMtx};
+        if (conn->closed.load() || !conn->socket.valid()) {
+            return;
+        }
+        try {
+            std::string const frame = ::morph::net::detail::encodeWsFrame(opcode, payload, /*mask=*/false);
+            conn->socket.sendAll(frame.data(), frame.size());
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch) — see the doc comment above
+        }
+    }
+
     // Returns false when the connection should stop reading (peer sent
     // Close, or a protocol error was detected).
     bool drainFrames(const std::shared_ptr<ClientConnection>& conn, ::morph::net::detail::WsFrameReader& reader) {
@@ -197,28 +246,12 @@ private:
                 return true;
             }
             if (frame->opcode == WsOpcode::kClose) {
-                {
-                    std::scoped_lock lock{conn->writeMtx};
-                    if (!conn->closed.load() && conn->socket.valid()) {
-                        try {
-                            std::string closeFrame = ::morph::net::detail::encodeWsFrame(WsOpcode::kClose, "", false);
-                            conn->socket.sendAll(closeFrame.data(), closeFrame.size());
-                        } catch (const std::exception&) {
-                        }
-                    }
-                }
+                sendControlFrame(conn, WsOpcode::kClose, "");
                 conn->closed.store(true);
                 return false;
             }
             if (frame->opcode == WsOpcode::kPing) {
-                std::scoped_lock lock{conn->writeMtx};
-                if (!conn->closed.load() && conn->socket.valid()) {
-                    try {
-                        std::string pong = ::morph::net::detail::encodeWsFrame(WsOpcode::kPong, frame->payload, false);
-                        conn->socket.sendAll(pong.data(), pong.size());
-                    } catch (const std::exception&) {
-                    }
-                }
+                sendControlFrame(conn, WsOpcode::kPong, frame->payload);
                 continue;
             }
             if (frame->opcode == WsOpcode::kPong) {
@@ -226,11 +259,14 @@ private:
             }
             if (frame->opcode == WsOpcode::kText) {
                 std::weak_ptr<ClientConnection> weak = conn;
-                _server.handle(frame->payload, [weak](const std::string& reply) {
-                    if (auto locked = weak.lock()) {
-                        locked->sendText(reply);
-                    }
-                });
+                _server.handle(
+                    frame->payload,
+                    [weak](const std::string& reply) {
+                        if (auto locked = weak.lock()) {
+                            locked->sendText(reply);
+                        }
+                    },
+                    conn->cid);
             }
         }
     }

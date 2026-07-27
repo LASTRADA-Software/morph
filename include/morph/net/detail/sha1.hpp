@@ -27,7 +27,10 @@ inline std::array<std::uint8_t, 20> sha1Digest(std::string_view message) {
     std::uint32_t h3 = 0x10325476;
     std::uint32_t h4 = 0xC3D2E1F0;
 
-    std::uint64_t const bitLen = static_cast<std::uint64_t>(message.size()) * 8u;
+    // message.size() is already std::size_t (== std::uint64_t on every
+    // platform morph::net builds for), so an explicit cast trips GCC's
+    // -Wuseless-cast under this project's warnings-as-errors policy.
+    std::uint64_t const bitLen = std::uint64_t{message.size()} * 8U;
     std::vector<std::uint8_t> data(message.begin(), message.end());
     data.push_back(std::uint8_t{0x80});
     while (data.size() % 64 != 56) {

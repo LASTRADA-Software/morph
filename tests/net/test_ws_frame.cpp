@@ -6,6 +6,7 @@
 #include <string>
 
 using morph::net::detail::encodeWsFrame;
+using morph::net::detail::WsFrame;
 using morph::net::detail::WsFrameReader;
 using morph::net::detail::WsOpcode;
 
@@ -72,11 +73,101 @@ TEST_CASE("WsFrameReader extracts two frames fed back-to-back in one buffer", "[
     REQUIRE_FALSE(reader.tryExtractFrame().has_value());
 }
 
-TEST_CASE("WsFrameReader rejects a fragmented (FIN=0) frame", "[net][frame]") {
-    std::string wire = encodeWsFrame(WsOpcode::kText, "oops", true);
-    wire[0] = static_cast<char>(static_cast<unsigned char>(wire[0]) & 0x7Fu);  // clear FIN
+// ── Fragmented messages (RFC 6455 §5.4) ─────────────────────────────────────
+// A peer fragments whenever a message exceeds its outgoing frame size, and
+// Qt's QWebSocket defaults that to 512 KiB -- so rejecting fragments broke
+// interop with the very transport this project ships, for every payload past
+// that size.
+
+namespace {
+// encodeWsFrame always sets FIN; rewrite byte 0 to build the fragment shapes a
+// real peer emits.
+// Extracts a frame that must be there. Returning by value (rather than
+// REQUIRE-ing an optional and then dereferencing it) keeps engagement provable
+// at every call site — Catch2's REQUIRE is a macro clang-tidy's optional-access
+// analysis cannot follow.
+WsFrame requireFrame(WsFrameReader& reader) {
+    auto frame = reader.tryExtractFrame();
+    if (!frame.has_value()) {
+        throw std::runtime_error("requireFrame: expected a complete message, got none");
+    }
+    return std::move(frame).value();
+}
+
+std::string fragmentFrame(WsOpcode opcode, const std::string& payload, bool fin) {
+    std::string wire = encodeWsFrame(opcode, payload, /*mask=*/true);
+    wire.at(0) = static_cast<char>((fin ? 0x80U : 0x00U) | (static_cast<unsigned>(opcode) & 0x0FU));
+    return wire;
+}
+}  // namespace
+
+TEST_CASE("WsFrameReader withholds an incomplete fragmented message", "[net][frame]") {
     WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kText, "first half ", /*fin=*/false));
+    // Not an error, just not a whole message yet.
+    REQUIRE_FALSE(reader.tryExtractFrame().has_value());
+}
+
+TEST_CASE("WsFrameReader reassembles a fragmented text message", "[net][frame]") {
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kText, "one ", /*fin=*/false));
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "two ", /*fin=*/false));
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "three", /*fin=*/true));
+
+    auto const frame = requireFrame(reader);
+    // The completed message carries the opcode of its *first* frame, not the
+    // continuation opcode the last one arrived with.
+    CHECK(frame.opcode == WsOpcode::kText);
+    CHECK(frame.payload == "one two three");
+    CHECK_FALSE(reader.tryExtractFrame().has_value());
+}
+
+TEST_CASE("WsFrameReader reassembles a message delivered in one buffer", "[net][frame]") {
+    WsFrameReader reader;
+    std::string wire = fragmentFrame(WsOpcode::kText, "a", /*fin=*/false);
+    wire += fragmentFrame(WsOpcode::kContinuation, "b", /*fin=*/false);
+    wire += fragmentFrame(WsOpcode::kContinuation, "c", /*fin=*/true);
+    wire += encodeWsFrame(WsOpcode::kText, "next", /*mask=*/true);
     reader.feed(wire);
+
+    CHECK(requireFrame(reader).payload == "abc");
+    CHECK(requireFrame(reader).payload == "next");
+}
+
+TEST_CASE("WsFrameReader passes control frames through mid-reassembly", "[net][frame]") {
+    // The RFC explicitly allows a control frame between the fragments of a
+    // data message; a ping arriving mid-message must be answerable without
+    // corrupting the message being assembled.
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kText, "start ", /*fin=*/false));
+    reader.feed(encodeWsFrame(WsOpcode::kPing, "hb", /*mask=*/true));
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "end", /*fin=*/true));
+
+    auto const ping = requireFrame(reader);
+    CHECK(ping.opcode == WsOpcode::kPing);
+    CHECK(ping.payload == "hb");
+
+    auto const message = requireFrame(reader);
+    CHECK(message.opcode == WsOpcode::kText);
+    CHECK(message.payload == "start end");
+}
+
+TEST_CASE("WsFrameReader rejects a continuation with no message in progress", "[net][frame]") {
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kContinuation, "orphan", /*fin=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a new data frame interrupting a fragmented message", "[net][frame]") {
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kText, "half", /*fin=*/false));
+    reader.feed(encodeWsFrame(WsOpcode::kText, "interrupting", /*mask=*/true));
+    REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
+}
+
+TEST_CASE("WsFrameReader rejects a fragmented control frame", "[net][frame]") {
+    WsFrameReader reader;
+    reader.feed(fragmentFrame(WsOpcode::kPing, "nope", /*fin=*/false));
     REQUIRE_THROWS_AS(reader.tryExtractFrame(), std::runtime_error);
 }
 

@@ -73,7 +73,10 @@ public:
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
         addrinfo* resolved = nullptr;
-        std::string const portStr = std::to_string(port);
+        // Widened explicitly: std::to_string has no uint16_t overload, and
+        // letting the integral promotion pick one trips GCC's -Wsign-promo
+        // (it would choose the signed `int` overload over `unsigned`).
+        std::string const portStr = std::to_string(static_cast<unsigned>(port));
         int const rc = ::getaddrinfo(host.c_str(), portStr.c_str(), &hints, &resolved);
         if (rc != 0 || resolved == nullptr) {
             throw std::runtime_error("TcpSocket::connect: getaddrinfo failed for " + host + ": " + ::gai_strerror(rc));
@@ -169,11 +172,24 @@ public:
     /// @return The accepted `TcpSocket`.
     /// @throws std::runtime_error if `::accept` fails (including the shutdown case above).
     TcpSocket accept() {
-        int const clientFd = ::accept(_fd, nullptr, nullptr);
-        if (clientFd < 0) {
+        for (;;) {
+            int const clientFd = ::accept(_fd, nullptr, nullptr);
+            if (clientFd >= 0) {
+                return TcpSocket{clientFd};
+            }
+            // EINTR is not a failure, just a signal delivered while blocked, and
+            // `recvSome`/`sendAll` already retry it. Without the same retry
+            // here, any signal the host happens to deliver (a profiler's timer,
+            // SIGCHLD, SIGWINCH) tears down the accept loop and the server
+            // silently stops taking connections. ECONNABORTED is deliberately
+            // *not* retried: `shutdownBoth()` is the documented way to break
+            // out of this call, and swallowing an abort risks spinning forever
+            // on a listener that is being torn down.
+            if (errno == EINTR) {
+                continue;
+            }
             throw std::runtime_error(std::string{"TcpSocket::accept: "} + std::strerror(errno));
         }
-        return TcpSocket{clientFd};
     }
 
     /// @brief Reads up to @p len bytes into @p buf.

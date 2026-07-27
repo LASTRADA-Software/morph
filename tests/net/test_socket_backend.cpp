@@ -62,7 +62,7 @@ TEST_CASE("SocketBackend: action result delivered via then", "[net][socket_backe
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer.port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
 
@@ -84,7 +84,7 @@ TEST_CASE("SocketBackend: exception delivered via onError", "[net][socket_backen
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer.port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
 
@@ -112,7 +112,7 @@ TEST_CASE("SocketBackend: many concurrent in-flight executes all resolve, matche
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer.port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
 
@@ -142,7 +142,7 @@ TEST_CASE("SocketBackend: two backends share one server with isolated model stat
     morph::net::SocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer.port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendA = std::make_unique<morph::net::SocketBackend>(url);
     auto backendB = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendA->waitForConnected());
@@ -191,7 +191,7 @@ TEST_CASE("SocketBackend: register after the server closes fails instead of hang
     auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
     REQUIRE(wsServer->listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer->port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
     morph::net::SocketBackend backend{url};
     REQUIRE(backend.waitForConnected());
 
@@ -250,7 +250,7 @@ TEST_CASE("SocketBackend: server dropping mid-call resolves the pending completi
     auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
     REQUIRE(wsServer->listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer->port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer->port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(backendPtr->waitForConnected());
 
@@ -292,7 +292,7 @@ TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net]
         auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
         REQUIRE(wsServer->listen());
         port = wsServer->port();
-        url = "ws://127.0.0.1:" + std::to_string(port);
+        url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port));
 
         backend = std::make_unique<morph::net::SocketBackend>(url, cfg);
         REQUIRE(backend->waitForConnected());
@@ -320,4 +320,92 @@ TEST_CASE("SocketBackend: reconnects to a fresh server on the same port", "[net]
 
     auto mid2 = backend->registerModel("SbEchoModel", nullptr);
     REQUIRE(mid2.v != 0U);
+}
+
+namespace {
+
+// Shared scaffolding for the reconnect tests: brings a server up, connects a
+// backend, installs `onReconnect`, then drops the server and starts a fresh one
+// on the same port so the backend's retry loop fires the handler. Extracted so
+// each test below is just its own assertions.
+struct ReconnectFixture {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    std::shared_ptr<morph::backend::RemoteServer> server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    std::unique_ptr<morph::net::SocketBackend> backend;
+    std::unique_ptr<morph::net::SocketServer> restarted;
+    std::uint16_t port = 0;
+
+    void bounce(const std::function<void()>& onReconnect) {
+        morph::net::SocketBackend::Config cfg;
+        cfg.initialReconnectDelay = std::chrono::milliseconds{50};
+        cfg.maxReconnectDelay = std::chrono::milliseconds{200};
+        {
+            auto first = std::make_unique<morph::net::SocketServer>(*server, 0);
+            if (!first->listen()) {
+                throw std::runtime_error("ReconnectFixture: initial listen failed");
+            }
+            port = first->port();
+            backend = std::make_unique<morph::net::SocketBackend>(
+                "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(port)), cfg);
+            if (!backend->waitForConnected()) {
+                throw std::runtime_error("ReconnectFixture: initial connect failed");
+            }
+            backend->setReconnectHandler(onReconnect);
+        }  // first server destroyed -> the backend observes the drop and retries
+
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        restarted = std::make_unique<morph::net::SocketServer>(*server, port);
+        if (!restarted->listen()) {
+            throw std::runtime_error("ReconnectFixture: re-listen failed");
+        }
+    }
+};
+
+}  // namespace
+
+TEST_CASE("SocketBackend: a reconnect handler that re-registers does not deadlock the transport",
+          "[net][socket_backend][disconnect]") {
+    // The handler used to run inline on the I/O thread from onConnected(),
+    // *before* readLoop() started. Any handler doing what a reconnect handler
+    // exists to do -- re-registering its models, which Bridge does via sendSync
+    // -- then blocked on _syncCv waiting for a reply only readLoop could
+    // deliver, on the very thread that was supposed to start readLoop. The wait
+    // has no timeout, so the transport wedged permanently.
+    //
+    // This test therefore fails by *hanging* on the old code, which ctest's
+    // per-test TIMEOUT turns into a failure.
+    ReconnectFixture fixture;
+    std::atomic<bool> handlerRan{false};
+    std::atomic<bool> handlerSucceeded{false};
+
+    fixture.bounce([&] {
+        handlerRan.store(true);
+        // The synchronous control call that used to deadlock here.
+        handlerSucceeded.store(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
+    });
+
+    spinUntil([&] { return handlerSucceeded.load(); }, 500);
+    CHECK(handlerRan.load());
+    CHECK(handlerSucceeded.load());
+
+    // The transport is still fully usable afterwards -- the handler's sendSync
+    // resolved rather than leaving _syncInFlight stuck set.
+    CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
+}
+
+TEST_CASE("SocketBackend: a throwing reconnect handler leaves the transport usable",
+          "[net][socket_backend][disconnect]") {
+    // The handler now runs on its own thread; an exception escaping it must not
+    // terminate that thread, or the *next* reconnect would silently never fire.
+    ReconnectFixture fixture;
+    std::atomic<int> handlerCalls{0};
+
+    fixture.bounce([&] {
+        handlerCalls.fetch_add(1);
+        throw std::runtime_error("handler blew up");
+    });
+
+    spinUntil([&] { return handlerCalls.load() > 0; }, 500);
+    CHECK(handlerCalls.load() > 0);
+    CHECK(fixture.backend->registerModel("SbEchoModel", nullptr).v != 0U);
 }

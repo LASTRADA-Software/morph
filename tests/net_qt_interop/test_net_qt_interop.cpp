@@ -101,7 +101,7 @@ TEST_CASE("SocketBackend interop: connects to a QtWebSocketServer and completes 
     morph::qt::QtWebSocketServer wsServer{*server, 0};
     REQUIRE(wsServer.listen());
 
-    std::string url = "ws://127.0.0.1:" + std::to_string(wsServer.port());
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
     auto backendPtr = std::make_unique<morph::net::SocketBackend>(url);
     REQUIRE(waitForConnectedPumpingQt(*backendPtr));
 

@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <functional>
 #include <morph/core/backend.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/wire.hpp>
 #include <mutex>
 #include <optional>
@@ -72,6 +73,7 @@ public:
           _cfg{cfg},
           _currentReconnectDelay{cfg.initialReconnectDelay} {
         _ioThread = std::thread{[this] { ioThreadMain(); }};
+        _handlerThread = std::thread{[this] { handlerThreadMain(); }};
     }
 
     /// @brief Shuts down the I/O thread and resolves any still-pending completions.
@@ -92,6 +94,18 @@ public:
         _reconnectCv.notify_all();
         if (_ioThread.joinable()) {
             _ioThread.join();
+        }
+        // Joined after _ioThread, not before: a reconnect handler parked in
+        // sendSync is released by onDisconnected()'s _syncCv notify, which only
+        // runs as ioThreadMain unwinds. Waking _handlerCv first would not free
+        // it -- that wait is on _syncCv.
+        {
+            std::scoped_lock const lock{_handlerMtx};
+            _handlerPending = false;
+        }
+        _handlerCv.notify_all();
+        if (_handlerThread.joinable()) {
+            _handlerThread.join();
         }
         cancelPending(std::make_exception_ptr(::morph::backend::DisconnectedError{}));
     }
@@ -267,13 +281,57 @@ private:
         _currentReconnectDelay = _cfg.initialReconnectDelay;
         _connectCv.notify_all();
         if (isReconnect) {
+            // Hand the callback to _handlerThread rather than running it here.
+            // onConnected() is called from ioThreadMain() immediately *before*
+            // readLoop() starts, and a reconnect handler is expected to
+            // re-register its models (Bridge::installReconnectHandler does
+            // exactly that), which goes through sendSync -> wait on _syncCv for
+            // a reply that only readLoop can ever deliver. Run inline, that
+            // wait blocks the one thread responsible for satisfying it: the
+            // transport deadlocks permanently, with no timeout to break it.
+            // Off-thread, the handler's sendSync overlaps readLoop as intended
+            // -- its request may even reach the socket before readLoop starts,
+            // which is harmless, since the reply simply waits in the kernel
+            // buffer.
+            std::scoped_lock const lock{_handlerMtx};
+            _handlerPending = true;
+            _handlerCv.notify_all();
+        }
+    }
+
+    /// Serializes reconnect-handler invocations off the I/O thread. Coalescing
+    /// via a flag (rather than queuing every request) is deliberate: if a second
+    /// reconnect lands while a handler is still running, re-running it once
+    /// afterwards is the correct catch-up, and it bounds concurrent handler runs
+    /// to one.
+    void handlerThreadMain() {
+        for (;;) {
             std::function<void()> handler;
             {
-                std::scoped_lock lock{_reconnectHandlerMtx};
+                std::unique_lock lock{_handlerMtx};
+                _handlerCv.wait(lock, [this] { return _handlerPending || _shuttingDown.load(); });
+                if (_shuttingDown.load()) {
+                    return;
+                }
+                _handlerPending = false;
+            }
+            {
+                std::scoped_lock const lock{_reconnectHandlerMtx};
                 handler = _reconnectHandler;
             }
-            if (handler) {
+            if (!handler) {
+                continue;
+            }
+            try {
                 handler();
+            } catch (const std::exception& exc) {
+                // A handler that throws (typically because the link dropped
+                // again mid-re-registration, surfacing as "disconnected") must
+                // not take this thread down: the next reconnect has to find it
+                // still waiting.
+                ::morph::log::logWarn(std::string{"[net::SocketBackend] reconnect handler threw: "} + exc.what());
+            } catch (...) {
+                ::morph::log::logWarn("[net::SocketBackend] reconnect handler threw a non-std exception");
             }
         }
     }
@@ -298,11 +356,25 @@ private:
         try {
             env = ::morph::wire::decode(payload);
         } catch (const std::exception&) {
-            std::scoped_lock lock{_syncMtx};
-            if (_syncInFlight) {
-                _syncReply = payload;
-                _syncCv.notify_all();
+            {
+                std::scoped_lock const lock{_syncMtx};
+                if (_syncInFlight) {
+                    // Hand the raw text to the parked caller so it can report
+                    // something better than "disconnected".
+                    _syncReply = payload;
+                    _syncCv.notify_all();
+                    return;
+                }
             }
+            // No sync waiter, and the callId is unreadable, so this reply cannot
+            // be matched to the execute it belongs to. Dropping it silently left
+            // that execute's Completion unsettled forever. Every message here is
+            // required to be one envelope, so an undecodable one means the
+            // peer's framing is no longer trustworthy: fail the pending calls
+            // rather than wait on a stream that may never produce a matching
+            // reply. Mirrors QtWebSocketBackend::onTextMessage.
+            cancelPending(std::make_exception_ptr(
+                std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
             return;
         }
         if (env.callId != 0U) {
@@ -458,10 +530,15 @@ private:
     std::mutex _reconnectHandlerMtx;
     std::function<void()> _reconnectHandler;
 
-    // Declared last: the constructor starts this thread after every other
-    // member above is fully constructed, so the thread body never observes a
+    std::mutex _handlerMtx;
+    std::condition_variable _handlerCv;
+    bool _handlerPending{false};
+
+    // Declared last: the constructor starts these threads after every other
+    // member above is fully constructed, so the thread bodies never observe a
     // partially-constructed `this`.
     std::thread _ioThread;
+    std::thread _handlerThread;
 };
 
 }  // namespace morph::net

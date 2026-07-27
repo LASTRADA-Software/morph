@@ -102,7 +102,9 @@ inline ParsedWsUrl parseWsUrl(std::string_view url) {
 inline std::string buildClientHandshakeRequest(const ParsedWsUrl& url, std::string_view key) {
     std::string req;
     req += "GET " + url.path + " HTTP/1.1\r\n";
-    req += "Host: " + url.host + ":" + std::to_string(url.port) + "\r\n";
+    // static_cast<unsigned>: see TcpSocket::connect — std::to_string has no
+    // uint16_t overload, and the promotion GCC would pick trips -Wsign-promo.
+    req += "Host: " + url.host + ":" + std::to_string(static_cast<unsigned>(url.port)) + "\r\n";
     req += "Upgrade: websocket\r\n";
     req += "Connection: Upgrade\r\n";
     req += "Sec-WebSocket-Key: " + std::string(key) + "\r\n";

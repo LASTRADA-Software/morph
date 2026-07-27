@@ -18,6 +18,8 @@
 #include <string>
 #include <thread>
 
+#include "../test_support.hpp"
+
 // ── Test model, registered process-wide (same pattern as tests/qt/test_qt_websocket.cpp) ──
 // Deliberately NOT in an anonymous namespace: glaze's reflection-based
 // get_name() needs these types to have external linkage (see
@@ -216,4 +218,98 @@ TEST_CASE("SocketServer: an action exception surfaces as an err reply, connectio
     auto okReply = client.receive();
     REQUIRE(okReply.kind == "ok");
     REQUIRE(okReply.body == "7");
+}
+
+// ── Connection-scoped reclamation over the raw-socket transport ─────────────
+// The scope machinery (RemoteServer::openConnection/closeConnection) was
+// originally wired into QtWebSocketServer only; SocketServer dispatched through
+// the unscoped two-argument handle(), so every model it registered outlived its
+// connection forever. These pin the raw-socket transport's half of it.
+
+TEST_CASE("SocketServer: dropping a client reclaims the models it registered", "[net][socket_server]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::uint64_t modelId = 0;
+    {
+        RawWsClient client{wsServer.port()};
+        client.send(morph::wire::makeRegister("NetEchoModel"));
+        auto regReply = client.receive();
+        REQUIRE(regReply.kind == "ok");
+        modelId = regReply.modelId;
+        REQUIRE(modelId != 0U);
+        REQUIRE(server->health().liveModels == 1U);
+    }  // client destructs: the socket closes and the server observes EOF
+
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 0U; }, std::chrono::seconds{5}));
+
+    // A late execute against the reclaimed id is answered, not serviced.
+    RawWsClient probe{wsServer.port()};
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.callId = 1;
+    execReq.modelId = modelId;
+    execReq.modelType = "NetEchoModel";
+    execReq.actionType = "NetEchoAction";
+    execReq.body = R"({"value":42})";
+    probe.send(execReq);
+    auto execReply = probe.receive();
+    REQUIRE(execReply.kind == "err");
+    REQUIRE(execReply.message == "model not found");
+}
+
+TEST_CASE("SocketServer: each client's models are reclaimed independently", "[net][socket_server]") {
+    morph::exec::ThreadPoolExecutor pool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    RawWsClient survivor{wsServer.port()};
+    survivor.send(morph::wire::makeRegister("NetEchoModel"));
+    auto survivorReg = survivor.receive();
+    REQUIRE(survivorReg.kind == "ok");
+
+    {
+        RawWsClient transient{wsServer.port()};
+        transient.send(morph::wire::makeRegister("NetEchoModel"));
+        REQUIRE(transient.receive().kind == "ok");
+        REQUIRE(server->health().liveModels == 2U);
+    }
+
+    // Only the departed client's instance goes; the survivor keeps working.
+    REQUIRE(morph::testing::waitUntil([&] { return server->health().liveModels == 1U; }, std::chrono::seconds{5}));
+
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.callId = 1;
+    execReq.modelId = survivorReg.modelId;
+    execReq.modelType = "NetEchoModel";
+    execReq.actionType = "NetEchoAction";
+    execReq.body = R"({"value":7})";
+    survivor.send(execReq);
+    auto execReply = survivor.receive();
+    REQUIRE(execReply.kind == "ok");
+    REQUIRE(execReply.body == "7");
+}
+
+TEST_CASE("SocketServer::close() reclaims every connected client's models", "[net][socket_server]") {
+    morph::exec::ThreadPoolExecutor pool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    auto wsServer = std::make_unique<morph::net::SocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    RawWsClient clientA{wsServer->port()};
+    clientA.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(clientA.receive().kind == "ok");
+    RawWsClient clientB{wsServer->port()};
+    clientB.send(morph::wire::makeRegister("NetEchoModel"));
+    REQUIRE(clientB.receive().kind == "ok");
+    REQUIRE(server->health().liveModels == 2U);
+
+    // close() joins the client threads, each of which runs its own scope
+    // teardown on the way out.
+    wsServer->close();
+    REQUIRE(server->health().liveModels == 0U);
 }
