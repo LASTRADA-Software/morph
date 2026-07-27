@@ -428,9 +428,14 @@ public:
         if (scopeIter == _connectionScopes.end()) {
             return;
         }
-        for (const auto& mid : scopeIter->second) {
-            _models.erase(mid);
-            _owners.erase(mid);
+        for (const auto& [mid, refs] : scopeIter->second) {
+            // Release exactly as many references as this connection held. A
+            // shared instance another connection is still attached to survives;
+            // a private one (count 1, no directory entry) is erased outright,
+            // which is byte-for-byte the previous behaviour.
+            for (std::size_t idx = 0; idx < refs; ++idx) {
+                releaseInstanceLocked(mid);
+            }
             _modelConnection.erase(mid);
         }
         _connectionScopes.erase(scopeIter);
@@ -582,6 +587,205 @@ public:
     }
 
 private:
+    /// @brief Releases one reference to @p mid, destroying it at zero. Caller holds `_regMtx`.
+    ///
+    /// A private instance has no `_attachCount` entry and is erased outright —
+    /// byte-for-byte the pre-sharing behaviour. A shared instance is erased, and
+    /// removed from the directory, only when its last attachment goes away, so
+    /// one client's `deregister` or dropped connection never tears an instance
+    /// out from under another client still using it.
+    /// @param mid Instance to release.
+    /// @return `true` if this call destroyed the instance.
+    bool releaseInstanceLocked(::morph::exec::detail::ModelId mid) {
+        if (auto refIter = _attachCount.find(mid); refIter != _attachCount.end()) {
+            refIter->second -= 1;
+            if (refIter->second > 0) {
+                return false;
+            }
+            _attachCount.erase(refIter);
+            if (auto keyIter = _sharedKeyOf.find(mid); keyIter != _sharedKeyOf.end()) {
+                _directory.erase(keyIter->second);
+                _sharedKeyOf.erase(keyIter);
+            }
+        }
+        _models.erase(mid);
+        _owners.erase(mid);
+        return true;
+    }
+
+    /// @brief Drops one of @p cid's references to @p mid, then releases the instance.
+    ///        Caller holds `_regMtx`.
+    /// @param mid Instance to release.
+    /// @param cid Connection whose reference is being dropped; `0` for unscoped.
+    void releaseScopedLocked(::morph::exec::detail::ModelId mid, ConnectionId cid) {
+        if (cid != 0) {
+            if (auto scopeIter = _connectionScopes.find(cid); scopeIter != _connectionScopes.end()) {
+                if (auto refIter = scopeIter->second.find(mid); refIter != scopeIter->second.end()) {
+                    refIter->second -= 1;
+                    if (refIter->second == 0) {
+                        scopeIter->second.erase(refIter);
+                    }
+                }
+            }
+        }
+        if (releaseInstanceLocked(mid)) {
+            _modelConnection.erase(mid);
+        }
+    }
+
+    /// @brief Records a new attachment of @p mid to @p cid. Caller holds `_regMtx`.
+    /// @param mid Instance being attached.
+    /// @param cid Connection attaching it; `0` for unscoped (records nothing).
+    /// @return `false` if @p cid's scope was already closed, in which case nothing was recorded.
+    bool noteScopeAttachLocked(::morph::exec::detail::ModelId mid, ConnectionId cid) {
+        if (cid == 0) {
+            return true;
+        }
+        auto scopeIter = _connectionScopes.find(cid);
+        if (scopeIter == _connectionScopes.end()) {
+            return false;
+        }
+        scopeIter->second[mid] += 1;
+        _modelConnection[mid] = cid;
+        return true;
+    }
+
+    /// @brief Attaches a configured `LogProvider`'s log to a freshly created holder.
+    /// @param holder Newly created instance.
+    /// @param env    Envelope carrying `typeId` and `contextKey`.
+    void attachLogIfConfigured(::morph::model::detail::IModelHolder& holder, const ::morph::wire::Envelope& env) {
+        if (env.contextKey.empty()) {
+            return;
+        }
+        LogProvider provider;
+        {
+            std::scoped_lock const lock{_logProviderMtx};
+            provider = _logProvider;
+        }
+        if (provider) {
+            if (auto log = provider(env.typeId, env.contextKey)) {
+                holder.attachActionLog(std::move(log), env.contextKey);
+            }
+        }
+    }
+
+    /// @brief Acquires (or creates) the shared instance for `(typeId, primary)` and replies.
+    ///
+    /// The register-or-attach core shared by the `register` branch (when
+    /// `shared` is set) and by `attach`. A shared instance is recorded with an
+    /// **empty owner principal**: `IAuthorizer::authorizeInstance`'s documented
+    /// `ownerPrincipal == ctx.principal` policy would otherwise reject every
+    /// client but the one that created it, defeating cross-client sharing
+    /// outright. Gating access to a shared model is therefore `authorize`'s job
+    /// (per type and action) or the model's own — see docs/spec/security.md.
+    ///
+    /// @param env            Decoded request; uses `typeId`, `primary`, `contextKey`, `callId`.
+    /// @param reply          Reply sink; always invoked exactly once.
+    /// @param cid            Connection scope, or `0` for unscoped.
+    /// @param releaseCurrent Instance to release first (an `attach` re-point), or `ModelId{0}`.
+    void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
+                               ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
+        LimitPolicy limits;
+        {
+            std::scoped_lock const lock{_limitsMtx};
+            limits = _limits;
+        }
+        DirectoryKey dirKey{env.typeId, env.primary};
+        {
+            std::scoped_lock const lock{_regMtx};
+            if (releaseCurrent.v != 0U) {
+                releaseScopedLocked(releaseCurrent, cid);
+            }
+            if (auto found = _directory.find(dirKey); found != _directory.end()) {
+                auto const mid = found->second;
+                _attachCount[mid] += 1;
+                if (!noteScopeAttachLocked(mid, cid)) {
+                    releaseInstanceLocked(mid);
+                    reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+                    return;
+                }
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+                return;
+            }
+        }
+        // Directory miss. Construct outside the lock, exactly as the private
+        // register path does, then re-check under the insert lock: a concurrent
+        // request for the same key may have won the race while we built ours.
+        auto holder = _registry.create(env.typeId);
+        attachLogIfConfigured(*holder, env);
+        ::morph::exec::detail::ModelId const fresh{nextOpaqueId()};
+        {
+            std::scoped_lock const lock{_regMtx};
+            if (auto found = _directory.find(dirKey); found != _directory.end()) {
+                auto const mid = found->second;
+                _attachCount[mid] += 1;
+                if (!noteScopeAttachLocked(mid, cid)) {
+                    releaseInstanceLocked(mid);
+                    reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+                    return;
+                }
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+                return;
+            }
+            if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
+                reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+                return;
+            }
+            if (!noteScopeAttachLocked(fresh, cid)) {
+                reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+                return;
+            }
+            _models[fresh] = std::move(holder);
+            _owners[fresh] = std::string{};  // shared instances are ownerless, by design
+            _directory.emplace(dirKey, fresh);
+            _sharedKeyOf.emplace(fresh, std::move(dirKey));
+            _attachCount[fresh] = 1;
+        }
+        reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, fresh.v)));
+    }
+
+    /// @brief Files a live instance under a primary key, in place.
+    ///
+    /// The existing holder of a key always wins: promoting onto a key another
+    /// instance already holds is a silent no-op rather than a displacement, so a
+    /// promotion can never steal an entry handlers are already attached to.
+    /// @param env Decoded request; uses `typeId`, `primary`, `modelId`.
+    void applyAssignLocked(const ::morph::wire::Envelope& env) {
+        ::morph::exec::detail::ModelId const mid{env.modelId};
+        if (env.primary.empty() || !_models.contains(mid)) {
+            return;
+        }
+        DirectoryKey dirKey{env.typeId, env.primary};
+        if (_directory.contains(dirKey)) {
+            return;
+        }
+        if (auto prevIter = _sharedKeyOf.find(mid); prevIter != _sharedKeyOf.end()) {
+            _directory.erase(prevIter->second);
+            _sharedKeyOf.erase(prevIter);
+        }
+        _directory.emplace(dirKey, mid);
+        _sharedKeyOf.emplace(mid, std::move(dirKey));
+        _attachCount.try_emplace(mid, 1);
+    }
+
+    /// @brief Answers an `instances` request with the live shared keys of a type.
+    /// @param env   Decoded request; uses `typeId` and `callId`.
+    /// @param reply Reply sink; always invoked exactly once.
+    void handleInstances(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply) {
+        std::vector<std::string> keys;
+        {
+            std::scoped_lock const lock{_regMtx};
+            for (const auto& [dirKey, mid] : _directory) {
+                if (dirKey.first == env.typeId) {
+                    keys.push_back(dirKey.second);
+                }
+            }
+        }
+        std::string body;
+        (void)glz::write_json(keys, body);
+        reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(body))));
+    }
+
     // One flat switch over the wire's `kind` discriminator. Splitting it would
     // scatter the authorization sequence each branch depends on across helpers,
     // with no reader benefit.
@@ -598,7 +802,8 @@ private:
         // the existing register/execute validation runs — while `deregister`
         // (and any other kind) still flows through unchanged, so a client can
         // still tear its models down cleanly during the drain window.
-        if ((env.kind == "register" || env.kind == "execute") && _shuttingDown.load(std::memory_order_acquire)) {
+        if ((env.kind == "register" || env.kind == "execute" || env.kind == "attach") &&
+            _shuttingDown.load(std::memory_order_acquire)) {
             reply(::morph::wire::encode(::morph::wire::makeErr("server shutting down", env.callId)));
             return;
         }
@@ -645,19 +850,15 @@ private:
                     reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
                     return;
                 }
-                auto holder = _registry.create(env.typeId);
-                if (!env.contextKey.empty()) {
-                    LogProvider provider;
-                    {
-                        std::scoped_lock const lock{_logProviderMtx};
-                        provider = _logProvider;
-                    }
-                    if (provider) {
-                        if (auto log = provider(env.typeId, env.contextKey)) {
-                            holder->attachActionLog(std::move(log), env.contextKey);
-                        }
-                    }
+                // A `shared` register naming a primary is a register-or-attach
+                // against the directory; everything below is the private path,
+                // unchanged.
+                if (env.shared && !env.primary.empty()) {
+                    acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{0});
+                    return;
                 }
+                auto holder = _registry.create(env.typeId);
+                attachLogIfConfigured(*holder, env);
                 // Record the owner principal for per-instance authorization:
                 // env.session's principal is already the verified identity
                 // stamped above (empty if the authorizer does not
@@ -702,7 +903,7 @@ private:
                         if (scopeIter == _connectionScopes.end()) {
                             scopeAlreadyClosed = true;
                         } else {
-                            scopeIter->second.insert(mid);
+                            scopeIter->second[mid] += 1;
                             _modelConnection[mid] = cid;
                         }
                     }
@@ -725,6 +926,47 @@ private:
                     return;
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+            } else if (env.kind == "attach") {
+                if (env.typeId.empty()) {
+                    throw std::runtime_error("attach requires a typeId");
+                }
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    env.session.principal = std::move(*verified);
+                } else {
+                    env.session.principal.clear();
+                }
+                if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
+                acquireSharedInstance(env, reply, cid, ::morph::exec::detail::ModelId{env.modelId});
+            } else if (env.kind == "assign") {
+                if (env.typeId.empty()) {
+                    throw std::runtime_error("assign requires a typeId");
+                }
+                {
+                    std::scoped_lock const lock{_regMtx};
+                    applyAssignLocked(env);
+                }
+                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, env.modelId)));
+            } else if (env.kind == "instances") {
+                if (env.typeId.empty()) {
+                    throw std::runtime_error("instances requires a typeId");
+                }
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    env.session.principal = std::move(*verified);
+                } else {
+                    env.session.principal.clear();
+                }
+                // Enumeration is a read channel over the directory: gate it with
+                // `authorize` for the model type (empty action id) so a deployer
+                // can refuse listing without refusing use. It discloses the live
+                // key set to anyone admitted — see docs/spec/security.md.
+                if (!_authorizer->authorize(env.session, env.typeId, {})) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
+                handleInstances(env, reply);
             } else if (env.kind == "deregister") {
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
                 ::morph::exec::detail::ModelId const mid{env.modelId};
@@ -749,17 +991,25 @@ private:
                 }
                 {
                     std::scoped_lock const lock{_regMtx};
-                    _models.erase(mid);
-                    _owners.erase(mid);
-                    // Keep the connection scope's membership set in sync: an
-                    // explicit wire deregister removes the id from its scope
-                    // too, so a later closeConnection never double-erases it.
+                    releaseInstanceLocked(mid);
+                    // Keep the connection scope's membership in sync: an
+                    // explicit wire deregister drops one of this connection's
+                    // references, so a later closeConnection never
+                    // double-releases it.
                     if (auto connIter = _modelConnection.find(mid); connIter != _modelConnection.end()) {
                         if (auto scopeIter = _connectionScopes.find(connIter->second);
                             scopeIter != _connectionScopes.end()) {
-                            scopeIter->second.erase(mid);
+                            auto refIter = scopeIter->second.find(mid);
+                            if (refIter != scopeIter->second.end()) {
+                                refIter->second -= 1;
+                                if (refIter->second == 0) {
+                                    scopeIter->second.erase(refIter);
+                                }
+                            }
                         }
-                        _modelConnection.erase(connIter);
+                        if (!_models.contains(mid)) {
+                            _modelConnection.erase(connIter);
+                        }
                     }
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
@@ -1024,13 +1274,26 @@ private:
     // and the scoped handle(msg, reply, cid) overload). Guarded by _regMtx —
     // the same lock as _models/_owners — so scope membership can never desync
     // from instance existence.
-    std::unordered_map<ConnectionId,
-                       std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash>>
+    // Value is a *count* per instance, not a set: one connection may attach the
+    // same shared instance from two handlers, and closing the connection must
+    // release both references or the instance leaks. A private instance always
+    // has a count of exactly 1.
+    std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
+                                                        ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
     // Owning connection recorded per scoped instance; absent means unscoped
     // (registered via the two-argument handle()/handleInline()).
     std::unordered_map<::morph::exec::detail::ModelId, ConnectionId, ::morph::exec::detail::ModelIdHash>
         _modelConnection;
+    // Shared-instance directory: (typeId, primary) -> ModelId, its reverse, and
+    // the cross-connection attach count. Guarded by _regMtx alongside
+    // _models/_owners so directory membership can never desync from instance
+    // existence. Only instances registered with `shared` set and a non-empty
+    // primary appear; a private instance has no entry in any of the three.
+    using DirectoryKey = std::pair<std::string, std::string>;
+    std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
+    std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
+    std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
     std::atomic<uint64_t> _nextId{0};
     std::atomic<uint64_t> _nextConnectionId{0};
     std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};
@@ -1113,6 +1376,89 @@ public:
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
         throw std::runtime_error("register failed: " + reply.message);
+    }
+
+    /// @brief Registers or attaches to the server's shared instance for @p identity.
+    ///
+    /// Sends a `shared` register, so the server returns the live instance for
+    /// `(typeId, primary)` when one exists rather than creating a second. An
+    /// empty primary degrades to the private path.
+    /// @param typeId   String type-id sent in the `register` message.
+    /// @param factory  Ignored — the server constructs via its own registry.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @return `ModelId` of the shared (or newly created) instance.
+    /// @throws std::runtime_error if the server replies with an error.
+    ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        detail::InstanceIdentity identity) override {
+        if (identity.primary.empty()) {
+            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+        }
+        auto reply =
+            ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeRegisterShared(
+                typeId, std::string{identity.primary}, std::string{identity.contextKey}))));
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error("register failed: " + reply.message);
+    }
+
+    /// @brief Re-points from @p current to the server's shared instance for @p identity.
+    ///
+    /// One `attach` request rather than a deregister/register pair, so the
+    /// re-pointing client cannot lose its slot to `LimitPolicy::maxLiveModels`
+    /// between releasing the old instance and acquiring the new one.
+    /// @param typeId   String type-id sent in the `attach` message.
+    /// @param factory  Ignored — the server constructs via its own registry.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @param current  Instance currently held, or `ModelId{0}` if none.
+    /// @return `ModelId` of the instance now attached to.
+    /// @throws std::runtime_error if the server replies with an error.
+    ::morph::exec::detail::ModelId attachModel(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
+        if (identity.primary.empty()) {
+            if (current.v != 0U) {
+                deregisterModel(current);
+            }
+            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+        }
+        auto reply = ::morph::wire::decode(_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v))));
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error("attach failed: " + reply.message);
+    }
+
+    /// @brief Files a live server-side instance under @p primary.
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id.
+    /// @param primary Canonical string encoding of the key to file it under.
+    void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                       std::string_view primary) override {
+        if (primary.empty() || mid.v == 0U) {
+            return;
+        }
+        (void)_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v)));
+    }
+
+    /// @brief Asks the server for the live shared primary keys of @p typeId.
+    /// @param typeId String type-id to enumerate.
+    /// @return Canonical key strings of the live shared instances.
+    /// @throws std::runtime_error if the server replies with an error.
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        auto reply =
+            ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId))));
+        if (reply.kind != "ok") {
+            throw std::runtime_error("instances failed: " + reply.message);
+        }
+        std::vector<std::string> keys;
+        if (auto errCode = glz::read_json(keys, reply.body)) {
+            throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, reply.body));
+        }
+        return keys;
     }
 
     /// @brief Deregisters the model on the server. Processed inline; safe from any thread.

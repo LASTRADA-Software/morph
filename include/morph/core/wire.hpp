@@ -46,6 +46,14 @@ inline constexpr std::uint32_t kProtocolVersion = 1;
 /// - `"register"`  — client requests model creation. Uses `typeId`, and
 ///                   optionally `contextKey` (the new instance's stable
 ///                   identity, e.g. an account id — see `RemoteServer::setLogProvider`).
+///                   With `shared` set, additionally uses `primary` and becomes
+///                   a register-or-attach against the shared directory.
+/// - `"attach"`    — client re-points at a different `primary` of `typeId`,
+///                   releasing `modelId` if non-zero. Replies `ok` with the
+///                   target instance's id in `modelId`.
+/// - `"assign"`    — client files live `modelId` under `primary` of `typeId`.
+/// - `"instances"` — client asks for the live shared primary keys of `typeId`.
+///                   Replies `ok` with a JSON array of key strings in `body`.
 /// - `"deregister"` — client destroys an instance. Uses `modelId`.
 /// - `"execute"`   — client dispatches an action. Uses `callId`, `modelId`,
 ///                   `modelType`, `actionType`, `body`, and optionally `session`.
@@ -68,6 +76,29 @@ struct Envelope {
     ///        gets no action log attached even if a `LogProvider` is configured.
     ///        Ignored on every kind other than `register`.
     std::string contextKey;
+
+    /// @brief Primary key of the instance being registered or attached to.
+    ///
+    /// Carried on `register` (when `shared` is set) and on `attach`, always as
+    /// the key's canonical string encoding (`morph::model::keyToString`)
+    /// whatever its C++ type, so the server's directory needs one map type
+    /// rather than one per key type. Empty means "no primary" — the instance is
+    /// anonymous and cannot be shared. Ignored on every other kind.
+    ///
+    /// Distinct from `contextKey`, which continues to mean only "entity key for
+    /// the action log". A keyed model will normally set both to the same value,
+    /// but conflating the fields would change behaviour for callers already
+    /// setting `contextKey` for journal purposes.
+    std::string primary;
+
+    /// @brief Whether a `register` should join the shared instance directory.
+    ///
+    /// `true` makes the request a *register-or-attach*: the server returns the
+    /// existing instance for `(typeId, primary)` if one is live, otherwise
+    /// creates it and enters it in the directory. `false` (the default, and the
+    /// value every pre-existing client sends) is today's behaviour exactly — a
+    /// private instance, invisible to the directory.
+    bool shared = false;
 
     /// @brief Existing model instance id for `deregister`, `execute`, `ok(register)`.
     uint64_t modelId = 0;
@@ -121,6 +152,79 @@ inline Envelope makeRegister(std::string typeId, std::string contextKey = {}) {
     env.kind = "register";
     env.typeId = std::move(typeId);
     env.contextKey = std::move(contextKey);
+    return env;
+}
+
+/// @brief Builds a shared (register-or-attach) `register` envelope.
+///
+/// The server returns the live instance for `(typeId, primary)` if one exists,
+/// otherwise creates it and enters it in the shared directory. A shared instance
+/// is recorded with no owner principal, so `IAuthorizer::authorizeInstance`'s
+/// documented `ownerPrincipal == ctx.principal` policy does not lock the second
+/// client out of an instance the first created — see
+/// docs/planned/shared_model_instances.md.
+///
+/// @param typeId     Model type id to register or attach to.
+/// @param primary    Canonical string encoding of the instance's primary key.
+/// @param contextKey Optional entity key for the action log (default: none).
+inline Envelope makeRegisterShared(std::string typeId, std::string primary, std::string contextKey = {}) {
+    Envelope env;
+    env.kind = "register";
+    env.typeId = std::move(typeId);
+    env.primary = std::move(primary);
+    env.contextKey = std::move(contextKey);
+    env.shared = true;
+    return env;
+}
+
+/// @brief Builds an `attach` envelope — re-points a client at a different primary.
+///
+/// Semantically a `deregister` + shared `register` pair, made a single request
+/// so a re-pointing handler cannot lose its slot to `LimitPolicy::maxLiveModels`
+/// between releasing the old instance and acquiring the new one.
+///
+/// @param typeId  Model type id.
+/// @param primary Canonical string encoding of the primary key to attach to.
+/// @param modelId Instance the client is currently attached to; `0` if none.
+inline Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0) {
+    Envelope env;
+    env.kind = "attach";
+    env.typeId = std::move(typeId);
+    env.primary = std::move(primary);
+    env.modelId = modelId;
+    env.shared = true;
+    return env;
+}
+
+/// @brief Builds an `assign` envelope — files a live instance under a primary key.
+///
+/// The promotion half of keyed instances: an action that creates its own entity
+/// runs on a not-yet-keyed instance, and only the reply carries the generated
+/// key. Assigning promotes that same instance in place, so nothing the create
+/// did is stranded on a throwaway.
+/// @param typeId  Model type id.
+/// @param primary Canonical string encoding of the key to file the instance under.
+/// @param modelId Live instance to promote.
+inline Envelope makeAssign(std::string typeId, std::string primary, uint64_t modelId) {
+    Envelope env;
+    env.kind = "assign";
+    env.typeId = std::move(typeId);
+    env.primary = std::move(primary);
+    env.modelId = modelId;
+    env.shared = true;
+    return env;
+}
+
+/// @brief Builds an `instances` envelope — asks for the live shared keys of a type.
+///
+/// The reply's `body` is a JSON array of canonical key strings. Only instances
+/// created through a shared `register`/`attach` are listed; a private instance
+/// is invisible to the directory by construction.
+/// @param typeId Model type id to enumerate.
+inline Envelope makeInstances(std::string typeId) {
+    Envelope env;
+    env.kind = "instances";
+    env.typeId = std::move(typeId);
     return env;
 }
 

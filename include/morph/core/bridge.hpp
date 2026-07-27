@@ -7,7 +7,9 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <type_traits>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -18,6 +20,7 @@
 #include "../session/session.hpp"
 #include "backend.hpp"
 #include "completion.hpp"
+#include "model_key.hpp"
 #include "registry.hpp"
 
 namespace morph::bridge {
@@ -145,6 +148,21 @@ struct HandlerBinding {
     /// can attach a log to the instance it creates. See `IBackend::registerModelWithContext`.
     std::string contextKey;
 
+    /// @brief Canonical string encoding of this instance's primary key.
+    ///
+    /// Empty until a keyed action or an explicit `attach` supplies one. Only
+    /// meaningful when `shared` is set; a private binding never consults it.
+    /// Mutated only under `Bridge::_mtx`.
+    std::string primary;
+
+    /// @brief Whether this binding participates in the shared instance directory.
+    ///
+    /// Set once at construction from `BridgeHandler`'s `Sharing` template
+    /// argument and never changed. A shared binding defers its backend
+    /// registration until it has a primary, so `currentId` stays `0` — and
+    /// `executeVia` fails fast on "handler not bound" — until then.
+    bool shared = false;
+
     /// @brief Current `ModelId` value in the active backend (0 = unbound).
     std::atomic<uint64_t> currentId{0};
 };
@@ -229,6 +247,108 @@ public:
         _handlers.push_back(binding);
     }
 
+    /// @brief Creates a shared, initially **unattached** binding for `Model`.
+    ///
+    /// Unlike `registerHandler<Model>()`, this registers nothing on the backend:
+    /// a shared handler has no instance until a keyed action or an explicit
+    /// `attach` tells it which one it wants. The binding is tracked from the
+    /// start so `switchBackend()` knows about it, but it stays unbound
+    /// (`currentId == 0`) until then.
+    ///
+    /// @tparam Model Concrete model type. Must have a registered `ModelTraits`.
+    /// @return Shared pointer to the new, unattached binding.
+    template <typename Model>
+    std::shared_ptr<detail::HandlerBinding> registerSharedHandler() {
+        auto binding = std::make_shared<detail::HandlerBinding>();
+        binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
+        binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
+        binding->shared = true;
+        std::scoped_lock const lock{_mtx};
+        _handlers.push_back(binding);
+        return binding;
+    }
+
+    /// @brief Attaches (or re-points) @p binding to the shared instance for @p primary.
+    ///
+    /// Idempotent: attaching to the primary a binding already holds is a no-op,
+    /// so a keyed action repeated against the same instance costs nothing. A
+    /// different primary re-points the binding — the previous instance is
+    /// released and survives only if another handler still holds it.
+    ///
+    /// The binding's `contextKey` is set to @p primary as well, so a keyed
+    /// model's journal entries carry the entity key without the caller
+    /// arranging it separately.
+    ///
+    /// @tparam Model Concrete model type.
+    /// @param binding Shared binding, as returned by `registerSharedHandler<Model>()`.
+    /// @param primary Canonical string encoding of the primary key to attach to.
+    template <typename Model>
+    void attachHandler(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
+        std::scoped_lock const lock{_mtx};
+        if (binding->primary == primary && binding->currentId.load() != 0U) {
+            return;
+        }
+        binding->contextKey = primary;
+        auto newId = loadBackend()->attachModel(binding->typeId, binding->modelFactory,
+                                                {.contextKey = binding->contextKey, .primary = primary},
+                                                ::morph::exec::detail::ModelId{binding->currentId.load()});
+        binding->primary = std::move(primary);
+        binding->currentId.store(newId.v);
+    }
+
+    /// @brief Gives @p binding an anonymous instance if it does not have one yet.
+    ///
+    /// Used before a result-keyed action: such an action generates the key it
+    /// will be filed under, so it has to run *somewhere* first. The instance it
+    /// gets is private (empty primary, invisible to the directory) until
+    /// `assignHandlerPrimary` promotes it in place once the key is known.
+    /// @param binding Shared binding to bind.
+    void ensureBound(const std::shared_ptr<detail::HandlerBinding>& binding) {
+        std::scoped_lock const lock{_mtx};
+        if (binding->currentId.load() != 0U) {
+            return;
+        }
+        auto newId = loadBackend()->registerModelShared(binding->typeId, binding->modelFactory,
+                                                        {.contextKey = binding->contextKey, .primary = {}});
+        binding->currentId.store(newId.v);
+    }
+
+    /// @brief Files @p binding's current instance under @p primary, in place.
+    ///
+    /// The instance keeps everything the creating action just did — nothing is
+    /// re-created and nothing is stranded. A no-op if another instance already
+    /// holds that key; the existing holder always wins.
+    /// @tparam Model Concrete model type.
+    /// @param binding Shared binding whose instance is being promoted.
+    /// @param primary Canonical string encoding of the key to file it under.
+    template <typename Model>
+    void assignHandlerPrimary(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
+        std::scoped_lock const lock{_mtx};
+        uint64_t const raw = binding->currentId.load();
+        if (raw == 0U || primary.empty()) {
+            return;
+        }
+        loadBackend()->assignPrimary(::morph::exec::detail::ModelId{raw}, binding->typeId, primary);
+        binding->contextKey = primary;
+        binding->primary = std::move(primary);
+    }
+
+    /// @brief Returns @p binding's current primary key, or empty if unattached.
+    /// @param binding Binding to inspect.
+    /// @return Canonical key string, or an empty string when unattached.
+    [[nodiscard]] std::string bindingPrimary(const std::shared_ptr<detail::HandlerBinding>& binding) {
+        std::scoped_lock const lock{_mtx};
+        return binding->primary;
+    }
+
+    /// @brief Lists the live shared primary keys of `Model` on the active backend.
+    /// @tparam Model Concrete model type.
+    /// @return Canonical key strings, in unspecified order.
+    template <typename Model>
+    [[nodiscard]] std::vector<std::string> listInstancesOf() {
+        return loadBackend()->listInstances(std::string{::morph::model::ModelTraits<Model>::typeId()});
+    }
+
     /// @brief Installs a default session context that `executeVia` stamps onto the
     ///        `ActionCall` of every subsequent call.
     ///
@@ -291,8 +411,19 @@ public:
                     if (!binding) {
                         continue;
                     }
-                    auto newId = newShared->registerModelWithContext(binding->typeId, binding->modelFactory,
-                                                                     binding->contextKey);
+                    // A shared binding that never attached has no instance to
+                    // re-create: it stays live and unbound, and acquires one on
+                    // the new backend the first time it is attached.
+                    if (binding->shared && binding->primary.empty()) {
+                        live.push_back(weak);
+                        continue;
+                    }
+                    auto newId = binding->shared
+                                     ? newShared->registerModelShared(
+                                           binding->typeId, binding->modelFactory,
+                                           {.contextKey = binding->contextKey, .primary = binding->primary})
+                                     : newShared->registerModelWithContext(binding->typeId, binding->modelFactory,
+                                                                           binding->contextKey);
                     staged.emplace_back(binding, newId.v);
                     live.push_back(weak);
                 }
@@ -381,7 +512,8 @@ public:
     ///         fails its validator).
     template <typename Model, typename Action>
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> executeVia(
-        const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec) {
+        const std::shared_ptr<detail::HandlerBinding>& binding, Action action, ::morph::exec::IExecutor* cbExec,
+        std::function<void(const typename ::morph::model::ActionTraits<Action>::Result&)> onResult = {}) {
         using R = ::morph::model::ActionTraits<Action>::Result;
 
         auto backend = loadBackend();
@@ -459,7 +591,7 @@ public:
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
-            .then([typedState](const std::shared_ptr<void>& vAny) {
+            .then([typedState, onResult = std::move(onResult)](const std::shared_ptr<void>& vAny) {
                 // Guard the value-forwarding: if R's move/copy throws (or the cast
                 // is somehow wrong), route the exception to the typed completion's
                 // error sink instead of letting it escape the callback executor —
@@ -468,7 +600,14 @@ public:
                 // and std::terminate. Mirrors the forwarding guard in remote.hpp's
                 // SimulatedRemoteBackend::execute. See docs/spec/bridge.md.
                 try {
-                    typedState->setValue(std::move(*static_cast<R*>(vAny.get())));
+                    auto* const typedResult = static_cast<R*>(vAny.get());
+                    // Runs before the value is moved out and before the caller's
+                    // own .then, so a result-sourced primary key is adopted by
+                    // the binding before any user code observes the result.
+                    if (onResult) {
+                        onResult(*typedResult);
+                    }
+                    typedState->setValue(std::move(*typedResult));
                 } catch (...) {
                     typedState->setException(std::current_exception());
                 }
@@ -478,7 +617,7 @@ public:
     }
 
 private:
-    template <typename>
+    template <typename, typename>
     friend class BridgeHandler;
 
     /// @brief Weak observer of this bridge's lifetime, handed to each handler.
@@ -548,6 +687,28 @@ private:
     std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };
 
+/// @brief `BridgeHandler` sharing policy: private, one instance per handler.
+///
+/// The default, and what every pre-existing call site gets. Such a handler
+/// registers its own instance at construction and never enters the shared
+/// directory, so two `BridgeHandler<M>` objects are two independent models —
+/// byte-for-byte the behaviour morph has always had.
+struct NoSharing {};
+
+/// @brief `BridgeHandler` sharing policy: joins the shared instance directory.
+///
+/// A shared handler registers **nothing** at construction. It acquires an
+/// instance the first time a keyed action or an explicit `attach()` names a
+/// primary key, and every other `AllowShared` handler naming that same key —
+/// in this process or, for a remote backend, in any other client — reaches the
+/// same instance. Releasing the last such handler destroys it.
+///
+/// A shared handler that only ever runs *keyless* actions never attaches, and
+/// its `execute` fails fast with "handler not bound": there is no instance to
+/// run against and inventing a private one would silently defeat the sharing
+/// the caller asked for. Attach first — see docs/planned/shared_model_instances.md.
+struct AllowShared {};
+
 /// @brief RAII wrapper that binds a single model type to a `Bridge`.
 ///
 /// On construction, registers a `HandlerBinding` on the bridge. On destruction,
@@ -564,10 +725,13 @@ private:
 /// - `reset<A>()` discards the in-progress draft of `A`.
 ///
 /// @tparam Model Concrete model type.
-template <typename Model>
+template <typename Model, typename Sharing = NoSharing>
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
 class BridgeHandler {
 public:
+    /// @brief Whether this handler participates in the shared instance directory.
+    static constexpr bool kShared = std::is_same_v<Sharing, AllowShared>;
+
     /// @brief Constructs and registers the handler using the default model factory.
     ///
     /// @param bridge   The bridge to register on.
@@ -576,8 +740,10 @@ public:
         : _bridge{bridge},
           _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
-          _binding{bridge.template registerHandler<Model>()},
+          _binding{makeBinding(bridge)},
           _subs{std::make_shared<SubscriberState>()} {
+        static_assert(!kShared || ::morph::model::KeyedModel<Model>,
+                      "BridgeHandler<Model, AllowShared> requires Model to declare a PrimaryKey alias");
         _subs->bridge = &_bridge;
         _subs->binding = _binding;
         _subs->guiExec = _guiExec;
@@ -627,7 +793,101 @@ public:
     /// @return Completion that resolves on the GUI executor.
     template <typename Action>
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> execute(Action action) {
-        return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
+        if constexpr (kShared && ::morph::model::detail::PayloadKeyed<Action>) {
+            // The action names its instance: attach (or re-point) before
+            // dispatching, so the call lands on the instance it asked for.
+            _bridge.template attachHandler<Model>(_binding, ::morph::model::ActionKeyTraits<Action>::key(action));
+        }
+        if constexpr (kShared && ::morph::model::detail::ResultKeyed<Action>) {
+            // The action *creates* the instance and its result carries the
+            // generated key, exactly as a database insert returns its primary
+            // key. Adopt it before any user callback observes the result, so a
+            // .then() can immediately run further actions on the new instance.
+            using R = ::morph::model::ActionTraits<Action>::Result;
+            // The action generates its own key, so it must run before the key
+            // exists. Give the handler an anonymous instance to run on, then
+            // promote *that* instance once the reply names it — re-pointing to a
+            // fresh one instead would strand whatever the create just did.
+            _bridge.ensureBound(_binding);
+            auto* const bridgePtr = &_bridge;
+            auto binding = _binding;
+            return _bridge.template executeVia<Model, Action>(
+                _binding, std::move(action), _guiExec, [bridgePtr, binding](const R& result) {
+                    bridgePtr->template assignHandlerPrimary<Model>(
+                        binding, ::morph::model::ActionKeyTraits<Action>::template keyOfResult<R>(result));
+                });
+        } else {
+            return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
+        }
+    }
+
+    /// @brief Attaches (or re-points) this handler to the instance for @p key.
+    ///
+    /// Creates the instance if no live instance holds @p key, otherwise joins the
+    /// existing one. Re-pointing an already-attached handler releases the old
+    /// instance, which survives only if another handler still holds it.
+    ///
+    /// The primary is deliberately **not** write-once: naming a different key is
+    /// how a screen switches which entity it is looking at. Instances never
+    /// change their own identity — the *handler* moves — so a key always maps to
+    /// exactly one instance and no collision case can arise.
+    ///
+    /// @tparam M Defaulted to `Model`; never named explicitly. Present only so the
+    ///         signature is instantiated lazily, since `PrimaryKeyOf` is
+    ///         ill-formed for an unkeyed model.
+    /// @param key Primary key of the instance to attach to.
+    template <typename M = Model>
+    void attach(const ::morph::model::PrimaryKeyOf<M>& key)
+        requires kShared
+    {
+        _bridge.template attachHandler<Model>(_binding, ::morph::model::keyToString(key));
+    }
+
+    /// @brief This handler's current primary key, or `nullopt` if unattached.
+    /// @tparam M Defaulted to `Model`; never named explicitly. See `attach`.
+    /// @return The attached key, or `nullopt` before the first attach.
+    template <typename M = Model>
+    [[nodiscard]] std::optional<::morph::model::PrimaryKeyOf<M>> primary()
+        requires kShared
+    {
+        auto raw = _bridge.bindingPrimary(_binding);
+        if (raw.empty()) {
+            return std::nullopt;
+        }
+        return ::morph::model::keyFromString<::morph::model::PrimaryKeyOf<M>>(raw);
+    }
+
+    /// @brief Snapshot of the live shared instance keys for `Model`.
+    ///
+    /// Asynchronous even in local mode: the directory is backend state, and in
+    /// remote mode answering costs a round trip. Returning a bare `std::vector`
+    /// would work in-process and force a different call site everywhere else,
+    /// breaking the local/remote symmetry the framework is built on.
+    ///
+    /// The result is a snapshot, stale the moment it arrives — another client may
+    /// attach or release before the callback runs. Treat a returned key as "was
+    /// live recently", never as a guarantee that a later `attach` finds the same
+    /// instance.
+    ///
+    /// @tparam M Defaulted to `Model`; never named explicitly. See `attach`.
+    /// @return Completion resolving on the GUI executor with the live keys.
+    template <typename M = Model>
+    [[nodiscard]] ::morph::async::Completion<std::vector<::morph::model::PrimaryKeyOf<M>>> instances()
+        requires kShared
+    {
+        using Key = ::morph::model::PrimaryKeyOf<M>;
+        auto state = std::make_shared<::morph::async::detail::CompletionState<std::vector<Key>>>();
+        ::morph::async::Completion<std::vector<Key>> comp{state, _guiExec};
+        try {
+            std::vector<Key> keys;
+            for (const auto& raw : _bridge.template listInstancesOf<Model>()) {
+                keys.push_back(::morph::model::keyFromString<Key>(raw));
+            }
+            state->setValue(std::move(keys));
+        } catch (...) {
+            state->setException(std::current_exception());
+        }
+        return comp;
     }
 
     /// @brief Type-erased execute: looks up the action by its registered
@@ -646,6 +906,17 @@ public:
                                                                       std::string_view bodyJson) {
         return ActionExecuteRegistry::instance().execute(std::string{::morph::model::ModelTraits<Model>::typeId()},
                                                          actionType, this, bodyJson);
+    }
+
+    /// @brief Creates this handler's binding: deferred when shared, immediate otherwise.
+    /// @param bridge Bridge to create the binding on.
+    /// @return The new binding.
+    static std::shared_ptr<detail::HandlerBinding> makeBinding(Bridge& bridge) {
+        if constexpr (kShared) {
+            return bridge.template registerSharedHandler<Model>();
+        } else {
+            return bridge.template registerHandler<Model>();
+        }
     }
 
     /// @brief The executor used to deliver this handler's `Completion` callbacks.

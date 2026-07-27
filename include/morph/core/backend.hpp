@@ -53,6 +53,22 @@ struct ActionCall {
     ::morph::session::Context session;
 };
 
+/// @brief The two identities a model instance can carry, passed together.
+///
+/// Bundled into one struct rather than passed as two adjacent `string_view`
+/// parameters because they are trivially swappable at a call site and mean
+/// entirely different things: transposing them would silently file journal
+/// entries under the directory key and share instances under the log's entity
+/// key. Keeping them named at every call site makes that mistake unwritable.
+struct InstanceIdentity {
+    /// @brief Entity key for the action log; empty if none. See `journal::LogEntry::entityKey`.
+    std::string_view contextKey;
+
+    /// @brief Canonical string encoding of the primary key; empty if the
+    ///        instance is anonymous and therefore unshareable.
+    std::string_view primary;
+};
+
 /// @brief Abstract interface for execution backends (local, remote, …).
 ///
 /// A backend owns model instances and dispatches actions against them.
@@ -88,7 +104,103 @@ struct IBackend {
         return registerModel(typeId, std::move(factory));
     }
 
+    /// @brief Registers or attaches to the shared instance holding @p primary.
+    ///
+    /// A *register-or-attach*: if an instance for `(typeId, primary)` is already
+    /// live in the backend's shared directory, its id is returned and its attach
+    /// count incremented — no new instance is created and @p factory is not
+    /// called. Otherwise a new instance is created, entered in the directory,
+    /// and returned with an attach count of one.
+    ///
+    /// An empty @p primary means "no identity": the call degrades to
+    /// `registerModelWithContext`, producing a private instance that never
+    /// enters the directory and can never be shared.
+    ///
+    /// The default implementation ignores @p primary and forwards to
+    /// `registerModelWithContext`, so a backend that has not implemented sharing
+    /// keeps its existing one-instance-per-caller behaviour rather than silently
+    /// handing two callers the same instance.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @return Id of the shared (or newly created) instance.
+    virtual ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        InstanceIdentity identity) {
+        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    }
+
+    /// @brief Re-points from @p current to the shared instance holding @p primary.
+    ///
+    /// The default implementation releases @p current (when non-zero) and then
+    /// calls `registerModelShared`, which is exactly right for an in-process
+    /// backend. Backends behind a wire protocol override this with the single
+    /// `attach` request so a re-pointing client cannot lose its slot to
+    /// `LimitPolicy::maxLiveModels` between the release and the acquire.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @param current    Instance currently held, or `ModelId{0}` if none.
+    /// @return Id of the instance now attached to.
+    virtual ::morph::exec::detail::ModelId attachModel(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        InstanceIdentity identity, ::morph::exec::detail::ModelId current) {
+        if (current.v != 0U) {
+            deregisterModel(current);
+        }
+        return registerModelShared(typeId, std::move(factory), identity);
+    }
+
+    /// @brief Enters an already-live instance into the directory under @p primary.
+    ///
+    /// The *promotion* half of keyed instances, and what makes a result-sourced
+    /// key work without losing state: an action that creates its own entity runs
+    /// on an instance that does not yet have a key, and the key only exists once
+    /// the result comes back. Re-pointing to a freshly created instance would
+    /// strand everything the create just did, so instead the instance the action
+    /// ran on is given the generated key in place.
+    ///
+    /// A no-op when @p primary is empty, when @p mid is not live, or when another
+    /// instance already holds that key — the existing holder always wins, so a
+    /// promotion can never silently displace a directory entry other handlers
+    /// are already attached to.
+    ///
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id — the directory's first key component.
+    /// @param primary Canonical string encoding of the key to file it under.
+    virtual void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                               std::string_view primary) {
+        (void)mid;
+        (void)typeId;
+        (void)primary;
+    }
+
+    /// @brief Lists the primary keys of live shared instances of @p typeId.
+    ///
+    /// Only instances created through `registerModelShared`/`attachModel` with a
+    /// non-empty primary appear; a private instance is invisible to the
+    /// directory by construction. The result is a snapshot and is stale the
+    /// moment it is returned.
+    ///
+    /// Synchronous, matching `registerModel`, which already blocks on remote
+    /// backends. The asynchronous surface users see is
+    /// `BridgeHandler::instances()`, which wraps this in a `Completion` so the
+    /// call site reads identically local and remote.
+    ///
+    /// @param typeId String type-id to enumerate.
+    /// @return Canonical key strings of the live shared instances; empty by default.
+    virtual std::vector<std::string> listInstances(const std::string& typeId) {
+        (void)typeId;
+        return {};
+    }
+
     /// @brief Removes the model identified by @p mid from the backend.
+    ///
+    /// For a shared instance this *decrements* its attach count and destroys the
+    /// instance only when the count reaches zero, so one caller releasing an
+    /// instance never tears it out from under another that is still attached.
     virtual void deregisterModel(::morph::exec::detail::ModelId mid) = 0;
 
     /// @brief Dispatches @p call against the model identified by @p mid.
@@ -195,11 +307,100 @@ public:
         return mid;
     }
 
-    /// @brief Removes the model with @p mid. Thread-safe.
-    /// @param mid Id returned by a prior `registerModel()` call.
+    /// @brief Registers or attaches to the shared instance holding @p primary.
+    ///
+    /// An empty @p primary bypasses the directory entirely and produces a
+    /// private instance, exactly as `registerModel` does.
+    /// @param typeId     String type-id of the model — the directory's first key component.
+    /// @param factory    Callable that constructs the `IModelHolder`; not called on an attach.
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @return Id of the shared (or newly created) instance.
+    ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        detail::InstanceIdentity identity) override {
+        if (identity.primary.empty()) {
+            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+        }
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
+        DirectoryKey dirKey{typeId, std::string{identity.primary}};
+        std::scoped_lock const lock{_regMtx};
+        if (auto found = _directory.find(dirKey); found != _directory.end()) {
+            _attachCount[found->second] += 1;
+            return found->second;
+        }
+        ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
+        auto holder = factory();
+        if (holder->isBackendChangeAware()) {
+            _changeAware.insert(mid);
+        }
+        _models[mid] = std::move(holder);
+        _directory.emplace(dirKey, mid);
+        _sharedKeyOf.emplace(mid, std::move(dirKey));
+        _attachCount[mid] = 1;
+        return mid;
+    }
+
+    /// @brief Enters an already-live instance into the directory under @p primary. Thread-safe.
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id — the directory's first key component.
+    /// @param primary Canonical string encoding of the key to file it under.
+    void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                       std::string_view primary) override {
+        if (primary.empty()) {
+            return;
+        }
+        std::scoped_lock const lock{_regMtx};
+        if (!_models.contains(mid)) {
+            return;
+        }
+        DirectoryKey dirKey{typeId, std::string{primary}};
+        if (_directory.contains(dirKey)) {
+            return;
+        }
+        if (auto prevIter = _sharedKeyOf.find(mid); prevIter != _sharedKeyOf.end()) {
+            _directory.erase(prevIter->second);
+            _sharedKeyOf.erase(prevIter);
+        }
+        _directory.emplace(dirKey, mid);
+        _sharedKeyOf.emplace(mid, std::move(dirKey));
+        _attachCount.try_emplace(mid, 1);
+    }
+
+    /// @brief Lists the primary keys of live shared instances of @p typeId. Thread-safe.
+    /// @param typeId String type-id to enumerate.
+    /// @return Canonical key strings of the live shared instances, in unspecified order.
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        std::vector<std::string> keys;
+        std::scoped_lock const lock{_regMtx};
+        for (const auto& [dirKey, mid] : _directory) {
+            if (dirKey.first == typeId) {
+                keys.push_back(dirKey.second);
+            }
+        }
+        return keys;
+    }
+
+    /// @brief Removes the model with @p mid, or releases one attachment to it. Thread-safe.
+    ///
+    /// A private instance is erased outright. A shared instance has its attach
+    /// count decremented and is erased — and removed from the directory — only
+    /// when that count reaches zero, so releasing one handler never destroys an
+    /// instance another handler still holds.
+    /// @param mid Id returned by a prior `registerModel()`/`registerModelShared()` call.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
         std::scoped_lock const lock{_regMtx};
+        if (auto refIter = _attachCount.find(mid); refIter != _attachCount.end()) {
+            refIter->second -= 1;
+            if (refIter->second > 0) {
+                return;
+            }
+            _attachCount.erase(refIter);
+            if (auto keyIter = _sharedKeyOf.find(mid); keyIter != _sharedKeyOf.end()) {
+                _directory.erase(keyIter->second);
+                _sharedKeyOf.erase(keyIter);
+            }
+        }
         _models.erase(mid);
         _changeAware.erase(mid);
     }
@@ -367,6 +568,17 @@ private:
     // `notifyBackendChanged()` never needs to inspect a model it doesn't have
     // to. Always a subset of `_models`' keys.
     std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _changeAware;
+    // Shared-instance directory: (typeId, primary) -> ModelId, plus the reverse
+    // lookup and per-instance attach count. All three are maintained under
+    // _regMtx alongside _models, so directory membership can never desync from
+    // instance existence — the same invariant RemoteServer's connection scopes
+    // maintain. Only instances registered with a non-empty primary appear here;
+    // a private instance has no entry in any of the three, which is exactly what
+    // makes deregisterModel's decrement path a no-op for it.
+    using DirectoryKey = std::pair<std::string, std::string>;
+    std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
+    std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
+    std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
