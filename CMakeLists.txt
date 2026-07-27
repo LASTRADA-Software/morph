@@ -342,6 +342,22 @@ endif()
 if(MORPH_BUILD_OFFLINE_SQLITE)
     find_package(SQLite3 REQUIRED)
 
+    # FindSQLite3 reports success but does not always leave `SQLite3::SQLite3`
+    # resolvable at generate time (observed on the ubuntu-24.04 runner, which
+    # fails with "the link interface ... contains SQLite3::SQLite3 but the
+    # target was not found" while printing "Found SQLite3" moments earlier).
+    # Synthesise the target from the variables the module *does* set, and
+    # promote it to GLOBAL either way so every subdirectory that consumes
+    # morph::offline_sqlite can see it.
+    if(NOT TARGET SQLite3::SQLite3)
+        add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
+        set_target_properties(SQLite3::SQLite3 PROPERTIES
+            IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+    else()
+        set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
+    endif()
+
     add_library(morph_offline_sqlite INTERFACE)
     add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
     target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)

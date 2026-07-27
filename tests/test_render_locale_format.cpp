@@ -68,10 +68,13 @@ TEST_CASE("A zoned DateTime display shift round-trips to the identical canonical
 // reported it malformed.
 
 namespace {
-// Spelled as escapes rather than literal bytes so the intent is unambiguous
-// in the source and the test does not depend on this file's own encoding.
-constexpr std::string_view kNarrowNbsp = "\u202f";  // U+202F, 3 UTF-8 bytes
-constexpr std::string_view kNbsp = "\u00a0";        // U+00A0, 2 UTF-8 bytes
+// Spelled as explicit UTF-8 bytes rather than \u universal-character-names:
+// MSVC rejects the latter in a narrow literal when the code page cannot
+// represent the character (warning C4566, fatal under this project's
+// warnings-as-errors policy), and the byte sequence is what the test is
+// actually about.
+constexpr std::string_view kNarrowNbsp = "\xE2\x80\xAF";  // U+202F, 3 UTF-8 bytes
+constexpr std::string_view kNbsp = "\xC2\xA0";            // U+00A0, 2 UTF-8 bytes
 }  // namespace
 
 TEST_CASE("render::normalizeLocaleNumber accepts a multi-byte group separator", "[render][locale]") {
