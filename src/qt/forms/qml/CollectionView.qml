@@ -131,8 +131,22 @@ Frame {
     // "Dispatch: the screen is still just action calls") — a form field not
     // named in v-rowAction's bind starts at its own default, unprefilled.
     function prefill(form) {
+        if (!form)
+            return
+        // Clear first, always. modalForm/detailForm are single instances
+        // created once inside their Dialog and reused for every row, and the
+        // loop below only writes the fields v-rowAction names in `bind` --
+        // so without this, anything else kept the value left there while
+        // editing the *previous* row. Since DynamicForm.revalidate()
+        // auto-submits the moment the form is `ready`, opening row 2 after
+        // editing row 1 fired the row action with row 2's id and row 1's
+        // leftover values: a silent write of data the user neither entered nor
+        // saw. Done unconditionally (before the early return below) so closing
+        // the editor also leaves a clean form behind.
+        form.resetFields()
+
         const rowAction = root.view["v-rowAction"]
-        if (!rowAction || !root.editorRow || !form)
+        if (!rowAction || !root.editorRow)
             return
         const bind = rowAction.bind || {}
         for (const actionField in bind) {

@@ -270,15 +270,25 @@ delete/create are issued purely through the existing
 `controller.submitIfValid(actionType, bodyJson)` / `replyReceived` surface —
 no new controller method was needed.
 
-Row-open prefill locates the actual `field_<name>` `TextField` instance
-DynamicForm.qml draws for a plain scalar field and sets its `text` — the same
-path a user's own typing takes (via that control's own `onTextChanged`),
-rather than reaching into `DynamicForm`'s internal `fieldValues` state
-directly, since `DynamicForm.qml` has no external "set a field's displayed
-value" API (every other control already owns writing its own text/selection
-from the user's input, and none of the [Tier-1](forms.md#renderer-conformance-kit) features preceding this one
-ever needed to prefill a field programmatically). See "Limitations" for what
-this does not reach.
+Row-open prefill first calls `DynamicForm.resetFields()`, then locates the
+actual `field_<name>` `TextField` instance DynamicForm.qml draws for each bound
+plain scalar field and sets its `text` — the same path a user's own typing
+takes (via that control's own `onTextChanged`), rather than reaching into
+`DynamicForm`'s internal `fieldValues` state directly, since `DynamicForm.qml`
+has no external "set a field's displayed value" API (every other control
+already owns writing its own text/selection from the user's input). See
+"Limitations" for what this does not reach.
+
+**The reset is not optional.** `modalForm`/`detailForm` are single instances
+created once inside their `Dialog` and reused for every row, and prefill only
+writes the fields `v-rowAction` names in `bind`. Without clearing first,
+everything else kept whatever the user left there while editing the *previous*
+row — and because the renderer auto-fires as soon as the form is `ready` (see
+Limitations), merely *opening* the next row fired the row action with that
+row's key and the previous row's field values: a silent write of data the user
+neither entered nor saw. `resetFields()` runs with auto-submit suppressed (see
+`DynamicForm`'s `programmaticEdit` counter), so repopulating a form never fires
+an action by itself.
 
 `examples/forms/lab_schemas.hpp`'s `SamplesView` (composed from
 `ListSamples`/`EditSample`/`DeleteSample`/`CreateSample` in

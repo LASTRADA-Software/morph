@@ -463,6 +463,18 @@ bar (`renderRuns`), and lays each section's fields out in a 2-column grid
 honoring `x-colspan` — falling back to a single implicit flat section
 (one column, no chrome) when the schema carries no `x-layout` at all.
 
+**Tab switching destroys and rebuilds controls, so they re-seed from
+`fieldValues`.** The tab bar drives its `Repeater` off
+`sections[currentTab].fields`, so leaving a tab destroys that tab's field
+delegates and returning to it creates new ones. A control's `text` otherwise
+flows only *outward* (via `onTextChanged` into `fieldValues`) and never back,
+so a returned-to tab showed empty controls while the form went on
+auto-submitting the values it still held — sending data the user could not see.
+Each text-bearing control therefore re-seeds itself from `fieldValues` on
+`Component.onCompleted`, under the `programmaticEdit` suppression so
+re-creating a control never fires the action. A `text:` binding would not work
+here: prefill assigns `text` imperatively, which would break it.
+
 ## Renderer contract: the schema key vocabulary
 
 This is the **normative** list of every key a renderer must understand to build
@@ -835,6 +847,14 @@ Display formatting is the renderer's duty; the wire stays canonical:
   display-only thousands grouping. The exact `Rational`/`Quantity` digit
   arithmetic ([rational.md](../util/rational.md)) never sees a
   locale-formatted string — the conversion happens at the control edge only.
+
+  Both separators are `std::string_view`, not `char`, because a real locale's
+  separator is not always one byte: fr-FR groups with U+202F (narrow no-break
+  space, 3 bytes in UTF-8) and several locales use U+00A0 (2 bytes). Typed as
+  `char`, neither could be expressed at all — a caller could only pass some
+  single byte that never matched, so a perfectly valid `"1 050,25"` typed by a
+  French user normalised to `std::nullopt` and the control reported it
+  malformed. An empty view means "this locale has no such separator".
 - **Timestamps.** The wire value is strict UTC ISO-8601
   ([datetime.md](../util/datetime.md)); a renderer displays and edits in the
   user's zone by shifting a `morph::time::DateTime` with its existing
@@ -963,8 +983,23 @@ prematurely; the required-ness of the operand itself is a separate
 `required`/`requiredWhen` concern. `equals`, by contrast, is **not** vacuous:
 an unengaged field cannot equal anything, so it returns `false` until the
 field is engaged. A literal passed to `equals` is one of `std::int64_t`,
-`bool`, `std::string`, or the exact `math::Rational` (never a `double`), so it
-serialises losslessly into `x-rules`.
+`bool`, `std::string`, the exact `math::Rational` (never a `double`), or a
+captured string literal, so it serialises losslessly into `x-rules`.
+
+A bare string literal — `equals(&A::code, "URGENT")` — is captured **inline**
+as a `detail::LiteralString` (an alias for the project's shared
+`morph::detail::FixedString`), not copied into a `std::string`. That is what
+keeps the documented
+`static constexpr auto formRules = ruleList(...)` declaration working for a
+literal of any length: a rule node has to be a literal type, and a `std::string`
+holding more characters than the standard library's small-string buffer (15 on
+libstdc++) allocates, so the declaration fails with "refers to a result of
+`operator new`". The limit was invisible in the source — the same code compiled
+or did not depending only on how long the literal was, and on which standard
+library was in use. Serialisation is unaffected: `emitNode()` emits the same
+JSON string either way. Passing an explicit `std::string` still stores a
+`std::string` and still cannot be `constexpr` when it allocates; that is
+inherent to the type the caller chose.
 
 ### Presentation rules never gate
 

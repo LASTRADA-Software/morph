@@ -38,6 +38,15 @@ Frame {
     property var fieldUnits: ({})
     property int optionsRevision: 0
     property bool ready: false
+
+    // Non-zero while values are being written programmatically rather than
+    // edited by a user -- restoring a control the layout just recreated, or
+    // clearing the form between rows. revalidate() keeps recomputing validity
+    // and the preview during such a window but does *not* auto-submit, because
+    // repopulating a form is not a user action and must never fire one. A
+    // counter, not a flag, so nested writes (a reset that itself triggers
+    // refreshDependents) cannot re-enable submission early.
+    property int programmaticEdit: 0
     property string previewLine: ""
     property string resultText: ""
     property bool resultOk: true
@@ -639,8 +648,64 @@ Frame {
         ready = ok
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
         rulesRevision++
-        if (ready && form.controller)
+        if (ready && form.controller && form.programmaticEdit === 0)
             form.controller.submitIfValid(form.actionType, form.previewLine)
+    }
+
+    // Runs `body` with auto-submit suppressed (see programmaticEdit), then
+    // revalidates once so `ready`/`previewLine` reflect the result.
+    function withoutAutoSubmit(body) {
+        form.programmaticEdit++
+        try {
+            body()
+        } finally {
+            form.programmaticEdit--
+        }
+        form.revalidate()
+    }
+
+    // Depth-first lookup of a control by objectName within this form.
+    function findControl(item, name) {
+        if (!item)
+            return null
+        if (item.objectName === name)
+            return item
+        const kids = item.children || []
+        for (let i = 0; i < kids.length; ++i) {
+            const found = form.findControl(kids[i], name)
+            if (found)
+                return found
+        }
+        return null
+    }
+
+    // Clears every field back to its unedited state: the value map, the unit
+    // selections, and the visible controls.
+    //
+    // A form instance is reused across the rows it edits (CollectionView keeps
+    // one modalForm and one detailForm for the whole collection), and prefill
+    // only writes the fields named in v-rowAction's bind. Without an explicit
+    // reset, everything else kept the previous row's value -- and because
+    // revalidate() submits as soon as the form is `ready`, opening a second row
+    // fired the action with that row's id and the *previous* row's field
+    // values, writing data the user never entered and never saw.
+    function resetFields() {
+        form.withoutAutoSubmit(function() {
+            form.fieldValues = ({})
+            form.fieldUnits = ({})
+            for (let i = 0; i < form.fields.length; ++i) {
+                const name = form.fields[i].name
+                const entry = form.findControl(form, "field_" + name)
+                if (entry)
+                    entry.text = ""
+                const area = form.findControl(form, "multiline_" + name)
+                if (area)
+                    area.text = ""
+                const slider = form.findControl(form, "slider_" + name)
+                if (slider)
+                    slider.value = slider.from
+            }
+        })
     }
 
     // The JSON body to send a Choice field's options action: {parentName:
@@ -898,6 +963,19 @@ Frame {
                     inputMethodHints: (fieldColumn.modelData.isQuantity || fieldColumn.modelData.isInteger)
                                       ? Qt.ImhFormattedNumbersOnly : Qt.ImhNone
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    // Re-seed from the retained value whenever this delegate is
+                    // (re)created. The tabbed layout drives its Repeater off
+                    // `sections[currentTab].fields`, so switching tabs destroys
+                    // and rebuilds every control, and `text` is otherwise
+                    // write-only -- it flows out via onTextChanged and never
+                    // back in. Returning to a tab therefore showed empty
+                    // controls while revalidate() went on auto-submitting the
+                    // values still held in fieldValues: the form sent data the
+                    // user could not see. Not a `text:` binding, because
+                    // prefill() assigns text imperatively and would break it.
+                    Component.onCompleted: form.withoutAutoSubmit(function() {
+                        entry.text = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                    })
                     Accessible.role: Accessible.EditableText
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
@@ -915,6 +993,10 @@ Frame {
                     readOnly: fieldColumn.modelData.readOnly
                     wrapMode: TextArea.Wrap
                     onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    // Same re-seed as the TextField above — see its comment.
+                    Component.onCompleted: form.withoutAutoSubmit(function() {
+                        notesArea.text = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                    })
                     Accessible.role: Accessible.EditableText
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
@@ -934,6 +1016,14 @@ Frame {
                     to: fieldColumn.modelData.sliderMax
                     stepSize: fieldColumn.modelData.sliderStep
                     onMoved: form.setFieldValue(fieldColumn.modelData.name, String(Math.round(value)))
+                    // Same re-seed as the TextField above — see its comment.
+                    // `onMoved` (not onValueChanged) fires only for user drags,
+                    // so restoring the position here cannot loop back.
+                    Component.onCompleted: {
+                        const retained = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                        if (retained !== "")
+                            levelSlider.value = Number(retained)
+                    }
                     Accessible.role: Accessible.Slider
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
@@ -1040,12 +1130,14 @@ Frame {
         // only the fields of whichever tab is currently selected.
         ColumnLayout {
             id: tabsBox
+            objectName: "tabset"
             property var runData
             Layout.fillWidth: true
             property int currentTab: 0
 
             TabBar {
                 id: bar
+                objectName: "tabBar"
                 Layout.fillWidth: true
                 currentIndex: tabsBox.currentTab
                 onCurrentIndexChanged: tabsBox.currentTab = currentIndex

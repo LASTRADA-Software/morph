@@ -212,4 +212,68 @@ TestCase {
         newButton.clicked()
         compare(mockController.callsByAction["CreateRow"], "{}")
     }
+
+    // ── Editor state must not leak from one row to the next ──────────────────
+    // modalForm/detailForm are single instances created once inside the Dialog
+    // and reused for every row, and prefill() only writes the fields named in
+    // v-rowAction's bind. Everything else used to keep the value left there
+    // while editing the previous row -- and because DynamicForm auto-submits as
+    // soon as the form is `ready`, merely *opening* the next row fired EditRow
+    // with that row's id and the previous row's values.
+
+    function test_openingAnotherRowDoesNotCarryOverTypedValues() {
+        mockController.queryCount = 0
+        mockController.callsByAction = ({})
+        var view = createTemporaryObject(viewComponent, testCase)
+        verify(view !== null)
+
+        // Edit row 1: type a name, which completes the form and fires EditRow.
+        var openFirst = findChild(view, "rowOpen_1")
+        verify(openFirst !== null)
+        openFirst.clicked()
+        var dialog = findChild(view, "editorDialog")
+        verify(dialog !== null)
+        var nameField = findChild(dialog.contentItem, "field_name")
+        verify(nameField !== null)
+        nameField.text = "Typed into row one"
+        compare(mockController.callsByAction["EditRow"], '{"id":1,"name":"Typed into row one"}')
+
+        // Now open row 2. Nothing has been typed into it, so nothing may fire.
+        mockController.callsByAction = ({})
+        mockController.queryCount = 0
+        var openSecond = findChild(view, "rowOpen_2")
+        verify(openSecond !== null)
+        openSecond.clicked()
+
+        compare(view.editorRow.id, 2)
+        compare(mockController.callsByAction["EditRow"], undefined)
+
+        // ...and the leftover value is gone from the control, not merely unsent.
+        var reopenedName = findChild(dialog.contentItem, "field_name")
+        verify(reopenedName !== null)
+        compare(reopenedName.text, "")
+        var idField = findChild(dialog.contentItem, "field_id")
+        verify(idField !== null)
+        compare(idField.text, "2")
+    }
+
+    function test_reopeningTheSameRowStartsFromACleanForm() {
+        mockController.callsByAction = ({})
+        var view = createTemporaryObject(viewComponent, testCase)
+        verify(view !== null)
+
+        var openButton = findChild(view, "rowOpen_1")
+        verify(openButton !== null)
+        openButton.clicked()
+        var dialog = findChild(view, "editorDialog")
+        verify(dialog !== null)
+        findChild(dialog.contentItem, "field_name").text = "First attempt"
+
+        view.closeEditor()
+        mockController.callsByAction = ({})
+        openButton.clicked()
+
+        compare(mockController.callsByAction["EditRow"], undefined)
+        compare(findChild(dialog.contentItem, "field_name").text, "")
+    }
 }

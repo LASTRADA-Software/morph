@@ -299,6 +299,67 @@ Item {
             compare(tabForm.renderRuns[1].section.title, "Solo")
         }
 
+        // ── Tab switching must not silently hide what the form still sends ──
+        // The tabbed layout drives its Repeater off
+        // `sections[currentTab].fields`, so switching tabs destroys and
+        // rebuilds every control. `text` flows out via onTextChanged and never
+        // back in, so returning to a tab used to show empty controls while
+        // fieldValues still held the values -- and revalidate() went on
+        // auto-submitting them. The form sent data the user could not see.
+
+        function test_tabSwitchRestoresTypedValues() {
+            var tabset = findChild(tabForm, "tabset")
+            verify(tabset !== null)
+            tabset.currentTab = 0
+
+            var fieldA = findChild(tabForm, "field_a")
+            verify(fieldA !== null)
+            fieldA.text = "42"
+            compare(tabForm.fieldValues["a"], "42")
+
+            tabset.currentTab = 1                       // destroys tab One's delegates
+            var fieldB = findChild(tabForm, "field_b")
+            verify(fieldB !== null)
+            fieldB.text = "7"
+
+            tabset.currentTab = 0                       // ...and rebuilds them
+            tryVerify(function() {
+                var again = findChild(tabForm, "field_a")
+                return again !== null && again.text === "42"
+            })
+            // The value never left fieldValues; what changed is that the
+            // control now agrees with it.
+            compare(tabForm.fieldValues["a"], "42")
+            compare(tabForm.fieldValues["b"], "7")
+
+            tabset.currentTab = 1
+            tryVerify(function() {
+                var againB = findChild(tabForm, "field_b")
+                return againB !== null && againB.text === "7"
+            })
+
+            tabset.currentTab = 0
+            findChild(tabForm, "field_a").text = ""
+            tabset.currentTab = 1
+            findChild(tabForm, "field_b").text = ""
+        }
+
+        function test_resetFieldsClearsValuesAndControls() {
+            var fieldC = findChild(tabForm, "field_c")   // the solo, non-tab section
+            verify(fieldC !== null)
+            fieldC.text = "13"
+            compare(tabForm.fieldValues["c"], "13")
+
+            tabForm.resetFields()
+
+            // Clearing the visible control routes back through the same
+            // onTextChanged path a user's own deletion does, so the value map
+            // ends up holding "" rather than losing the key -- which is what
+            // revalidate() treats as unset either way.
+            compare(tabForm.opt(tabForm.fieldValues["c"], ""), "")
+            compare(findChild(tabForm, "field_c").text, "")
+        }
+
         function test_noXLayoutFallsBackToOneFlatSection() {
             // `form` (the file-scope fixture) declares no x-layout.
             compare(form.sections.length, 1)
