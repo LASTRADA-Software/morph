@@ -107,6 +107,42 @@ public:
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override;
 
+    /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
+    ///
+    /// An empty primary degrades to the private path.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Ignored — model construction is delegated to the server.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @return `ModelId` of the shared (or newly created) instance.
+    /// @throws std::runtime_error if the server errors or the socket is not connected.
+    ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        ::morph::backend::detail::InstanceIdentity identity) override;
+
+    /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Ignored — model construction is delegated to the server.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @param current  Instance currently held, or `ModelId{0}` if none.
+    /// @return `ModelId` of the instance now attached to.
+    /// @throws std::runtime_error if the server errors or the socket is not connected.
+    ::morph::exec::detail::ModelId attachModel(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override;
+
+    /// @brief Files a live server-side instance under @p primary.
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id.
+    /// @param primary Canonical string encoding of the key to file it under.
+    void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                       std::string_view primary) override;
+
+    /// @brief Asks the server for the live shared primary keys of @p typeId.
+    /// @param typeId String type-id to enumerate.
+    /// @return Canonical key strings of the live shared instances.
+    /// @throws std::runtime_error if the server errors or the socket is not connected.
+    std::vector<std::string> listInstances(const std::string& typeId) override;
+
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     ///
     /// No acknowledgement is awaited, which avoids a nested `QEventLoop` during

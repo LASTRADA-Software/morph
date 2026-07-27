@@ -9,9 +9,9 @@
 #include <mutex>
 #include <optional>
 #include <stdexcept>
-#include <type_traits>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -507,6 +507,11 @@ public:
     /// @param binding Binding returned by `registerHandler<Model>()`.
     /// @param action  Action to execute (moved in).
     /// @param cbExec  Executor on which the `Completion` callbacks are posted.
+    /// @param onResult Optional observer run on the typed result *before* it is
+    ///                 moved into the returned `Completion` and before the
+    ///                 caller's own `.then`. Used to adopt a result-sourced
+    ///                 primary key so the binding is already promoted by the time
+    ///                 user code sees the result; empty for every other call.
     /// @return Completion that resolves with the typed result or an exception
     ///         (including `ValidationError` on `LocalBackend` when the action
     ///         fails its validator).
