@@ -269,6 +269,11 @@ public:
         {
             std::scoped_lock const lock{_mtx};
             _currentReady = false;
+            // Retire the old step's callbacks here, not only in
+            // subscribeCurrent(): on the last step this advance finishes the
+            // flow and no new subscription follows, so nothing else would move
+            // the marker and a late reply could still mark a finished flow ready.
+            _activeStep = _index;
         }
         if (!finished()) {
             subscribeCurrent();
@@ -289,6 +294,7 @@ public:
         {
             std::scoped_lock const lock{_mtx};
             _currentReady = true;  // this step already produced a result once, or it could not have been left
+            _activeStep = _index;
         }
         subscribeCurrent();
         return true;
@@ -338,8 +344,20 @@ public:
 
 private:
     template <typename A>
-    void captureResult(const typename ::morph::model::ActionTraits<A>::Result& result) {
+    void captureResult(const ::morph::model::ActionTraits<A>::Result& result, std::size_t stepIndex) {
         std::scoped_lock const lock{_mtx};
+        if (stepIndex != _activeStep) {
+            // A reply for a step the flow has already left. `unsubscribe()`
+            // removes the sink but cannot recall a callback already copied out
+            // of the handler's map (see ~FlowSession), so a step re-fired just
+            // before advance() can still land here afterwards. Applying it
+            // would do real damage twice over: `_resolvedValues` would be
+            // overwritten with a superseded reply that advance() never saw, and
+            // `_currentReady = true` below is not step-keyed, so it would mark
+            // the *new* step ready before anything was entered into it --
+            // letting the next advance() skip a step outright.
+            return;
+        }
         auto const typeId = ::morph::model::ActionTraits<A>::typeId();
         auto record = [&](const auto& value) {
             ::morph::forms::detail::forEachNamedMember(
@@ -363,22 +381,30 @@ private:
     /// anything on `this` — see `~FlowSession()`'s doc comment for why
     /// `unsubscribe()` alone is not enough.
     template <typename A>
-    void installSubscription() {
+    void installSubscription(std::size_t stepIndex) {
         auto alive = _alive;
         _handler.template subscribe<A>(
-            [this, alive](typename ::morph::model::ActionTraits<A>::Result result) {
+            [this, alive, stepIndex](::morph::model::ActionTraits<A>::Result result) {
                 if (!alive->load(std::memory_order_acquire)) {
                     return;
                 }
-                this->template captureResult<A>(result);
+                this->template captureResult<A>(result, stepIndex);
             },
-            [this, alive](std::exception_ptr err) {
+            [this, alive, stepIndex](std::exception_ptr err) {
                 if (!alive->load(std::memory_order_acquire)) {
                     return;
                 }
                 {
+                    // Only clear readiness while this really is the current
+                    // step. A late failure from a step already left behind used
+                    // to clear `_currentReady` for whichever step the flow had
+                    // moved on to — un-readying a step that had legitimately
+                    // completed. The error is still reported below either way:
+                    // the action did fail, and the host wants to know.
                     std::scoped_lock const lock{_mtx};
-                    _currentReady = false;
+                    if (stepIndex == _activeStep) {
+                        _currentReady = false;
+                    }
                 }
                 if (_onError) {
                     _onError(err);
@@ -400,7 +426,17 @@ private:
     }
 
     void subscribeCurrent() {
-        detail::forStep<Steps...>(_index, [this]<typename A> { this->template installSubscription<A>(); });
+        // Publish which step the callbacks about to be installed belong to.
+        // Read back under the same mutex by every callback, so one that fires
+        // after the flow has moved on can recognise itself as stale.
+        std::size_t stepIndex = 0;
+        {
+            std::scoped_lock const lock{_mtx};
+            _activeStep = _index;
+            stepIndex = _index;
+        }
+        detail::forStep<Steps...>(_index,
+                                  [this, stepIndex]<typename A> { this->template installSubscription<A>(stepIndex); });
     }
 
     void unsubscribeCurrent() {
@@ -418,6 +454,11 @@ private:
     std::size_t _index{0};
     mutable std::mutex _mtx;
     std::tuple<Steps...> _drafts{};
+    // The step whose subscriptions are currently installed, mirrored under
+    // _mtx so a callback running on the resolving executor's thread can tell
+    // whether it still speaks for the current step. `_index` itself is only
+    // safe to read from the owning thread.
+    std::size_t _activeStep{0};
     bool _currentReady{false};
     std::unordered_map<std::string, std::string> _resolvedValues;
     // Outlives `this`: a late callback (see installSubscription) checks this
