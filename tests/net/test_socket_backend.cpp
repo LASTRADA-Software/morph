@@ -34,6 +34,35 @@ BRIDGE_REGISTER_MODEL(SbEchoModel, "SbEchoModel")
 BRIDGE_REGISTER_ACTION(SbEchoModel, SbEchoAction, "SbEchoAction")
 BRIDGE_REGISTER_ACTION(SbEchoModel, SbEchoFail, "SbEchoFail")
 
+// A stateful, keyed model: two clients naming the same key must reach one
+// instance and see one counter. A stateless echo model could not tell the
+// difference between sharing and not sharing.
+//
+// External linkage as above: glaze reflection and the BRIDGE_REGISTER_* macros
+// both require it.
+// NOLINTBEGIN(misc-use-internal-linkage)
+struct SbBump {
+    std::int64_t id = 0;
+    int by = 0;
+};
+struct SbTotal {
+    int value = 0;
+};
+
+struct SbCounterModel {
+    using PrimaryKey = std::int64_t;
+    int value = 0;
+    SbTotal execute(const SbBump& act) {
+        value += act.by;
+        return {.value = value};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(SbCounterModel, "SbCounterModel")
+BRIDGE_REGISTER_ACTION(SbCounterModel, SbBump, "SbBump")
+BRIDGE_KEY_FROM(SbBump, &SbBump::id);
+// NOLINTEND(misc-use-internal-linkage)
+
 struct SbSlowAction {
     int value = 0;
 };
@@ -162,6 +191,74 @@ TEST_CASE("SocketBackend: two backends share one server with isolated model stat
     spinUntil([&] { return lastA.load() != -1 && lastB.load() != -1; });
     REQUIRE(lastA.load() == 11);
     REQUIRE(lastB.load() == 22);
+}
+
+TEST_CASE("SocketBackend: two clients sharing a key reach one instance over the wire",
+          "[net][socket_backend][shared-instances]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    auto backendA = std::make_unique<morph::net::SocketBackend>(url);
+    auto backendB = std::make_unique<morph::net::SocketBackend>(url);
+    REQUIRE(backendA->waitForConnected());
+    REQUIRE(backendB->waitForConnected());
+
+    morph::exec::ThreadPoolExecutor cbPool{2};
+    morph::bridge::Bridge bridgeA{std::move(backendA)};
+    morph::bridge::Bridge bridgeB{std::move(backendB)};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromA{bridgeA, &cbPool};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> fromB{bridgeB, &cbPool};
+
+    // Two genuinely separate clients, two sockets, one server-side directory.
+    std::atomic<int> lastA{-1};
+    fromA.execute(SbBump{.id = 77, .by = 10}).then([&](const SbTotal& res) { lastA.store(res.value); }).onError([](const std::exception_ptr&) {});
+    spinUntil([&] { return lastA.load() != -1; });
+    REQUIRE(lastA.load() == 10);
+
+    std::atomic<int> lastB{-1};
+    fromB.execute(SbBump{.id = 77, .by = 5}).then([&](const SbTotal& res) { lastB.store(res.value); }).onError([](const std::exception_ptr&) {});
+    spinUntil([&] { return lastB.load() != -1; });
+    // 15, not 5: the second client attached to the first client's instance.
+    REQUIRE(lastB.load() == 15);
+
+    std::atomic<int> keyCount{-1};
+    fromB.instances().then([&](const std::vector<std::int64_t>& keys) { keyCount.store(static_cast<int>(keys.size())); })
+        .onError([](const std::exception_ptr&) {});
+    spinUntil([&] { return keyCount.load() != -1; });
+    REQUIRE(keyCount.load() == 1);
+}
+
+TEST_CASE("SocketBackend: a plain handler keeps its own instance over the wire", "[net][socket_backend]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::net::SocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    std::string const url = "ws://127.0.0.1:" + std::to_string(static_cast<unsigned>(wsServer.port()));
+    auto shared = std::make_unique<morph::net::SocketBackend>(url);
+    auto priv = std::make_unique<morph::net::SocketBackend>(url);
+    REQUIRE(shared->waitForConnected());
+    REQUIRE(priv->waitForConnected());
+
+    morph::exec::ThreadPoolExecutor cbPool{2};
+    morph::bridge::Bridge sharedBridge{std::move(shared)};
+    morph::bridge::Bridge privBridge{std::move(priv)};
+    morph::bridge::BridgeHandler<SbCounterModel, morph::bridge::AllowShared> joined{sharedBridge, &cbPool};
+    morph::bridge::BridgeHandler<SbCounterModel> alone{privBridge, &cbPool};
+
+    std::atomic<int> lastShared{-1};
+    joined.execute(SbBump{.id = 88, .by = 30}).then([&](const SbTotal& res) { lastShared.store(res.value); }).onError([](const std::exception_ptr&) {});
+    spinUntil([&] { return lastShared.load() != -1; });
+    REQUIRE(lastShared.load() == 30);
+
+    std::atomic<int> lastPriv{-1};
+    alone.execute(SbBump{.id = 88, .by = 1}).then([&](const SbTotal& res) { lastPriv.store(res.value); }).onError([](const std::exception_ptr&) {});
+    spinUntil([&] { return lastPriv.load() != -1; });
+    // Opted out, so it registered its own instance and counts from zero.
+    REQUIRE(lastPriv.load() == 1);
 }
 
 TEST_CASE("SocketBackend: registerModel on a never-connected socket throws, does not hang",
