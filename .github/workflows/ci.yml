@@ -9,6 +9,8 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
   CLANG_VERSION: "22"
+  # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
+  QT_VERSION: "6.8.1"
 
 jobs:
   # ── Windows: MSVC + clang-cl ──────────────────────────────────────────
@@ -284,17 +286,16 @@ jobs:
           key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-all-features-${{ matrix.compiler }}-
 
-      - name: Install toolchain and every optional feature's dependencies
+      - name: Install toolchain and the non-Qt dependencies
         run: |
           sudo apt-get update -q
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2 \
-            qt6-base-dev qt6-websockets-dev qt6-declarative-dev qt6-tools-dev libgl1-mesa-dev \
-            qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls \
-            qml6-module-qtquick-layouts qml6-module-qttest \
-            libsqlite3-dev libsodium-dev libssl-dev
+            libsqlite3-dev libsodium-dev libssl-dev \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
             sudo apt-get install -y gcc-15 g++-15
             sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
@@ -302,6 +303,16 @@ jobs:
           else
             wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
           fi
+
+      # Not the distro's Qt: MORPH_BUILD_FORMS_QML needs 6.5+ (see the version
+      # floor in CMakeLists.txt) and Ubuntu 24.04 still ships 6.4.2, whose
+      # QQmlApplicationEngine has no loadFromModule.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
 
       - name: Cache sccache
         uses: actions/cache@v4
@@ -453,14 +464,23 @@ jobs:
           key: apt-clang-tidy-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-clang-tidy-
 
-      - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the optional features' deps
+      - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the non-Qt deps
         run: |
           sudo apt-get update -q
           sudo apt-get install -y ninja-build catch2 \
-            qt6-base-dev qt6-websockets-dev qt6-declarative-dev qt6-tools-dev libgl1-mesa-dev \
-            libsqlite3-dev libsodium-dev libssl-dev
+            libsqlite3-dev libsodium-dev libssl-dev \
+            libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
           sudo apt-get install -y clang-tidy-${{ env.CLANG_VERSION }}
+
+      # See the linux-all-features job: the QML renderer needs Qt 6.5+.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
 
       - name: Cache sccache
         uses: actions/cache@v4

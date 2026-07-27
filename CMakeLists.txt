@@ -175,7 +175,12 @@ target_sources(morph
 # only found/fetched there and its test executable names Catch2::Catch2
 # directly.
 if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
-    find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+    # 6.5 is a hard floor, not a preference: qt_standard_project_setup's
+    # REQUIRES keyword and QQmlApplicationEngine::loadFromModule (used by the
+    # demo) both arrive in 6.5. Stating it here turns "your Qt is too old" into
+    # one clear configure-time message instead of a confusing missing-member
+    # compile error deep in the build (Ubuntu 24.04 still ships 6.4.2).
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
     qt_standard_project_setup(REQUIRES 6.5)
 
     # Header-only, model-agnostic controller core (no Q_OBJECT -- Qt cannot
