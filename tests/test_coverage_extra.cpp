@@ -52,29 +52,17 @@ TEST_CASE("BridgeHandler::unsubscribe on type with no entry is a no-op", "[bridg
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<CovModel> handler{bridge, &cb};
 
-    // No prior subscribe<CovAction> → the unsubscribe path finds no entry and exercises
-    // the False arm of `if (iter != _subs->entries.end())` at line 311.
-    REQUIRE_NOTHROW(handler.unsubscribe<CovAction>());
+    // No prior subscribe<int>, so the removal path finds nothing to erase.
+    REQUIRE_NOTHROW(handler.unsubscribe<int>());
 }
 
-TEST_CASE("BridgeHandler::reset on type with no entry is a no-op", "[bridge]") {
+TEST_CASE("BridgeHandler::unsubscribe is idempotent", "[bridge]") {
     morph::exec::ThreadPoolExecutor pool{1};
     CovSyncExecutor cb;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<CovModel> handler{bridge, &cb};
 
-    REQUIRE_NOTHROW(handler.reset<CovAction>());
-}
-
-TEST_CASE("BridgeHandler::set on a field reuses an existing draft", "[bridge]") {
-    morph::exec::ThreadPoolExecutor pool{1};
-    CovSyncExecutor cb;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<CovModel> handler{bridge, &cb};
-
-    // First set creates the draft entry → line 327 True arm. Second set finds
-    // the entry already there → False arm.
-    handler.set<&CovAction::v>(1);
-    handler.set<&CovAction::v>(2);
-    REQUIRE(true);
+    handler.subscribe<int>([](int) {});
+    REQUIRE_NOTHROW(handler.unsubscribe<int>());
+    REQUIRE_NOTHROW(handler.unsubscribe<int>());
 }

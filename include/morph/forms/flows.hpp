@@ -208,7 +208,7 @@ public:
     explicit FlowSession(::morph::bridge::BridgeHandler<Model>& handler,
                          std::function<void(std::exception_ptr)> onError = nullptr)
         : _handler{handler}, _onError{std::move(onError)} {
-        subscribeCurrent();
+        beginStep();
     }
 
     /// @brief Flags this session as gone, then unsubscribes the current step.
@@ -222,7 +222,6 @@ public:
     /// touching a partially- or fully-destroyed object.
     ~FlowSession() {
         _alive->store(false, std::memory_order_release);
-        unsubscribeCurrent();
     }
 
     FlowSession(const FlowSession&) = delete;
@@ -244,11 +243,22 @@ public:
         if (::morph::model::ActionTraits<A>::typeId() != currentActionType()) {
             throw std::logic_error{"FlowSession::set<>: field belongs to an action that is not the current step"};
         }
+        A draft{};
+        std::size_t stepIndex = 0;
         {
             std::scoped_lock const lock{_mtx};
-            std::get<A>(_drafts).*FieldPtr = value;
+            std::get<A>(_drafts).*FieldPtr = std::move(value);
+            draft = std::get<A>(_drafts);
+            stepIndex = _activeStep;
         }
-        _handler.template set<FieldPtr>(std::move(value));
+        // The readiness gate that used to live in the handler's draft machinery
+        // lives here now: the flow already owns the draft, so it can decide when
+        // the step is complete and dispatch it itself. Note there is no
+        // in-flight coalescing — each ready `set<>` dispatches, where the old
+        // handler-side draft collapsed patches landing during a flight.
+        if (::morph::model::ActionValidator<A>::ready(draft)) {
+            fireStep<A>(std::move(draft), stepIndex);
+        }
     }
 
     /// @brief Moves to the next step, if the current step has already produced
@@ -264,7 +274,6 @@ public:
         if (!ready || finished()) {
             return false;
         }
-        unsubscribeCurrent();
         ++_index;
         {
             std::scoped_lock const lock{_mtx};
@@ -276,7 +285,7 @@ public:
             _activeStep = _index;
         }
         if (!finished()) {
-            subscribeCurrent();
+            beginStep();
         }
         return true;
     }
@@ -289,14 +298,13 @@ public:
         if (_index == 0) {
             return false;
         }
-        unsubscribeCurrent();
         --_index;
         {
             std::scoped_lock const lock{_mtx};
             _currentReady = true;  // this step already produced a result once, or it could not have been left
             _activeStep = _index;
         }
-        subscribeCurrent();
+        beginStep();
         return true;
     }
 
@@ -374,23 +382,25 @@ private:
         _currentReady = true;
     }
 
-    /// @brief Installs the result/error sinks for step @p A.
+    /// @brief Dispatches step @p A's completed draft and routes its outcome.
     ///
     /// Both closures capture `_alive` (a copy of the `shared_ptr`, so it
-    /// outlives `this` if the two race) and check it before touching
-    /// anything on `this` — see `~FlowSession()`'s doc comment for why
-    /// `unsubscribe()` alone is not enough.
+    /// outlives `this` if the two race) and check it before touching anything on
+    /// `this` — a completion can still resolve after the flow is destroyed.
+    /// @tparam A Step action type.
+    /// @param draft     The completed action to execute.
+    /// @param stepIndex Index of the step this dispatch belongs to.
     template <typename A>
-    void installSubscription(std::size_t stepIndex) {
+    void fireStep(A draft, std::size_t stepIndex) {
         auto alive = _alive;
-        _handler.template subscribe<A>(
-            [this, alive, stepIndex](::morph::model::ActionTraits<A>::Result result) {
+        _handler.execute(std::move(draft))
+            .then([this, alive, stepIndex](::morph::model::ActionTraits<A>::Result result) {
                 if (!alive->load(std::memory_order_acquire)) {
                     return;
                 }
                 this->template captureResult<A>(result, stepIndex);
-            },
-            [this, alive, stepIndex](std::exception_ptr err) {
+            })
+            .onError([this, alive, stepIndex](const std::exception_ptr& err) {
                 if (!alive->load(std::memory_order_acquire)) {
                     return;
                 }
@@ -425,22 +435,13 @@ private:
         }
     }
 
-    void subscribeCurrent() {
-        // Publish which step the callbacks about to be installed belong to.
-        // Read back under the same mutex by every callback, so one that fires
-        // after the flow has moved on can recognise itself as stale.
-        std::size_t stepIndex = 0;
-        {
-            std::scoped_lock const lock{_mtx};
-            _activeStep = _index;
-            stepIndex = _index;
-        }
-        detail::forStep<Steps...>(_index,
-                                  [this, stepIndex]<typename A> { this->template installSubscription<A>(stepIndex); });
-    }
-
-    void unsubscribeCurrent() {
-        detail::forStep<Steps...>(_index, [this]<typename A> { _handler.template unsubscribe<A>(); });
+    /// @brief Publishes which step is now current.
+    ///
+    /// Read back under the same mutex by every dispatch callback, so one that
+    /// resolves after the flow has moved on recognises itself as stale.
+    void beginStep() {
+        std::scoped_lock const lock{_mtx};
+        _activeStep = _index;
     }
 
     ::morph::bridge::BridgeHandler<Model>& _handler;

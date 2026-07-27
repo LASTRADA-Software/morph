@@ -240,26 +240,36 @@ TEST_CASE("BridgeHandler::set<> recomputes total live before firing", "[bridge][
         }
     });
 
-    handler.set<&CFLineItem::qty>(Rational{Numerator{3}, Denominator{1}, dp2});
-    handler.set<&CFLineItem::price>(Rational{Numerator{2}, Denominator{1}, dp2});
+    // `total` is left unengaged on purpose: recomputeAll overwrites it from
+    // qty*price on the dispatch path, which is what this asserts.
+    handler.execute(CFLineItem{.qty = Rational{Numerator{3}, Denominator{1}, dp2},
+                               .price = Rational{Numerator{2}, Denominator{1}, dp2},
+                               .total = {}});
 
     REQUIRE(morph::testing::waitUntil([&] { return haveTotal.load(); }));
     std::scoped_lock lock{totalMtx};
     CHECK(lastTotal == Rational{6, dp2});
 }
 
-TEST_CASE("BridgeHandler::set<> does not fire before both computed inputs are engaged", "[bridge][computed]") {
+TEST_CASE("an action with a computed input missing fails its validator", "[bridge][computed]") {
     morph::exec::ThreadPoolExecutor pool{2};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<CFModel> handler{bridge, &cbExec};
 
     std::atomic<bool> fired{false};
+    std::atomic<bool> failed{false};
     handler.subscribe<CFLineItem>([&](CFLineItem /*unused*/) { fired.store(true); });
 
-    handler.set<&CFLineItem::qty>(Rational{Numerator{3}, Denominator{1}, dp2});
-    std::this_thread::sleep_for(std::chrono::milliseconds{50});
-    CHECK_FALSE(fired.load());  // price still missing -> total unengaged -> validate() is false
+    // price is missing, so total stays unengaged and validate() is false. The
+    // validator gate now sits on the dispatch path rather than in a client-side
+    // draft, so the action is rejected instead of simply never firing -- and a
+    // failed action notifies no subscriber.
+    handler.execute(CFLineItem{.qty = Rational{Numerator{3}, Denominator{1}, dp2}, .price = {}, .total = {}})
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return failed.load(); }));
+    CHECK_FALSE(fired.load());
 }
 
 // ---------------------------------------------------------------------------

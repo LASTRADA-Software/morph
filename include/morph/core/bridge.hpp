@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <typeindex>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -109,9 +110,8 @@ namespace detail {
 
 /// @brief Compile-time decomposition of a pointer-to-data-member type.
 ///
-/// Used by `BridgeHandler::set<auto FieldPtr>` to recover both the action
-/// type and the field type from a single non-type template parameter, so
-/// callers write `handler.set<&MyAction::c>(7.0)` with no redundant type
+/// Recovers both the class and the member type from a single non-type template
+/// parameter, so callers name a field as `&MyAction::c` with no redundant type
 /// arguments.
 ///
 /// @tparam T The pointer-to-member type (e.g. `double MyAction::*`).
@@ -349,6 +349,80 @@ public:
         return loadBackend()->listInstances(std::string{::morph::model::ModelTraits<Model>::typeId()});
     }
 
+    /// @brief Registers a result-type subscription for @p binding.
+    ///
+    /// The subscription is stored against the *binding*, not against a fixed
+    /// instance id, and is matched at publish time by comparing the binding's
+    /// current instance. Re-pointing a handler therefore moves its subscriptions
+    /// with it, which is what makes "tell me about the account I am looking at"
+    /// keep working when the user switches accounts.
+    ///
+    /// @param binding Handler binding that owns the subscription.
+    /// @param type    Result type being subscribed to.
+    /// @param sink    Type-erased delivery callback; receives the boxed result.
+    /// @param exec    Executor the callback is delivered on.
+    void addSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type,
+                         std::function<void(const std::any&)> sink, ::morph::exec::IExecutor* exec) {
+        std::scoped_lock const lock{_subMtx};
+        for (auto& entry : _subscriptions) {
+            auto owner = entry.binding.lock();
+            if (owner && owner.get() == binding.get() && entry.type == type) {
+                entry.sink = std::move(sink);  // one callback per (handler, result type)
+                entry.exec = exec;
+                return;
+            }
+        }
+        _subscriptions.push_back({.binding = binding, .type = type, .sink = std::move(sink), .exec = exec});
+    }
+
+    /// @brief Removes @p binding's subscription for @p type, if any.
+    /// @param binding Handler binding that owns the subscription.
+    /// @param type    Result type to stop hearing about.
+    void removeSubscription(const std::shared_ptr<detail::HandlerBinding>& binding, std::type_index type) {
+        std::scoped_lock const lock{_subMtx};
+        std::erase_if(_subscriptions, [&](const InstanceSubscription& entry) {
+            auto owner = entry.binding.lock();
+            return !owner || (owner.get() == binding.get() && entry.type == type);
+        });
+    }
+
+    /// @brief Delivers @p value to every subscriber attached to instance @p mid.
+    ///
+    /// Called for every successful action result. Subscribers are matched on
+    /// *the instance the result was produced on*, so a handler hears about work
+    /// another handler — or, with a shared instance, another screen entirely —
+    /// did on the model it is attached to.
+    ///
+    /// The producing handler is notified too: suppressing the echo would force
+    /// every subscriber to special-case "was this mine", which is exactly the
+    /// bookkeeping the feature exists to remove.
+    ///
+    /// Sinks are snapshotted under the lock and invoked outside it, so a
+    /// subscriber that re-enters the bridge cannot deadlock.
+    ///
+    /// @param mid   Instance the result was produced on.
+    /// @param type  Result type produced.
+    /// @param value Boxed result.
+    void publishResult(::morph::exec::detail::ModelId mid, std::type_index type, const std::any& value) {
+        std::vector<std::pair<std::function<void(const std::any&)>, ::morph::exec::IExecutor*>> targets;
+        {
+            std::scoped_lock const lock{_subMtx};
+            for (const auto& entry : _subscriptions) {
+                auto owner = entry.binding.lock();
+                if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
+                    targets.emplace_back(entry.sink, entry.exec);
+                }
+            }
+        }
+        for (auto& [sink, exec] : targets) {
+            if (exec != nullptr) {
+                exec->post([sink, value] { sink(value); });
+            } else {
+                sink(value);
+            }
+        }
+    }
+
     /// @brief Installs a default session context that `executeVia` stamps onto the
     ///        `ActionCall` of every subsequent call.
     ///
@@ -541,9 +615,8 @@ public:
         call.localOp = [sharedAction](::morph::model::detail::IModelHolder& holder) -> std::shared_ptr<void> {
             // Enforce the action's validator on the local execution path too, so
             // a caller that constructs an Action by hand and calls
-            // BridgeHandler<Model>::execute<Action>() directly — bypassing the
-            // reactive set<>/tryFireImpl gate that already checks ready() — is
-            // rejected the same way a hand-built wire envelope is rejected by
+            // BridgeHandler<Model>::execute<Action>() directly is rejected the
+            // same way a hand-built wire envelope is rejected by
             // ActionDispatcher::registerAction's runner (registry.hpp). No JSON is
             // involved on this path, so there is no declared-precision
             // reconciliation step here (that only applies to decoded wire
@@ -596,7 +669,8 @@ public:
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
-            .then([typedState, onResult = std::move(onResult)](const std::shared_ptr<void>& vAny) {
+            .then([typedState, onResult = std::move(onResult), this, raw,
+                   alive = liveness()](const std::shared_ptr<void>& vAny) {
                 // Guard the value-forwarding: if R's move/copy throws (or the cast
                 // is somehow wrong), route the exception to the typed completion's
                 // error sink instead of letting it escape the callback executor —
@@ -611,6 +685,16 @@ public:
                     // the binding before any user code observes the result.
                     if (onResult) {
                         onResult(*typedResult);
+                    }
+                    // Fan the result out to everything attached to this
+                    // instance before the value is moved away. Guarded on the
+                    // bridge's liveness token: a completion can in principle
+                    // resolve after the Bridge is gone.
+                    if constexpr (std::is_copy_constructible_v<R>) {
+                        if (!alive.expired()) {
+                            publishResult(::morph::exec::detail::ModelId{raw}, std::type_index{typeid(R)},
+                                          std::any{*typedResult});
+                        }
                     }
                     typedState->setValue(std::move(*typedResult));
                 } catch (...) {
@@ -688,6 +772,17 @@ private:
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;
+    // Instance subscriptions. Held against the binding rather than a fixed
+    // instance id so a re-pointed handler keeps its subscriptions; matched at
+    // publish time by comparing the binding's current instance.
+    struct InstanceSubscription {
+        std::weak_ptr<detail::HandlerBinding> binding;
+        std::type_index type;
+        std::function<void(const std::any&)> sink;
+        ::morph::exec::IExecutor* exec = nullptr;
+    };
+    std::mutex _subMtx;
+    std::vector<InstanceSubscription> _subscriptions;
     // Destroyed with the Bridge; handlers hold weak_ptrs to it (see liveness()).
     std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };
@@ -719,15 +814,13 @@ struct AllowShared {};
 /// On construction, registers a `HandlerBinding` on the bridge. On destruction,
 /// deregisters it automatically. The handler is non-copyable.
 ///
-/// @par Fielded actions and subscriptions
-/// Beyond the one-shot `execute(action) -> Completion<R>` API, the handler
-/// offers a streaming surface for actions whose values arrive field-by-field
-/// from a GUI (typically one widget per field):
+/// @par Instance subscriptions
+/// Beyond the one-shot `execute(action) -> Completion<R>` API, a handler can
+/// observe *the instance it is attached to*:
 ///
-/// - `subscribe<A>(cb)` stashes a result callback for action type `A`.
-/// - `set<&A::field>(value)` updates one field of the in-progress draft of `A`.
-/// - `unsubscribe<A>()` drops the callback.
-/// - `reset<A>()` discards the in-progress draft of `A`.
+/// - `subscribe<R>(cb)` fires whenever an `R` is produced on that instance, by
+///   any handler attached to it.
+/// - `unsubscribe<R>()` drops the callback.
 ///
 /// @tparam Model Concrete model type.
 template <typename Model, typename Sharing = NoSharing>
@@ -745,13 +838,9 @@ public:
         : _bridge{bridge},
           _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
-          _binding{makeBinding(bridge)},
-          _subs{std::make_shared<SubscriberState>()} {
+          _binding{makeBinding(bridge)} {
         static_assert(!kShared || ::morph::model::KeyedModel<Model>,
                       "BridgeHandler<Model, AllowShared> requires Model to declare a PrimaryKey alias");
-        _subs->bridge = &_bridge;
-        _subs->binding = _binding;
-        _subs->guiExec = _guiExec;
     }
 
     /// @brief Constructs the handler with a pre-built binding (for dependency injection).
@@ -763,12 +852,8 @@ public:
         : _bridge{bridge},
           _bridgeAlive{bridge.liveness()},
           _guiExec{guiExec},
-          _binding{std::move(binding)},
-          _subs{std::make_shared<SubscriberState>()} {
+          _binding{std::move(binding)} {
         _bridge.registerHandler(_binding);
-        _subs->bridge = &_bridge;
-        _subs->binding = _binding;
-        _subs->guiExec = _guiExec;
     }
 
     /// @brief Deregisters the binding from the bridge.
@@ -928,69 +1013,34 @@ public:
     /// @return The GUI/callback executor passed at construction.
     [[nodiscard]] ::morph::exec::IExecutor* guiExecutor() const noexcept { return _guiExec; }
 
-    /// @brief Subscribes to results of action type @p Action.
+    /// @brief Subscribes to results of type @p R produced on the attached instance.
     ///
-    /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
-    /// @param cb Callable receiving the action's `Result` by value on the GUI executor.
-    template <typename Action>
-    void subscribe(std::function<void(typename ::morph::model::ActionTraits<Action>::Result)> cb) {
-        using R = ::morph::model::ActionTraits<Action>::Result;
-        auto wrapper = [cb = std::move(cb)](const std::any& boxed) { cb(std::any_cast<const R&>(boxed)); };
-        std::scoped_lock lock{_subs->mtx};
-        _subs->entries[::morph::model::ActionTraits<Action>::typeId()].sink = std::move(wrapper);
+    /// Fires whenever an `R` is produced on the instance this handler is
+    /// attached to — by this handler, by another handler sharing the instance,
+    /// or by another screen entirely. The subscriber names *what it renders*,
+    /// not what somebody else must call to produce it, so adding an action that
+    /// also yields an `R` never breaks an existing subscriber.
+    ///
+    /// One callback per `(handler, R)`: subscribing again replaces the previous
+    /// one. Callbacks are delivered on this handler\'s executor. Failed actions
+    /// notify nobody; delivery is best-effort and unbuffered, with no replay.
+    ///
+    /// @tparam R Result/state type to observe.
+    /// @param cb Callable receiving the value by value on the GUI executor.
+    template <typename R>
+    void subscribe(std::function<void(R)> cb) {
+        _bridge.addSubscription(
+            _binding, std::type_index{typeid(R)},
+            [cb = std::move(cb)](const std::any& boxed) { cb(std::any_cast<const R&>(boxed)); }, _guiExec);
     }
 
-    /// @brief Subscribes to both results and errors of action type @p Action.
-    ///
-    /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
-    /// @param cb     Result callback invoked on success.
-    /// @param errCb  Error callback invoked on failure (replaces orphan logging).
-    template <typename Action>
-    void subscribe(std::function<void(typename ::morph::model::ActionTraits<Action>::Result)> cb,
-                   std::function<void(std::exception_ptr)> errCb) {
-        subscribe<Action>(std::move(cb));
-        std::scoped_lock lock{_subs->mtx};
-        _subs->entries[::morph::model::ActionTraits<Action>::typeId()].errSink = std::move(errCb);
-    }
-
-    /// @brief Removes the subscriber for action type @p Action.
-    template <typename Action>
+    /// @brief Removes this handler\'s subscription for @p R.
+    /// @tparam R Result/state type to stop hearing about.
+    template <typename R>
     void unsubscribe() {
-        std::scoped_lock lock{_subs->mtx};
-        auto iter = _subs->entries.find(::morph::model::ActionTraits<Action>::typeId());
-        if (iter != _subs->entries.end()) {
-            iter->second.sink = nullptr;
-            iter->second.errSink = nullptr;
-        }
+        _bridge.removeSubscription(_binding, std::type_index{typeid(R)});
     }
 
-    /// @brief Sets one field of the in-progress draft and fires the action if ready.
-    ///
-    /// @tparam FieldPtr Pointer-to-data-member of the action struct (encodes both action and field type).
-    /// @param value New value for the field.
-    template <auto FieldPtr>
-    void set(detail::MemberPointerTraits<decltype(FieldPtr)>::ValueType value) {
-        using A = detail::MemberPointerTraits<decltype(FieldPtr)>::ClassType;
-        {
-            std::scoped_lock lock{_subs->mtx};
-            auto& entry = _subs->entries[::morph::model::ActionTraits<A>::typeId()];
-            if (!entry.draft.has_value()) {
-                entry.draft = A{};
-            }
-            std::any_cast<A&>(entry.draft).*FieldPtr = std::move(value);
-        }
-        tryFireImpl<A>(_subs, ::morph::model::ActionTraits<A>::typeId());
-    }
-
-    /// @brief Discards the in-progress draft for action @p Action.
-    template <typename Action>
-    void reset() {
-        std::scoped_lock lock{_subs->mtx};
-        auto iter = _subs->entries.find(::morph::model::ActionTraits<Action>::typeId());
-        if (iter != _subs->entries.end()) {
-            iter->second.draft.reset();
-        }
-    }
 
     /// @brief Returns the underlying `HandlerBinding`.
     ///
@@ -998,132 +1048,10 @@ public:
     [[nodiscard]] const std::shared_ptr<detail::HandlerBinding>& binding() const { return _binding; }
 
 private:
-    struct SubscriberEntry {
-        std::any draft;
-        std::function<void(const std::any&)> sink;
-        std::function<void(std::exception_ptr)> errSink;
-        bool running{false};
-        bool pending{false};
-    };
-    struct SubscriberState {
-        std::mutex mtx;
-        Bridge* bridge{nullptr};
-        std::shared_ptr<detail::HandlerBinding> binding;
-        ::morph::exec::IExecutor* guiExec{nullptr};
-        /// @note Keys are `std::string_view` pointing to string literals from
-        /// `ActionTraits<A>::typeId()` — all call sites pass compile-time strings
-        /// with static storage duration, so the map's keys never dangle.
-        std::unordered_map<std::string_view, SubscriberEntry> entries;
-    };
-
-    struct PostExec {
-        std::function<void(const std::any&)> sink;
-        std::function<void(std::exception_ptr)> errSink;
-        bool refire{false};
-    };
-
-    static PostExec consumeFlight(SubscriberState& state, std::string_view typeId) {
-        PostExec out;
-        std::scoped_lock lock{state.mtx};
-        auto& entry = state.entries.find(typeId)->second;
-        out.sink = entry.sink;
-        out.errSink = entry.errSink;
-        entry.running = false;
-        if (entry.pending) {
-            entry.pending = false;
-            out.refire = true;
-        }
-        return out;
-    }
-
-    static void logUnhandledError(std::string_view typeId, const std::exception_ptr& err) {
-        try {
-            std::rethrow_exception(err);
-        } catch (const std::exception& exc) {
-            ::morph::log::logError(std::string{"[subscription:"} + std::string{typeId} +
-                                   "] unhandled exception: " + exc.what());
-        } catch (...) {
-            ::morph::log::logError(std::string{"[subscription:"} + std::string{typeId} +
-                                   "] unhandled unknown exception");
-        }
-    }
-
-    template <typename Action>
-    static void tryFireImpl(const std::shared_ptr<SubscriberState>& state, std::string_view typeId) {
-        // Every caller holds the `SubscriberState` alive for the duration of this
-        // call, so no liveness check is needed on entry. The async continuations
-        // below may outlive the subscription, so they each re-check through this
-        // weak_ptr instead.
-        const std::weak_ptr<SubscriberState> weak{state};
-        using R = ::morph::model::ActionTraits<Action>::Result;
-
-        Action snapshot;
-        {
-            std::scoped_lock lock{state->mtx};
-            auto iter = state->entries.find(typeId);
-            if (iter == state->entries.end() || !iter->second.draft.has_value()) {
-                return;
-            }
-            if (iter->second.running) {
-                iter->second.pending = true;
-                return;
-            }
-            snapshot = std::any_cast<const Action&>(iter->second.draft);
-            // Recompute every declared computed field live, on the snapshot,
-            // before the readiness check and fire -- so a validator that
-            // inspects a computed field sees the freshly-derived value, and
-            // the fired action already carries it. No-op for actions with no
-            // computedFields. This is a live, non-authoritative recompute for
-            // display; the dispatch paths (bridge.hpp's ActionExecuteRegistry
-            // executor and localOp, registry.hpp's ActionDispatcher runner)
-            // recompute it again, authoritatively. See docs/spec/forms/forms.md.
-            ::morph::forms::recomputeAll(snapshot);
-        }
-        if (!::morph::model::ActionValidator<Action>::ready(snapshot)) {
-            return;
-        }
-        {
-            std::scoped_lock lock{state->mtx};
-            state->entries[typeId].running = true;
-        }
-
-        state->bridge->template executeVia<Model, Action>(state->binding, std::move(snapshot), state->guiExec)
-            .then([weak, typeId](R result) {
-                auto inner = weak.lock();
-                if (!inner) {
-                    return;
-                }
-                auto outcome = consumeFlight(*inner, typeId);
-                if (outcome.sink) {
-                    std::any boxed{std::move(result)};
-                    outcome.sink(boxed);
-                }
-                if (outcome.refire) {
-                    tryFireImpl<Action>(inner, typeId);
-                }
-            })
-            .onError([weak, typeId](const std::exception_ptr& err) {
-                auto inner = weak.lock();
-                if (!inner) {
-                    return;
-                }
-                auto outcome = consumeFlight(*inner, typeId);
-                if (outcome.errSink) {
-                    outcome.errSink(err);
-                } else {
-                    logUnhandledError(typeId, err);
-                }
-                if (outcome.refire) {
-                    tryFireImpl<Action>(inner, typeId);
-                }
-            });
-    }
-
     Bridge& _bridge;
     std::weak_ptr<const void> _bridgeAlive;  // expires when _bridge is destroyed
     ::morph::exec::IExecutor* _guiExec;
     std::shared_ptr<detail::HandlerBinding> _binding;
-    std::shared_ptr<SubscriberState> _subs;
 };
 
 /// Out-of-line definition of ActionExecuteRegistry::registerAction.
