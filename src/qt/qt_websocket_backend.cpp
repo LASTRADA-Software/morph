@@ -218,11 +218,25 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
     try {
         env = ::morph::wire::decode(msg);
     } catch (const std::exception&) {
-        // Malformed reply — route as a sync error if a waiter is parked.
+        // Malformed reply — route as a sync error if a waiter is parked. The raw
+        // text is handed over rather than discarded so the parked caller can
+        // report something better than "disconnected".
         _pendingReply = msg;
         if (_syncLoop) {
             _syncLoop->quit();
+            return;
         }
+        // No sync waiter: with the callId unreadable, this reply cannot be
+        // matched to the execute it belongs to. Dropping it silently — the
+        // previous behavior — left that execute's Completion unsettled forever,
+        // firing neither .then() nor .onError(); a caller awaiting it simply
+        // hangs. Since every message on this socket is required to be one
+        // envelope, an undecodable one means the peer's framing can no longer be
+        // trusted, so fail the pending calls rather than wait on a stream that
+        // may never produce a matching reply. A spurious error is recoverable by
+        // the caller; a permanent hang is not.
+        cancelPending(std::make_exception_ptr(
+            std::runtime_error("protocol error: server sent a message that is not a valid envelope")));
         return;
     }
 

@@ -791,6 +791,43 @@ TEST_CASE("morph::qt::QtWebSocketServer: maxMessageBytes rejects an oversized fr
     pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
 }
 
+TEST_CASE("morph::qt::QtWebSocketServer: an oversized frame's err reply carries the rejected call's id",
+          "[qt][ws][limits]") {
+    // The frame is never decoded, so the id has to be recovered by a bounded
+    // prefix scan. Replying with callId 0 would be actively harmful rather than
+    // merely unhelpful: 0 is the client's synchronous-reply discriminator, so
+    // the error would resume an unrelated parked register/deregister with
+    // another call's reply, while the rejected execute never resolved at all.
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.maxMessageBytes = 1024;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 4242;
+    req.modelId = 1;
+    req.modelType = "WsEchoModel";
+    req.actionType = "WsEchoAction";
+    req.body = std::string(2000, 'x');  // pushes the frame past 1024 bytes
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+    REQUIRE(reply.kind == "err");
+    REQUIRE(reply.message.contains("maxMessageBytes"));
+    REQUIRE(reply.callId == 4242U);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
 TEST_CASE("morph::qt::QtWebSocketServer: default config behaves exactly as before (regression)", "[qt][ws][limits]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};

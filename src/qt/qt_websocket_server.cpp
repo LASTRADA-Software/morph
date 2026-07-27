@@ -9,6 +9,8 @@
 #include <chrono>
 #include <morph/core/logger.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 namespace morph::qt {
@@ -199,9 +201,18 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         state.handshakeTimer = nullptr;
     }
 
-    if (static_cast<std::size_t>(message.toUtf8().size()) > _cfg.maxMessageBytes) {
-        socket->sendTextMessage(
-            QString::fromStdString(::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes"))));
+    if (const auto utf8 = message.toUtf8(); std::cmp_greater(utf8.size(), _cfg.maxMessageBytes)) {
+        // Address the rejection to the call it answers. The frame is never
+        // decoded (that is the point of the cap), so the id is recovered by a
+        // bounded prefix scan. Replying with a zeroed callId would be worse
+        // than useless: `callId == 0` is the client's synchronous-reply
+        // discriminator, so the error would resume some unrelated parked
+        // register/deregister with a reply meant for an execute, while the
+        // execute that triggered it still never resolves.
+        const auto callId = ::morph::wire::detail::peekCallId(
+            std::string_view{utf8.constData(), static_cast<std::size_t>(utf8.size())});
+        socket->sendTextMessage(QString::fromStdString(
+            ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", callId))));
         return;
     }
 
