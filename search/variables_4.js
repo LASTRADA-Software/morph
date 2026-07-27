@@ -8,5 +8,6 @@ var searchData=
   ['den_5',['den',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a26c9d2102cd4c458fffdb95bee645234',1,'morph::units::UnitAlternative::den'],['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9',1,'morph::math::Rational::Wire::den']]],
   ['denominator_6',['denominator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad6c59c25744a54b8f27699e4c3c43800',1,'morph::math::Rational']]],
   ['display_7',['display',['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f',1,'morph::units::UnitMeta']]],
-  ['dp_8',['dp',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8',1,'morph::math::Rational::Wire']]]
+  ['dp_8',['dp',['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8',1,'morph::math::Rational::Wire']]],
+  ['drainoutbox_9',['drainOutbox',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a46bff3ee88485624fe3b6c9184ad0906',1,'morph::journal::OutboxRelay']]]
 ];

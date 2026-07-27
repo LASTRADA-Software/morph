@@ -1,7 +1,8 @@
 var searchData=
 [
-  ['namedquantity_0',['NamedQuantity',['../d1/d58/structmorph_1_1units_1_1NamedQuantity.html',1,'morph::units']]],
-  ['networkmonitor_1',['NetworkMonitor',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html',1,'morph::offline']]],
-  ['networkmonitorconfig_2',['NetworkMonitorConfig',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html',1,'morph::offline']]],
-  ['numerator_3',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]]
+  ['less_0',['Less',['../dd/da0/structmorph_1_1forms_1_1Less.html',1,'morph::forms']]],
+  ['lessorequal_1',['LessOrEqual',['../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html',1,'morph::forms']]],
+  ['limitpolicy_2',['LimitPolicy',['../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html',1,'morph::backend']]],
+  ['localbackend_3',['LocalBackend',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html',1,'morph::backend']]],
+  ['logentry_4',['LogEntry',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html',1,'morph::journal']]]
 ];

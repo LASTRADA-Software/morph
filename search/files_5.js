@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['session_5fauth_2ehpp_0',['session_auth.hpp',['../d3/d6a/session__auth_8hpp.html',1,'']]]
+  ['layout_2ehpp_0',['layout.hpp',['../dd/d6c/layout_8hpp.html',1,'']]],
+  ['locale_5fformat_2ehpp_1',['locale_format.hpp',['../d8/d3a/locale__format_8hpp.html',1,'']]]
 ];

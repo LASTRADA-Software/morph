@@ -1,8 +1,7 @@
 var searchData=
 [
-  ['value_0',['value',['../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee',1,'morph::units::Quantity']]],
-  ['value_5for_1',['value_or',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834',1,'morph::units::Quantity']]],
-  ['valuefield_2',['valueField',['../df/d65/structmorph_1_1forms_1_1Choice.html#a7ee9bd530727b58937656503574eb1a0',1,'morph::forms::Choice']]],
-  ['verify_3',['verify',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492',1,'morph::session::TokenVerifier']]],
-  ['view_4',['view',['../df/d52/structmorph_1_1detail_1_1FixedString.html#aca5e4e24c878f8399dd3c86759549d77',1,'morph::detail::FixedString']]]
+  ['undolast_0',['undoLast',['../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333',1,'morph::journal::SessionLog']]],
+  ['unitalternatives_1',['unitAlternatives',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a98aad53730bc9d5da2a7d921c0d10374',1,'morph::units::Quantity']]],
+  ['unitmeta_2',['unitMeta',['../d5/dda/structmorph_1_1units_1_1Quantity.html#a974c58708720c7c1ab9041d4f903d8df',1,'morph::units::Quantity']]],
+  ['unsubscribe_3',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a6ea83bd14e9cb81f66f9613b0ce75576',1,'morph::bridge::BridgeHandler']]]
 ];

@@ -1,6 +1,5 @@
 var searchData=
 [
-  ['callback_0',['Callback',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a3eeeaa00eee93d89caa0070dd69c51a9',1,'morph::offline::NetworkMonitor']]],
-  ['clock_1',['Clock',['../d3/d6a/session__auth_8hpp.html#a588dddd8a11edffa0eb30b0e24cc129e',1,'morph::session']]],
-  ['config_2',['config',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8d947c7f41ebffae2073c9e3d32dc3bb',1,'morph::offline::NetworkMonitor::Config'],['../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#af3e7ffb97a416c00981893ba53d5421b',1,'morph::offline::ReconnectCoordinator::Config'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c',1,'morph::qt::QtWebSocketBackend::Config']]]
+  ['base_0',['Base',['../d1/d58/structmorph_1_1units_1_1NamedQuantity.html#af067a9bec5485a0e395856980ee0f598',1,'morph::units::NamedQuantity']]],
+  ['binds_1',['binds',['../d8/d94/structmorph_1_1flows_1_1WizardStep.html#a98d4a48c599245638cb6886b2033f800',1,'morph::flows::WizardStep']]]
 ];

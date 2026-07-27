@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a361e6944f65fe4d6dc1b349397528127',1,'morph::backend::RemoteServer']]]
+  ['executor_0',['Executor',['../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html#a053dc5bfc617902b5a2debb208be722d',1,'morph::bridge::ActionExecuteRegistry']]]
 ];

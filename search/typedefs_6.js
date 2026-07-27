@@ -1,5 +1,4 @@
 var searchData=
 [
-  ['policy_0',['Policy',['../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#af7a6a35d6b004829f0d22752f68f506e',1,'morph::session::SigningAuthorizer']]],
-  ['probefunction_1',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]]
+  ['logprovider_0',['LogProvider',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81',1,'morph::backend::RemoteServer']]]
 ];

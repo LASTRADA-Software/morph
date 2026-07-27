@@ -1,4 +1,5 @@
 var searchData=
 [
-  ['replayfunction_0',['ReplayFunction',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a31349dc8d4338512a2ffc2a8fda90996',1,'morph::offline::SyncWorker']]]
+  ['macfunction_0',['MacFunction',['../d3/d6a/session__auth_8hpp.html#afe63b47bbe6b2084d6808466a30421c0',1,'morph::session']]],
+  ['menu_1',['menu',['../d8/d09/structmorph_1_1app_1_1App.html#a3cfd6ea9820e803dd79ab633d9eefea8',1,'morph::app::App']]]
 ];

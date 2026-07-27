@@ -1,9 +1,8 @@
 var searchData=
 [
-  ['reconnectenabled_0',['reconnectEnabled',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#ac3c821f0b4d2405c5b1b5f70640a212a',1,'morph::qt::QtWebSocketBackendConfig']]],
-  ['replay_1',['replay',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b',1,'morph::offline::ReconnectCoordinator::Deps']]],
-  ['requestid_2',['requestId',['../dd/d85/structmorph_1_1session_1_1Context.html#a985070c36f98f59186888105e2d57e46',1,'morph::session::Context']]],
-  ['result_3',['result',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e',1,'morph::journal::LogEntry']]],
-  ['retrydelay_4',['retryDelay',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html#a05af269a1ab61cf5205eadf00a14102c',1,'morph::offline::ReconnectCoordinatorConfig']]],
-  ['roles_5',['roles',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ab5babcea61c0929008503e675bb9a90c',1,'morph::session::SessionToken']]]
+  ['payload_0',['payload',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3391f30563d9f938b266527937c8c4ed',1,'morph::journal::LogEntry::payload'],['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a910247a6d17dd7b29660b9cb009c2918',1,'morph::offline::QueueItem::payload'],['../d5/dda/structmorph_1_1units_1_1Quantity.html#a7a80d984d0cc6760a677a2c4f802d58f',1,'morph::units::Quantity::payload']]],
+  ['placeholder_1',['placeholder',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a02bf72763b3d86624f5ab6ab9ac5f1b4',1,'morph::forms::FieldMeta']]],
+  ['principal_2',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
+  ['probeinterval_3',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
+  ['protocolversion_4',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]]
 ];

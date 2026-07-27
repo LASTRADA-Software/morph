@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['macfunction_0',['MacFunction',['../d3/d6a/session__auth_8hpp.html#a1fdbc7fb676ba2b0ff30b5787c9d4f8a',1,'morph::session']]]
+  ['fixedstring_0',['FixedString',['../d1/d8b/choice_8hpp.html#ab910f400a845e37456104830038b5c88',1,'morph::forms']]]
 ];

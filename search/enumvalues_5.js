@@ -1,4 +1,4 @@
 var searchData=
 [
-  ['overflow_0',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]]
+  ['label_0',['Label',['../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f',1,'morph::forms::i18n']]]
 ];
