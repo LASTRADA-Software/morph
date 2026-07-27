@@ -289,9 +289,17 @@ public:
             return;
         }
         binding->contextKey = primary;
+        // The default `attachModel` releases the current instance before
+        // acquiring the new one. If the acquire then fails -- a transport error,
+        // a server at `maxLiveModels` -- the binding must not keep pointing at
+        // the id it just gave up, or the next execute dispatches to a released
+        // instance and gets a confusing "model not found" instead of the
+        // documented "handler not bound". Unbind first, publish only on success.
+        auto const previous = ::morph::exec::detail::ModelId{binding->currentId.load()};
+        binding->currentId.store(0);
+        binding->primary.clear();
         auto newId = loadBackend()->attachModel(binding->typeId, binding->modelFactory,
-                                                {.contextKey = binding->contextKey, .primary = primary},
-                                                ::morph::exec::detail::ModelId{binding->currentId.load()});
+                                                {.contextKey = binding->contextKey, .primary = primary}, previous);
         binding->primary = std::move(primary);
         binding->currentId.store(newId.v);
     }
