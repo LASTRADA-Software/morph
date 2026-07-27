@@ -216,17 +216,53 @@ a guaranteed-durable view. Strictly-empty lines are skipped before decoding
 (the check is `line.empty()`; a whitespace-only line is *not* treated as blank
 and is handed to `fromJson`).
 
-**Torn-write tolerance.** A crash between `append()`'s `fwrite` and the next
-`flush()` can leave a truncated final line (bytes written, never completed).
-`entries()` tolerates it by position, not by cause: if decoding fails on the
-**last** non-empty line *for any reason* (truncation is the expected one, but the
-catch is over `std::exception` generally), it skips that line, logs a warning via
-`morph::log::logWarn` (naming the path and the parse error), and returns
-everything before it. A decode failure on any line **mid-file** is treated as
-genuine corruption and
+**Torn-write repair (on open).** A crash between `append()`'s `fwrite` and the
+next `flush()` can leave a truncated final line (bytes written, never
+completed). The constructor **truncates** the file to the last newline before
+opening it for append. Discarding those bytes is safe by construction: every
+complete record is written newline-terminated in a single `fwrite`, so whatever
+follows the final newline can only be an incomplete record — never a whole one.
+
+Tolerating the torn line without removing it was not enough. The file is opened
+`"a"`, so the next `append()` began writing at the exact byte the truncated JSON
+stopped at, with no separating newline: the two merged into one line that
+swallowed the new entry. A *further* append then pushed that merged line out of
+trailing position, at which point `entries()` threw — and because the
+constructor itself calls `entries()`, the journal became permanently unopenable.
+`FileOfflineQueue` heals the same damage during `compact()`; this is
+`FileActionLog`'s equivalent.
+
+**Torn-write tolerance (on read).** `entries()` additionally tolerates a
+malformed final line by position, not by cause: if decoding fails on the
+**last** non-empty line *for any reason* (the catch is over `std::exception`
+generally), it skips that line, logs a warning via `morph::log::logWarn`
+(naming the path and the parse error), and returns everything before it. A
+decode failure on any line **mid-file** is treated as genuine corruption and
 the `fromJson` exception is re-thrown — the log is not silently truncated at an
-interior tear. So a single trailing torn record is recoverable; interior
-damage is fatal and surfaced to the caller.
+interior tear, and the repair above never removes a complete record either. So a
+single trailing torn record is recoverable; interior damage is fatal and
+surfaced to the caller.
+
+**I/O failures are raised, never swallowed.** `append()` throws on a short
+write; `flush()` throws if either `fflush` or the `fsync`/`_commit` fails;
+`rotate()` throws if its pre-rotation flush fails, before anything is closed or
+renamed. `IActionLog::flush()` returns `void`, so throwing is the only channel
+available — and callers depend on it: `OutboxRelay::relay()` calls
+`markRelayed()` immediately after `flush()`, and a silently-failed flush would
+record rows as relayed in the model's own store while nothing reached the
+durable sink, dropping them from the outbox *and* from the log with no error
+anywhere.
+
+**Dedup keys follow durability.** An entry's `idempotencyKey` is only recorded
+as *seen* once a `flush()` confirms it reached the disk; keys written since the
+last successful flush are held separately and discarded if that flush fails, so
+a retry writes them again instead of being deduplicated away. A duplicated audit
+row is recoverable; a dropped one is not.
+
+**After a failed `rotate()` reopen.** If `rotate()` renames successfully but
+cannot reopen the active path, it throws with no file open. `append()`,
+`flush()` and a further `rotate()` then all throw with that diagnosis rather
+than dereferencing a null handle, and destruction stays safe.
 
 See [Rotation and retention](#rotation-and-retention) for `rotate()`, the seam
 a host uses to seal and archive segments of this file.

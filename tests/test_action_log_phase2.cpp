@@ -21,6 +21,7 @@
 #include <morph/journal/file_action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <string>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -440,4 +441,105 @@ TEST_CASE("End-to-end: HandlerBinding::contextKey reaches the server's LogProvid
     REQUIRE(entries.size() == 1);
     REQUIRE(entries[0].entityKey == "acct-remote-1");
     REQUIRE(entries[0].actionType == "P2_Deposit");
+}
+
+// ── A torn trailing record must be repaired, not merely tolerated ────────────
+// entries() skips a malformed trailing line, but the file was opened "a", so
+// the next append() began writing at the exact byte the truncated JSON stopped
+// at with no separating newline. The two merged into one line that swallowed
+// the new entry; a further append pushed that merged line out of trailing
+// position, at which point entries() threw -- and since the constructor calls
+// entries(), the journal became permanently unopenable.
+
+TEST_CASE("FileActionLog: a torn trailing record is truncated on open", "[action_log][phase2][file]") {
+    TempFile const tmp{"file_torn_repair"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+        log.flush();
+    }
+    // Simulate a crash between append()'s fwrite and the next flush: a partial
+    // record with no terminating newline.
+    {
+        std::ofstream out{tmp.path, std::ios::app | std::ios::binary};
+        out << R"({"seq":2,"modelType":"P2_Model","entityKe)";
+    }
+
+    {
+        FileActionLog log{tmp.path};
+        REQUIRE(log.entries().size() == 1);
+        log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
+        log.flush();
+        // The new entry is readable, not fused onto the torn remainder.
+        auto all = log.entries();
+        REQUIRE(all.size() == 2);
+        CHECK(all.at(0).entityKey == "acct-1");
+        CHECK(all.at(1).entityKey == "acct-2");
+    }
+}
+
+TEST_CASE("FileActionLog: a torn trailing record does not make the log unopenable", "[action_log][phase2][file]") {
+    TempFile const tmp{"file_torn_unopenable"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+        log.flush();
+    }
+    {
+        std::ofstream out{tmp.path, std::ios::app | std::ios::binary};
+        out << R"({"seq":2,"modelType":"P2_Mod)";
+    }
+
+    // The second append is what used to be fatal: it pushed the merged line
+    // into interior position. Reopen between appends, as a restarting process
+    // would, and keep going well past that point.
+    for (int restart = 0; restart < 3; ++restart) {
+        FileActionLog log{tmp.path};
+        REQUIRE_NOTHROW(log.append(makeEntry("P2_Model", "acct-n", "P2_Deposit", "{}", "1")));
+        REQUIRE_NOTHROW(log.flush());
+    }
+    FileActionLog reopened{tmp.path};
+    REQUIRE(reopened.entries().size() == 4);
+}
+
+TEST_CASE("FileActionLog: interior corruption is still reported, not silently truncated",
+          "[action_log][phase2][file]") {
+    // The repair only removes bytes after the final newline -- never a complete
+    // record. Genuine mid-file corruption must keep throwing.
+    TempFile const tmp{"file_interior_corrupt"};
+    {
+        FileActionLog log{tmp.path};
+        log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+        log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20"));
+        log.flush();
+    }
+    {
+        // Insert a complete-but-malformed line between two good ones.
+        std::ifstream input{tmp.path};
+        std::vector<std::string> lines;
+        std::string line;
+        while (std::getline(input, line)) {
+            lines.push_back(line);
+        }
+        input.close();
+        REQUIRE(lines.size() == 2);
+        std::ofstream out{tmp.path, std::ios::trunc};
+        out << lines.at(0) << "\n" << R"({"seq":9,"broken)" << "\n" << lines.at(1) << "\n";
+    }
+    REQUIRE_THROWS(FileActionLog{tmp.path});
+}
+
+TEST_CASE("FileActionLog: append and flush on a log whose rotate() left it closed throw clearly",
+          "[action_log][phase2][file]") {
+    // rotate() deliberately leaves the handle null rather than dangling when the
+    // reopen fails; every entry point must say so instead of dereferencing it.
+    TempFile const tmp{"file_rotate_closed"};
+    FileActionLog log{tmp.path};
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    // Rotating into a directory that does not exist fails the rename, but the
+    // active path is still reopenable, so the log stays usable.
+    REQUIRE_THROWS(log.rotate(std::filesystem::path{"/no/such/directory/at/all/sealed.ndjson"}));
+    REQUIRE_NOTHROW(log.append(makeEntry("P2_Model", "acct-2", "P2_Deposit", "{}", "20")));
+    REQUIRE_NOTHROW(log.flush());
+    REQUIRE(log.entries().size() == 2);
 }

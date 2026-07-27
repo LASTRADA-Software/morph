@@ -72,7 +72,18 @@ struct OutboxRelay {
     ///
     /// A no-op (returns `{.relayed = 0}` without touching `sink` or calling
     /// `markRelayed`) if `drainOutbox()` returns no rows.
+    ///
+    /// `markRelayed` runs only after `sink->flush()` returns normally. An
+    /// `IActionLog` that cannot make the batch durable throws (see
+    /// `IActionLog::flush`), which propagates out of here *before* the rows are
+    /// marked — so they stay in the outbox and a later `relay()` retries them.
+    /// This is what keeps the relay at-least-once instead of at-most-once: were
+    /// the failure swallowed, the rows would be recorded as relayed while
+    /// nothing reached the sink, and nothing would ever surface the loss.
+    ///
     /// @return The number of rows relayed in this call.
+    /// @throws std::exception propagated from `sink->append()` or `sink->flush()`;
+    ///         the batch is left unmarked and therefore retryable.
     OutboxRelayResult relay() {
         logIfAnyDepNull();
         auto rows = drainOutbox();

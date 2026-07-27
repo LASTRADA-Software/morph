@@ -62,6 +62,17 @@ public:
     ///         *interior* line (a malformed trailing line is tolerated — see
     ///         `entries()`).
     explicit FileActionLog(std::filesystem::path path) : _path{std::move(path)} {
+        // Discard a torn trailing record before anything else touches the file.
+        // The file is opened "a", so the next append() would otherwise start
+        // writing at the exact byte the truncated JSON stopped at, with no
+        // separating newline: the two would merge into one line that swallows
+        // the new entry, and once a *further* append pushes that merged line out
+        // of trailing position, entries()' tolerance no longer applies and it
+        // throws -- from this very constructor, leaving the journal permanently
+        // unopenable. FileOfflineQueue heals the same damage in compact(); this
+        // is FileActionLog's equivalent.
+        repairTornTail();
+
         // Rebuild the idempotencyKey dedup set from whatever is already durably on
         // disk, so a re-relayed outbox row is recognised even after this process
         // restarts (not just within one FileActionLog instance's lifetime). Reuses
@@ -74,6 +85,10 @@ public:
         // handle open. Opening _file first and rebuilding the dedup set after
         // would leak it on this path -- the constructor never completes, so
         // the destructor never runs to close what fopen() already opened.
+        // entries() is deliberately the final overrider here: copy/move are
+        // deleted and nothing derives from this class, so there is no more-
+        // derived override for the call to bypass.
+        // NOLINTNEXTLINE(clang-analyzer-optin.cplusplus.VirtualCall)
         for (const auto& existing : entries()) {
             if (!existing.idempotencyKey.empty()) {
                 _seenIdempotencyKeys.insert(existing.idempotencyKey);
@@ -87,12 +102,20 @@ public:
 
     /// @brief Closes the underlying file.
     ///
-    /// `_file` is always non-null here: the constructor either finishes with a
+    /// `_file` is normally non-null: the constructor either finishes with a
     /// valid handle or throws before completing (in which case this destructor
-    /// never runs), and copy/move are deleted, so there is no path that could
-    /// null it out afterwards.
+    /// never runs), and copy/move are deleted. The one exception is a `rotate()`
+    /// whose reopen failed after the rename succeeded — it throws with the
+    /// handle left null rather than dangling, so the null check here is
+    /// reachable and load-bearing, not defensive noise.
     // NOLINTNEXTLINE(cert-err33-c) — destructor context, can't propagate errors
-    ~FileActionLog() override { std::fclose(_file); }
+    ~FileActionLog() override {
+        if (_file != nullptr) {
+            // Destructor context: there is nothing to propagate a failure to.
+            // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
+            std::fclose(_file);
+        }
+    }
 
     FileActionLog(const FileActionLog&) = delete;
     FileActionLog& operator=(const FileActionLog&) = delete;
@@ -100,29 +123,71 @@ public:
     FileActionLog& operator=(FileActionLog&&) = delete;
 
     /// @brief Appends @p entry as one JSON line. Buffered until `flush()`. Thread-safe.
+    ///
+    /// The entry's `idempotencyKey` is only remembered as *seen* once `flush()`
+    /// confirms it reached the disk (see `flush()`), so a write that fails is
+    /// still retryable. Recording the key up front — before the bytes were
+    /// durable — silently deduplicated the retry of a row that was never
+    /// written, turning a transient I/O error into permanent data loss.
+    ///
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
+    /// @throws std::runtime_error if the write fails, or if the log has no open
+    ///         file (only reachable after a `rotate()` that failed to reopen).
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
-        if (!entry.idempotencyKey.empty() && !_seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
-            return;  // already durably recorded; a re-relayed duplicate is a safe no-op
+        requireOpen("append");
+        if (!entry.idempotencyKey.empty() && (_seenIdempotencyKeys.contains(entry.idempotencyKey) ||
+                                              _unflushedIdempotencyKeys.contains(entry.idempotencyKey))) {
+            return;  // already recorded; a re-relayed duplicate is a safe no-op
         }
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
-        // NOLINTNEXTLINE(cert-err33-c) — append-only; fwrite errors checked via subsequent fsync
-        std::fwrite(line.data(), 1, line.size(), _file);
+        if (std::fwrite(line.data(), 1, line.size(), _file) != line.size()) {
+            throw std::runtime_error("FileActionLog::append: short write to " + _path.string());
+        }
+        if (!entry.idempotencyKey.empty()) {
+            _unflushedIdempotencyKeys.insert(std::move(entry.idempotencyKey));
+        }
     }
 
     /// @brief Flushes stdio's buffer, then fsyncs the file descriptor. Thread-safe.
+    ///
+    /// Throws rather than returning a status because the interface is
+    /// `void`-returning and the failure is not one a caller may ignore:
+    /// `OutboxRelay::relay()` calls `markRelayed()` immediately after this, and
+    /// on a silent failure would record rows as relayed in the model's own store
+    /// while nothing reached the durable sink — the rows are then gone from the
+    /// outbox and absent from the log. Throwing aborts `relay()` before
+    /// `markRelayed`, leaving the batch to be retried.
+    ///
+    /// On failure the keys buffered since the last successful flush are
+    /// forgotten, so a retry writes them again instead of being deduplicated
+    /// away. A duplicated audit row is recoverable; a dropped one is not.
+    ///
+    /// @throws std::runtime_error if the buffer flush or the fsync fails, or if
+    ///         the log has no open file.
     void flush() override {
         std::scoped_lock const lock{_mtx};
-        // NOLINTNEXTLINE(cert-err33-c) — errors logged by caller after flush
-        std::fflush(_file);
+        requireOpen("flush");
+        if (std::fflush(_file) != 0) {
+            _unflushedIdempotencyKeys.clear();
+            throw std::runtime_error("FileActionLog::flush: failed to flush " + _path.string());
+        }
 #ifdef _WIN32
-        _commit(_fileno(_file));
+        int const syncResult = _commit(_fileno(_file));
 #else
-        ::fsync(fileno(_file));
+        int const syncResult = ::fsync(fileno(_file));
 #endif
+        if (syncResult != 0) {
+            _unflushedIdempotencyKeys.clear();
+            throw std::runtime_error("FileActionLog::flush: failed to fsync " + _path.string());
+        }
+        // Durable now: promote this window's keys so they survive as dedup state.
+        for (const auto& key : _unflushedIdempotencyKeys) {
+            _seenIdempotencyKeys.insert(key);
+        }
+        _unflushedIdempotencyKeys.clear();
     }
 
     /// @brief Re-reads the file from disk and decodes every line. Thread-safe.
@@ -191,28 +256,47 @@ public:
     ///        `rename` semantics decide what happens if a filesystem entry
     ///        already exists there (POSIX silently replaces it) — pass a path
     ///        that does not collide with an existing segment.
-    /// @throws std::runtime_error if renaming to @p sealedPath fails — in that
-    ///         case the *original* active file is reopened in place (still
-    ///         holding every entry recorded before the call, so no data is
-    ///         lost; the rotation simply did not happen) — or if reopening the
-    ///         active path afterward fails outright (only possible if the
-    ///         rename itself succeeded and the original path's directory then
-    ///         became unwritable).
+    /// @throws std::runtime_error if the pre-rotation flush/fsync fails (raised
+    ///         before anything is closed or renamed, so no segment is ever
+    ///         sealed around entries that never reached the disk); if renaming
+    ///         to @p sealedPath fails — in that case the *original* active file
+    ///         is reopened in place (still holding every entry recorded before
+    ///         the call, so no data is lost; the rotation simply did not
+    ///         happen) — or if reopening the active path afterward fails
+    ///         outright (only possible if the rename itself succeeded and the
+    ///         original path's directory then became unwritable). After that
+    ///         last case the log has no open file: `append()`, `flush()`, and a
+    ///         further `rotate()` all throw with that diagnosis rather than
+    ///         dereferencing a null handle, and destruction is still safe.
     void rotate(const std::filesystem::path& sealedPath) {
         std::scoped_lock const lock{_mtx};
+        requireOpen("rotate");
         // Same durability steps as flush()'s body, inlined here because
-        // flush() itself takes _mtx and this is already under it.
-        std::fflush(_file);
+        // flush() itself takes _mtx and this is already under it. A failure is
+        // raised before the file is closed and renamed, so a segment is never
+        // sealed around entries that never reached the disk.
+        if (std::fflush(_file) != 0) {
+            throw std::runtime_error("FileActionLog::rotate: failed to flush " + _path.string());
+        }
 #ifdef _WIN32
-        _commit(_fileno(_file));
+        int const syncResult = _commit(_fileno(_file));
 #else
-        ::fsync(fileno(_file));
+        int const syncResult = ::fsync(fileno(_file));
 #endif
+        if (syncResult != 0) {
+            throw std::runtime_error("FileActionLog::rotate: failed to fsync " + _path.string());
+        }
+        // Everything buffered is now durable in the segment about to be sealed.
+        for (const auto& key : _unflushedIdempotencyKeys) {
+            _seenIdempotencyKeys.insert(key);
+        }
+        _unflushedIdempotencyKeys.clear();
+        // NOLINTNEXTLINE(cert-err33-c) — the data is already fsynced above
         std::fclose(_file);
         _file = nullptr;
 
-        std::error_code ec;
-        std::filesystem::rename(_path, sealedPath, ec);
+        std::error_code renameError;
+        std::filesystem::rename(_path, sealedPath, renameError);
 
         // Reopen the active path regardless of the rename's outcome: on
         // success this creates a fresh empty file; on failure it reopens the
@@ -221,20 +305,80 @@ public:
         _file = std::fopen(_path.string().c_str(), "a");
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
-                                     (ec ? "a failed" : "a successful") + " rename to " + sealedPath.string());
+                                     (renameError ? "a failed" : "a successful") + " rename to " +
+                                     sealedPath.string());
         }
-        if (ec) {
+        if (renameError) {
             throw std::runtime_error("FileActionLog::rotate: failed to rename " + _path.string() + " to " +
-                                     sealedPath.string() + ": " + ec.message());
+                                     sealedPath.string() + ": " + renameError.message());
         }
     }
 
 private:
+    /// Throws if no file handle is open. Reachable only after a `rotate()` whose
+    /// reopen failed: that path deliberately leaves `_file` null rather than
+    /// dangling, so every entry point has to say so instead of dereferencing it.
+    void requireOpen(std::string_view what) const {
+        if (_file == nullptr) {
+            throw std::runtime_error("FileActionLog::" + std::string{what} + ": " + _path.string() +
+                                     " is not open (a previous rotate() failed to reopen it)");
+        }
+    }
+
+    /// Truncates any bytes following the last newline in the file.
+    ///
+    /// A crash between `append()`'s `fwrite` and the next `flush()` can leave a
+    /// partial record at the end. Because every complete record is written
+    /// newline-terminated in a single `fwrite`, whatever follows the final
+    /// newline is by construction an incomplete record and never a whole one —
+    /// which makes discarding it safe: it can only remove bytes that no reader
+    /// could ever have decoded. Complete records, including a malformed
+    /// *interior* line, are left exactly as they are; diagnosing those stays
+    /// `entries()`' job.
+    void repairTornTail() const {
+        std::error_code errorCode;
+        auto const size = std::filesystem::file_size(_path, errorCode);
+        if (errorCode || size == 0) {
+            return;  // absent or empty: nothing to repair
+        }
+        std::ifstream input{_path, std::ios::binary};
+        if (!input) {
+            return;
+        }
+        std::uintmax_t intactEnd = 0;
+        std::uintmax_t offset = 0;
+        std::string line;
+        while (std::getline(input, line)) {
+            offset += line.size();
+            if (input.eof()) {
+                break;  // no trailing newline: this line is the torn remainder
+            }
+            ++offset;  // the '\n' getline consumed
+            intactEnd = offset;
+        }
+        if (intactEnd == size) {
+            return;
+        }
+        std::filesystem::resize_file(_path, intactEnd, errorCode);
+        if (errorCode) {
+            ::morph::log::logWarn("FileActionLog: could not truncate torn trailing record in " + _path.string() +
+                                  ": " + errorCode.message());
+            return;
+        }
+        ::morph::log::logWarn("FileActionLog: discarded " + std::to_string(size - intactEnd) +
+                              " byte(s) of a torn trailing record in " + _path.string());
+    }
+
     std::filesystem::path _path;
     std::FILE* _file = nullptr;
     mutable std::mutex _mtx;
     uint64_t _nextSeq{0};
+    /// Keys confirmed durable by a successful `flush()`.
     std::unordered_set<std::string> _seenIdempotencyKeys;
+    /// Keys written since the last successful `flush()`. Promoted into
+    /// `_seenIdempotencyKeys` on success, discarded on failure so the
+    /// corresponding rows stay retryable.
+    std::unordered_set<std::string> _unflushedIdempotencyKeys;
 };
 
 }  // namespace morph::journal

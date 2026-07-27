@@ -169,11 +169,29 @@ struct IActionLog {
     virtual ~IActionLog() = default;
 
     /// @brief Appends @p entry. Implementations assign `entry.seq`.
+    ///
+    /// An implementation that can fail to record the entry must throw. Returning
+    /// normally is the sink's promise that the entry is recorded (or, for a
+    /// buffering sink, that it will be by the next successful `flush()`); see
+    /// `flush()` for why silence is not an option here.
+    ///
     /// @param entry Entry to append.
+    /// @throws std::exception (implementation-defined) if the entry could not be recorded.
     virtual void append(LogEntry entry) = 0;
 
     /// @brief Pushes any buffered entries to the durable backend. No-op for sinks
     ///        with nothing to buffer (e.g. `InMemoryActionLog`).
+    ///
+    /// **Must throw if the data did not reach the backend.** The return type is
+    /// `void`, so throwing is the only channel an implementation has, and
+    /// callers rely on it: `OutboxRelay::relay()` calls `markRelayed()` directly
+    /// after this, and a silently-failed flush would mark rows relayed in the
+    /// model's own store while nothing was durably written — dropping them from
+    /// the outbox *and* from the log, with no error anywhere. An implementation
+    /// that cannot fail (nothing to buffer) simply never throws.
+    ///
+    /// @throws std::exception (implementation-defined) if buffered entries could
+    ///         not be made durable.
     virtual void flush() = 0;
 
     /// @brief Returns recorded entries in append order.
