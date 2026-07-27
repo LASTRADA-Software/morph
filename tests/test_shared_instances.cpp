@@ -58,6 +58,17 @@ struct ShiPeek {
     int unused = 0;
 };
 
+/// Creates the entity, so its key cannot be in the request — it comes back in
+/// the reply, exactly as a database insert returns its generated primary key.
+struct ShiCreate {
+    std::int64_t initial = 0;
+};
+
+struct ShiCreated {
+    std::int64_t id = 0;
+    std::int64_t value = 0;
+};
+
 struct ShiCounterModel {
     using PrimaryKey = std::int64_t;
 
@@ -69,15 +80,23 @@ struct ShiCounterModel {
     }
     [[nodiscard]] ShiCounterState execute(const ShiRead& /*act*/) const { return {.value = value}; }
     [[nodiscard]] ShiCounterState execute(const ShiPeek& /*act*/) const { return {.value = value}; }
+
+    ShiCreated execute(const ShiCreate& act) {
+        static std::atomic<std::int64_t> nextId{9000};
+        value = act.initial;
+        return {.id = nextId.fetch_add(1), .value = value};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(ShiCounterModel, "SHI_CounterModel")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiAddTo, "SHI_AddTo")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiRead, "SHI_Read")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiPeek, "SHI_Peek")
+BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiCreate, "SHI_Create")
 
 BRIDGE_KEY_FROM(ShiAddTo, &ShiAddTo::id);
 BRIDGE_KEY_FROM(ShiRead, &ShiRead::id);
+BRIDGE_KEY_FROM_RESULT(ShiCreate, &ShiCreated::id);
 // NOLINTEND(misc-use-internal-linkage)
 
 namespace {
@@ -294,6 +313,42 @@ TEST_CASE("a remote plain handler still gets its own instance", "[shared-instanc
     settle(shared.execute(ShiAddTo{.id = 8, .amount = 30}));
     REQUIRE(settle(priv.execute(ShiAddTo{.id = 8, .amount = 1})).value == 1);
     REQUIRE(settle(shared.execute(ShiRead{.id = 8})).value == 30);
+}
+
+TEST_CASE("a result-sourced key promotes the instance the create ran on", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> creator{bridge, &exec};
+    auto created = settle(creator.execute(ShiCreate{.initial = 5}));
+
+    // The handler adopts the generated key before any user callback sees the
+    // result, so a .then() could immediately act on the new instance.
+    REQUIRE(created.id != 0);
+    REQUIRE(creator.primary().value_or(-1) == created.id);
+
+    // Crucially the *same* instance was filed under that key rather than a fresh
+    // one being created for it: everything the create did is still there. This
+    // is the whole reason promotion exists instead of re-pointing.
+    REQUIRE(settle(creator.execute(ShiPeek{})).value == 5);
+
+    // …and it is now reachable by key like any other shared instance.
+    BridgeHandler<ShiCounterModel, AllowShared> latecomer{bridge, &exec};
+    latecomer.attach(created.id);
+    REQUIRE(settle(latecomer.execute(ShiPeek{})).value == 5);
+    REQUIRE(settle(latecomer.instances()).size() == 1);
+}
+
+TEST_CASE("a result-sourced key promotes across a remote backend", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> creator{bridge, &exec};
+    auto created = settle(creator.execute(ShiCreate{.initial = 11}));
+    REQUIRE(creator.primary().value_or(-1) == created.id);
+    REQUIRE(settle(creator.execute(ShiPeek{})).value == 11);
 }
 
 TEST_CASE("primary keys round-trip through their canonical encoding", "[shared-instances]") {
