@@ -139,7 +139,7 @@ jobs:
       - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2
+          sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
       - name: Cache sccache
@@ -154,9 +154,17 @@ jobs:
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # morph::net and the SQLite offline queue are opt-in, but they are also
+      # where the memory/threading/UB risk actually lives (raw sockets, an I/O
+      # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
+      # and the coverage number both silently skipped them. Qt/QML and the
+      # fuzzers stay out of this matrix — they are covered by the
+      # linux-all-features job, and a GUI stack under TSan is mostly noise.
       - name: Configure
         run: |
           cmake --preset ${{ matrix.preset }} \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
@@ -243,6 +251,120 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug
 
+  # ── Linux: every optional feature enabled at once ─────────────────────
+  # Every MORPH_BUILD_* option below is off by default, and until this job
+  # existed no CI configuration turned any of them on — so several thousand
+  # lines (morph::net, the Qt/QML forms renderer, the SQLite queue, the fuzz
+  # harnesses, the vetted-HMAC adapters, the soak/bench targets) were never
+  # compiled here, let alone tested. That is how a build that cannot configure
+  # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
+  # extension both reached master green. Enabling them together also proves
+  # they compose, which building each alone would not.
+  linux-all-features:
+    name: Linux / all optional features (${{ matrix.compiler }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Clang additionally builds the libFuzzer harnesses, which require it.
+          - compiler: clang
+            preset: clang-debug
+            fuzzers: 'ON'
+          - compiler: gcc
+            preset: gcc-debug
+            fuzzers: 'OFF'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-all-features-${{ matrix.compiler }}-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-all-features-${{ matrix.compiler }}-
+
+      - name: Install toolchain and every optional feature's dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build catch2 \
+            qt6-base-dev qt6-websockets-dev qt6-declarative-dev qt6-tools-dev libgl1-mesa-dev \
+            qml6-module-qtqml qml6-module-qtquick qml6-module-qtquick-controls \
+            qml6-module-qtquick-layouts qml6-module-qttest \
+            libsqlite3-dev libsodium-dev libssl-dev
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            sudo apt-get install -y gcc-15 g++-15
+            sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+          else
+            wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          fi
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
+          restore-keys: sccache-all-features-${{ matrix.compiler }}-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      # MORPH_REQUIRE_VETTED_HMAC is deliberately combined with
+      # MORPH_BUILD_TESTS=ON (the preset default). docs/spec/security.md
+      # documents that pairing as supported; this is what keeps it that way.
+      - name: Configure (every optional feature ON)
+        run: |
+          EXTRA=""
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            EXTRA="-DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}"
+          fi
+          # shellcheck disable=SC2086
+          cmake --preset ${{ matrix.preset }} \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_FORMS_QML=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DMORPH_BUILD_LOAD_TESTS=ON \
+            -DMORPH_BUILD_HMAC_EXAMPLES=ON \
+            -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
+            -DMORPH_REQUIRE_VETTED_HMAC=ON \
+            $EXTRA \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      # Includes the fuzz *replay* tests on the clang leg: each committed seed
+      # and crash reproducer is replayed once and must not crash. This is a
+      # deterministic regression check, not a fuzzing campaign.
+      - name: Test (offscreen Qt platform)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset ${{ matrix.preset }} --output-on-failure
+
+      # A guard that never fires is indistinguishable from one that works, so
+      # assert the fuzz replay actually ran the committed crash reproducers
+      # rather than silently matching nothing (the `.txt`-vs-`.bin` glob bug).
+      - name: Verify the fuzz replay covered the committed reproducers
+        if: matrix.fuzzers == 'ON'
+        run: |
+          ctest --preset ${{ matrix.preset }} -R fuzz -V > fuzz-replay.log 2>&1
+          status=0
+          for finding in tests/fuzz/findings/*/*; do
+            if ! grep -qF "$(basename "$finding")" fuzz-replay.log; then
+              echo "::error::fuzz replay never referenced committed reproducer $finding"
+              status=1
+            fi
+          done
+          exit "$status"
+
   # ── Valgrind (memcheck) ───────────────────────────────────────────────
   valgrind:
     name: Valgrind memcheck
@@ -279,22 +401,41 @@ jobs:
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # morph::net and the SQLite queue are where the raw pointers, manual
+      # buffers and C API calls live — precisely what memcheck is for — so they
+      # are built here rather than left to the default (Qt/QML stays out: it
+      # drags in a GUI stack whose own allocations dominate the report).
       - name: Configure
-        run: cmake --preset gcc-debug -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        run: |
+          cmake --preset gcc-debug \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
       - name: Build
         run: cmake --build --preset gcc-debug
 
       - name: Run tests under Valgrind
         run: |
-          valgrind \
-            --tool=memcheck \
-            --leak-check=full \
-            --show-leak-kinds=definite,indirect \
-            --errors-for-leak-kinds=definite,indirect \
-            --error-exitcode=1 \
-            --suppressions=cmake/valgrind.supp \
-            build/gcc-debug/tests/morph_tests
+          status=0
+          for suite in tests/morph_tests tests/net/morph_net_tests tests/offline_sqlite/morph_offline_sqlite_tests; do
+            binary="build/gcc-debug/$suite"
+            if [ ! -x "$binary" ]; then
+              echo "::error::expected Valgrind suite $binary was not built"
+              exit 1
+            fi
+            echo "── memcheck: $suite ──"
+            valgrind \
+              --tool=memcheck \
+              --leak-check=full \
+              --show-leak-kinds=definite,indirect \
+              --errors-for-leak-kinds=definite,indirect \
+              --error-exitcode=1 \
+              --suppressions=cmake/valgrind.supp \
+              "$binary" || status=1
+          done
+          exit "$status"
 
   # ── clang-tidy-diff (changed lines only) ──────────────────────────────
   clang-tidy:
@@ -312,10 +453,12 @@ jobs:
           key: apt-clang-tidy-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-clang-tidy-
 
-      - name: Install Clang ${{ env.CLANG_VERSION }} and clang-tidy from apt.llvm.org
+      - name: Install Clang ${{ env.CLANG_VERSION }}, clang-tidy, and the optional features' deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y ninja-build catch2
+          sudo apt-get install -y ninja-build catch2 \
+            qt6-base-dev qt6-websockets-dev qt6-declarative-dev qt6-tools-dev libgl1-mesa-dev \
+            libsqlite3-dev libsodium-dev libssl-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
           sudo apt-get install -y clang-tidy-${{ env.CLANG_VERSION }}
 
@@ -331,9 +474,22 @@ jobs:
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
-      - name: Configure (generates compile_commands.json)
+      # Every optional feature is ON here purely so its sources land in
+      # compile_commands.json. clang-tidy only ever analyses *changed lines*, so
+      # this costs a wider build, not a wider lint. Configured narrowly before,
+      # the whole opt-in surface — morph::net, the Qt transport, the QML forms
+      # renderer, the SQLite queue, the fuzz harnesses — was invisible to the
+      # one gate in this workflow that reads code rather than running it.
+      - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
+            -DMORPH_BUILD_NET=ON \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_FORMS_QML=ON \
+            -DMORPH_BUILD_OFFLINE_SQLITE=ON \
+            -DMORPH_BUILD_LOAD_TESTS=ON \
+            -DMORPH_BUILD_HMAC_EXAMPLES=ON \
+            -DMORPH_BUILD_FUZZERS=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
@@ -381,6 +537,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      # The checker itself is tested first. A lint gate nobody tests reports
+      # green whether or not it still detects anything — this one was blind to
+      # both the bare `[[deprecated]]` form and any message wrapped across
+      # lines, which is exactly what VERSIONING.md forbids.
+      - name: Self-test the deprecation-marker checker
+        run: bash scripts/test_check_deprecated_markers.sh
 
       - name: Check [[deprecated]] markers cite a replacement and removal version
         run: bash scripts/check_deprecated_markers.sh include/morph
