@@ -203,7 +203,7 @@ construction.
 
 ## Wire protocol changes
 
-Three additive changes. All are compatible with the additive-only evolution
+Four additive changes. All are compatible with the additive-only evolution
 policy in [wire.md](wire.md), and the lenient decoding that A6
 established means an older peer ignores what it does not understand.
 
@@ -218,6 +218,13 @@ established means an older peer ignores what it does not understand.
   `ModelId`. Semantically a `deregister` + `register` pair, made atomic so a
   re-pointing handler cannot lose its slot to `LimitPolicy::maxLiveModels` in
   between.
+- **A new `assign` request.** Files an already-live `modelId` under a primary
+  key, in place. This is what makes a result-sourced key work without losing
+  state: an action that creates its own entity runs on a not-yet-keyed
+  instance, and only the reply carries the generated key, so the instance the
+  action ran on is promoted rather than abandoned for a fresh one. The existing
+  holder of a key always wins — promoting onto a taken key is a silent no-op,
+  never a displacement.
 - **A new `instances` request.** Takes a model type id, replies with the live
   primary keys for it. Subject to `authorize` like any other request; see below.
 
@@ -236,7 +243,7 @@ policy being `ownerPrincipal.empty() || ownerPrincipal == ctx.principal`
 
 Under that policy, a second client attaching to an instance the first client
 created would be **rejected**. Cross-client sharing and per-instance ownership
-are therefore mutually exclusive, and the design must say so rather than let an
+are therefore mutually exclusive, and the design says so rather than letting an
 authorizer silently defeat the feature:
 
 - **A shared instance is ownerless.** Its `ownerPrincipal` is empty, so the
