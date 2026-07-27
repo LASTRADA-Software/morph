@@ -235,22 +235,31 @@ private:
         writeLine(detail::toJson(record));
     }
 
+    /// Every mutation is documented as a committed transaction by the time the
+    /// call returns, so a failure to get the bytes down has to be raised rather
+    /// than swallowed: a caller told an item was enqueued, or marked done, must
+    /// not have that silently be untrue after a restart.
     void writeLine(const std::string& json) {
         std::string line = json;
         line.push_back('\n');
-        // NOLINTNEXTLINE(cert-err33-c) — durability checked via fflush/fsync below
-        std::fwrite(line.data(), 1, line.size(), _file);
-        syncFile(_file);
+        if (std::fwrite(line.data(), 1, line.size(), _file) != line.size()) {
+            throw std::runtime_error("FileOfflineQueue: short write to " + _path.string());
+        }
+        syncFile(_file, _path.string());
     }
 
-    static void syncFile(std::FILE* file) {
-        // NOLINTNEXTLINE(cert-err33-c)
-        std::fflush(file);
+    static void syncFile(std::FILE* file, const std::string& what) {
+        if (std::fflush(file) != 0) {
+            throw std::runtime_error("FileOfflineQueue: failed to flush " + what);
+        }
 #ifdef _WIN32
-        _commit(_fileno(file));
+        int const syncResult = _commit(_fileno(file));
 #else
-        ::fsync(fileno(file));
+        int const syncResult = ::fsync(fileno(file));
 #endif
+        if (syncResult != 0) {
+            throw std::runtime_error("FileOfflineQueue: failed to fsync " + what);
+        }
     }
 
     /// @brief Reads whatever is on disk and replays it into `_items`/`_nextId`.
@@ -302,18 +311,50 @@ private:
         if (out == nullptr) {
             throw std::runtime_error("FileOfflineQueue: failed to open " + tmp + " for compaction");
         }
-        for (const auto& [id, item] : _items) {
-            detail::FileQueueRecord const record{.op = "put",
-                                                 .id = item.id,
-                                                 .payload = item.payload,
-                                                 .idempotencyKey = item.idempotencyKey,
-                                                 .attempts = item.attempts};
+        auto writeRecord = [&](const detail::FileQueueRecord& record) {
             std::string outLine = detail::toJson(record);
             outLine.push_back('\n');
-            // NOLINTNEXTLINE(cert-err33-c)
-            std::fwrite(outLine.data(), 1, outLine.size(), out);
+            if (std::fwrite(outLine.data(), 1, outLine.size(), out) != outLine.size()) {
+                // Closing on the way out of a throw; nothing to report a
+                // close failure to.
+                // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
+                std::fclose(out);
+                throw std::runtime_error("FileOfflineQueue: short write during compaction of " + _path.string());
+            }
+        };
+
+        for (const auto& [entryId, item] : _items) {
+            writeRecord(detail::FileQueueRecord{.op = "put",
+                                                .id = item.id,
+                                                .payload = item.payload,
+                                                .idempotencyKey = item.idempotencyKey,
+                                                .attempts = item.attempts});
         }
-        syncFile(out);
+
+        // Carry the id high-water mark across the rewrite. `load()` derives
+        // _nextId from the ids it sees, and compaction drops every tombstone, so
+        // without this the mark silently regresses to the highest *surviving*
+        // id: enqueue 1 and 2, markDone(2), restart (compacts to just id 1),
+        // restart again -> _nextId == 1 and the next enqueue reissues id 2, the
+        // id of an item that was completed and acknowledged. That breaks the
+        // "new ids never collide with an old tombstone" invariant this class
+        // documents, and a stale in-flight reference to the old id 2 would then
+        // silently address a different item.
+        //
+        // Recorded as a "done" for the mark itself rather than a new record
+        // type: `load()` already raises highestId for every id it reads and
+        // erasing an id that is not present is a no-op, so this needs no reader
+        // change and stays readable by an older build. Emitted only when the
+        // mark exceeds every surviving id -- writing "done" for an id that a
+        // "put" line above just restored would delete it on the next load.
+        uint64_t const maxSurviving = _items.empty() ? 0 : _items.rbegin()->first;
+        if (_nextId > maxSurviving) {
+            writeRecord(detail::FileQueueRecord{
+                .op = "done", .id = _nextId, .payload = {}, .idempotencyKey = {}, .attempts = 0});
+        }
+
+        syncFile(out, tmp);
+        // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory) — the data is already fsynced above
         std::fclose(out);
         std::filesystem::rename(tmp, _path);
     }

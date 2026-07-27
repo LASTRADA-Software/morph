@@ -180,11 +180,18 @@ public:
         // Conflict fired (DO NOTHING) -- a row for this key already exists.
         detail::StatementGuard lookupGuard{prepare("SELECT id FROM morph_offline_queue WHERE idempotency_key = ?;")};
         bindText(lookupGuard.get(), 1, idempotencyKey);
-        uint64_t existingId = 0;
-        if (sqlite3_step(lookupGuard.get()) == SQLITE_ROW) {
-            existingId = static_cast<uint64_t>(sqlite3_column_int64(lookupGuard.get(), 0));
+        int const lookupResult = sqlite3_step(lookupGuard.get());
+        if (lookupResult != SQLITE_ROW) {
+            // The conflict proved a row exists, so anything but a row here is a
+            // real failure. Returning the `0` this used to fall through with
+            // would hand the caller an id that matches nothing: `markDone(0)`
+            // silently deletes no row, and the item is stranded in the queue
+            // forever with no error ever reported.
+            throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: enqueue could not resolve the existing id "
+                                                      "for a deduplicated idempotency key: "} +
+                                          sqlite3_errmsg(_db)};
         }
-        return existingId;
+        return static_cast<uint64_t>(sqlite3_column_int64(lookupGuard.get(), 0));
     }
 
     /// @brief Returns all pending rows in ascending-id (enqueue) order.
@@ -194,7 +201,20 @@ public:
         detail::StatementGuard guard{
             prepare("SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;")};
         std::vector<QueueItem> out;
-        while (sqlite3_step(guard.get()) == SQLITE_ROW) {
+        for (;;) {
+            int const stepResult = sqlite3_step(guard.get());
+            if (stepResult == SQLITE_DONE) {
+                break;
+            }
+            if (stepResult != SQLITE_ROW) {
+                // `while (step() == SQLITE_ROW)` treated an I/O error, a corrupt
+                // page, or SQLITE_BUSY as "no more rows", so drain() returned a
+                // silently truncated set that the caller takes for the complete
+                // list of pending work -- and SyncWorker then reports a clean
+                // pass over a queue it never fully read.
+                throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: drain failed part-way through after "} +
+                                              std::to_string(out.size()) + " row(s): " + sqlite3_errmsg(_db)};
+            }
             QueueItem item;
             item.id = static_cast<uint64_t>(sqlite3_column_int64(guard.get(), 0));
             item.payload = textColumn(guard.get(), 1);

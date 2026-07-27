@@ -200,7 +200,18 @@ growth and heals a torn trailing line left by a crash mid-write, tolerating it
 the same way `FileActionLog` does (a malformed *trailing* line is logged and
 skipped; a malformed line anywhere else is genuine corruption and is
 rethrown). New ids resume from the highest id ever seen in the file (including
-tombstoned ones), so a fresh item never collides with an old tombstone. A
+tombstoned ones), so a fresh item never collides with an old tombstone — and
+because compaction drops every tombstone, that high-water mark is carried across
+each rewrite explicitly, as a trailing `"done"` record for the mark itself
+(emitted only when it exceeds every surviving id, so it can never delete a row a
+`"put"` line above just restored). Recording it as a `"done"` needs no reader
+change: `load()` already raises the mark for every id it reads, and erasing an
+absent id is a no-op. Without it the mark regressed to the highest *surviving*
+id on the second restart — enqueue 1 and 2, `markDone(2)`, restart (compacts to
+just id 1), restart again, and the next `enqueue()` reissued id 2, the id of a
+completed and acknowledged item. Mutations also raise rather than swallow I/O
+failures: a short write or a failed `fflush`/`fsync` throws, since every
+mutation is documented as a committed transaction by the time the call returns. A
 keyed `enqueue`'s dedup is a linear scan over pending items — fine at modest
 queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same

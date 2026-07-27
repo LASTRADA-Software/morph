@@ -176,3 +176,79 @@ TEST_CASE("morph::offline::FileOfflineQueue: item survives a crash between drain
     }
     std::filesystem::remove(path);
 }
+
+TEST_CASE("morph::offline::FileOfflineQueue: ids are never reissued across repeated restarts", "[file_queue]") {
+    // compact() keeps only surviving "put" lines, and load() derives _nextId
+    // from the ids it reads, so dropping every tombstone used to let the mark
+    // regress -- but only from the *second* restart onward, since the first
+    // still reads the original tombstone. The id of a completed, acknowledged
+    // item was then handed to a brand-new one.
+    auto const path = tempQueuePath();
+    std::uint64_t firstId = 0;
+    std::uint64_t doneId = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        firstId = queue.enqueue("one");
+        doneId = queue.enqueue("two");
+        queue.markDone(doneId);
+    }
+    REQUIRE(firstId != doneId);
+
+    {
+        morph::offline::FileOfflineQueue queue{path};  // first restart: compacts away the tombstone
+        REQUIRE(queue.drain().size() == 1);
+    }
+
+    std::uint64_t reissued = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};  // second restart: the mark must have survived
+        reissued = queue.enqueue("three");
+    }
+    CHECK(reissued != doneId);
+    CHECK(reissued != firstId);
+    CHECK(reissued > doneId);
+
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: the id high-water mark survives an empty queue", "[file_queue]") {
+    // With nothing surviving, compaction writes no "put" lines at all, so the
+    // mark has nowhere to hide unless it is recorded explicitly.
+    auto const path = tempQueuePath();
+    std::uint64_t lastId = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        lastId = queue.enqueue("only");
+        queue.markDone(lastId);
+    }
+    {
+        morph::offline::FileOfflineQueue const queue{path};
+    }  // restart 1: compacts to empty
+    {
+        morph::offline::FileOfflineQueue queue{path};  // restart 2
+        REQUIRE(queue.drain().empty());
+        CHECK(queue.enqueue("next") > lastId);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after repeated restarts", "[file_queue]") {
+    // The high-water marker is written as a "done" record, so it must never
+    // collide with a surviving id and delete it on the next load.
+    auto const path = tempQueuePath();
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        queue.enqueue("keep-a");
+        auto const gone = queue.enqueue("drop");
+        queue.enqueue("keep-b");
+        queue.markDone(gone);
+    }
+    for (int restart = 0; restart < 3; ++restart) {
+        morph::offline::FileOfflineQueue queue{path};
+        auto const pending = queue.drain();
+        REQUIRE(pending.size() == 2);
+        CHECK(pending.at(0).payload == "keep-a");
+        CHECK(pending.at(1).payload == "keep-b");
+    }
+    std::filesystem::remove(path);
+}
