@@ -98,9 +98,13 @@ QML-facing API:
   fully generic, no per-action branches. Calls
   `_handler.executeJson(...)`; `.then()`/`.onError()` emit
   `replyReceived(actionType, ok, payload)`.
-- `fetchOptions` — backed by `_handler.execute(ListSamples{})`. This is the
-  one fixed, hand-known query (combo-box options); it does not grow with
-  the number of form actions.
+- `Q_INVOKABLE void fetchOptions(QString optionsAction, QString bodyJson)` —
+  equally generic: calls `_handler.executeJson(optionsAction, bodyJson)` and
+  emits `optionsReceived(optionsAction, ok, payload)`. `bodyJson` is `"{}"`
+  for an independent `Choice` and `{parentField: value, ...}` for a
+  dependent one (`x-optionsDependsOn`); `DynamicForm.qml` decides which and
+  when to re-fetch, and `FormsController` stays a thin, name-agnostic
+  pass-through for any registered action — not a fixed, hand-known query.
 
 ### `DynamicForm.qml`
 

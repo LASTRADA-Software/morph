@@ -4,29 +4,30 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QProcess>
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QSslKey>
 #include <QSslSocket>
 #include <QWebSocket>
-#include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
-#include <morph/qt/qt_executor.hpp>
-#include <morph/qt/qt_websocket_backend.hpp>
-#include <morph/qt/qt_websocket_server.hpp>
-#include <morph/core/registry.hpp>
-#include <morph/core/remote.hpp>
-#include <morph/core/wire.hpp>
 #include <atomic>
 #include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_tls.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
+#include <morph/qt/qt_websocket_server.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
-
 
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
 // QCoreApplication is owned by main() (below) and torn down before any global
@@ -72,6 +73,21 @@ struct WsCounterModel {
 BRIDGE_REGISTER_MODEL(WsCounterModel, "WsCounterModel")
 BRIDGE_REGISTER_ACTION(WsCounterModel, WsAddAction, "WsAddAction")
 
+// Sleeps for a caller-specified duration — used to exercise
+// RemoteServer::LimitPolicy::executeTimeout over a real WebSocket connection.
+struct WsSlowAction {
+    int ms = 0;
+};
+struct WsSlowModel {
+    int execute(WsSlowAction action) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(action.ms));
+        return action.ms;
+    }
+};
+
+BRIDGE_REGISTER_MODEL(WsSlowModel, "WsSlowModel")
+BRIDGE_REGISTER_ACTION(WsSlowModel, WsSlowAction, "WsSlowAction")
+
 // ── Poll helper — pumps Qt event loop while waiting ──────────────────────────
 static void pumpUntil(const std::function<bool()>& done, int maxIterations = 50) {
     for (int idx = 0; idx < maxIterations && !done(); ++idx) {
@@ -99,6 +115,24 @@ static QSslConfiguration makeServerTlsConfig() {
 static QSslConfiguration makeClientTlsConfig() {
     QSslConfiguration cfg = QSslConfiguration::defaultConfiguration();
     cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+    return cfg;
+}
+
+static QSslCertificate loadCertificate(const QString& path) {
+    QFile file{path};
+    REQUIRE(file.open(QIODevice::ReadOnly));
+    return QSslCertificate{&file, QSsl::Pem};
+}
+
+static QSslConfiguration makeMitmServerTlsConfig() {
+    QFile certFile{QStringLiteral(TESTS_CERTS_DIR "/mitm.crt")};
+    QFile keyFile{QStringLiteral(TESTS_CERTS_DIR "/mitm.key")};
+    REQUIRE(certFile.open(QIODevice::ReadOnly));
+    REQUIRE(keyFile.open(QIODevice::ReadOnly));
+
+    QSslConfiguration cfg;
+    cfg.setLocalCertificate(QSslCertificate{&certFile, QSsl::Pem});
+    cfg.setPrivateKey(QSslKey{&keyFile, QSsl::Rsa, QSsl::Pem});
     return cfg;
 }
 
@@ -306,8 +340,9 @@ TEST_CASE("morph::qt::QtWebSocketBackend reconnects to a fresh server on the sam
         morph::bridge::Bridge bridge{std::move(backendPtr)};
         morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
         std::atomic<int> result{-1};
-        handler.execute(WsEchoAction{7}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
-        });
+        handler.execute(WsEchoAction{7})
+            .then([&](int val) { result.store(val); })
+            .onError([](const std::exception_ptr&) {});
         pumpUntil([&] { return result.load() != -1; });
         REQUIRE(result.load() == 7);
     }
@@ -395,6 +430,32 @@ TEST_CASE("morph::qt::QtWebSocketBackend: register after the server closes fails
     REQUIRE(what.find("register failed") != std::string::npos);
 }
 
+TEST_CASE("morph::qt::QtWebSocketBackend: negotiateProtocolVersion succeeds against a real RemoteServer",
+          "[qt][ws][protocol]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    auto result = backend.negotiateProtocolVersion();
+    REQUIRE(result == morph::wire::ProtocolNegotiationResult::Negotiated);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: negotiateProtocolVersion throws when never connected",
+          "[qt][ws][protocol]") {
+    ensureApp();
+    QUrl url{QString("ws://127.0.0.1:1")};  // reserved port, never listening
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE_FALSE(backend.waitForConnected(200));
+
+    REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
+}
+
 TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected signal", "[qt][ws][lifecycle]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
@@ -425,6 +486,91 @@ TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected si
     pumpUntil([] { return false; }, 20);
     morph::qt::QtWebSocketBackend* rawBackend = nullptr;  // backend is owned by the bridge — no direct access needed
     (void)rawBackend;
+}
+
+// ── Graceful shutdown tests (closeGracefully) ────────────────────────────────
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully closes idle clients with a going-away frame",
+          "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    QWebSocket client;
+    client.open(url);
+    pumpUntil([&] { return client.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(client.state() == QAbstractSocket::ConnectedState);
+
+    QWebSocketProtocol::CloseCode observedCode = QWebSocketProtocol::CloseCodeNormal;
+    QObject::connect(&client, &QWebSocket::disconnected, [&] { observedCode = client.closeCode(); });
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{500});
+    REQUIRE(drained);
+
+    pumpUntil([&] { return client.state() == QAbstractSocket::UnconnectedState; }, 100);
+    REQUIRE(client.state() == QAbstractSocket::UnconnectedState);
+    REQUIRE(observedCode == QWebSocketProtocol::CloseCodeGoingAway);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully waits for an in-flight execute before closing",
+          "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    std::atomic<bool> completed{false};
+    std::atomic<int> result{-1};
+    handler.execute(WsSlowAction{200})
+        .then([&](int val) {
+            result.store(val);
+            completed.store(true);
+        })
+        .onError([](const std::exception_ptr&) {});
+
+    // Give the execute a moment to actually reach the server and start
+    // running on its strand before beginning the graceful shutdown.
+    pumpUntil([] { return false; }, 5);
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{2000});
+    REQUIRE(drained);
+    REQUIRE(completed.load());
+    REQUIRE(result.load() == 200);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully hard-stops once the deadline elapses", "[qt][ws][shutdown]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    handler.execute(WsSlowAction{2000}).onError([](const std::exception_ptr&) {});
+
+    pumpUntil([] { return false; }, 5);
+
+    bool const drained = wsServer->closeGracefully(std::chrono::milliseconds{100});
+    REQUIRE_FALSE(drained);
 }
 
 // ── Malformed-protocol tests (raw QWebSocket) ────────────────────────────────
@@ -470,8 +616,11 @@ TEST_CASE("Server rejects malformed protocol messages", "[qt][ws][protocol]") {
     auto decodeReply = [](const std::string& raw) { return morph::wire::decode(raw); };
 
     SECTION("bare unknown envelope kind") {
+        // "hello" is now a recognised control kind (protocol-version
+        // negotiation, see docs/spec/core/wire.md) — use a string that stays
+        // genuinely unrecognised so this test keeps testing what it says.
         morph::wire::Envelope req;
-        req.kind = "hello";
+        req.kind = "bogus_kind_xyz";
         auto reply = decodeReply(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
         REQUIRE(reply.kind == "err");
         REQUIRE(reply.message.find("unknown envelope kind") != std::string::npos);
@@ -583,6 +732,435 @@ TEST_CASE("Server keeps serving good clients after a malformed message", "[qt][w
     pumpUntil([&] { return badSock.state() == QAbstractSocket::UnconnectedState; }, 50);
 }
 
+// ── Resource-limit tests (QtWebSocketServerConfig) ──────────────────────────
+
+TEST_CASE("morph::qt::QtWebSocketServer: maxConnections rejects connections beyond the cap", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.maxConnections = 1;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    QWebSocket first;
+    first.open(url);
+    pumpUntil([&] { return first.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(first.state() == QAbstractSocket::ConnectedState);
+
+    QWebSocket second;
+    second.open(url);
+    // The server accepts the TCP/WS handshake either way (that happens inside
+    // QWebSocketServer before our slot runs) and then closes the socket
+    // immediately in onNewConnection — so assert on the eventual disconnect
+    // rather than a refused connect.
+    pumpUntil([&] { return second.state() == QAbstractSocket::UnconnectedState; }, 150);
+    REQUIRE(second.state() == QAbstractSocket::UnconnectedState);
+
+    first.close();
+    pumpUntil([&] { return first.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: maxMessageBytes rejects an oversized frame before dispatch",
+          "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.maxMessageBytes = 1024;  // much smaller than the 8 MiB wire cap
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    morph::wire::Envelope req;
+    req.kind = "register";
+    req.typeId = "WsEchoModel";
+    req.contextKey = std::string(2000, 'x');  // pushes the frame past 1024 bytes
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+    REQUIRE(reply.kind == "err");
+    REQUIRE(reply.message.find("maxMessageBytes") != std::string::npos);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: an oversized frame's err reply carries the rejected call's id",
+          "[qt][ws][limits]") {
+    // The frame is never decoded, so the id has to be recovered by a bounded
+    // prefix scan. Replying with callId 0 would be actively harmful rather than
+    // merely unhelpful: 0 is the client's synchronous-reply discriminator, so
+    // the error would resume an unrelated parked register/deregister with
+    // another call's reply, while the rejected execute never resolved at all.
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.maxMessageBytes = 1024;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl const url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 4242;
+    req.modelId = 1;
+    req.modelType = "WsEchoModel";
+    req.actionType = "WsEchoAction";
+    req.body = std::string(2000, 'x');  // pushes the frame past 1024 bytes
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(sock, QString::fromStdString(morph::wire::encode(req))));
+    REQUIRE(reply.kind == "err");
+    REQUIRE(reply.message.contains("maxMessageBytes"));
+    REQUIRE(reply.callId == 4242U);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: default config behaves exactly as before (regression)", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};  // no cfg argument at all
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{5}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 5);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on one connection", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.messagesPerSecond = 5;  // bucket capacity 5, refills at 5/s
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    // Register once (consumes 1 token) so subsequent frames target a valid modelId.
+    auto regReply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regReply.kind == "ok");
+
+    // Fire 20 execute frames back-to-back. The bucket started at capacity 5 and
+    // lost 1 token to the register above, so at most ~4 of these should be
+    // admitted before the bucket empties; the rest are dropped at the transport,
+    // never reaching RemoteServer, so no reply arrives for them.
+    std::atomic<int> replies{0};
+    auto conn =
+        QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString&) { replies.fetch_add(1); });
+    for (int idx = 0; idx < 20; ++idx) {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = static_cast<uint64_t>(idx + 1);
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = R"({"value":1})";
+        sock.sendTextMessage(QString::fromStdString(morph::wire::encode(req)));
+    }
+    // Give the admitted replies a moment to arrive, then a further moment to
+    // confirm no additional (wrongly-admitted) replies trickle in.
+    pumpUntil([&] { return replies.load() >= 1; }, 100);
+    pumpUntil([] { return false; }, 30);
+    QObject::disconnect(conn);
+
+    REQUIRE(replies.load() >= 1);
+    REQUIRE(replies.load() < 20);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond == 0 never drops frames (regression)", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};  // default cfg: messagesPerSecond == 0
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto regReply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regReply.kind == "ok");
+
+    std::atomic<int> replies{0};
+    auto conn =
+        QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString&) { replies.fetch_add(1); });
+    constexpr int total = 20;
+    for (int idx = 0; idx < total; ++idx) {
+        morph::wire::Envelope req;
+        req.kind = "execute";
+        req.callId = static_cast<uint64_t>(idx + 1);
+        req.modelId = regReply.modelId;
+        req.modelType = "WsEchoModel";
+        req.actionType = "WsEchoAction";
+        req.body = R"({"value":1})";
+        sock.sendTextMessage(QString::fromStdString(morph::wire::encode(req)));
+    }
+    pumpUntil([&] { return replies.load() >= total; }, 200);
+    QObject::disconnect(conn);
+    REQUIRE(replies.load() == total);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: handshakeTimeout closes a silent connection", "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.handshakeTimeout = std::chrono::milliseconds{100};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    // Send nothing — wait past the handshake timeout and confirm the server closed it.
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::UnconnectedState);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: sending a frame before handshakeTimeout keeps the connection open",
+          "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.handshakeTimeout = std::chrono::milliseconds{200};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reply.kind == "ok");
+
+    // Outlive the original handshake deadline; the timer should have been
+    // cancelled by the frame above, so the connection must still be alive.
+    pumpUntil([] { return false; }, 40);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    sock.close();
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: idleTimeout closes a connection that goes silent after activity",
+          "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.idleTimeout = std::chrono::milliseconds{150};
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    QWebSocket sock;
+    sock.open(url);
+    pumpUntil([&] { return sock.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(sock.state() == QAbstractSocket::ConnectedState);
+
+    auto reply = morph::wire::decode(sendRawAndAwaitReply(
+        sock, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reply.kind == "ok");
+
+    // Go silent past idleTimeout plus the ~1s housekeeping sweep granularity.
+    pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 250);
+    REQUIRE(sock.state() == QAbstractSocket::UnconnectedState);
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketServer + RemoteServer::LimitPolicy compose: a server-side executeTimeout"
+    " surfaces to a real QtWebSocketBackend client as TimeoutError",
+    "[qt][ws][limits]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::backend::LimitPolicy policy;
+    policy.executeTimeout = std::chrono::milliseconds{80};
+    server->setLimitPolicy(policy);
+
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsSlowModel> handler{bridge, &qtExec};
+
+    std::atomic<bool> gotTimeoutError{false};
+    handler
+        .execute(WsSlowAction{300})  // well past the 80ms executeTimeout
+        .then([](int) {})
+        .onError([&](const std::exception_ptr& exc) {
+            try {
+                std::rethrow_exception(exc);
+            } catch (const morph::backend::TimeoutError&) {
+                gotTimeoutError.store(true);
+            } catch (...) {
+            }
+        });
+
+    pumpUntil([&] { return gotTimeoutError.load(); }, 150);
+    REQUIRE(gotTimeoutError.load());
+}
+
+// ── Connection-scoped cleanup tests ──────────────────────────────────────────
+
+TEST_CASE("QtWebSocketServer reclaims every model a dropped client registered", "[qt][ws][connection-scope]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    QWebSocket registrant;
+    registrant.open(url);
+    pumpUntil([&] { return registrant.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(registrant.state() == QAbstractSocket::ConnectedState);
+
+    // Register two models over the same connection (N > 1, to prove the whole
+    // scope is reclaimed, not just one instance).
+    auto reg1 = morph::wire::decode(sendRawAndAwaitReply(
+        registrant, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reg1.kind == "ok");
+    auto reg2 = morph::wire::decode(sendRawAndAwaitReply(
+        registrant, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(reg2.kind == "ok");
+    REQUIRE(reg1.modelId != reg2.modelId);
+
+    // Simulate a crash/drop: abort the socket rather than a clean close, so no
+    // deregister is ever sent for either model.
+    registrant.abort();
+    pumpUntil([] { return false; }, 100);
+
+    // A second, independent client asks the server whether the old ids are still live.
+    QWebSocket checker;
+    checker.open(url);
+    pumpUntil([&] { return checker.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(checker.state() == QAbstractSocket::ConnectedState);
+
+    for (auto modelId : {reg1.modelId, reg2.modelId}) {
+        morph::wire::Envelope execReq;
+        execReq.kind = "execute";
+        execReq.modelId = modelId;
+        execReq.modelType = "WsEchoModel";
+        execReq.actionType = "WsEchoAction";
+        execReq.body = R"({"value":1})";
+        auto execReply =
+            morph::wire::decode(sendRawAndAwaitReply(checker, QString::fromStdString(morph::wire::encode(execReq))));
+        REQUIRE(execReply.kind == "err");
+        REQUIRE(execReply.message == "model not found");
+    }
+
+    checker.close();
+    pumpUntil([&] { return checker.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("QtWebSocketServer::close() reclaims every client's scope", "[qt][ws][connection-scope]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+
+    QWebSocket clientA;
+    clientA.open(url);
+    pumpUntil([&] { return clientA.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(clientA.state() == QAbstractSocket::ConnectedState);
+    auto regA = morph::wire::decode(sendRawAndAwaitReply(
+        clientA, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regA.kind == "ok");
+
+    QWebSocket clientB;
+    clientB.open(url);
+    pumpUntil([&] { return clientB.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(clientB.state() == QAbstractSocket::ConnectedState);
+    auto regB = morph::wire::decode(sendRawAndAwaitReply(
+        clientB, QString::fromStdString(morph::wire::encode(morph::wire::makeRegister("WsEchoModel")))));
+    REQUIRE(regB.kind == "ok");
+
+    // Orderly shutdown must reclaim every live client's models too.
+    wsServer->close();
+    wsServer.reset();
+    pumpUntil([] { return false; }, 100);
+
+    // The RemoteServer outlives the transport (owned separately, per
+    // Lifetime & ownership), so it can still be asked directly.
+    for (auto modelId : {regA.modelId, regB.modelId}) {
+        morph::wire::Envelope execReq;
+        execReq.kind = "execute";
+        execReq.modelId = modelId;
+        execReq.modelType = "WsEchoModel";
+        execReq.actionType = "WsEchoAction";
+        execReq.body = R"({"value":1})";
+
+        std::atomic<bool> replied{false};
+        morph::wire::Envelope execResult;
+        server->handle(morph::wire::encode(execReq), [&](const std::string& raw) {
+            execResult = morph::wire::decode(raw);
+            replied.store(true);
+        });
+        pumpUntil([&] { return replied.load(); }, 50);
+        REQUIRE(replied.load());
+        REQUIRE(execResult.kind == "err");
+        REQUIRE(execResult.message == "model not found");
+    }
+
+    clientA.abort();
+    clientB.abort();
+}
+
 // ── TLS WebSocket tests ──────────────────────────────────────────────────────
 
 TEST_CASE("morph::qt::QtWebSocketBackend TLS: action result delivered via then", "[qt][wss]") {
@@ -593,8 +1171,9 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: action result delivered via then",
     REQUIRE(wsServer.listen());
 
     QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
-    auto backendPtr =
-        std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), makeClientTlsConfig());
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(),
+                                                                      makeClientTlsConfig());
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
@@ -617,8 +1196,9 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: exception delivered via onError", 
     REQUIRE(wsServer.listen());
 
     QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
-    auto backendPtr =
-        std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), makeClientTlsConfig());
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(),
+                                                                      makeClientTlsConfig());
     REQUIRE(backendPtr->waitForConnected());
 
     morph::qt::QtExecutor qtExec;
@@ -649,6 +1229,160 @@ TEST_CASE("morph::qt::QtWebSocketBackend TLS: connection refused when client lac
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url);
     REQUIRE_FALSE(backendPtr->waitForConnected(500));
+}
+
+// ── TLS peer-verification helper tests ───────────────────────────────────────
+
+TEST_CASE("morph::qt::tlsVerifyingConfig sets VerifyPeer", "[qt][tls-helpers]") {
+    QSslConfiguration cfg = morph::qt::tlsVerifyingConfig();
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyPeer);
+}
+
+TEST_CASE("morph::qt::tlsPinnedConfig sets VerifyPeer and trusts only the pinned cert", "[qt][tls-helpers]") {
+    QFile certFile{QStringLiteral(TESTS_CERTS_DIR "/server.crt")};
+    REQUIRE(certFile.open(QIODevice::ReadOnly));
+    QSslCertificate cert{&certFile, QSsl::Pem};
+
+    QSslConfiguration cfg = morph::qt::tlsPinnedConfig(cert);
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyPeer);
+    REQUIRE(cfg.caCertificates().size() == 1);
+    REQUIRE(cfg.caCertificates().first() == cert);
+}
+
+TEST_CASE("morph::qt::tlsInsecureNoVerify sets VerifyNone", "[qt][tls-helpers]") {
+    QSslConfiguration cfg = morph::qt::tlsInsecureNoVerify();
+    REQUIRE(cfg.peerVerifyMode() == QSslSocket::VerifyNone);
+}
+
+// ── TLS peer-verification integration tests ─────────────────────────────────
+//
+// server.crt/server.key carry a subjectAltName=IP:127.0.0.1 extension so Qt's
+// hostname check (these tests connect to the literal IP "127.0.0.1", which
+// Qt matches only against SAN IP entries, never the CN) passes for the real
+// server. mitm.crt/mitm.key is a second, independently-generated self-signed
+// pair standing in for an attacker who intercepted the TCP connection but
+// cannot present the pinned certificate's private key.
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsPinnedConfig accepts the real server", "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeServerTlsConfig()};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
+    auto pinned = morph::qt::tlsPinnedConfig(loadCertificate(QStringLiteral(TESTS_CERTS_DIR "/server.crt")));
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(), pinned);
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec};
+
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{99}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 99);
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsPinnedConfig rejects a server presenting a different certificate",
+          "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeMitmServerTlsConfig()};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("wss://127.0.0.1:%1").arg(wsServer.port())};
+    // Pinned to server.crt, but the server above presents mitm.crt.
+    auto pinned = morph::qt::tlsPinnedConfig(loadCertificate(QStringLiteral(TESTS_CERTS_DIR "/server.crt")));
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(url, morph::model::detail::defaultDispatcher(),
+                                                                      morph::model::detail::defaultRegistry(), pinned);
+    REQUIRE_FALSE(backendPtr->waitForConnected(1000));
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend TLS: tlsInsecureNoVerify connects to both the real and mitm servers",
+          "[qt][wss][tls-peer]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor realPool{2};
+    auto realServer = std::make_shared<morph::backend::RemoteServer>(realPool);
+    morph::qt::QtWebSocketServer realWs{*realServer, 0, makeServerTlsConfig()};
+    REQUIRE(realWs.listen());
+
+    morph::exec::ThreadPoolExecutor mitmPool{2};
+    auto mitmServer = std::make_shared<morph::backend::RemoteServer>(mitmPool);
+    morph::qt::QtWebSocketServer mitmWs{*mitmServer, 0, makeMitmServerTlsConfig()};
+    REQUIRE(mitmWs.listen());
+
+    auto insecure = morph::qt::tlsInsecureNoVerify();
+
+    QUrl realUrl{QString("wss://127.0.0.1:%1").arg(realWs.port())};
+    morph::qt::QtWebSocketBackend realBackend{realUrl, morph::model::detail::defaultDispatcher(),
+                                              morph::model::detail::defaultRegistry(), insecure};
+    REQUIRE(realBackend.waitForConnected());
+
+    QUrl mitmUrl{QString("wss://127.0.0.1:%1").arg(mitmWs.port())};
+    morph::qt::QtWebSocketBackend mitmBackend{mitmUrl, morph::model::detail::defaultDispatcher(),
+                                              morph::model::detail::defaultRegistry(), insecure};
+    REQUIRE(mitmBackend.waitForConnected());
+}
+
+// ── Server exposure guard tests ──────────────────────────────────────────────
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: non-loopback bind without TLS refuses listen()",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;  // not loopback
+    // cfg.allowPlaintextExposure stays false (default) — the guard should refuse.
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE_FALSE(wsServer.listen());
+    REQUIRE(wsServer.port() == 0);  // never actually bound
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: allowPlaintextExposure permits a non-loopback plaintext bind",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;
+    cfg.allowPlaintextExposure = true;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE(wsServer.listen());
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: TLS permits a non-loopback bind", "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.bindAddress = QHostAddress::AnyIPv4;
+    // allowPlaintextExposure stays false — a TLS config is enough on its own.
+    morph::qt::QtWebSocketServer wsServer{*server, 0, makeServerTlsConfig(), cfg};
+
+    REQUIRE(wsServer.listen());
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer exposure guard: loopback bind without TLS still listens (regression)",
+          "[qt][ws][exposure-guard]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServerConfig cfg;  // bindAddress defaults to QHostAddress::LocalHost
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+
+    REQUIRE(wsServer.listen());
 }
 
 // ── Process-separation tests ─────────────────────────────────────────────────

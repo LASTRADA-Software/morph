@@ -65,10 +65,17 @@ public:
     /// may be silently lost.
     ~ThreadPoolExecutor() override {
         {
+            // notify_all() while still holding _m, not after releasing it: a
+            // waiter woken by a notify issued after unlocking could reacquire
+            // the lock, see _stop, return from wait(), and let this object be
+            // destroyed while this thread is still physically inside the
+            // notify call -- a real data race on the condition variable's
+            // internal state (this pattern is what post()'s own notify_one(),
+            // below, must avoid too, for the same reason).
             std::scoped_lock const lock{_m};
             _stop = true;
+            _cv.notify_all();
         }
-        _cv.notify_all();
         for (auto& worker : _workers) {
             worker.join();
         }
@@ -77,10 +84,8 @@ public:
     /// @brief Enqueues @p task for execution on one of the pool threads.
     /// @param task Callable to execute. Thread-safe.
     void post(std::function<void()> task) override {
-        {
-            std::scoped_lock const lock{_m};
-            _q.push(std::move(task));
-        }
+        std::scoped_lock const lock{_m};
+        _q.push(std::move(task));
         _cv.notify_one();
     }
 

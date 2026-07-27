@@ -1,39 +1,42 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# Qt Quick renderer for the schema-generated forms. Built when
-# -DMORPH_BUILD_FORMS_QML=ON (requires Qt 6.5+ with Quick).
+# Demo app for the shipped Qt/QML forms renderer (src/qt/forms, URI
+# MorphForms): registers this demo's own model/schemas via a small
+# FormsController subclass and its own Main.qml, which imports MorphForms for
+# DynamicForm/I18nCatalog. Built when -DMORPH_BUILD_FORMS_QML=ON (which also
+# builds the shipped module itself, from src/qt/forms, independent of this
+# demo). Qt6 is already found and qt_standard_project_setup() already called
+# by the time this subdirectory is reached (the MORPH_BUILD_FORMS_QML block
+# in the root CMakeLists.txt), and morph_forms_moduleplugin (the shipped
+# MorphForms module) already exists as a target.
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Qml Quick)
+qt_add_library(lab_forms_demo_module STATIC)
 
-qt_standard_project_setup(REQUIRES 6.5)
-
-# The QML module is a static library so both the app and the Qt Quick Test
-# runner can link (and therefore import) it.
-qt_add_library(morph_forms_module STATIC)
-
-qt_add_qml_module(morph_forms_module
-    URI MorphForms
+qt_add_qml_module(lab_forms_demo_module
+    URI LabFormsDemo
     VERSION 1.0
     QML_FILES
         qml/Main.qml
-        qml/DynamicForm.qml
-        qml/DateTimePicker.qml
+        qml/AppShell.qml
     SOURCES
         FormsController.hpp
         FormsController.cpp
 )
 
 # lab_model.hpp / lab_schemas.hpp live one level up, shared with the console demo.
-target_include_directories(morph_forms_module PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(morph_forms_module PUBLIC morph::morph Qt6::Quick Qt6::Qml)
-target_compile_features(morph_forms_module PUBLIC cxx_std_23)
+target_include_directories(lab_forms_demo_module PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(lab_forms_demo_module PUBLIC morph::morph morph::qt_forms morph_forms_moduleplugin Qt6::Quick Qt6::Qml)
+target_compile_features(lab_forms_demo_module PUBLIC cxx_std_23)
 
 qt_add_executable(morph_forms_qml main.cpp)
-target_link_libraries(morph_forms_qml PRIVATE morph_forms_moduleplugin Qt6::Quick)
+target_link_libraries(morph_forms_qml PRIVATE lab_forms_demo_moduleplugin Qt6::Quick)
 
 # Deploy Qt's runtime DLLs next to the executable so it can be launched
 # directly (double-click, plain `./morph_forms_qml.exe`) without the Qt bin
-# directory already on PATH.
+# directory already on PATH. A single --qmldir pointing at this demo's own
+# qml/ is sufficient: Main.qml uses the same QtQuick/QtQuick.Controls/
+# QtQuick.Layouts imports DynamicForm.qml (in the shipped module) does, so
+# windeployqt discovers the same Qt-provided QML plugins either way.
 if(WIN32)
     find_program(MORPH_WINDEPLOYQT_EXECUTABLE windeployqt
         HINTS "${QT6_INSTALL_PREFIX}/bin" "${Qt6_DIR}/../../../bin"
@@ -57,34 +60,4 @@ if(WIN32)
         message(WARNING "windeployqt not found; morph_forms_qml.exe will need "
                         "Qt's bin directory on PATH to run.")
     endif()
-endif()
-
-# Qt Quick Test suite for the QML logic (DynamicForm descriptors, exact
-# arithmetic, unit conversion, composition, readiness).
-if(MORPH_BUILD_TESTS)
-    find_package(Qt6 REQUIRED COMPONENTS QuickTest)
-
-    qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)
-    target_link_libraries(morph_forms_qml_tests PRIVATE morph_forms_moduleplugin Qt6::QuickTest)
-
-    # Same rationale as morph_forms_qml above: without this, running
-    # `ctest -R forms_qml_logic` (or the .exe directly) outside a shell that
-    # already has Qt's bin/plugins on PATH hangs briefly then fails with
-    # STATUS_DLL_NOT_FOUND, since Qt6QuickTestd.dll and the offscreen QPA
-    # plugin are not otherwise deployed next to the test binary.
-    if(WIN32 AND MORPH_WINDEPLOYQT_EXECUTABLE)
-        add_custom_command(TARGET morph_forms_qml_tests POST_BUILD
-            COMMAND "${MORPH_WINDEPLOYQT_EXECUTABLE}"
-                    --no-compiler-runtime
-                    --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
-                    --include-plugins qoffscreen
-                    $<TARGET_FILE:morph_forms_qml_tests>
-            COMMENT "Deploying Qt runtime DLLs next to morph_forms_qml_tests.exe"
-        )
-    endif()
-
-    add_test(NAME forms_qml_logic
-             COMMAND morph_forms_qml_tests -input ${CMAKE_CURRENT_SOURCE_DIR}/tests)
-    set_tests_properties(forms_qml_logic PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 endif()

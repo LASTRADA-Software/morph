@@ -11,8 +11,10 @@ The framework is header-only (C++23, namespace `morph`), depends on Glaze for JS
 > subsystem, capturing invariants, API surface, and the reasoning behind each
 > design. Consult the matching spec before changing a public type: e.g.
 > `docs/spec/security.md` (authenticated sessions and the trust model),
-> `docs/spec/core/completion.md`, `docs/spec/core/executor.md`, `docs/spec/core/bridge.md`,
-> `docs/spec/journal/journal.md`, `docs/spec/offline/offline.md`, `docs/spec/session/session.md`,
+> `docs/spec/VERSIONING.md` (the semantic-versioning / deprecation-window
+> commitment), `docs/spec/core/completion.md`, `docs/spec/core/executor.md`,
+> `docs/spec/core/bridge.md`, `docs/spec/journal/journal.md`,
+> `docs/spec/offline/offline.md`, `docs/spec/session/session.md`,
 > `docs/spec/core/wire.md`. Where this document and a spec disagree, the spec wins.
 
 ## Namespace map
@@ -22,6 +24,7 @@ The public surface is split per topic so callers always know whether a name is p
 | Namespace | Purpose | Public symbols |
 |---|---|---|
 | `morph::` | Macros only at this level | `BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`, `BRIDGE_REGISTER_VALIDATOR` (at file scope, but specialise `morph::model::*` templates) |
+| `morph::version` | Release version constants | `kMajor`, `kMinor`, `kPatch`, `kString` (see `docs/spec/VERSIONING.md`) |
 | `morph::log` | Configurable logging | `LogLevel`, `setLogger`, `setLogLevel`, `getLogLevel`, `logDebug`, `logInfo`, `logWarn`, `logError` |
 | `morph::exec` | Executor primitives | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor` |
 | `morph::async` | Async result handle | `Completion<T>` |
@@ -315,7 +318,7 @@ Because these are mutually exclusive per topology, recording is automatically se
 
 **Remote-mode per-instance identity** (`RemoteServer::setLogProvider`) is the advanced escape hatch for when the global default isn't granular enough: `RemoteServer` owns the actual model instances behind any remote/simulated-remote client, so it is the only place able to attach a *different* log (or a specific `entityKey`) to a *specific* instance. `HandlerBinding::contextKey` (client-side) travels through the `register` wire envelope's `contextKey` field; if a `LogProvider` is installed, `RemoteServer` calls it with `(modelType, contextKey)` and attaches whatever `IActionLog` it returns (or nothing, if it returns `nullptr` or no `contextKey` was sent) before the instance ever executes an action — overriding whatever the global default would have attached.
 
-**Not yet built** : the outbox pattern an integration against a model that also owns its own durable store would need (to avoid the log and the store's committed state silently diverging) — see `examples/bank`, which demonstrates `setActionLog` end to end against SQLite-backed models but writes to its own DB and the audit log as two independent steps, not one atomic outbox write.
+**Transactional outbox (opt-in)**: a model that also owns its own durable store can avoid the log and the store's committed state silently diverging by writing its own outbox row inside its own transaction, calling `IModelHolder::setOutboxManaged(true)` to suppress the automatic append, and draining that outbox through a `journal::OutboxRelay` into the real sink — see `docs/spec/journal/journal.md`'s "Transactional outbox (opt-in)" section. `examples/bank` still demonstrates the un-opted-in two-independent-writes behavior this closes for models that adopt the pattern.
 
 ### SyncWorker
 
@@ -579,7 +582,11 @@ Two further field types follow the same one-kind-of-empty pattern:
 
 The headers are grouped into per-sub-domain subdirectories that mirror the
 namespaces. Design specs live under `docs/spec/<sub-domain>/` with the same
-folder names.
+folder names. One exception: `include/morph/version.hpp` sits directly under
+`include/morph/`, with no subdirectory — it is cross-cutting library
+metadata rather than part of any one sub-domain, so it is documented in the
+top-level `docs/spec/VERSIONING.md` instead of a `docs/spec/<sub-domain>/`
+folder.
 
 ### Library headers (`include/morph/`)
 
@@ -647,17 +654,6 @@ folder names.
 
 ## Known limitations
 
-### Validators do not run server-side
-
-`ActionValidator`/`validate()` gate only the client side: the fielded
-`set<...>` flow checks readiness before dispatching, and schema-driven form
-renderers disable submit until required fields are filled. The dispatcher
-itself executes whatever payload arrives — a remote client can bypass
-validation entirely. A model that dereferences required quantities must
-therefore enforce its own precondition (the `examples/forms` model throws
-`std::invalid_argument` via the same `validate()` predicate the GUI uses).
-Running validators inside the dispatcher runner is a planned extension.
-
 ### `RemoteServer` must be heap-allocated
 
 `RemoteServer::handle()` captures `shared_from_this()` to prevent a use-after-free if the worker pool outlives the server. This means `RemoteServer` **must** be created via `std::make_shared<morph::backend::RemoteServer>(...)`. Constructing it on the stack and calling `handle()` will throw `std::bad_weak_ptr` at runtime.
@@ -679,6 +675,19 @@ An abandoned **error**, however, is not silenced by a null executor: `onErrAttac
 ### `MainThreadExecutor::runFor` does not drain on timeout
 
 If `runFor(timeout)` returns because the timeout expired rather than because the queue emptied, any remaining tasks stay enqueued. A subsequent `runFor` call will process them. This is intentional — `runFor` is a pump, not a flush.
+
+## Versioning & compatibility
+
+morph is `0.1.0` and pre-1.0: per [Semantic Versioning](https://semver.org/)'s
+own rule for major version `0`, any release may still change anything without
+a major bump. The semantic-versioning, stable-surface, and deprecation-window
+commitment morph makes **starting at 1.0** is fully specified in
+`docs/spec/VERSIONING.md` — this section is only a
+pointer, not a substitute. In short: the per-topic public namespaces above
+(everything outside a `detail` namespace) are the stable surface; because
+morph is header-only there is no ABI to preserve, so the promise is *source*
+compatibility, checked against both a symbol's signature and its `docs/spec/`
+documented behavior.
 
 ## Key design decisions
 

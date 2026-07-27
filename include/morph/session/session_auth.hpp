@@ -6,12 +6,11 @@
 #include <cstdint>
 #include <expected>
 #include <functional>
+#include <glaze/glaze.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
-
-#include <glaze/glaze.hpp>
 
 #include "session.hpp"
 
@@ -318,11 +317,24 @@ enum class AuthError : std::uint8_t {
 /// Wire format: `base64url(claimsJson) "." base64url(mac(secret, payload))`.
 class TokenIssuer {
 public:
+#ifdef MORPH_REQUIRE_VETTED_HMAC
+    /// @brief Constructs an issuer over @p secret using @p mac.
+    ///
+    /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
+    /// default** here, so a call site that relied on the reference
+    /// `hmacSha256` default fails to compile, forcing an explicit vetted
+    /// `MacFunction` injection. See `docs/spec/security.md` ("MAC-primitive
+    /// recommended wiring").
+    /// @param secret Shared secret (same value the verifier uses).
+    /// @param mac    MAC primitive (required — no default under this build option).
+    explicit TokenIssuer(std::string secret, MacFunction mac) : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+#else
     /// @brief Constructs an issuer over @p secret using @p mac.
     /// @param secret Shared secret (same value the verifier uses).
     /// @param mac    MAC primitive; defaults to `hmacSha256`.
     explicit TokenIssuer(std::string secret, MacFunction mac = hmacSha256)
         : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+#endif
 
     /// @brief Serialises @p claims and returns a signed token string.
     /// @param claims Claims to embed and sign.
@@ -345,11 +357,24 @@ private:
 /// @brief Verifies signed bearer tokens against a shared secret.
 class TokenVerifier {
 public:
+#ifdef MORPH_REQUIRE_VETTED_HMAC
+    /// @brief Constructs a verifier over @p secret using @p mac.
+    ///
+    /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
+    /// default** here, so a call site that relied on the reference
+    /// `hmacSha256` default fails to compile, forcing an explicit vetted
+    /// `MacFunction` injection. See `docs/spec/security.md` ("MAC-primitive
+    /// recommended wiring").
+    /// @param secret Shared secret (same value the issuer used).
+    /// @param mac    MAC primitive (required — no default under this build option).
+    explicit TokenVerifier(std::string secret, MacFunction mac) : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+#else
     /// @brief Constructs a verifier over @p secret using @p mac.
     /// @param secret Shared secret (same value the issuer used).
     /// @param mac    MAC primitive; defaults to `hmacSha256`.
     explicit TokenVerifier(std::string secret, MacFunction mac = hmacSha256)
         : _secret{std::move(secret)}, _mac{std::move(mac)} {}
+#endif
 
     /// @brief Verifies @p token's signature and expiry and returns its claims.
     ///
@@ -426,6 +451,20 @@ public:
     using Policy =
         std::function<bool(const SessionToken& claims, std::string_view modelType, std::string_view actionType)>;
 
+#ifdef MORPH_REQUIRE_VETTED_HMAC
+    /// @brief Constructs the authorizer.
+    ///
+    /// Built with `MORPH_REQUIRE_VETTED_HMAC` defined: @p mac has **no
+    /// default**, so a call site that relied on the reference `hmacSha256`
+    /// default fails to compile. See `docs/spec/security.md` ("MAC-primitive
+    /// recommended wiring").
+    /// @param secret Shared secret used to verify tokens.
+    /// @param mac    MAC primitive (required — no default under this build option).
+    /// @param clock  Time source (ms since epoch) for expiry; defaults to system time.
+    /// @param policy Optional per-request policy over verified claims.
+    explicit SigningAuthorizer(std::string secret, MacFunction mac, Clock clock = systemClockMs, Policy policy = {})
+        : _verifier{std::move(secret), std::move(mac)}, _clock{std::move(clock)}, _policy{std::move(policy)} {}
+#else
     /// @brief Constructs the authorizer.
     /// @param secret Shared secret used to verify tokens.
     /// @param mac    MAC primitive; defaults to `hmacSha256`.
@@ -434,6 +473,7 @@ public:
     explicit SigningAuthorizer(std::string secret, MacFunction mac = hmacSha256, Clock clock = systemClockMs,
                                Policy policy = {})
         : _verifier{std::move(secret), std::move(mac)}, _clock{std::move(clock)}, _policy{std::move(policy)} {}
+#endif
 
     /// @brief Allows the call iff @p ctx carries a valid token the policy admits.
     /// @param ctx        Per-call session (its `token` is verified).

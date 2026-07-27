@@ -1,0 +1,254 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <chrono>
+#include <filesystem>
+#include <fstream>
+#include <morph/offline/file_offline_queue.hpp>
+#include <string>
+#include <vector>
+
+namespace {
+
+std::filesystem::path tempQueuePath() {
+    static std::atomic<int> counter{0};
+    auto const now = std::chrono::steady_clock::now().time_since_epoch().count();
+    return std::filesystem::temp_directory_path() /
+           ("morph_file_offline_queue_test_" + std::to_string(now) + "_" + std::to_string(++counter) + ".ndjson");
+}
+
+}  // namespace
+
+TEST_CASE("morph::offline::FileOfflineQueue: enqueue/drain/markDone round-trip within one process", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("a");
+        auto id2 = queue.enqueue("b");
+        auto items = queue.drain();
+        REQUIRE(items.size() == 2);
+        REQUIRE(items[0].id == id1);
+        REQUIRE(items[1].id == id2);
+        queue.markDone(id1);
+        REQUIRE(queue.drain().size() == 1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: items and attempts survive destroying and reopening over the same file",
+          "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    uint64_t id1 = 0;
+    uint64_t id2 = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        id1 = queue.enqueue("payload-1", "key-1");
+        id2 = queue.enqueue("payload-2");
+        queue.setAttempts(id2, 3);
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto items = queue.drain();
+        REQUIRE(items.size() == 2);
+        REQUIRE(items[0].id == id1);
+        REQUIRE(items[0].payload == "payload-1");
+        REQUIRE(items[0].idempotencyKey == "key-1");
+        REQUIRE(items[1].id == id2);
+        REQUIRE(items[1].attempts == 3);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: markDone persists across a reopen", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("gone");
+        queue.enqueue("stays");
+        queue.markDone(id1);
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        REQUIRE(items[0].payload == "stays");
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE(
+    "morph::offline::FileOfflineQueue: new ids resume from the highest id ever seen, never colliding with a "
+    "tombstoned id",
+    "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+
+    uint64_t id1 = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        id1 = queue.enqueue("first");
+        queue.markDone(id1);  // tombstoned -- id1 must never be reused
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id2 = queue.enqueue("second");
+        REQUIRE(id2 > id1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: re-enqueue with the same idempotencyKey is deduplicated",
+          "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+
+        auto id1 = queue.enqueue("first-payload", "op-1");
+        auto id2 = queue.enqueue("second-payload", "op-1");
+
+        REQUIRE(id1 == id2);
+        REQUIRE(queue.drain().size() == 1);
+    }  // close the queue's file handle before removing it -- required on Windows
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: empty idempotencyKey items are never deduplicated", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+
+        queue.enqueue("a");
+        queue.enqueue("b");
+
+        REQUIRE(queue.drain().size() == 2);
+    }  // close the queue's file handle before removing it -- required on Windows
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: tolerates a torn trailing line on open", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    uint64_t id1 = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        id1 = queue.enqueue("intact");
+    }
+    // Manually append a torn (truncated, non-JSON) trailing line, simulating a
+    // crash mid-write.
+    {
+        std::ofstream out{path, std::ios::app};
+        out << R"({"op":"put","id":2,"payload":"cut-o)";  // no closing brace/newline
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        REQUIRE(items[0].id == id1);
+        REQUIRE(items[0].payload == "intact");
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: item survives a crash between drain() and markDone()", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    uint64_t id1 = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        id1 = queue.enqueue("payload");
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        // Simulate a crash: no markDone() call before the queue is destroyed.
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        REQUIRE(queue.drain().size() == 1);
+        queue.markDone(id1);
+        REQUIRE(queue.drain().empty());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: ids are never reissued across repeated restarts", "[file_queue]") {
+    // compact() keeps only surviving "put" lines, and load() derives _nextId
+    // from the ids it reads, so dropping every tombstone used to let the mark
+    // regress -- but only from the *second* restart onward, since the first
+    // still reads the original tombstone. The id of a completed, acknowledged
+    // item was then handed to a brand-new one.
+    auto const path = tempQueuePath();
+    std::uint64_t firstId = 0;
+    std::uint64_t doneId = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        firstId = queue.enqueue("one");
+        doneId = queue.enqueue("two");
+        queue.markDone(doneId);
+    }
+    REQUIRE(firstId != doneId);
+
+    {
+        morph::offline::FileOfflineQueue queue{path};  // first restart: compacts away the tombstone
+        REQUIRE(queue.drain().size() == 1);
+    }
+
+    std::uint64_t reissued = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};  // second restart: the mark must have survived
+        reissued = queue.enqueue("three");
+    }
+    CHECK(reissued != doneId);
+    CHECK(reissued != firstId);
+    CHECK(reissued > doneId);
+
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: the id high-water mark survives an empty queue", "[file_queue]") {
+    // With nothing surviving, compaction writes no "put" lines at all, so the
+    // mark has nowhere to hide unless it is recorded explicitly.
+    auto const path = tempQueuePath();
+    std::uint64_t lastId = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        lastId = queue.enqueue("only");
+        queue.markDone(lastId);
+    }
+    {
+        morph::offline::FileOfflineQueue const queue{path};
+    }  // restart 1: compacts to empty
+    {
+        morph::offline::FileOfflineQueue queue{path};  // restart 2
+        REQUIRE(queue.drain().empty());
+        CHECK(queue.enqueue("next") > lastId);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after repeated restarts", "[file_queue]") {
+    // The high-water marker is written as a "done" record, so it must never
+    // collide with a surviving id and delete it on the next load.
+    auto const path = tempQueuePath();
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        queue.enqueue("keep-a");
+        auto const gone = queue.enqueue("drop");
+        queue.enqueue("keep-b");
+        queue.markDone(gone);
+    }
+    for (int restart = 0; restart < 3; ++restart) {
+        morph::offline::FileOfflineQueue queue{path};
+        auto const pending = queue.drain();
+        REQUIRE(pending.size() == 2);
+        CHECK(pending.at(0).payload == "keep-a");
+        CHECK(pending.at(1).payload == "keep-b");
+    }
+    std::filesystem::remove(path);
+}

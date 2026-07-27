@@ -11,10 +11,9 @@
 /// never `kgm3`). The `id` strings become schema/wire vocabulary: append new
 /// enumerators, never renumber or rename existing ones.
 
-#include <morph/util/quantity.hpp>
-
 #include <array>
 #include <cstdint>
+#include <morph/util/quantity.hpp>
 #include <span>
 
 namespace lab {
@@ -38,15 +37,24 @@ template <>
 struct morph::units::UnitTraits<lab::Unit> {
     static constexpr morph::units::UnitMeta meta(lab::Unit unit) noexcept {
         switch (unit) {
-            case lab::Unit::scalar:    return {"scalar", "", 3};
-            case lab::Unit::percent:   return {"percent", "%", 1};
-            case lab::Unit::kg:        return {"kg", "kg", 3};
-            case lab::Unit::m3:        return {"m3", "m³", 3};
-            case lab::Unit::kg_per_m3: return {"kg_per_m3", "kg/m³", 1};
-            case lab::Unit::g:         return {"g", "g", 1};
-            case lab::Unit::t:         return {"t", "t", 4};
-            case lab::Unit::l:         return {"l", "L", 1};
-            default:                   return {"?", "?", 3};
+            case lab::Unit::scalar:
+                return {"scalar", "", 3};
+            case lab::Unit::percent:
+                return {"percent", "%", 1};
+            case lab::Unit::kg:
+                return {"kg", "kg", 3};
+            case lab::Unit::m3:
+                return {"m3", "m³", 3};
+            case lab::Unit::kg_per_m3:
+                return {"kg_per_m3", "kg/m³", 1};
+            case lab::Unit::g:
+                return {"g", "g", 1};
+            case lab::Unit::t:
+                return {"t", "t", 4};
+            case lab::Unit::l:
+                return {"l", "L", 1};
+            default:
+                return {"?", "?", 3};
         }
     }
 
@@ -54,18 +62,24 @@ struct morph::units::UnitTraits<lab::Unit> {
     ///        These drive `convert`, chaining, and the display-unit selector.
     static constexpr std::array<morph::units::UnitRelation<lab::Unit>, 3> relations{{
         {lab::Unit::g, lab::Unit::kg,
-         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                               morph::math::DecimalPlaces{3}}},
         {lab::Unit::t, lab::Unit::kg,
-         morph::math::Rational{morph::math::Numerator{1000}, morph::math::Denominator{1}, morph::math::DecimalPlaces{3}}},
+         morph::math::Rational{morph::math::Numerator{1000}, morph::math::Denominator{1},
+                               morph::math::DecimalPlaces{3}}},
         {lab::Unit::l, lab::Unit::m3,
-         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000}, morph::math::DecimalPlaces{3}}},
+         morph::math::Rational{morph::math::Numerator{1}, morph::math::Denominator{1000},
+                               morph::math::DecimalPlaces{3}}},
     }};
 };
 
 namespace lab {
 
 /// @brief Unit product table. A combination without an entry is a
-///        compile-time error at the call site that attempted it.
+///        compile-time error at the call site that attempted it: both
+///        operators are `consteval`, so the `throw` below can only be
+///        reached while evaluating a constant expression, which C++ forbids
+///        -- it never executes as a runtime exception.
 consteval Unit operator*(Unit lhs, Unit rhs) {
     if (lhs == Unit::scalar) {
         return rhs;
@@ -76,10 +90,11 @@ consteval Unit operator*(Unit lhs, Unit rhs) {
     if ((lhs == Unit::kg_per_m3 && rhs == Unit::m3) || (lhs == Unit::m3 && rhs == Unit::kg_per_m3)) {
         return Unit::kg;
     }
-    throw "lab::Unit: unsupported unit product";
+    throw "lab::Unit: unsupported unit product";  // compile error at the call site (consteval) -- see @brief above
 }
 
-/// @brief Unit quotient table.
+/// @brief Unit quotient table. Same compile-time-only `throw` as `operator*`
+///        above (this function is `consteval` too).
 consteval Unit operator/(Unit lhs, Unit rhs) {
     if (rhs == Unit::scalar) {
         return lhs;
@@ -90,7 +105,7 @@ consteval Unit operator/(Unit lhs, Unit rhs) {
     if (lhs == Unit::kg && rhs == Unit::m3) {
         return Unit::kg_per_m3;
     }
-    throw "lab::Unit: unsupported unit quotient";
+    throw "lab::Unit: unsupported unit quotient";  // compile error at the call site (consteval) -- see @brief above
 }
 
 /// @brief Shorthand for quantities in this unit system. The second argument

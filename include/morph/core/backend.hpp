@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <array>
 #include <atomic>
+#include <chrono>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -10,12 +12,14 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
+#include "../session/session.hpp"
 #include "completion.hpp"
 #include "model.hpp"
+#include "observability.hpp"
 #include "registry.hpp"
-#include "../session/session.hpp"
 #include "strand.hpp"
 
 namespace morph::backend {
@@ -60,8 +64,7 @@ struct IBackend {
 
     /// @brief Registers a new model instance and returns its opaque id.
     virtual ::morph::exec::detail::ModelId registerModel(
-        const std::string& typeId,
-        std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) = 0;
 
     /// @brief Registers a new model instance, additionally passing @p contextKey —
     ///        the instance's stable identity (e.g. an account id) — through to
@@ -89,8 +92,9 @@ struct IBackend {
     virtual void deregisterModel(::morph::exec::detail::ModelId mid) = 0;
 
     /// @brief Dispatches @p call against the model identified by @p mid.
-    virtual ::morph::async::Completion<std::shared_ptr<void>> execute(
-        ::morph::exec::detail::ModelId mid, ActionCall call, ::morph::exec::IExecutor* cbExec) = 0;
+    virtual ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                                      ActionCall call,
+                                                                      ::morph::exec::IExecutor* cbExec) = 0;
 
     /// @brief Called by `Bridge::switchBackend()` after all handlers are re-registered.
     virtual void notifyBackendChanged() = 0;
@@ -143,6 +147,21 @@ struct DisconnectedError : std::runtime_error {
     DisconnectedError() : std::runtime_error{"transport disconnected before completion resolved"} {}
 };
 
+/// @brief Thrown to a pending `Completion` when the server-side
+///        `morph::backend::LimitPolicy::executeTimeout` elapses before the
+///        model's action replies.
+///
+/// The action keeps running to completion on its strand — morph never
+/// interrupts an in-flight `Model::execute` — but the caller's wait is bounded.
+/// Distinguishes a timeout from any other `err` reply (a generic
+/// `std::runtime_error` on `QtWebSocketBackend` / `SimulatedRemoteBackend`), so
+/// callers can retry or surface a specific "request timed out" message. See
+/// `docs/spec/core/backend.md` (`LimitPolicy`).
+struct TimeoutError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
+    TimeoutError() : std::runtime_error{"execute timed out on the server"} {}
+};
+
 /// @brief In-process backend that executes model actions on a thread pool strand.
 ///
 /// Each model instance gets its own strand so actions are serialised per-model
@@ -156,31 +175,45 @@ public:
     /// @brief Creates a model instance via @p factory and registers it.
     ///
     /// @p typeId is accepted for interface compatibility but not used — the
-    /// concrete type is captured by the factory closure.
+    /// concrete type is captured by the factory closure. If the new holder's
+    /// `isBackendChangeAware()` returns `true`, @p mid is also recorded in
+    /// `_changeAware` so `notifyBackendChanged()` finds it without a
+    /// `dynamic_cast` sweep.
     /// @param factory  Callable that constructs the `IModelHolder`.
     /// @return Newly assigned `ModelId`.
     ::morph::exec::detail::ModelId registerModel(
         const std::string& /*typeId*/,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory) override {
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::registerCount, 1.0);
         ::morph::exec::detail::ModelId mid{_nextId.fetch_add(1) + 1};
         std::scoped_lock const lock{_regMtx};
-        _models[mid] = factory();
+        auto holder = factory();
+        if (holder->isBackendChangeAware()) {
+            _changeAware.insert(mid);
+        }
+        _models[mid] = std::move(holder);
         return mid;
     }
 
     /// @brief Removes the model with @p mid. Thread-safe.
     /// @param mid Id returned by a prior `registerModel()` call.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::deregisterCount, 1.0);
         std::scoped_lock const lock{_regMtx};
         _models.erase(mid);
+        _changeAware.erase(mid);
     }
 
-    /// @brief Schedules `onBackendChanged()` on each live model's strand. Thread-safe.
+    /// @brief Schedules `onBackendChanged()` on each change-aware model's strand. Thread-safe.
     ///
-    /// Every model that implements `IBackendChangedSink` has its
-    /// `onBackendChanged()` **posted onto that model's own strand** (the same
-    /// per-`ModelId` serial queue `execute` uses), rather than invoked inline on
-    /// the caller's thread. Two properties follow, and they are the whole point:
+    /// Only models recorded in `_changeAware` — maintained by `registerModel`/
+    /// `deregisterModel` from `IModelHolder::isBackendChangeAware()`, a
+    /// compile-time answer per model type — are visited; there is no
+    /// `dynamic_cast` and no scan of models that never opted in. Each such
+    /// model's `onBackendChanged()` (the `IModelHolder` base virtual) is
+    /// **posted onto that model's own strand** (the same per-`ModelId` serial
+    /// queue `execute` uses), rather than invoked inline on the caller's thread.
+    /// Two properties follow, and they are the whole point:
     ///
     /// - **Strand-serialised, lock-free model code.** `onBackendChanged()` runs
     ///   on the pool inside the model's strand, so it never overlaps an
@@ -198,24 +231,20 @@ public:
     /// concurrent `deregisterModel` cannot free the model out from under its
     /// pending notification (mirrors `execute`'s holder capture).
     void notifyBackendChanged() override {
-        std::vector<std::pair<::morph::exec::detail::ModelId,
-                              std::shared_ptr<::morph::model::detail::IModelHolder>>>
-            sinks;
+        std::vector<std::pair<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>>>
+            aware;
         {
             std::scoped_lock const lock{_regMtx};
-            for (auto& [modelId, holder] : _models) {
-                if (dynamic_cast<::morph::model::detail::IBackendChangedSink*>(holder.get()) != nullptr) {
-                    sinks.emplace_back(modelId, holder);
+            aware.reserve(_changeAware.size());
+            for (auto modelId : _changeAware) {
+                auto iter = _models.find(modelId);
+                if (iter != _models.end()) {
+                    aware.emplace_back(modelId, iter->second);
                 }
             }
         }
-        for (auto& [modelId, holder] : sinks) {
-            _strand.post(modelId, [h = std::move(holder)]() mutable {
-                auto* sink = dynamic_cast<::morph::model::detail::IBackendChangedSink*>(h.get());
-                if (sink != nullptr) {
-                    sink->onBackendChanged();
-                }
-            });
+        for (auto& [modelId, holder] : aware) {
+            _strand.post(modelId, [h = std::move(holder)]() mutable { h->onBackendChanged(); });
         }
     }
 
@@ -228,9 +257,9 @@ public:
     /// @param call   Bundled action; `localOp` is the only field used here.
     /// @param cbExec Executor for delivering callbacks.
     /// @return Completion that will carry the result or an exception.
-    ::morph::async::Completion<std::shared_ptr<void>> execute(
-        ::morph::exec::detail::ModelId mid, detail::ActionCall call,
-        ::morph::exec::IExecutor* cbExec) override {
+    ::morph::async::Completion<std::shared_ptr<void>> execute(::morph::exec::detail::ModelId mid,
+                                                              detail::ActionCall call,
+                                                              ::morph::exec::IExecutor* cbExec) override {
         auto compState = std::make_shared<::morph::async::detail::CompletionState<std::shared_ptr<void>>>();
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 
@@ -250,13 +279,56 @@ public:
         trackPending(compState);
         auto localOp = std::move(call.localOp);
         auto session = std::move(call.session);
+        auto modelTypeId = call.modelTypeId;
+        auto actionTypeId = call.actionTypeId;
+        // Captured by shared_ptr, never by raw `this`: see the Global
+        // Constraints note on `~StrandExecutor`'s member-destruction-order
+        // subtlety. A shared_ptr copy has its own lifetime, independent of
+        // LocalBackend's, so it stays valid even if the backend is torn down
+        // while this task is still queued or running.
+        auto inFlightCounter = _inFlight;
+        auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
+        ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                             static_cast<double>(inFlightAfterInc));
         _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
-                           session = std::move(session)]() mutable {
+                           session = std::move(session), modelTypeId = std::move(modelTypeId),
+                           actionTypeId = std::move(actionTypeId), inFlightCounter]() mutable {
+            auto const start = std::chrono::steady_clock::now();
+            auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
+            bool ok = false;
+            // Resolve `compState` only after every metric and `endSpan` below are
+            // recorded — nothing synchronizes a `.then()`/`.onError()` callback
+            // (delivered via `cbExec`, which may run inline/synchronously) with
+            // anything after `setValue`/`setException` returns, so resolving first
+            // would let the caller observe completion before these metrics are
+            // emitted. This is a real race, not just a theoretical one.
+            std::shared_ptr<void> value;
+            std::exception_ptr error;
             try {
                 ::morph::session::detail::ScopedContext const scoped{session};
-                compState->setValue(localOp(*holder));
+                value = localOp(*holder);
+                ok = true;
             } catch (...) {
-                compState->setException(std::current_exception());
+                error = std::current_exception();
+            }
+            ::morph::observe::detail::endSpan(spanId, ok);
+            auto const elapsedMs =
+                std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
+                {{"modelType", modelTypeId}, {"actionType", actionTypeId}}};
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+            if (!ok) {
+                ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+            }
+            auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
+                                                 static_cast<double>(inFlightAfterDec));
+            // Resolve last: the Completion is still settled exactly once, only
+            // its position relative to the now-recorded instrumentation moved.
+            if (ok) {
+                compState->setValue(std::move(value));
+            } else {
+                compState->setException(error);
             }
         });
         return comp;
@@ -289,9 +361,20 @@ private:
     std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<::morph::model::detail::IModelHolder>,
                        ::morph::exec::detail::ModelIdHash>
         _models;
+    // Ids of models whose holder answered `isBackendChangeAware() == true` at
+    // registration time. Maintained in lockstep with `_models` (inserted in
+    // `registerModel`, erased in `deregisterModel`, both under `_regMtx`) so
+    // `notifyBackendChanged()` never needs to inspect a model it doesn't have
+    // to. Always a subset of `_models`' keys.
+    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _changeAware;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    // Concurrent in-flight executes, for the executeInFlight metric. A
+    // shared_ptr (not a plain atomic member) so strand tasks hold their own
+    // reference instead of capturing `this` — see execute()'s comment and the
+    // Global Constraints note on ~StrandExecutor's destruction order.
+    std::shared_ptr<std::atomic<std::size_t>> _inFlight = std::make_shared<std::atomic<std::size_t>>(0);
 };
 
 }  // namespace morph::backend

@@ -1,0 +1,253 @@
+// SPDX-License-Identifier: Apache-2.0
+
+// Protocol-version negotiation coverage: the wire-layer primitives
+// (kProtocolVersion, Envelope::protocolVersion, ProtocolRange, makeHello,
+// interpretHelloReply), RemoteServer's "hello" handling, and
+// SimulatedRemoteBackend::negotiateProtocolVersion(). QtWebSocketBackend's
+// negotiateProtocolVersion() is covered separately in
+// tests/qt/test_qt_websocket.cpp (it needs a real Qt event loop).
+
+#include <catch2/catch_test_macros.hpp>
+#include <cstdint>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/remote.hpp>
+#include <morph/core/wire.hpp>
+#include <string>
+
+#include "test_support.hpp"
+
+using morph::wire::decode;
+using morph::wire::encode;
+using morph::wire::Envelope;
+using morph::wire::interpretHelloReply;
+using morph::wire::kProtocolVersion;
+using morph::wire::makeErr;
+using morph::wire::makeHello;
+using morph::wire::makeOk;
+using morph::wire::ProtocolNegotiationResult;
+using morph::wire::ProtocolRange;
+
+// ── kProtocolVersion / Envelope::protocolVersion ──────────────────────────────
+
+TEST_CASE("kProtocolVersion is 1", "[wire][protocol]") { REQUIRE(kProtocolVersion == 1U); }
+
+TEST_CASE("Envelope::protocolVersion defaults to 0 (legacy/unspecified)", "[wire][protocol]") {
+    Envelope env;
+    REQUIRE(env.protocolVersion == 0U);
+}
+
+TEST_CASE("protocolVersion round-trips through encode/decode", "[wire][protocol]") {
+    Envelope env = makeHello();
+    REQUIRE(env.protocolVersion == kProtocolVersion);
+    auto decoded = decode(encode(env));
+    REQUIRE(decoded.protocolVersion == kProtocolVersion);
+    REQUIRE(decoded.kind == "hello");
+}
+
+TEST_CASE("an envelope encoded without protocolVersion decodes as 0 (legacy)", "[wire][protocol]") {
+    // Simulates an old encoder that has never heard of protocolVersion: the
+    // JSON simply omits the key.
+    const std::string json = R"({"kind":"register","typeId":"SomeType"})";
+    auto decoded = decode(json);
+    REQUIRE(decoded.protocolVersion == 0U);
+}
+
+TEST_CASE("a protocolVersion key an old decoder does not know is ignored, not rejected", "[wire][protocol]") {
+    // Forward-compat regression guard: an unknown/newer field must not break
+    // the parse, matching the existing error_on_unknown_keys=false contract.
+    const std::string json = R"({"kind":"register","typeId":"SomeType","protocolVersion":99})";
+    REQUIRE_NOTHROW(decode(json));
+}
+
+// ── makeHello / ProtocolRange ─────────────────────────────────────────────────
+
+TEST_CASE("makeHello builds a hello envelope carrying the caller's version", "[wire][protocol]") {
+    auto env = makeHello(7);
+    REQUIRE(env.kind == "hello");
+    REQUIRE(env.protocolVersion == 7U);
+}
+
+TEST_CASE("makeHello defaults to kProtocolVersion", "[wire][protocol]") {
+    auto env = makeHello();
+    REQUIRE(env.protocolVersion == kProtocolVersion);
+}
+
+TEST_CASE("ProtocolRange round-trips through glaze JSON", "[wire][protocol]") {
+    ProtocolRange range{.min = 1, .max = 3};
+    std::string json;
+    REQUIRE_FALSE(glz::write_json(range, json));
+    ProtocolRange decoded{};
+    REQUIRE_FALSE(glz::read_json(decoded, json));
+    REQUIRE(decoded.min == 1U);
+    REQUIRE(decoded.max == 3U);
+}
+
+// ── interpretHelloReply ────────────────────────────────────────────────────────
+
+TEST_CASE("interpretHelloReply: an ok reply is Negotiated", "[wire][protocol]") {
+    std::string body;
+    REQUIRE_FALSE(glz::write_json(ProtocolRange{.min = 1, .max = 1}, body));
+    auto reply = makeOk(0, body);
+    REQUIRE(interpretHelloReply(reply) == ProtocolNegotiationResult::Negotiated);
+}
+
+TEST_CASE("interpretHelloReply: 'unknown envelope kind: hello' is classified LegacyPeer", "[wire][protocol]") {
+    auto reply = makeErr("unknown envelope kind: hello");
+    REQUIRE(interpretHelloReply(reply) == ProtocolNegotiationResult::LegacyPeer);
+}
+
+TEST_CASE("interpretHelloReply: any other err throws instead of proceeding", "[wire][protocol]") {
+    auto reply = makeErr("protocol version unsupported");
+    REQUIRE_THROWS_AS(interpretHelloReply(reply), std::runtime_error);
+}
+
+TEST_CASE("interpretHelloReply: an empty-message err still throws (does not misclassify)", "[wire][protocol]") {
+    auto reply = makeErr("");
+    REQUIRE_THROWS_AS(interpretHelloReply(reply), std::runtime_error);
+}
+
+// ── RemoteServer: "hello" handling ────────────────────────────────────────────
+
+TEST_CASE("RemoteServer: hello at kProtocolVersion returns ok with the default range", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello()), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+
+    ProtocolRange range{};
+    REQUIRE_FALSE(glz::read_json(range, waiter.env.body));
+    REQUIRE(range.min == kProtocolVersion);
+    REQUIRE(range.max == kProtocolVersion);
+}
+
+TEST_CASE("RemoteServer: hello echoes callId in its reply", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    Envelope req = makeHello();
+    req.callId = 55;
+    morph::testing::WaitReply waiter;
+    server->handle(encode(req), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+    REQUIRE(waiter.env.callId == 55U);
+}
+
+TEST_CASE("RemoteServer: hello outside the supported range is rejected", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(2, 3);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello(1)), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+    REQUIRE(waiter.env.message == "protocol version unsupported");
+}
+
+TEST_CASE("RemoteServer: hello inside a widened supported range succeeds", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(1, 2);
+
+    morph::testing::WaitReply waiter;
+    server->handle(encode(makeHello(2)), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "ok");
+}
+
+TEST_CASE("RemoteServer::setSupportedVersionRange rejects min > max", "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    REQUIRE_THROWS_AS(server->setSupportedVersionRange(5, 1), std::invalid_argument);
+}
+
+TEST_CASE("RemoteServer: hello is also handled via handleInline", "[remote][protocol][handleInline]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reply = decode(server->handleInline(encode(makeHello())));
+    REQUIRE(reply.kind == "ok");
+}
+
+// ── SimulatedRemoteBackend::negotiateProtocolVersion ──────────────────────────
+
+TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: Negotiated against a hello-aware server",
+          "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE(backend.negotiateProtocolVersion() == ProtocolNegotiationResult::Negotiated);
+}
+
+TEST_CASE("SimulatedRemoteBackend::negotiateProtocolVersion: throws when the server's range excludes us",
+          "[remote][protocol]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setSupportedVersionRange(2, 3);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    REQUIRE_THROWS_AS(backend.negotiateProtocolVersion(), std::runtime_error);
+}
+
+// ── Action-evolution policy: BRIDGE_REGISTER_ACTION is forward-compatible ────
+
+// Deliberately at file scope, not inside an anonymous namespace: glaze's
+// reflection (`get_name`) needs external linkage to mangle a name for the
+// type, matching the established convention for BRIDGE_REGISTER_ACTION
+// fixtures elsewhere in this test suite (see test_action_validation.cpp,
+// test_coverage_gaps.cpp).
+struct PvPolicyResult {
+    int value = 0;
+};
+struct PvPolicyAction {
+    int id = 0;
+};
+struct PvPolicyModel {
+    PvPolicyResult execute(PvPolicyAction a) { return PvPolicyResult{.value = a.id}; }
+};
+
+// Also at file scope for the same reason (see above) — used only by the
+// "strict by default" pin below.
+struct PvPolicyOldShape {
+    int id = 0;
+};
+
+BRIDGE_REGISTER_MODEL(PvPolicyModel, "PV_PolicyModel")
+BRIDGE_REGISTER_ACTION(PvPolicyModel, PvPolicyAction, "PV_PolicyAction")
+
+TEST_CASE("BRIDGE_REGISTER_ACTION fromJson tolerates an unknown field from a newer peer",
+          "[registry][protocol][policy]") {
+    // Simulates a newer client sending an action payload with an additive
+    // field this older-compiled struct does not know about.
+    const std::string newerPeerJson = R"({"id":42,"note":"from a newer client"})";
+    auto action = morph::model::ActionTraits<PvPolicyAction>::fromJson(newerPeerJson);
+    REQUIRE(action.id == 42);
+}
+
+TEST_CASE("BRIDGE_REGISTER_ACTION resultFromJson tolerates an unknown field from a newer peer",
+          "[registry][protocol][policy]") {
+    // Same additive-evolution guarantee on the result side: a newer server
+    // adds a field to the result struct, an older-compiled client still
+    // decodes the fields it knows.
+    const std::string newerPeerJson = R"({"value":99,"extra":"from a newer server"})";
+    auto result = morph::model::ActionTraits<PvPolicyAction>::resultFromJson(newerPeerJson);
+    REQUIRE(result.value == 99);
+}
+
+TEST_CASE("Plain glz::read_json (the pre-existing, non-macro pattern) is strict by default",
+          "[registry][protocol][policy]") {
+    // Pins *why* the macro change in this task matters: the glaze default
+    // (error_on_unknown_keys = true) is what a hand-written fromJson gets if
+    // it calls glz::read_json directly instead of the lenient pattern.
+    const std::string newerPeerJson = R"({"id":42,"note":"from a newer client"})";
+    PvPolicyOldShape older{};
+    auto err = glz::read_json(older, newerPeerJson);
+    REQUIRE(static_cast<bool>(err));
+}

@@ -44,6 +44,8 @@ set(DOXYGEN_WARN_AS_ERROR          FAIL_ON_WARNINGS)
 set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::log::detail"
     "morph::log::detail::*"
+    "morph::observe::detail"
+    "morph::observe::detail::*"
     "morph::exec::detail"
     "morph::exec::detail::*"
     "morph::async::detail"
@@ -58,12 +60,16 @@ set(DOXYGEN_EXCLUDE_SYMBOLS
     "morph::offline::detail::*"
     "morph::qt::detail"
     "morph::qt::detail::*"
+    "morph::net::detail"
+    "morph::net::detail::*"
     "morph::math::detail"
     "morph::math::detail::*"
     "morph::units::detail"
     "morph::units::detail::*"
     "morph::forms::detail"
     "morph::forms::detail::*"
+    "morph::views::detail"
+    "morph::views::detail::*"
     # Third-party customisation points (glaze codecs/schemas, std::formatter)
     # are integration shims, not morph API surface.
     "glz"

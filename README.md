@@ -395,19 +395,28 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
   decimal precision shrinks the representable magnitude. Wire input is *clamped*,
   not rejected, on malformed values.
 - **Journal replay re-executes actions**, so undo/reconstruction is only exact
-  for pure, in-memory models; there is no transactional outbox tying the log to a
-  model's own store yet.
+  for pure, in-memory models. A model with its own transactional store can close
+  the store/log divergence gap by opting into `IModelHolder::setOutboxManaged` +
+  `journal::OutboxRelay` (see `docs/spec/journal/journal.md`); a model that
+  doesn't opt in keeps the default fire-after-success append.
 - **Offline durability is bring-your-own.** Only an in-memory queue ships; the
   crash-safety story depends on a durable queue you implement.
 - **Registration is global and macro-driven** (per-TU, static-init, string type
   ids); there is no runtime deregistration and unknown ids fail at runtime, not
   compile time.
+- **No 1.0 compatibility promise yet.** morph is `0.1.0`; per semver's own rule
+  for major version `0`, anything may still change in any release without a
+  major bump. The semantic-versioning, stable-surface, and deprecation-window
+  policy morph commits to **starting at 1.0** is already published — see
+  [`docs/spec/VERSIONING.md`](docs/spec/VERSIONING.md).
 
 ## Learn more
 
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — namespace map, layer diagram,
   wire protocol, deployment topologies, and design rationale.
 - [`docs/spec/`](docs/spec) — the authoritative per-type/subsystem design specs.
+- [`docs/spec/VERSIONING.md`](docs/spec/VERSIONING.md) — the semantic-versioning,
+  stable-surface, and deprecation-window policy.
 
 ## License
 

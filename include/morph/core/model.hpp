@@ -66,6 +66,24 @@ struct IModelHolder {
     /// @brief Returns the `std::type_index` of the concrete model type.
     [[nodiscard]] virtual std::type_index type() const noexcept = 0;
 
+    /// @brief Returns `true` if the concrete model type declares `void onBackendChanged()`.
+    ///
+    /// Answered by `ModelHolder<Model>` from the `BackendChangedNotifiable<Model>`
+    /// concept — a compile-time constant per concrete `Model` — so a backend can
+    /// learn this once, at registration time, instead of `dynamic_cast`ing every
+    /// holder on every backend switch. See `LocalBackend::registerModel` /
+    /// `LocalBackend::notifyBackendChanged` (`backend.hpp`).
+    [[nodiscard]] virtual bool isBackendChangeAware() const noexcept = 0;
+
+    /// @brief Forwards to the concrete model's `onBackendChanged()`, if it declared one.
+    ///
+    /// Default implementation is a no-op, for holders whose model is not
+    /// backend-change-aware. `ModelHolder<Model>` overrides this to call
+    /// `Model::onBackendChanged()` when `BackendChangedNotifiable<Model>` holds.
+    /// Called by `LocalBackend::notifyBackendChanged` through this base-class
+    /// virtual — no `dynamic_cast`, no RTTI dependency on this path.
+    virtual void onBackendChanged() {}
+
     /// @brief Down-casts to a concrete `Model` reference.
     ///
     /// @tparam Model The expected concrete type.
@@ -95,31 +113,53 @@ struct IModelHolder {
     /// @brief Returns `true` if an action log is attached to this instance.
     [[nodiscard]] bool hasActionLog() const noexcept { return static_cast<bool>(_actionLog); }
 
-    /// @brief Records @p entry if a log is attached; no-op otherwise.
+    /// @brief Marks this instance as outbox-managed: the model records its own
+    ///        `LogEntry` (inside its own store's transaction) and relays it via
+    ///        `journal::OutboxRelay`, so `recordIfAttached` must stop
+    ///        auto-appending for it — otherwise the framework's normal
+    ///        fire-after-success append would double-log the same action.
+    ///
+    /// Independent of `attachActionLog`/`hasActionLog()`: those keep reporting
+    /// whatever log is attached and whether one is attached, respectively; this
+    /// flag only changes whether `recordIfAttached` actually forwards to it.
+    /// Defaults to `false` — every instance auto-appends exactly as before
+    /// unless a model explicitly opts in.
+    /// @param outboxManaged `true` to suppress `recordIfAttached`; `false` to
+    ///        restore the ordinary fire-after-success behavior.
+    void setOutboxManaged(bool outboxManaged) noexcept { _outboxManaged = outboxManaged; }
+
+    /// @brief Returns `true` if `setOutboxManaged(true)` was called on this instance.
+    [[nodiscard]] bool isOutboxManaged() const noexcept { return _outboxManaged; }
+
+    /// @brief Records @p entry if a log is attached and this instance is not
+    ///        outbox-managed; no-op otherwise.
     ///
     /// Called automatically by the two places `Model::execute()` is actually
     /// invoked (`ActionDispatcher`'s runner and `Bridge::executeVia`'s local
     /// op) — model code and application code never call this directly.
     /// Overwrites `entityKey`, `principal`, and `timestampMs` on @p entry;
     /// callers only need to fill `modelType`, `actionType`, `payload`, `result`.
+    /// A no-op if no log is attached, **or** if `setOutboxManaged(true)` was
+    /// called on this instance (the model records its own entry elsewhere).
     /// @param entry Entry to record; `seq` is assigned by the attached sink.
     void recordIfAttached(::morph::journal::LogEntry entry) {
-        if (!_actionLog) {
+        if (!_actionLog || _outboxManaged) {
             return;
         }
         entry.entityKey = _contextKey;
         if (const auto* ctx = ::morph::session::current()) {
             entry.principal = ctx->principal;
         }
-        entry.timestampMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                 std::chrono::system_clock::now().time_since_epoch())
-                                 .count();
+        entry.timestampMs =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+                .count();
         _actionLog->append(std::move(entry));
     }
 
 private:
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
+    bool _outboxManaged{false};
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
@@ -138,6 +178,24 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
 
     /// @brief Returns `typeid(Model)` wrapped in a `std::type_index`.
     [[nodiscard]] std::type_index type() const noexcept override { return typeid(Model); }
+
+    /// @brief Returns `BackendChangedNotifiable<Model>` — a compile-time constant.
+    [[nodiscard]] bool isBackendChangeAware() const noexcept override { return BackendChangedNotifiable<Model>; }
+
+    /// @brief Forwards to `Model::onBackendChanged()` iff `Model` declared one; no-op otherwise.
+    ///
+    /// This single definition is the final overrider for two unrelated base
+    /// virtuals: `IModelHolder::onBackendChanged` (always), and — when `Model`
+    /// is notifiable — `IBackendChangedSink::onBackendChanged`, reached via
+    /// `BackendChangedMixin<Model, true>`. That mixin's own forwarding body
+    /// becomes unreachable (shadowed by this more-derived override) but is left
+    /// as-is; both call paths (`IModelHolder*` and `dynamic_cast<IBackendChangedSink*>`)
+    /// land here.
+    void onBackendChanged() override {
+        if constexpr (BackendChangedNotifiable<Model>) {
+            model.onBackendChanged();
+        }
+    }
 };
 
 /// @brief Factory that creates default-constructed `ModelHolder<Model>` instances.

@@ -9,8 +9,11 @@ session layer (`session.hpp` `Context`/`IAuthorizer`, `session_auth.hpp`
 Related specs: [session.md](session/session.md) (the `Context`/`IAuthorizer` types),
 [wire.md](core/wire.md) (the envelope the `session` travels in),
 [backend.md](core/backend.md) (`RemoteServer`/`LocalBackend` dispatch),
-[error_handling.md](error_handling.md) (how a rejected request surfaces). The
-shipped `morph::qt` WebSocket transport supplies the TLS layer discussed below.
+[error_handling.md](error_handling.md) (how a rejected request surfaces), and
+[testing_strategy.md](testing_strategy.md) (the fuzz/soak/load/adversarial
+suites that exercise this trust model over distributions and time, rather than
+single-shot examples). The shipped `morph::qt` WebSocket transport supplies the
+TLS layer discussed below.
 
 ## Threat model — what morph does and does not defend
 
@@ -31,6 +34,12 @@ application. Be explicit about the boundary:
   `wire::kMaxEnvelopeBytes` (8 MiB) before parsing, bounding a single message's
   allocation and parse cost (see [wire.md](core/wire.md)). This is a coarse
   per-message backstop only — not a rate limit, timeout, or inner-`body` bound.
+- A negotiated protocol-version handshake (`wire::kind == "hello"`), opt-in and
+  exchanged before any `execute`, so an incompatible peer is refused with a
+  clear diagnostic instead of failing per-request later (see
+  [wire.md](core/wire.md), "Protocol version negotiation"). The handshake
+  carries no `session` and predates authorization — it is orthogonal to, not a
+  substitute for, `IAuthorizer`.
 
 **morph does NOT provide (the application/transport must):**
 - **Wire-layer transport security.** The `wire` envelope carries no encryption
@@ -52,18 +61,28 @@ application. Be explicit about the boundary:
 - **Authentication of the transport peer.** A bearer token proves the caller
   holds a validly-signed token; it does not bind the token to a connection.
   Without transport-level TLS a stolen token can be replayed.
-- **Type-level `register` authorization.** The `register` envelope is **not**
-  passed through `authorize`, and model ids are guessable sequential integers
-  assigned from a single counter (see [backend.md](core/backend.md),
-  `RemoteServer::_nextId`). Any client that can send envelopes can register
-  models. **Per-instance ownership on `execute`/`deregister` *is* now
-  enforceable** via the optional `IAuthorizer::authorizeInstance` hook (see
+- **`register` authorization and opaque ids are both opt-in, defaulting to
+  today's permissive behaviour.** The `register` envelope is gated by the
+  optional `IAuthorizer::authorizeRegister` hook (see
+  [The register-authorization hook](#the-register-authorization-hook-authorizeregister)
+  below), consulted after authentication and before the instance is created;
+  its **default allows everything**, so an unconfigured server still lets any
+  client that can send envelopes create model instances. Model ids are no
+  longer sequential — `RemoteServer` assigns them via a keyed 64-bit Feistel
+  permutation over an internal counter (see [backend.md](core/backend.md),
+  `RemoteServer`'s `detail::OpaqueIdGenerator`) — but opaque ids are
+  defence-in-depth, not authorization: a caller who independently learns a
+  valid id can still target it. **Per-instance ownership on
+  `execute`/`deregister` *is* enforceable** via the optional
+  `IAuthorizer::authorizeInstance` hook (see
   [The per-instance ownership hook](#the-per-instance-ownership-hook-authorizeinstance)
   below) — a deployer can bind each instance to the principal that registered it
-  and reject cross-tenant `execute`/`deregister`. The hook **defaults to
-  allow-all**, so an unconfigured server still behaves as a single-trust-domain
-  server: it is not a hardened multi-tenant public-internet server *unless* you
-  install an authorizer that overrides `authorizeInstance`.
+  and reject cross-tenant `execute`/`deregister`. All three hooks
+  (`authorizeRegister`, `authorize`, `authorizeInstance`) **default to
+  allow-all**, so an unconfigured server still behaves as a
+  single-trust-domain server: it is not a hardened multi-tenant
+  public-internet server *unless* you install an authorizer that overrides
+  `authorizeRegister` and `authorizeInstance`.
 - **Local-path authorization.** `LocalBackend::execute` installs the session
   context but never calls the authorizer (the authorizer is a remote-only gate,
   `remote.hpp` `dispatchExecute` is the sole call site). Security-critical checks
@@ -145,6 +164,81 @@ morph::session::MacFunction mac =
     [](std::string_view key, std::string_view msg) { return myLibsodiumHmac(key, msg); };
 morph::session::SigningAuthorizer authz{sharedSecret, mac};
 ```
+
+#### Recommended production wiring: a vetted library (libsodium / OpenSSL)
+
+Two ready-to-copy adapters ship under `examples/vetted_hmac/` (built only when
+`-DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_HMAC_EXAMPLES=ON`, each with its own
+sub-option so a host missing one library can still build the other):
+
+- **libsodium** (`examples/vetted_hmac/libsodium_adapter.hpp`, gated by
+  `MORPH_BUILD_HMAC_EXAMPLE_LIBSODIUM`, default `ON` once the parent option is
+  on):
+
+  ```cpp
+  morph::session::MacFunction sodiumHmacSha256 =
+      [](std::string_view key, std::string_view msg) -> std::string {
+          unsigned char out[crypto_auth_hmacsha256_BYTES];
+          crypto_auth_hmacsha256_state st;
+          crypto_auth_hmacsha256_init(&st,
+              reinterpret_cast<const unsigned char*>(key.data()), key.size());
+          crypto_auth_hmacsha256_update(&st,
+              reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
+          crypto_auth_hmacsha256_final(&st, out);
+          return std::string(reinterpret_cast<char*>(out), sizeof out);
+      };
+  ```
+
+- **OpenSSL** (`examples/vetted_hmac/openssl_adapter.hpp`, gated by
+  `MORPH_BUILD_HMAC_EXAMPLE_OPENSSL`):
+
+  ```cpp
+  morph::session::MacFunction opensslHmacSha256 =
+      [](std::string_view key, std::string_view msg) -> std::string {
+          unsigned char out[EVP_MAX_MD_SIZE];
+          unsigned int outLen = 0;
+          HMAC(EVP_sha256(), key.data(), static_cast<int>(key.size()),
+               reinterpret_cast<const unsigned char*>(msg.data()), msg.size(), out, &outLen);
+          return std::string(reinterpret_cast<char*>(out), outLen);
+      };
+  ```
+
+Both adapters return the same raw MAC bytes as `hmacSha256` on every RFC 4231
+vector (`examples/vetted_hmac/test_libsodium_adapter.cpp`,
+`test_openssl_adapter.cpp`) and interoperate with it in both directions — a
+token issued with the reference impl verifies under either adapter and vice
+versa — so swapping the injected `MacFunction` is drop-in. Wiring is the same
+constructor argument shown above:
+
+```cpp
+auto authz = std::make_shared<morph::session::SigningAuthorizer>(sharedSecret, sodiumHmacSha256);
+```
+
+#### `MORPH_REQUIRE_VETTED_HMAC` — failing the build on the reference default
+
+`-DMORPH_REQUIRE_VETTED_HMAC=ON` (default `OFF`) removes the `mac = hmacSha256`
+default argument from `TokenIssuer`, `TokenVerifier`, and `SigningAuthorizer`
+(via `#ifdef` in `session_auth.hpp`), so any construction that relied on the
+default fails to compile — the deployer must pass an explicit `MacFunction`
+(e.g. one of the two adapters above). The option is opt-in and keys on a build
+configuration the deployer chooses, not on `CMAKE_BUILD_TYPE`: a zero-dependency
+local/low-stakes deployment can keep shipping the reference impl by leaving it
+off. It has no effect on code that already passes a `MacFunction` explicitly.
+
+The guard is a deployment switch aimed at *application* call sites, so it does
+not apply to morph's own suite: several test files (`test_session_auth.cpp`,
+`test_security_fixes.cpp`, `test_policy_hardening.cpp`,
+`test_register_authorization.cpp`) deliberately exercise the reference
+`hmacSha256` through its default argument, and `tests/CMakeLists.txt` undoes
+the inherited definition for the `morph_tests` target alone (a `-U` in that
+target's compile options, which CMake expands after the interface `-D`).
+`MORPH_BUILD_TESTS=ON` and `MORPH_REQUIRE_VETTED_HMAC=ON` therefore compose:
+CI builds and tests exactly that combination, which is what keeps the option
+from rotting. The guard's own correctness — that it blocks the default, still
+allows an explicit `MacFunction`, and is a no-op when off — is proven at
+configure time by three `try_compile` checks in `tests/CMakeLists.txt` (see
+"Testing" below), which set or omit the macro per probe and so run
+independently of both the top-level option's value and that `-U`.
 
 ### Issuing tokens — the login flow
 
@@ -328,6 +422,95 @@ every instance is unowned and the hook (if overridden as above) admits all.
 Register itself remains type-unauthorized — bounding *who may create* instances
 is still the transport's/app's responsibility.
 
+## The register-authorization hook (`authorizeRegister`)
+
+`authorize` and `authorizeInstance` both act on an instance that already
+exists; neither can answer "may this caller create one at all?".
+`IAuthorizer` closes that gap with a fourth optional method:
+
+```cpp
+[[nodiscard]] virtual bool authorizeRegister(
+    const Context& ctx,
+    std::string_view modelType
+) const { return true; }             // DEFAULT: allow
+```
+
+### Enforcement order in `RemoteServer`
+
+On every `register` envelope, in order:
+
+1. Reject an empty `typeId` (`err "register requires a typeId"`) — unchanged,
+   checked before any authorization.
+2. **Authenticate.** `_authorizer->authenticate(env.session)` runs and its
+   result is stamped onto `env.session.principal` — a verified value
+   overwrites it, `nullopt` clears it — exactly as `dispatchExecute` does for
+   `execute`. So `authorizeRegister` (and the owner recorded below) key on the
+   *verified* identity, never the client's raw claim.
+3. **`authorizeRegister(env.session, typeId)`.** A `false` return replies
+   `err "unauthorized"` (with the request's `callId`) and **no instance is
+   created** — `ModelRegistryFactory::create` never runs.
+4. Only on `true` does the server construct the instance and record
+   `env.session.principal` (already verified) as its owner, exactly as before.
+
+`handleInline` — the synchronous control path `SimulatedRemoteBackend` uses for
+`register` — runs through the same `dispatchMessage` code path, so the gate
+holds identically on both entry points.
+
+### Composing with `authorizeInstance`
+
+`authorizeRegister` and `authorizeInstance` answer different questions:
+registration decides *whether an instance may be created and by whom*; the
+owner recorded at that same register call then drives per-instance
+`execute`/`deregister` decisions. A deployer typically installs both on one
+authorizer subclassing `SigningAuthorizer`:
+
+```cpp
+struct TenantAuthorizer : morph::session::SigningAuthorizer {
+    using SigningAuthorizer::SigningAuthorizer;
+    bool authorizeRegister(const morph::session::Context& ctx, std::string_view) const override {
+        return !ctx.principal.empty();  // only authenticated callers may register
+    }
+    bool authorizeInstance(const morph::session::Context& ctx, std::string_view, std::string_view,
+                           std::uint64_t, std::string_view ownerPrincipal) const override {
+        return ownerPrincipal.empty() || ownerPrincipal == ctx.principal;
+    }
+};
+```
+
+### Backward compatibility
+
+The default returns `true`. `AllowAllAuthorizer` and a plain `SigningAuthorizer`
+(neither overrides `authorizeRegister`) impose no register restriction, so an
+unconfigured server registers any known model type exactly as before. Register
+over the **local** path is unaffected — there is no authorizer on
+`LocalBackend`; its factory closure constructs the instance directly.
+
+## Opaque model ids
+
+`RemoteServer` no longer assigns model ids from a bare sequential counter.
+Each id is now the result of running an internal monotonic counter through
+`morph::backend::detail::OpaqueIdGenerator` — a 4-round Feistel network over
+the 64-bit space, keyed once at construction from `std::random_device` (see
+[backend.md](core/backend.md) for the construction). Two properties matter:
+
+- **Uniqueness is unconditional.** A Feistel network is a bijection over its
+  full domain for *any* round function, so distinct counter values always
+  produce distinct ids — there is no collision risk short of the
+  practically-unreachable 2^64 counter wraparound.
+- **Opacity depends on the key, not on the algorithm being secret.** The
+  per-round keys are drawn once from `std::random_device` and never exposed;
+  without them, an observed id cannot be inverted to recover the counter or
+  predict the next one. An *unkeyed* public mixing function would not have
+  this property — anyone who reads the (public) source could invert it.
+
+Opaque ids are **defence-in-depth, not the authorization boundary**. They
+remove cheap sequential *enumeration* (`1, 2, 3, …`) as an attack, but a caller
+who independently learns a valid id — its own prior register, a leaked log
+line, a referrer header — can still target it; `authorizeInstance` (above) is
+what actually decides whether that targeting is allowed. A deployer relying on
+id opacity *instead of* an ownership-enforcing authorizer has not closed the
+cross-tenant gap, only made it more expensive to find.
+
 ## The default is fail-open — change it in production
 
 `RemoteServer`'s ordinary constructor defaults to `allowAllAuthorizer()`, and the
@@ -348,50 +531,74 @@ matter in practice:
   Absent a config, both run plaintext (`ws://`). TLS here provides the transport
   confidentiality and peer authentication the wire layer does not — this is the
   intended way to protect bearer tokens against capture and replay.
-- **The server binds to loopback only.** `QtWebSocketServer::listen()` binds
-  `QHostAddress::LocalHost`; the shipped server is not reachable off-host. Exposing
-  it beyond localhost requires changing the bind address *and* adding the
-  authorization the base `RemoteServer` does not enforce (control messages, model
-  ids — see the threat model).
-- **Client peer verification is the deployer's choice.** For self-signed certs
-  the documented pattern sets `QSslSocket::VerifyNone` on the client config, which
-  disables server-identity verification (encrypts but does not authenticate the
-  server, so it is MITM-vulnerable). Production clients must verify the server
-  certificate against a trusted CA or a pinned certificate.
-- **No transport-level message-size check.** `QtWebSocketServer` forwards each
-  text frame to `RemoteServer::handle()` with no size check of its own; the bounds
-  are `QWebSocket`'s default frame/message limit and the wire-layer 8 MiB
-  `kMaxEnvelopeBytes` cap that `wire::decode` enforces before parsing (which
-  covers the whole envelope, including `body`). There is no per-connection request
-  rate limit and no cap on the number of models a connection may register.
+- **The server binds to loopback by default, and refuses silent plaintext
+  exposure.** `QtWebSocketServerConfig::bindAddress` defaults to
+  `QHostAddress::LocalHost` (unchanged from before). Exposing the server beyond
+  localhost means changing `bindAddress` — and `listen()` now guards that
+  change: binding a non-loopback address with no TLS configuration and
+  `allowPlaintextExposure` left at its default `false` makes `listen()` return
+  `false` and log at `morph::log::LogLevel::error` instead of silently starting
+  a plaintext, off-host-reachable server. Passing a TLS configuration, or
+  explicitly setting `allowPlaintextExposure = true`, allows the bind. This is
+  in addition to the authorization the base `RemoteServer` does not enforce
+  (control messages, model ids — see the threat model).
+- **Client peer verification is the default-safe path.** `qt_tls.hpp` ships three
+  factory helpers: `tlsVerifyingConfig()` (verify against the system/CA trust
+  store — the recommended production default), `tlsPinnedConfig(cert)` (verify
+  against one pinned certificate — the correct choice for a self-signed
+  deployment), and `tlsInsecureNoVerify()` (`QSslSocket::VerifyNone` — encrypts
+  but does not authenticate the server, so it is MITM-vulnerable; local
+  development and tests only, named so it can be grepped for in a security
+  review). Pass the result of one of these as `QtWebSocketBackend`'s `tls`
+  argument. See the worked example in `examples/qt_tls_client/`.
+- **Transport-level resource limits are available, opt-in.** `QtWebSocketServerConfig`
+  bounds connection count (`maxConnections`), per-frame size (`maxMessageBytes`,
+  defaulting to the wire-layer `kMaxEnvelopeBytes` cap), per-connection message rate
+  (`messagesPerSecond`, token bucket), and handshake/idle time
+  (`handshakeTimeout`/`idleTimeout`). All default to unbounded/disabled, so an
+  unconfigured server behaves exactly as before. See
+  [backend.md](core/backend.md#qtwebsocketserver--server-side-websocket-transport).
 
 ## Residual limitations & hardening checklist
 
 Even with `SigningAuthorizer` installed, the following remain the deployer's
 responsibility:
 
-- **Use TLS and verify the peer.** Bearer tokens and payloads travel in
-  plaintext otherwise, and a captured token can be replayed until it expires.
-  There is no envelope-level confidentiality or replay protection. The Qt
-  transport supports `wss://` (above); enable it and make the client actually
-  verify the server certificate (not `VerifyNone`).
+- **Use TLS and verify the peer — now the documented default.** Bearer tokens
+  and payloads travel in plaintext otherwise, and a captured token can be
+  replayed until it expires. There is no envelope-level confidentiality or
+  replay protection. The Qt transport supports `wss://` (above); build the
+  client's configuration with `tlsVerifyingConfig()` or `tlsPinnedConfig()`
+  (`qt_tls.hpp`) rather than `tlsInsecureNoVerify()`, and rely on
+  `QtWebSocketServer::listen()`'s exposure guard to catch an accidental
+  plaintext off-host bind.
 - **Keep expiry short and rotate the secret.** A leaked secret forges any
   identity; a leaked token is valid until `expiresAtMs`.
-- **Bound message size and add timeouts in the transport.** The wire layer now
-  caps a single message at `wire::kMaxEnvelopeBytes` (8 MiB) but imposes **no**
-  per-request timeout and **no** per-connection rate or count limit (see
-  [wire.md](core/wire.md)); `QtWebSocketServer` adds no cap beyond `QWebSocket`'s
-  default. A hostile client can still exhaust memory with many sub-cap messages
-  or leave `Completion`s pending forever, so the transport must add its own
-  size/rate bounds and timeouts.
+- **Inject a vetted HMAC and enable `MORPH_REQUIRE_VETTED_HMAC` in release
+  builds.** The reference `hmacSha256` is correct (RFC 4231/FIPS 180-4
+  test-vector-verified) but is not side-channel-hardened beyond the
+  constant-time MAC compare. Wire in libsodium or OpenSSL via the `MacFunction`
+  seam (see "Recommended production wiring" above) and turn on
+  `MORPH_REQUIRE_VETTED_HMAC` so a build that forgets to inject one fails to
+  compile rather than shipping the reference impl silently.
+- **Bound message size, rate, and add timeouts — now available, still opt-in.**
+  `RemoteServer::LimitPolicy` (`executeTimeout`, `maxLiveModels`,
+  `maxInFlightExecutes`) and the Qt transport's `QtWebSocketServerConfig`
+  (`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
+  `handshakeTimeout`/`idleTimeout`) cover every gap this bullet used to call out.
+  Both default to unbounded/off, so **installing neither changes anything** — a
+  deployer exposing `RemoteServer` publicly should configure both. See
+  [backend.md](core/backend.md#limitpolicy--opt-in-resource-limits).
 - **Do not rely on the authorizer for correctness inside models.** It runs only
   on the remote path and only for `execute`. Enforce invariants in the model so
   they also hold locally and for control messages.
-- **Per-instance ownership is opt-in.** `execute`/`deregister` can be bound to
-  the registering principal via `authorizeInstance` (above), but the default
-  allows all. `register` remains type-unauthorized regardless. Treat
-  `RemoteServer` as single-trust-domain unless you install an authorizer that
-  overrides `authorizeInstance` *and* bound who may `register` at the transport.
+- **All three authorization hooks are opt-in.** `execute`/`deregister` can be
+  bound to the registering principal via `authorizeInstance`, and `register`
+  itself can be bounded via `authorizeRegister` (both above) — but every hook
+  **defaults to allow-all**. Treat `RemoteServer` as single-trust-domain unless
+  you install an authorizer that overrides `authorizeRegister` *and*
+  `authorizeInstance`. Opaque model ids (above) reduce the value of guessing an
+  id but are not a substitute for either hook.
 
 ## Testing
 
@@ -410,11 +617,33 @@ character fails; and, with an ownership authorizer installed, principal B cannot
 `execute` or `deregister` principal A's instance while A can, whereas with the
 default authorizer any principal can (backward compatible).
 
-The **test TLS material** in `tests/certs/` (`server.crt`/`server.key`, used
-only by `tests/qt/test_qt_websocket.cpp`) is a throwaway self-signed pair with
-the deliberately loud CN `MORPH-TEST-DO-NOT-USE`. Its private key is committed
-in plaintext and must be assumed public — it grants no trust anywhere and must
-**never** be used in production or copied elsewhere. See `tests/certs/README.md`.
+`tests/test_register_authorization.cpp` covers `authorizeRegister`: an
+authorizer denying a specific model type (or an unauthenticated caller)
+receives `err "unauthorized"` on `register` and creates no instance — a
+subsequent `execute` against an arbitrary id still reports `err "model not
+found"`; the default authorizer and a plain `SigningAuthorizer` (neither
+overrides the hook) continue to register any known type, unchanged from
+before.
+
+`tests/test_opaque_model_ids.cpp` covers the id-opacity change directly: unit
+tests on `morph::backend::detail::OpaqueIdGenerator` confirm it is a bijection
+(20000 counters → 20000 distinct outputs), that its output is not sequential,
+and that two independently-constructed instances (independent random keys)
+disagree on the same counter; integration tests against `RemoteServer` confirm
+two successive registers return non-adjacent ids, a 2000-round register churn
+produces zero collisions, and a returned id still round-trips through
+`execute`/`deregister` (the only contract ids ever guaranteed — no test
+asserts a literal id value).
+
+The **test TLS material** in `tests/certs/` (`server.crt`/`server.key` and
+`mitm.crt`/`mitm.key`, used only by `tests/qt/test_qt_websocket.cpp`) is a pair
+of throwaway self-signed pairs with the deliberately loud CNs
+`MORPH-TEST-DO-NOT-USE` and `MORPH-TEST-MITM-DO-NOT-USE`. Both carry a
+`subjectAltName=IP:127.0.0.1` extension so Qt's hostname check passes when
+connecting to the loopback address the tests use. Their private keys are
+committed in plaintext and must be assumed public — they grant no trust
+anywhere and must **never** be used in production or copied elsewhere. See
+`tests/certs/README.md`.
 
 `tests/test_server_limits.cpp` exercises the untrusted-input hardening claim: a
 1 MiB action payload round-trips intact, a 5000-deep nested-JSON envelope and a
@@ -429,10 +658,46 @@ an oversized one (including one whose bulk is deeply-nested JSON inside the
 opaque `body` string) with `std::runtime_error` before parsing, and — pinning
 the honest, non-guaranteed behavior — accepts duplicate JSON keys (top-level and
 nested `session`) with last-wins rather than rejecting them, since glaze 7.2.1
-offers no option to error on duplicates. There remains **no** per-request
-timeout and **no** rate or message-count cap (see above).
+offers no option to error on duplicates. A per-request timeout and a rate/
+message-count cap are now available via `LimitPolicy` and
+`QtWebSocketServerConfig` (both opt-in — see above).
 
-`tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key`)
-covers the TLS transport: `wss://` request/reply, TLS error propagation,
-refusal of a plaintext client against a `wss://` server, and a cross-process TLS
-handshake.
+`tests/qt/test_qt_websocket.cpp` (with `tests/certs/server.crt`/`server.key` and
+`tests/certs/mitm.crt`/`mitm.key`) covers the TLS transport: `wss://`
+request/reply, TLS error propagation, refusal of a plaintext client against a
+`wss://` server, a cross-process TLS handshake, `tlsPinnedConfig` accepting the
+real server and rejecting one presenting a different certificate, the exposure
+guard on `QtWebSocketServer::listen()` (non-loopback + no TLS refuses;
+`allowPlaintextExposure` or a TLS configuration allows it; loopback + no TLS is
+unaffected), and `tlsInsecureNoVerify` connecting to both — pinning the
+contrast the "Transport security" section above describes.
+
+`tests/test_limit_policy.cpp` covers `LimitPolicy` (`maxLiveModels`,
+`maxInFlightExecutes`, `executeTimeout` including the once-flag discard of a late
+strand result and `TimeoutError` surfacing through `SimulatedRemoteBackend`);
+`tests/qt/test_qt_websocket.cpp` covers `QtWebSocketServerConfig`
+(`maxConnections`, `maxMessageBytes`, `messagesPerSecond`,
+`handshakeTimeout`/`idleTimeout`) and their composition with `LimitPolicy`.
+
+`examples/vetted_hmac/test_libsodium_adapter.cpp` and
+`test_openssl_adapter.cpp` (built only with `MORPH_BUILD_HMAC_EXAMPLES=ON` and
+their respective sub-option) cover the vetted-HMAC adapters: byte-identical
+output to `hmacSha256` on the RFC 4231 vectors, issue/verify interop in both
+directions, and `SigningAuthorizer` authorize/reject parity with the reference
+impl. `tests/CMakeLists.txt` additionally runs three `try_compile` checks
+proving the `MORPH_REQUIRE_VETTED_HMAC` default-argument guard: it blocks a
+construction relying on the default, still allows one with an explicit
+`MacFunction`, and leaves the default working when the option is off.
+
+Four opt-in suites generalise this coverage from single-shot examples to
+distributions of input and time: `tests/fuzz/fuzz_wire_decode.cpp` and
+`tests/fuzz/fuzz_dispatch_execute.cpp` (`MORPH_BUILD_FUZZERS=ON`) coverage-fuzz
+`wire::decode`, the inner `body` re-parse, and `RemoteServer::dispatchMessage`;
+`tests/soak/` (`MORPH_BUILD_LOAD_TESTS=ON`) cycles `switchBackend` and the
+`NetworkMonitor`/`ReconnectCoordinator`/`SyncWorker` pipeline for hundreds of
+cycles, checking resource stability rather than a single transition;
+`tests/bench/bench_dispatch_latency.cpp` baselines dispatch throughput/latency;
+and `tests/qt/test_qt_websocket_adversarial.cpp` drives a hostile client
+(oversized frames, a message flood, a duplicate-key envelope, a stalled
+connection) against a real `QtWebSocketServer` and confirms honest clients are
+unaffected. See [testing_strategy.md](testing_strategy.md).

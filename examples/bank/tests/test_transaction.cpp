@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -22,8 +20,7 @@ namespace {
 
 std::string testConnection() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 /// Opens a fresh checking account in the given currency and returns its id.
@@ -49,9 +46,9 @@ TEST_CASE("TransactionModel deposit / withdraw adjust balances and ledger", "[tr
     const std::int64_t acct = openAccount(app, accounts);
 
     SECTION("deposit increases the balance and records a credit") {
-        auto entry = await(txns.execute(bank::dto::Deposit{.accountId = acct, .amountMinor = 10000,
-                                                           .description = "paycheck"}),
-                           app.guiLoop());
+        auto entry =
+            await(txns.execute(bank::dto::Deposit{.accountId = acct, .amountMinor = 10000, .description = "paycheck"}),
+                  app.guiLoop());
         REQUIRE(entry.balanceAfterMinor == 10000);
         REQUIRE(entry.direction == static_cast<int>(bank::TxnDirection::Credit));
         REQUIRE(entry.kind == static_cast<int>(bank::TxnKind::Deposit));
@@ -89,10 +86,8 @@ TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transa
     await(txns.execute(bank::dto::Deposit{.accountId = src, .amountMinor = 10000}), app.guiLoop());
 
     SECTION("a valid transfer moves money and conserves the total") {
-        auto result = await(txns.execute(bank::dto::Transfer{.fromAccountId = src,
-                                                             .toAccountId = dst,
-                                                             .amountMinor = 4000,
-                                                             .description = "rent"}),
+        auto result = await(txns.execute(bank::dto::Transfer{
+                                .fromAccountId = src, .toAccountId = dst, .amountMinor = 4000, .description = "rent"}),
                             app.guiLoop());
         REQUIRE(result.fromBalanceMinor == 6000);
         REQUIRE(result.toBalanceMinor == 4000);
@@ -100,19 +95,21 @@ TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transa
     }
 
     SECTION("transferring to the same account fails validation") {
-        REQUIRE_THROWS_AS(await(txns.execute(bank::dto::Transfer{.fromAccountId = src,
-                                                                 .toAccountId = src,
-                                                                 .amountMinor = 100}),
-                                app.guiLoop()),
-                          bank::ValidationError);
+        // Transfer::validate() (a field-level check) already rejects
+        // fromAccountId == toAccountId, so morph's ActionValidator gate
+        // catches this before TransactionModel::execute() runs -- see
+        // docs/spec/forms/forms.md, "Security / trust boundary".
+        REQUIRE_THROWS_AS(
+            await(txns.execute(bank::dto::Transfer{.fromAccountId = src, .toAccountId = src, .amountMinor = 100}),
+                  app.guiLoop()),
+            morph::model::ValidationError);
     }
 
     SECTION("an over-balance transfer leaves both balances untouched") {
-        REQUIRE_THROWS_AS(await(txns.execute(bank::dto::Transfer{.fromAccountId = src,
-                                                                 .toAccountId = dst,
-                                                                 .amountMinor = 999999}),
-                                app.guiLoop()),
-                          bank::InsufficientFunds);
+        REQUIRE_THROWS_AS(
+            await(txns.execute(bank::dto::Transfer{.fromAccountId = src, .toAccountId = dst, .amountMinor = 999999}),
+                  app.guiLoop()),
+            bank::InsufficientFunds);
         auto srcInfo = await(accounts.execute(bank::dto::GetAccount{.id = src}), app.guiLoop());
         auto dstInfo = await(accounts.execute(bank::dto::GetAccount{.id = dst}), app.guiLoop());
         REQUIRE(srcInfo.balanceMinor == 10000);
@@ -124,10 +121,9 @@ TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transa
         REQUIRE_THROWS_AS(
             await(txns.execute(bank::dto::Withdraw{.accountId = src, .amountMinor = 100}), app.guiLoop()),
             bank::Unauthorized);
-        REQUIRE_THROWS_AS(await(txns.execute(bank::dto::Transfer{.fromAccountId = src,
-                                                                 .toAccountId = dst,
-                                                                 .amountMinor = 100}),
-                                app.guiLoop()),
-                          bank::Unauthorized);
+        REQUIRE_THROWS_AS(
+            await(txns.execute(bank::dto::Transfer{.fromAccountId = src, .toAccountId = dst, .amountMinor = 100}),
+                  app.guiLoop()),
+            bank::Unauthorized);
     }
 }

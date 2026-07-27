@@ -14,18 +14,46 @@ option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
 option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
-option(MORPH_BUILD_FORMS_QML     "Build the Qt Quick renderer for the forms demo" OFF)
+option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
+option(MORPH_BUILD_FORMS_QML     "Build the shipped Qt/QML forms renderer module (MorphForms) and its demo" OFF)
 
-if(MORPH_BUILD_FORMS_QML AND (NOT MORPH_BUILD_EXAMPLES OR EMSCRIPTEN))
-    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: it lives under the forms example, "
-                    "which needs MORPH_BUILD_EXAMPLES=ON and a non-Emscripten toolchain.")
+if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
+    message(WARNING "MORPH_BUILD_HMAC_EXAMPLES is ignored: it lives under examples/vetted_hmac, "
+                    "which needs MORPH_BUILD_EXAMPLES=ON.")
+endif()
+
+if(MORPH_BUILD_FORMS_QML AND EMSCRIPTEN)
+    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: the Qt/QML forms renderer needs a "
+                    "non-Emscripten toolchain.")
 endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
+option(MORPH_BUILD_NET           "Build the morph::net raw-socket WebSocket transport (POSIX only; see docs/spec/core/backend.md)" OFF)
+option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
+option(MORPH_BUILD_LOAD_TESTS    "Build the soak + throughput/latency benchmark targets" OFF)
+# Opt-in reference durable IOfflineQueue backed by SQLite (raw sqlite3 C API).
+# Resolved via CMake's bundled FindSQLite3 module against a system SQLite3 dev
+# package -- deliberately NOT added to vcpkg.json, so vcpkg-toolchain presets
+# do not install it unconditionally. Off by default: the standard build tree
+# never needs SQLite3 to be present. See docs/spec/offline/offline.md,
+# "SqliteOfflineQueue".
+option(MORPH_BUILD_OFFLINE_SQLITE "Build the SQLite-backed durable IOfflineQueue reference implementation (needs SQLite3)" OFF)
 option(MORPH_BUILD_DOCUMENTATION "Build doxygen docs"  OFF)
 option(MORPH_BUILD_CLANG_TIDY   "Enable clang-tidy checks (warnings-as-errors)" OFF)
 option(MORPH_ENABLE_STRICT_COMPILATION
     "Enable strict compilation: treat all warnings as errors with extra diagnostics"
     ON
+)
+# Opt-in production guard: when ON, session_auth.hpp drops the `mac = hmacSha256`
+# default argument on TokenIssuer/TokenVerifier/SigningAuthorizer, so any
+# construction relying on the reference HMAC's default fails to compile and a
+# vetted MacFunction (see examples/vetted_hmac/) must be injected explicitly.
+# Keys on a build configuration the deployer chooses, not on CMAKE_BUILD_TYPE,
+# so a zero-dependency local/low-stakes deployment can keep the reference impl
+# by leaving this off. See docs/spec/security.md, "MAC-primitive recommended
+# wiring". Off by default: the standard build is unaffected.
+option(MORPH_REQUIRE_VETTED_HMAC
+    "Fail to build if a call site relies on the reference hmacSha256 default; forces an explicit vetted MacFunction"
+    OFF
 )
 
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
@@ -86,6 +114,9 @@ target_link_libraries(morph INTERFACE glaze::glaze)
 if(NOT WIN32 AND NOT EMSCRIPTEN)
     target_link_libraries(morph INTERFACE Threads::Threads)
 endif()
+if(MORPH_REQUIRE_VETTED_HMAC)
+    target_compile_definitions(morph INTERFACE MORPH_REQUIRE_VETTED_HMAC)
+endif()
 
 set_target_properties(morph PROPERTIES
     VERIFY_INTERFACE_HEADER_SETS ON
@@ -96,7 +127,9 @@ target_sources(morph
     FILE_SET HEADERS
     BASE_DIRS include
     FILES
+        include/morph/version.hpp
         include/morph/core/logger.hpp
+        include/morph/core/observability.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
@@ -112,13 +145,59 @@ target_sources(morph
         include/morph/offline/network_monitor.hpp
         include/morph/offline/offline_queue.hpp
         include/morph/offline/sync_worker.hpp
+        include/morph/offline/file_offline_queue.hpp
         include/morph/session/session.hpp
         include/morph/forms/forms.hpp
         include/morph/forms/choice.hpp
+        include/morph/forms/i18n.hpp
         include/morph/util/rational.hpp
         include/morph/util/quantity.hpp
         include/morph/util/datetime.hpp
+        include/morph/render/i18n.hpp
+        include/morph/render/locale_format.hpp
 )
+
+# ── Qt/QML forms renderer setup (optional) ───────────────────────────────────
+# Ships the reference Qt/QML renderer (MorphForms, src/qt/forms) as a reusable
+# component, independent of MORPH_BUILD_EXAMPLES. examples/forms/gui_qml
+# (added from examples/forms/CMakeLists.txt, itself still gated on
+# MORPH_BUILD_EXAMPLES, added further below in "Demo executable") is a
+# *consumer* of this module, not its home -- the find_package/
+# qt_standard_project_setup() call and the morph::qt_forms interface target
+# below must both exist before the "Demo executable" section runs, since that
+# demo's CMakeLists.txt relies on qt_add_library/qt_add_qml_module/
+# qt_add_executable already being defined and links against morph::qt_forms
+# (a namespaced target, which -- unlike a plain target name such as
+# morph_forms_moduleplugin below -- CMake requires to already exist at the
+# point it is named). add_subdirectory(src/qt/forms) itself (which builds the
+# actual MorphForms module/plugin, plus a Catch2-linked test executable) is
+# deferred to just after the "Tests" section further below, since Catch2 is
+# only found/fetched there and its test executable names Catch2::Catch2
+# directly.
+if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+    # 6.5 is a hard floor, not a preference: qt_standard_project_setup's
+    # REQUIRES keyword and QQmlApplicationEngine::loadFromModule (used by the
+    # demo) both arrive in 6.5. Stating it here turns "your Qt is too old" into
+    # one clear configure-time message instead of a confusing missing-member
+    # compile error deep in the build (Ubuntu 24.04 still ships 6.4.2).
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Qml Quick)
+    qt_standard_project_setup(REQUIRES 6.5)
+
+    # Header-only, model-agnostic controller core (no Q_OBJECT -- Qt cannot
+    # register a class template for QML); an app's own QObject/QML_ELEMENT
+    # controller subclass forwards to it. See
+    # include/morph/qt/forms/forms_controller_core.hpp.
+    add_library(morph_qt_forms INTERFACE)
+    add_library(morph::qt_forms ALIAS morph_qt_forms)
+    target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
+    target_sources(morph_qt_forms
+        INTERFACE
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/qt/forms/forms_controller_core.hpp
+    )
+endif()
 
 # ── Demo executable ──────────────────────────────────────────────────────────
 if(MORPH_BUILD_EXAMPLES)
@@ -137,10 +216,15 @@ if(MORPH_BUILD_EXAMPLES)
         endif()
 
         add_subdirectory(examples/forms)
+        add_subdirectory(examples/concepts)
     endif()
 
     if(MORPH_BUILD_BANK_EXAMPLE)
         add_subdirectory(examples/bank)
+    endif()
+
+    if(MORPH_BUILD_HMAC_EXAMPLES)
+        add_subdirectory(examples/vetted_hmac)
     endif()
 endif()
 
@@ -161,6 +245,35 @@ if(MORPH_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+# ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
+# The actual MorphForms module/plugin (src/qt/forms), deferred to here (after
+# Catch2 is found/fetched above) since its own CMakeLists.txt links a Catch2
+# test executable directly against Catch2::Catch2 when MORPH_BUILD_TESTS is
+# ON -- the same condition that guards both. Qt6 Quick/Qml was already found
+# and morph::qt_forms already created earlier (before "Demo executable"), so
+# examples/forms/gui_qml (a consumer, added above) only forward-references
+# the plain (non-namespaced) morph_forms_moduleplugin target this creates,
+# which CMake resolves once this subdirectory is processed.
+if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+    add_subdirectory(src/qt/forms)
+endif()
+
+# ── Fuzz harnesses (optional) ────────────────────────────────────────────────
+if(MORPH_BUILD_FUZZERS)
+    add_subdirectory(tests/fuzz)
+endif()
+
+# ── Soak + load/latency benchmark targets (optional) ─────────────────────────
+if(MORPH_BUILD_LOAD_TESTS)
+    if(NOT MORPH_BUILD_TESTS)
+        message(FATAL_ERROR
+            "MORPH_BUILD_LOAD_TESTS requires MORPH_BUILD_TESTS=ON (the soak/bench "
+            "targets link Catch2, fetched under that option).")
+    endif()
+    add_subdirectory(tests/soak)
+    add_subdirectory(tests/bench)
+endif()
+
 # ── Qt WebSocket backend (optional) ─────────────────────────────────────────
 if(MORPH_BUILD_QT)
     find_package(Qt6 COMPONENTS WebSockets REQUIRED)
@@ -175,6 +288,7 @@ if(MORPH_BUILD_QT)
         BASE_DIRS include
         FILES
             include/morph/qt/qt_executor.hpp
+            include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp
             include/morph/qt/qt_websocket_backend.hpp
     )
@@ -190,6 +304,78 @@ if(MORPH_BUILD_QT)
 
     if(MORPH_BUILD_TESTS)
         add_subdirectory(tests/qt)
+    endif()
+
+    if(MORPH_BUILD_EXAMPLES)
+        add_subdirectory(examples/qt_tls_client)
+    endif()
+endif()
+
+# ── morph::net raw-socket WebSocket transport (optional, POSIX only) ───────
+if(MORPH_BUILD_NET)
+    if(WIN32)
+        message(WARNING "MORPH_BUILD_NET is ignored on Windows: morph::net is POSIX-only "
+                        "(BSD sockets) today; Winsock2 support is documented future work.")
+    else()
+        add_library(morph_net INTERFACE)
+        add_library(morph::net ALIAS morph_net)
+        target_link_libraries(morph_net INTERFACE morph)
+        target_sources(morph_net
+            INTERFACE
+            FILE_SET HEADERS
+            BASE_DIRS include
+            FILES
+                include/morph/net/detail/base64.hpp
+                include/morph/net/detail/sha1.hpp
+                include/morph/net/detail/ws_handshake.hpp
+                include/morph/net/detail/tcp_socket.hpp
+                include/morph/net/detail/ws_frame.hpp
+                include/morph/net/socket_server.hpp
+                include/morph/net/socket_backend.hpp
+        )
+
+        if(MORPH_BUILD_TESTS)
+            add_subdirectory(tests/net)
+            if(MORPH_BUILD_QT)
+                add_subdirectory(tests/net_qt_interop)
+            endif()
+        endif()
+    endif()
+endif()
+
+# ── SQLite-backed durable offline queue (optional) ──────────────────────────
+if(MORPH_BUILD_OFFLINE_SQLITE)
+    find_package(SQLite3 REQUIRED)
+
+    # FindSQLite3 reports success but does not always leave `SQLite3::SQLite3`
+    # resolvable at generate time (observed on the ubuntu-24.04 runner, which
+    # fails with "the link interface ... contains SQLite3::SQLite3 but the
+    # target was not found" while printing "Found SQLite3" moments earlier).
+    # Synthesise the target from the variables the module *does* set, and
+    # promote it to GLOBAL either way so every subdirectory that consumes
+    # morph::offline_sqlite can see it.
+    if(NOT TARGET SQLite3::SQLite3)
+        add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
+        set_target_properties(SQLite3::SQLite3 PROPERTIES
+            IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+    else()
+        set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
+    endif()
+
+    add_library(morph_offline_sqlite INTERFACE)
+    add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
+    target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)
+    target_sources(morph_offline_sqlite
+        INTERFACE
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/offline/sqlite_offline_queue.hpp
+    )
+
+    if(MORPH_BUILD_TESTS)
+        add_subdirectory(tests/offline_sqlite)
     endif()
 endif()
 

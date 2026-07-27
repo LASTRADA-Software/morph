@@ -22,9 +22,43 @@ ApplicationWindow {
     // Distinct id: DynamicForm has its own `controller` property, and although
     // QML ids outrank scope properties, shadowing them invites confusion.
     property var schemas: JSON.parse(formsController.schemasJson)
+    property var views: JSON.parse(formsController.viewsJson)
+
+    // Actions referenced by a view (its query, row-opener, or button
+    // targets) are rendered by the view itself — not duplicated as a
+    // second, bare standalone form (docs/spec/forms/views.md: "Each screen
+    // is still composed of existing action-forms" — composed, not
+    // duplicated).
+    property var viewOwnedActions: {
+        const owned = {}
+        for (const viewId in root.views) {
+            const v = root.views[viewId]
+            owned[v["v-query"]] = true
+            if (v["v-rowAction"])
+                owned[v["v-rowAction"].action] = true
+            for (const a of (v["v-actions"] || []))
+                owned[a.action] = true
+        }
+        return owned
+    }
+
+    // "C" (the default) is the locale-free identity transform: no translated
+    // labels, plain "." decimals, no grouping — exactly today's rendering.
+    // Selecting "de" demonstrates a catalog hit (RecordMeasurement.sampleId's
+    // label) and decimal-comma numeric entry.
+    property string uiLocale: "C"
 
     FormsController {
         id: formsController
+    }
+
+    I18nCatalog {
+        id: i18nCatalog
+        Component.onCompleted: {
+            // One seeded translation proves the catalog-hit path; every
+            // other key misses and falls back to its schema literal.
+            addTranslation("de", "RecordMeasurement.sampleId.label", "Probe")
+        }
     }
 
     ScrollView {
@@ -46,8 +80,19 @@ ApplicationWindow {
                       + "through an in-process RemoteServer."
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.leftMargin: 12
+                Layout.rightMargin: 12
+                Label { text: "Display locale:" }
+                ComboBox {
+                    model: ["C", "de"]
+                    onActivated: root.uiLocale = currentText
+                }
+            }
+
             Repeater {
-                model: Object.keys(root.schemas)
+                model: Object.keys(root.schemas).filter(k => !root.viewOwnedActions[k])
 
                 DynamicForm {
                     required property string modelData
@@ -56,6 +101,23 @@ ApplicationWindow {
                     Layout.rightMargin: 12
                     actionType: modelData
                     schema: root.schemas[modelData]
+                    controller: formsController
+                    catalog: i18nCatalog
+                    displayLocale: root.uiLocale
+                }
+            }
+
+            Repeater {
+                model: Object.keys(root.views)
+
+                CollectionView {
+                    required property string modelData
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 12
+                    Layout.rightMargin: 12
+                    viewId: modelData
+                    view: root.views[modelData]
+                    schemas: root.schemas
                     controller: formsController
                 }
             }

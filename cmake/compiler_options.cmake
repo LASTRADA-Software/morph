@@ -196,3 +196,12 @@ function(apply_coverage target)
     target_link_options(${target} PRIVATE
         -fprofile-instr-generate)
 endfunction()
+
+function(apply_fuzzer target)
+    # tests/fuzz/*: libFuzzer harnesses over morph::wire::decode and
+    # RemoteServer::dispatchMessage. Only meaningful on Clang (libFuzzer ships
+    # with the Clang runtime via -fsanitize=fuzzer). Combined with
+    # AddressSanitizer so a fuzzer-found crash is also a memory-safety finding.
+    target_compile_options(${target} PRIVATE -fsanitize=fuzzer,address -fno-omit-frame-pointer -g -O1)
+    target_link_options(${target} PRIVATE -fsanitize=fuzzer,address)
+endfunction()

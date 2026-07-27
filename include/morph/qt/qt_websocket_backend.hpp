@@ -6,10 +6,11 @@
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
-#include <morph/core/backend.hpp>
-#include <morph/core/registry.hpp>
 #include <chrono>
 #include <functional>
+#include <morph/core/backend.hpp>
+#include <morph/core/registry.hpp>
+#include <morph/core/wire.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -45,8 +46,11 @@ struct QtWebSocketBackendConfig {
 /// message, and resolves the returned `Completion` when the matching reply arrives.
 ///
 /// @par TLS
-/// Pass a `QSslConfiguration` to enable `wss://`. For self-signed certificates
-/// set `QSslSocket::VerifyNone` on the configuration before passing it in.
+/// Pass a `QSslConfiguration` to enable `wss://`. Build it with `tlsVerifyingConfig()`
+/// (CA-verified — the recommended production default) or `tlsPinnedConfig()`
+/// (pinned-certificate — the correct choice for a self-signed deployment), both in
+/// `qt_tls.hpp`. `tlsInsecureNoVerify()` disables peer verification entirely and is
+/// for local development and tests only — see security.md's "Transport security" section.
 ///
 /// @par Threading
 /// Must be used from the Qt event loop thread. `execute()` and the internal
@@ -67,8 +71,7 @@ public:
         QUrl serverUrl,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
-        std::optional<QSslConfiguration> tls = std::nullopt,
-        Config cfg = Config{});
+        std::optional<QSslConfiguration> tls = std::nullopt, Config cfg = Config{});
 
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
@@ -80,6 +83,19 @@ public:
     /// @param timeoutMs Maximum time to wait in milliseconds.
     /// @return `true` if connected before the timeout, `false` otherwise.
     bool waitForConnected(int timeoutMs = 5000);
+
+    /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
+    ///
+    /// Synchronous, like `registerModel` — blocks the calling (Qt event loop)
+    /// thread via a nested `QEventLoop` until the reply arrives. Intended to be
+    /// called once, after `waitForConnected()` returns `true` and before any
+    /// `registerModel`/`execute` call; nothing enforces that ordering.
+    ///
+    /// @return `Negotiated` if the server accepted `kProtocolVersion`;
+    ///         `LegacyPeer` if the server does not understand `"hello"`.
+    /// @throws std::runtime_error if the server explicitly rejects the version,
+    ///         or if the socket is not connected (or disconnects mid-call).
+    ::morph::wire::ProtocolNegotiationResult negotiateProtocolVersion();
 
     /// @brief Sends a `register` message to the server and blocks until the reply arrives.
     ///

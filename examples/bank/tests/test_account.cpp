@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
-
-#include <morph/core/bridge.hpp>
-
 #include <filesystem>
+#include <morph/core/bridge.hpp>
 #include <string>
 
 #include "bank/app/app.hpp"
@@ -21,8 +19,7 @@ namespace {
 /// Builds an App against the shared test DB and logs in @p principal.
 std::string dbConnectionForTests() {
     bank::testing::ensureDatabase();
-    return "DRIVER=SQLite3;Database=" +
-           (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
+    return "DRIVER=SQLite3;Database=" + (std::filesystem::temp_directory_path() / "morph_bank_tests.db").string();
 }
 
 }  // namespace
@@ -94,13 +91,15 @@ TEST_CASE("AccountModel reports errors through onError", "[account]") {
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
 
     SECTION("fetching a non-existent account throws NotFound") {
-        REQUIRE_THROWS_AS(await(accounts.execute(bank::dto::GetAccount{.id = 999999}), app.guiLoop()),
-                          bank::NotFound);
+        REQUIRE_THROWS_AS(await(accounts.execute(bank::dto::GetAccount{.id = 999999}), app.guiLoop()), bank::NotFound);
     }
 
     SECTION("invalid currency fails validation") {
-        REQUIRE_THROWS_AS(
-            await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
-            bank::ValidationError);
+        // OpenAccount::validate() already rejects an out-of-range currency,
+        // so morph's ActionValidator gate catches this before AccountModel::
+        // execute() runs -- see docs/spec/forms/forms.md, "Security / trust
+        // boundary".
+        REQUIRE_THROWS_AS(await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
+                          morph::model::ValidationError);
     }
 }

@@ -37,9 +37,21 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
-          sudo apt-get install -y cmake ninja-build doxygen g++-15
+          sudo apt-get install -y cmake ninja-build g++-15
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+
+      # Ubuntu 24.04's apt package is Doxygen 1.9.8, which misreports several
+      # correctly-documented symbols as undocumented (confirmed: two template
+      # overloads of the same free function, and a function immediately
+      # following a file-level doc comment both trip its param/return
+      # association) -- fixed upstream by 1.15.0. Install a release binary
+      # instead of relying on the distro package.
+      - name: Install Doxygen 1.17.0
+        run: |
+          curl -sL https://github.com/doxygen/doxygen/releases/download/Release_1_17_0/doxygen-1.17.0.linux.bin.tar.gz -o /tmp/doxygen.tar.gz
+          tar -xzf /tmp/doxygen.tar.gz -C /tmp
+          echo "/tmp/doxygen-1.17.0/bin" >> "$GITHUB_PATH"
 
       - name: Configure (docs target only)
         run: |

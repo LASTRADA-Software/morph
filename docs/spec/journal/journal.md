@@ -26,14 +26,18 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
 - [Serialization](#serialization)
+- [Line-format version (`v`)](#line-format-version-v)
+- [Data-at-rest contract](#data-at-rest-contract)
 - [IActionLog — the storage interface](#iactionlog--the-storage-interface)
 - [InMemoryActionLog](#inmemoryactionlog)
 - [FileActionLog](#fileactionlog)
+- [Rotation and retention](#rotation-and-retention)
 - [SessionLog](#sessionlog)
 - [replay()](#replay)
 - [Process-wide default log](#process-wide-default-log)
 - [Attaching a log to remote instances](#attaching-a-log-to-remote-instances)
 - [ScopedActionLog](#scopedactionlog)
+- [Transactional outbox (opt-in)](#transactional-outbox-opt-in)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
 - [Invariants](#invariants)
@@ -58,6 +62,8 @@ directly.
 | `result` | `std::string` | JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after successful execution. |
 | `principal` | `std::string` | Auth principal from `morph::session::current()`, if any. Empty if unset. |
 | `timestampMs` | `int64_t` | Wall-clock time, milliseconds since the Unix epoch. |
+| `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
+| `v` | `std::uint32_t` | Line-format version this entry was written at. Defaults to `kLogFormatVersion`. See [Line-format version (`v`)](#line-format-version-v). |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
 specialisation, the same automatic reflection `BRIDGE_REGISTER_ACTION` relies on.
@@ -72,8 +78,16 @@ Encodes a `LogEntry` as JSON via Glaze. Throws `SerializationError` on failure
 
 ### `fromJson(std::string_view) -> LogEntry`
 
-Decodes JSON into a `LogEntry`. Throws `SerializationError` if the input is not
-valid.
+Decodes JSON into a `LogEntry`. Reads leniently —
+`glz::read<glz::opts{.error_on_unknown_keys = false}>`, the same stance
+`wire::decode` takes ([wire.md](../core/wire.md)) — so an unknown/extra key
+(an additive field from a newer writer) is ignored rather than rejected; the
+same duplicate-key caveat as `wire::decode` applies (last-wins, not a security
+boundary). Syntactically malformed JSON still throws `SerializationError`.
+After a successful decode, `fromJson` also enforces the [line-format version
+rule](#line-format-version-v): a decoded `v` greater than this build's
+`kLogFormatVersion` throws `SerializationError` even though the JSON itself
+parsed cleanly.
 
 ### `SerializationError`
 
@@ -86,6 +100,70 @@ Shared non-template helper used by both `toJson` and `fromJson` so their error
 paths compile through the same branch. `fromJson`'s failure path is easy to
 exercise (malformed JSON is everyday input); `toJson`'s is not — Glaze's
 buffer-writer has no reachable failure mode for a flat struct like `LogEntry`.
+
+## Line-format version (`v`)
+
+```cpp
+inline constexpr std::uint32_t kLogFormatVersion = 1;  // bumped only on a breaking line-format change
+```
+
+`LogEntry::v` (`std::uint32_t`, default `kLogFormatVersion`) records which line
+format wrote a persisted entry.
+
+- Every freshly-constructed `LogEntry` — which is every entry `toJson` ever
+  writes for a new action execution — carries `v = kLogFormatVersion` via its
+  default member initializer; no separate stamping step runs inside `toJson`.
+- A **legacy line** (written before `v` existed) has no `v` key; `fromJson`'s
+  leniency means that is just an absent-key case like any other, and the
+  member's default applies: the entry decodes with `v == kLogFormatVersion`
+  (currently `1`). This is intentional, not an approximation — `v = 1` **is**
+  today's shape; `kLogFormatVersion` merely gives it a name.
+- **Read rule.** `v <= kLogFormatVersion` decodes normally. `v` **greater**
+  than the reader's `kLogFormatVersion` throws `SerializationError` — a build
+  refuses to guess at a line format it has never seen, rather than silently
+  misreading it. This check runs *after* leniency's unknown-key tolerance, so
+  the two rules compose: an unrelated new key is ignored, but a `v` bump is
+  always fatal to an older reader.
+- **The existing torn-line rule is unchanged.** `FileActionLog::entries()`
+  still tolerates a decode failure — of any cause, including a too-new `v` —
+  only on the file's last line, skipping it with a warning; the same failure
+  mid-file is re-thrown. See [FileActionLog](#fileactionlog). Note that
+  `FileActionLog`'s constructor itself scans `entries()` to rebuild its
+  `idempotencyKey` dedup set, so a too-new `v` on an interior line surfaces as
+  a thrown `SerializationError` from **construction**, not only from a later
+  explicit `entries()` call — the same behavior any other interior corruption
+  already has (see [Sink-side dedup](#sink-side-dedup)).
+- `kLogFormatVersion` bumps only on a **breaking** change to the line format;
+  additive keys (tolerated by leniency) do not bump it — the same discipline
+  applied to protocol-version bumps elsewhere in the wire layer.
+
+## Data-at-rest contract
+
+One rule with teeth: **an action recorded in a retained journal must stay
+decodable for as long as that journal is retained.** This extends the wire
+layer's additive-only evolution policy from *deployment* scope (peers upgrade
+within a window) to *retention* scope — a journal can outlive every deployment
+that ever wrote to it:
+
+- Fields of journal-recorded actions evolve **additive-only** — a new field
+  must be optional-or-defaulted so an old payload (recorded before the field
+  existed) still decodes into the new struct.
+- **Removing or retyping** a recorded action's field requires either every
+  retained journal containing it to have expired, or an explicit migration
+  pass (below) run first.
+- Replay and dispatch share one codec — `ActionTraits<A>::fromJson` — so there
+  is exactly one compatibility surface to keep honest; there is no separate
+  "archive format" that can drift from the live one.
+
+### The migration recipe (not shipped)
+
+When retention forces a breaking change through despite the above: call
+[`rotate()`](#rotation-and-retention) to seal the active file; transform the
+sealed segments offline (a host-owned mapping over the recorded payload JSON,
+using `entries()` or plain NDJSON tooling); write the result as new segments
+stamped with the current `v`. morph guarantees the decode rules above and
+ships no transformer — reading never mutates history, and there is no
+upgrade-on-read.
 
 ## IActionLog — the storage interface
 
@@ -138,17 +216,99 @@ a guaranteed-durable view. Strictly-empty lines are skipped before decoding
 (the check is `line.empty()`; a whitespace-only line is *not* treated as blank
 and is handed to `fromJson`).
 
-**Torn-write tolerance.** A crash between `append()`'s `fwrite` and the next
-`flush()` can leave a truncated final line (bytes written, never completed).
-`entries()` tolerates it by position, not by cause: if decoding fails on the
-**last** non-empty line *for any reason* (truncation is the expected one, but the
-catch is over `std::exception` generally), it skips that line, logs a warning via
-`morph::log::logWarn` (naming the path and the parse error), and returns
-everything before it. A decode failure on any line **mid-file** is treated as
-genuine corruption and
+**Torn-write repair (on open).** A crash between `append()`'s `fwrite` and the
+next `flush()` can leave a truncated final line (bytes written, never
+completed). The constructor **truncates** the file to the last newline before
+opening it for append. Discarding those bytes is safe by construction: every
+complete record is written newline-terminated in a single `fwrite`, so whatever
+follows the final newline can only be an incomplete record — never a whole one.
+
+Tolerating the torn line without removing it was not enough. The file is opened
+`"a"`, so the next `append()` began writing at the exact byte the truncated JSON
+stopped at, with no separating newline: the two merged into one line that
+swallowed the new entry. A *further* append then pushed that merged line out of
+trailing position, at which point `entries()` threw — and because the
+constructor itself calls `entries()`, the journal became permanently unopenable.
+`FileOfflineQueue` heals the same damage during `compact()`; this is
+`FileActionLog`'s equivalent.
+
+**Torn-write tolerance (on read).** `entries()` additionally tolerates a
+malformed final line by position, not by cause: if decoding fails on the
+**last** non-empty line *for any reason* (the catch is over `std::exception`
+generally), it skips that line, logs a warning via `morph::log::logWarn`
+(naming the path and the parse error), and returns everything before it. A
+decode failure on any line **mid-file** is treated as genuine corruption and
 the `fromJson` exception is re-thrown — the log is not silently truncated at an
-interior tear. So a single trailing torn record is recoverable; interior
-damage is fatal and surfaced to the caller.
+interior tear, and the repair above never removes a complete record either. So a
+single trailing torn record is recoverable; interior damage is fatal and
+surfaced to the caller.
+
+**I/O failures are raised, never swallowed.** `append()` throws on a short
+write; `flush()` throws if either `fflush` or the `fsync`/`_commit` fails;
+`rotate()` throws if its pre-rotation flush fails, before anything is closed or
+renamed. `IActionLog::flush()` returns `void`, so throwing is the only channel
+available — and callers depend on it: `OutboxRelay::relay()` calls
+`markRelayed()` immediately after `flush()`, and a silently-failed flush would
+record rows as relayed in the model's own store while nothing reached the
+durable sink, dropping them from the outbox *and* from the log with no error
+anywhere.
+
+**Dedup keys follow durability.** An entry's `idempotencyKey` is only recorded
+as *seen* once a `flush()` confirms it reached the disk; keys written since the
+last successful flush are held separately and discarded if that flush fails, so
+a retry writes them again instead of being deduplicated away. A duplicated audit
+row is recoverable; a dropped one is not.
+
+**After a failed `rotate()` reopen.** If `rotate()` renames successfully but
+cannot reopen the active path, it throws with no file open. `append()`,
+`flush()` and a further `rotate()` then all throw with that diagnosis rather
+than dereferencing a null handle, and destruction stays safe.
+
+See [Rotation and retention](#rotation-and-retention) for `rotate()`, the seam
+a host uses to seal and archive segments of this file.
+
+## Rotation and retention
+
+```cpp
+void rotate(const std::filesystem::path& sealedPath);
+```
+
+Seals the active file and reopens a fresh, empty one at the same path — the
+seam a host uses to implement its own retention policy (archive or delete
+sealed segments on whatever schedule or size trigger it chooses; morph ships
+the seam, not the policy).
+
+- **What it does.** Flushes (`fflush` + `fsync`/`_commit`) and closes the
+  current active file, renames it to `sealedPath`, then reopens a fresh, empty
+  active file at the original path. Thread-safe — guarded by the same mutex as
+  `append()`/`flush()`/`entries()`, so no in-flight `append()` call is ever
+  split across the sealed and the new active file.
+- **`entries()` is unchanged.** It keeps reading only the (now-empty, then
+  regrowing) active file. Sealed segments are immutable history the host reads
+  directly — e.g. by opening its own `FileActionLog` on the sealed path, or
+  with plain NDJSON tooling.
+- **Full-history reads and replay compose segments oldest → newest, then the
+  active file** — a documented recipe, not a new API: concatenate `entries()`
+  from each sealed segment in seal order, then the active file's `entries()`,
+  and hand the result to [`replay()`](#replay). File order is already the
+  cross-restart ordering authority (`seq` stays process-local, unchanged).
+- **Crash safety.** The rename is a single atomic filesystem operation. A
+  crash before it completes leaves the pre-rotation active file exactly as it
+  was — as if `rotate()` had never been called. A crash after leaves the
+  sealed file plus a freshly recreated, empty active file. Either way no line
+  is ever torn across the two files, so the existing torn-line rule
+  ([FileActionLog](#fileactionlog)) keeps applying independently per file.
+- **A failed rename does not lose data.** If renaming to `sealedPath` fails
+  (e.g. its directory does not exist), `rotate()` reopens the *original*
+  active file in place — still holding every entry recorded before the call —
+  and throws `std::runtime_error`. The log stays fully usable; the rotation
+  simply did not happen.
+- **Not `rotate()`'s job.** Choosing *when* to rotate (by size, by time, on a
+  host-defined "archive now" action) and what happens to a sealed segment
+  afterward (compress, ship, delete) are entirely the host's call — morph
+  supplies only the seal-and-reopen primitive. See the [Data-at-rest
+  contract](#data-at-rest-contract) for what a sealed segment's contents must
+  keep decoding as.
 
 ## SessionLog
 
@@ -381,6 +541,122 @@ for tests and for temporarily redirecting auto-attached logging.
 
 Copy and move are deleted.
 
+## Transactional outbox (opt-in)
+
+A model with its own transactional store (a SQL database, a file) can tie its
+state commit and its journal entry into one atomic write instead of the
+framework's default two independent writes (mutate-then-auto-append). This is
+opt-in — a model that does nothing new keeps the fire-after-success behavior
+described above unchanged.
+
+### The pattern
+
+1. **The model writes its own outbox row inside its own transaction.** Alongside
+   its business-table mutation, the model inserts a row shaped like `LogEntry`
+   (including a stable `idempotencyKey`) into an outbox table in its own store,
+   in the same transaction as the mutation. Either both commit or neither does —
+   morph does not participate in this transaction and never touches the model's
+   database.
+2. **The model calls `IModelHolder::setOutboxManaged(true)`** on its own holder
+   (typically once, from the same factory closure that calls `attachActionLog`).
+   This suppresses `recordIfAttached`'s automatic append for that instance:
+   `hasActionLog()` keeps reporting whatever log is attached, but
+   `recordIfAttached` becomes a no-op, so the framework's normal
+   fire-after-success append does not also record the action (which would
+   double-log it).
+3. **A separate `journal::OutboxRelay` moves committed rows to the durable
+   sink**, asynchronously, on whatever schedule the host chooses (a timer, an
+   idle callback, a background thread).
+
+### `IModelHolder::setOutboxManaged` / `isOutboxManaged`
+
+```cpp
+void setOutboxManaged(bool outboxManaged) noexcept;
+[[nodiscard]] bool isOutboxManaged() const noexcept;
+```
+
+- `setOutboxManaged(true)` makes `recordIfAttached` a no-op for that instance,
+  regardless of what `attachActionLog` attached. `hasActionLog()` is unaffected —
+  it still reports whether a log is attached, independent of whether this
+  instance auto-appends to it.
+- Defaults to `false`: every instance auto-appends exactly as before unless a
+  model explicitly opts in.
+
+### Sink-side dedup
+
+`InMemoryActionLog::append` and `FileActionLog::append` treat a **non-empty**
+`idempotencyKey` as a dedup key: if an entry with the same key was already
+appended, the second `append()` call is a silent no-op (no duplicate stored, no
+`seq` consumed). An **empty** `idempotencyKey` never dedups — every entry with
+no key is stored, exactly as before. `FileActionLog`'s dedup set is rebuilt from
+the existing on-disk entries every time the file is opened (an O(n) scan of the
+current contents, paid once per open, not per append), so the dedup survives a
+process restart, not just repeated calls within one run — and, as a consequence,
+opening an existing file whose *interior* is corrupted now throws
+`SerializationError` from the constructor itself (a malformed *trailing* line is
+still tolerated, matching `entries()`).
+
+`SessionLog::append` deliberately does **not** dedup — its documented contract
+is full fidelity, nothing coalesced or dropped (see `undoLast()`). Wire
+`OutboxRelay::sink` to `InMemoryActionLog`, `FileActionLog`, or a custom
+`IActionLog` that dedups on `idempotencyKey`; a `SessionLog` used as the relay's
+sink gives no re-relay protection.
+
+### `journal::OutboxRelay`
+
+```cpp
+struct OutboxRelayResult {
+    std::size_t relayed = 0;
+};
+
+struct OutboxRelay {
+    std::function<std::vector<LogEntry>()> drainOutbox;
+    std::function<void(std::span<const LogEntry>)> markRelayed;
+    std::shared_ptr<IActionLog> sink;
+
+    OutboxRelayResult relay();
+};
+```
+
+Declared in `outbox.hpp`. `drainOutbox` and `markRelayed` are injected against
+the model's own store, exactly as `morph::offline::ReconnectCoordinator::Deps`
+and `morph::offline::SyncWorker::ReplayFunction` inject their side effects —
+morph never touches the model's database.
+
+`relay()` drains every currently-unrelayed row, appends each to `sink`, flushes
+`sink`, then marks the whole batch relayed via `markRelayed` in one call. A
+no-op (`{.relayed = 0}`, `sink`/`markRelayed` untouched) if `drainOutbox()`
+returns nothing.
+
+**Crash safety.** Because `markRelayed` runs only after `sink`'s append *and*
+flush complete, a crash between them leaves the row still "unrelayed" in the
+model's store; the next `relay()` call re-drains and re-appends it, and the
+sink's `idempotencyKey` dedup makes that re-append a no-op — the row is marked
+relayed exactly once from the outbox table's perspective, and stored exactly
+once in the sink. This is at-least-once-plus-dedup, not two-phase commit: `sink`
+and the model's own store are never committed as a single distributed
+transaction. A crash *before* the model's own outbox-row insert ever committed
+means `drainOutbox()` never reports the row in the first place — neither the
+state nor the log advanced, so there is no divergence to reconcile; this
+guarantee comes from the host's own transaction, not from `OutboxRelay`.
+
+Mirroring `ReconnectCoordinator::Deps`, a null `drainOutbox`/`markRelayed`/`sink`
+is logged (via `morph::log::logError`) at the start of every `relay()` call but
+does not reject the call — invoking a null member still throws
+(`std::bad_function_call`) or crashes as usual.
+
+### What this does not do
+
+- **No database driver ships.** `drainOutbox`/`markRelayed` are the host's
+  callables against its own store; morph provides only the relay loop and the
+  dedup-capable sinks.
+- **Not distributed transactions.** The model's own store commit (business
+  tables + outbox row) is one local transaction; the relay to `sink` is a
+  separate, at-least-once-plus-dedup step, not 2PC.
+- **`examples/bank` is unchanged.** It still demonstrates the two-write
+  divergence this section closes for models that opt in; adopting the pattern
+  there is not part of this change.
+
 ## API reference
 
 All symbols live in `namespace morph::journal`.
@@ -389,9 +665,10 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`. Glaze-reflected (no `glz::meta`). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta`). |
+| `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON. Throws `SerializationError`. |
-| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON. Throws `SerializationError`. |
+| `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
 | `detail::throwOnGlazeError` | inline function | `void throwOnGlazeError(const glz::error_ctx&, std::string_view)` — shared error path for `toJson`/`fromJson`. |
 
@@ -401,7 +678,7 @@ All symbols live in `namespace morph::journal`.
 |---|---|---|
 | `IActionLog` | abstract struct | `virtual ~IActionLog() = default`; `append(LogEntry)`, `flush()`, `entries(entityKey)`. |
 | `InMemoryActionLog` | class | `: IActionLog`. Thread-safe `std::vector`-backed. `flush()` no-op. |
-| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path)`. Copy/move deleted. |
+| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path)`. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
 | `SessionLog` | class | `: IActionLog`. Full-fidelity in-memory log + `undoLast()` + `checkpoint()`. |
 
 ### Process-wide default
@@ -438,6 +715,12 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `FileActionLog::seq` is process-local | **Fresh per process, not resumed from disk** | `seq` is a monotonic order key within one process instance, not a cross-restart durable identifier. On-disk order is append order; `entries()` returns in that order regardless of `seq` gaps. |
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
+| `InMemoryActionLog`/`FileActionLog` dedup on `idempotencyKey` | **Non-empty key only; `SessionLog` excluded** | Makes both safe default choices for `OutboxRelay::sink` without changing behavior for callers that never set the key (empty key never dedups). `SessionLog` is excluded because its contract is full fidelity — nothing coalesced or dropped. |
+| `fromJson` reads leniently | **`glz::read<{.error_on_unknown_keys = false}>`, not `glz::read_json`** | Matches `wire::decode`'s forward-compatibility contract; without it, adding the `v` key itself (or any future key) would be a reader flag-day for every already-deployed reader. |
+| `LogEntry::v` defaults to `kLogFormatVersion` | **Default member initializer, not a `toJson`-time stamp** | A freshly constructed entry (every entry `toJson` ever encodes for a new action) already carries the current version for free; a legacy line missing the key decodes with the same default, so "legacy is v1" falls out of the type rather than being special-cased in code. |
+| `v` newer than `kLogFormatVersion` throws | **Fail loud, not guess** | A reader has no way to know the shape a future breaking change introduces; refusing to decode is safer than guessing a superset/subset shape. |
+| `rotate()` reopens the active path regardless of rename outcome | **Never leave the log unusable** | A failed rename reopens the pre-rotation file in place (no data lost, rotation simply didn't happen); a successful rename reopens a fresh empty file. Either branch leaves `FileActionLog` in a valid, appendable state. |
+| `setOutboxManaged` suppresses `recordIfAttached`, not `hasActionLog()` | **Two independent signals** | A store-backed model needs to stop the auto-append without losing "a log is attached" as a fact holders can still query — the suppression is a separate flag, not a side effect of detaching the log. |
 
 ## Invariants
 
@@ -499,12 +782,15 @@ alone implies. Understand these before relying on the log for recovery:
   durable sink and that sink's `flush()` returns. For `FileActionLog`, `flush()`
   is what fsyncs; before it, entries may sit in stdio/OS buffers. A crash before
   `checkpoint()` loses the entire uncheckpointed session's history.
-- **No transactional link to the model's own store.** The log and a model's own
-  durable store (e.g. the SQLite in `examples/bank`) commit as two independent
-  steps. A crash can leave the store committed but the log missing the
-  corresponding entries (uncheckpointed), or — with a separately-flushed
-  file — the log ahead of the store. There is no outbox tying the two into one
-  atomic write; recovery must reconcile them out of band.
+- **No transactional link to the model's own store, unless it opts in.** By
+  default the log and a model's own durable store (e.g. the SQLite in
+  `examples/bank`) commit as two independent steps. A crash can leave the store
+  committed but the log missing the corresponding entries (uncheckpointed), or —
+  with a separately-flushed file — the log ahead of the store. A model that
+  writes its own outbox row in its own transaction and calls
+  `setOutboxManaged(true)` closes this gap for itself (see
+  [Transactional outbox (opt-in)](#transactional-outbox-opt-in)); a model that
+  does not opt in must still reconcile the two out of band.
 - **`FileActionLog` torn-write recovery is trailing-only.** A single truncated
   *final* line (from a crash mid-`append`) is skipped with a warning; any
   malformed *interior* line makes `entries()` throw. So the file self-heals from
@@ -525,26 +811,37 @@ Honest boundaries of the current design:
   side effects. Undo and reconstruction are therefore **exact only for pure,
   deterministic, in-memory models**. A model backed by an external store will,
   on replay, attempt to re-apply its writes.
-- **No transactional outbox.** As above, nothing ties a log entry to the
-  commit of the model's own store. Divergence between the two is possible and
-  is the application's problem to detect and reconcile.
+- **Transactional outbox is opt-in, not automatic.** `journal::OutboxRelay` plus
+  `IModelHolder::setOutboxManaged` close the store/log divergence gap only for a
+  model that actively writes its own outbox row and calls
+  `setOutboxManaged(true)` (see [Transactional outbox (opt-in)](#transactional-outbox-opt-in)).
+  A model that does not opt in keeps the default two-independent-writes
+  behavior, and divergence between the two remains the application's problem to
+  detect and reconcile.
 - **Unbounded in-memory growth; O(n²) repeated undo.** `SessionLog` retains full
   uncoalesced history for the lifetime of the instance — memory grows without
   bound. Each `undoLast()` replays the entire remaining prefix from scratch, so
   undoing the last *k* actions one at a time is O(n·k) ≈ O(n²) in the history
   length. There is no incremental/snapshot fast-path.
-- **No schema version or migration path for persisted NDJSON.** `FileActionLog`
-  writes `LogEntry` as Glaze-reflected JSON with no embedded schema version. A
-  change to `LogEntry`'s shape has no defined migration story for files written
-  by an earlier build; on-disk compatibility rests entirely on the struct
-  staying additive-and-compatible under Glaze.
+- **No automatic rotation and no shipped migration tool.** `rotate()` is a
+  seam, not a policy: nothing in morph decides when to call it, and reading
+  never transforms history — a breaking change forced through by retention is
+  an explicit, offline, host-owned pass over sealed segments (see [The
+  migration recipe](#the-migration-recipe-not-shipped)). Absent host-driven
+  `rotate()` calls, the active file still grows without bound.
+- **No compaction of sealed history.** `checkpoint()` is the only reducer, and
+  it runs *before* entries become durable; once a segment is sealed or
+  written, morph never rewrites or drops entries from it.
 
 ## Cross-references
 
+- **`wire.md`** — `wire::decode`'s `error_on_unknown_keys = false` stance and
+  duplicate-key caveat, which `journal::fromJson` now mirrors.
 - **`registry.md`** — `ModelRegistryFactory`/`ActionDispatcher` and
   `ModelFactory::create`, which auto-attach the default log and which `replay()`
   reuses for dispatch. Also the `ActionDispatcher::coalesce` lookup driving
-  `checkpoint()`.
+  `checkpoint()`, and `IModelHolder::setOutboxManaged`/`isOutboxManaged`, the
+  opt-out this outbox section's suppression relies on.
 - **`bridge.md`** — the two (mutually exclusive) recording call sites
   (`Bridge::executeVia`'s `localOp` for local mode; the `RemoteServer` dispatch
   path for remote/Qt), and `HandlerBinding::contextKey`/`RemoteServer::setLogProvider`

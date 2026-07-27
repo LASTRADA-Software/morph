@@ -14,6 +14,7 @@ without knowing their concrete types.
   - [ActionTraits](#actiontraits)
 - [Validation and logging policy](#validation-and-logging-policy)
   - [ActionValidator](#actionvalidator)
+  - [ValidationError](#validationerror)
   - [Loggable](#loggable)
   - [ActionLogPolicy](#actionlogpolicy)
 - [Type-erased holders and factory](#type-erased-holders-and-factory)
@@ -44,7 +45,11 @@ provides:
 - **Traits** — `ModelTraits<M>` and `ActionTraits<A>` that map types to string
   ids and JSON codecs. Users specialise them directly or use macros.
 - **Validators** — `ActionValidator<A>` that decides whether a partially-built
-  action draft is ready to execute.
+  action draft is ready to execute, enforced on every dispatch path: the
+  reactive `set<>` path, the type-erased `executeJson` path, the server dispatch
+  runner (`ActionDispatcher::registerAction`), and the local `Bridge::executeVia`
+  path — the last two throw `ValidationError` on a `false` result instead of
+  running `Model::execute`.
 - **Logging policy** — `ActionLogPolicy<A>` and `Loggable` that control whether
   an action's executions are recorded and how duplicates are coalesced.
 - **Type-erased holders** — `IModelHolder` / `ModelHolder<M>` that own a model
@@ -179,6 +184,57 @@ struct ActionValidator {
 };
 ```
 
+A common `validate()` body composes `morph::forms::allRulesSatisfied(*this)`
+(an action's declared cross-field rules, [forms.md](../forms/forms.md)) with
+`morph::forms::allRequiredEngaged(*this)` (per-field required-ness). Neither
+requires any change to `ActionValidator`/`HasValidate` — both are ordinary
+`bool`-returning calls inside `validate()`, picked up the same way any other
+`validate()` body is.
+
+### `ValidationError`
+
+Thrown by the two execution sites that receive an action without first passing
+through a client-side readiness gate: `ActionDispatcher::registerAction`'s
+runner (the server dispatch path `RemoteServer` uses on every remote and Qt
+WebSocket topology) and `Bridge::executeVia`'s `localOp` (the in-process path
+`LocalBackend` uses). Both call `ActionValidator<Action>::ready(action)`
+immediately before `Model::execute` and throw `ValidationError` on `false`,
+instead of executing the action:
+
+```cpp
+struct ValidationError : std::runtime_error {
+    ValidationError(std::string_view modelType, std::string_view actionType);
+    // what(): "action failed validation: <modelType>/<actionType>"
+};
+```
+
+`ActionDispatcher::registerAction`'s runner additionally reconciles every
+`Quantity` field of the decoded action to its declared precision
+(`morph::forms::reconcileDeclaredPrecision`) before the `ready()` check, so a
+hand-built wire payload's `Quantity` values match the schema's advertised
+`x-decimalPlaces` the same way the client bridge dispatch path already
+normalises them (see [forms.md](../forms/forms.md)). `Bridge::executeVia`'s
+`localOp` does not reconcile precision — that path never decodes JSON, so
+there is no wire `dp` to reconcile against.
+
+`ValidationError` derives from `std::runtime_error`, so it is caught by
+existing generic `catch (const std::exception&)` handling on both paths
+without any special-casing: `LocalBackend::execute`'s strand `catch (...)`
+(`backend.hpp`) forwards it into the `Completion`'s `onError` with the concrete
+type intact; `RemoteServer::dispatchExecute`'s strand `catch (const
+std::exception&)` (`remote.hpp`) turns it into an ordinary `err` reply carrying
+`exc.what()` and the `callId` — the client's `Completion` resolves through
+`onError` with a generic `std::runtime_error` carrying that message (the
+concrete type does not cross the wire).
+
+Actions with no validator are unaffected on both paths: `ActionValidator<A>::ready`
+defaults to `true` when neither a `bool validate() const` member nor a
+`BRIDGE_REGISTER_VALIDATOR` specialisation exists, so this is backward
+compatible.
+
+`ValidationError` is **not** an authorization mechanism — see
+[security.md](../security.md) for that separate concern.
+
 ### `Loggable`
 
 A strong enum avoiding bare `bool` arguments at registration sites:
@@ -216,13 +272,25 @@ implementation type — backends hold it, application code never names it).
 struct IModelHolder {
     virtual ~IModelHolder() = default;
     [[nodiscard]] virtual std::type_index type() const noexcept = 0;
+    [[nodiscard]] virtual bool isBackendChangeAware() const noexcept = 0;
+    virtual void onBackendChanged() {}
     template <typename Model> Model& into();
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog>, std::string contextKey);
     bool hasActionLog() const noexcept;
     void recordIfAttached(LogEntry entry);
+    void setOutboxManaged(bool outboxManaged) noexcept;
+    [[nodiscard]] bool isOutboxManaged() const noexcept;
 };
 ```
 
+- `isBackendChangeAware()` / `onBackendChanged()` are the compile-time-known
+  backend-change-notification capability, exposed as base-class virtuals so a
+  backend can query and invoke it without `dynamic_cast`. `ModelHolder<M>`
+  answers `isBackendChangeAware()` from the `BackendChangedNotifiable<M>`
+  concept and forwards `onBackendChanged()` to `M::onBackendChanged()` only
+  when that concept holds; the base default is a no-op. See
+  [backend.md](backend.md#localbackend--in-process-execution) for how
+  `LocalBackend` uses this.
 - `into<Model>()` down-casts to a concrete `Model&`; throws `std::bad_cast` on
   mismatch.
 - `attachActionLog` sets the durable log sink and the instance's stable identity
@@ -230,7 +298,11 @@ struct IModelHolder {
 - `recordIfAttached` is called automatically by `ActionDispatcher`'s runner and
   `Bridge::executeVia` — model code never calls it directly. It fills
   `entityKey`, `principal` (from `session::current()`), and `timestampMs` on the
-  entry before forwarding.
+  entry before forwarding. It is also a no-op when `isOutboxManaged()` is
+  `true` — see [journal.md's transactional outbox section](../journal/journal.md#transactional-outbox-opt-in).
+- `setOutboxManaged(true)` marks this instance as managing its own outbox log
+  write, so `recordIfAttached` stops auto-appending for it; `hasActionLog()` is
+  unaffected. Defaults to `false`.
 
 ### `ModelHolder<Model>`
 
@@ -244,6 +316,8 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
     Model model;
     template <typename... Args> explicit ModelHolder(Args&&... args);
     std::type_index type() const noexcept override;
+    bool isBackendChangeAware() const noexcept override;
+    void onBackendChanged() override;
 };
 ```
 
@@ -264,11 +338,17 @@ class ModelFactory {
 
 ### `IBackendChangedSink` and `BackendChangedMixin`
 
-Optional interface for models that need to react to backend switches. `Bridge::switchBackend`
-discovers this capability via `dynamic_cast`. `ModelHolder<M>` inherits
-`BackendChangedMixin<M>` which conditionally derives from `IBackendChangedSink`
-when `M` declares `void onBackendChanged()` (detected by the
-`BackendChangedNotifiable<M>` concept).
+Optional interface for models that need to react to backend switches.
+`ModelHolder<M>` inherits `BackendChangedMixin<M>` which conditionally derives
+from `IBackendChangedSink` when `M` declares `void onBackendChanged()` (detected
+by the `BackendChangedNotifiable<M>` concept) — this remains available to
+anyone holding an `IModelHolder*` who wants to `dynamic_cast` to it directly.
+`LocalBackend`, however, does not: it discovers and invokes the same capability
+through `IModelHolder::isBackendChangeAware()` / `IModelHolder::onBackendChanged()`
+— two base-class virtuals `ModelHolder<M>` answers from the same
+`BackendChangedNotifiable<M>` concept — so its `notifyBackendChanged()` sweep
+needs no RTTI and visits only models that opted in. See
+[backend.md](backend.md#localbackend--in-process-execution).
 
 ## Singleton registries
 
@@ -293,7 +373,14 @@ class ActionDispatcher {
 };
 ```
 
-- `registerAction` registers a runner that deserialises, executes via
+- `registerAction` registers a runner that deserialises, reconciles any
+  `Quantity` fields to their declared precision, overwrites any declared
+  computed fields from their inputs (`morph::forms::recomputeAll`,
+  [forms.md](../forms/forms.md) — a no-op for actions with no
+  `computedFields`; runs after precision reconciliation and before the
+  validator check, so the validator sees the authoritative computed value),
+  enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
+  on `false`, before `Model::execute` runs), executes via
   `Model::execute(action)`, serialises the result, and records to the attached
   action log when the action is loggable and a log is attached.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
@@ -410,8 +497,12 @@ Expands to:
   `decltype(std::declval<M&>().execute(std::declval<A>()))`, a
   `static constexpr std::string_view typeId()` (no `noexcept`, unlike
   `ModelTraits::typeId()`), a `static constexpr Loggable loggable`, and four JSON
-  codec functions using `glz::write_json` / `glz::read_json` (each throwing
-  `detail::ParseError` on failure).
+  codec functions (each throwing `detail::ParseError` on failure): `toJson`/
+  `resultToJson` use `glz::write_json`; `fromJson`/`resultFromJson` use
+  `glz::read<glz::opts{.error_on_unknown_keys = false}>` — the same
+  forward-compatibility convention `wire::decode` uses (see wire.md,
+  "Action-evolution policy") — so an older-compiled action struct silently
+  ignores an additive field a newer peer sent.
 - A `[[maybe_unused]] const bool` in an anonymous namespace calling
   `detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
   (the model-id argument is the model's registered `typeId()`, not a raw string).
@@ -444,6 +535,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | `ModelTraits<M>` | class template | **Customisation point.** Maps model type to `std::string_view typeId()`. |
 | `ActionTraits<A>` | class template | **Customisation point.** Maps action type to id, JSON codec, result type, and `Loggable`. |
 | `ActionValidator<A>` | class template | **Customisation point.** `static bool ready(const A&)` — built-in detection of `bool validate() const`, overridable via specialisation. |
+| `ValidationError` | exception type | Thrown by `ActionDispatcher::registerAction`'s runner and `Bridge::executeVia`'s `localOp` when `ActionValidator<A>::ready` returns `false`. `std::runtime_error` subclass carrying `"action failed validation: <modelType>/<actionType>"`. |
 | `ActionLogPolicy<A>` | class template | **Customisation point.** `static constexpr bool coalesce = false` — checkpoint coalescing policy. |
 | `Loggable` | enum | `{ No, Yes }` — strong boolean for action loggability. |
 
@@ -459,10 +551,10 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 
 | Symbol | Kind | Purpose |
 |---|---|---|
-| `IModelHolder` | abstract class | Type-erased model owner with action log slot. |
-| `ModelHolder<M>` | class template | Concrete holder storing `M` by value; conditionally inherits `IBackendChangedSink`. |
+| `IModelHolder` | abstract class | Type-erased model owner with an action log slot, an outbox-managed opt-out flag, and a compile-time-answered backend-change-awareness bit. |
+| `ModelHolder<M>` | class template | Concrete holder storing `M` by value; conditionally inherits `IBackendChangedSink`; answers `isBackendChangeAware()`/`onBackendChanged()` from `BackendChangedNotifiable<M>`. |
 | `ModelFactory` | class | `static create<M>()` — default-constructs `ModelHolder<M>` and attaches the process-wide default log. |
-| `IBackendChangedSink` | abstract class | Optional interface for backend-switch notification, discovered via `dynamic_cast`. |
+| `IBackendChangedSink` | abstract class | Optional interface for backend-switch notification; reachable via `dynamic_cast`, though `LocalBackend` itself dispatches through `IModelHolder`'s virtuals instead. |
 | `BackendChangedMixin<M>` | class template | Conditionally inherits `IBackendChangedSink` when `M` has `onBackendChanged()`. |
 
 ### Singleton registries
@@ -504,6 +596,7 @@ Expands to `template <> struct morph::model::ActionValidator<A> { static bool re
 | Action validation is a property of the action | **`ActionValidator<Action>`, not `ActionValidator<Model, Action>`** | Different actions on the same model have different readiness requirements; keeping the predicate next to the action keeps the GUI side oblivious to model internals. |
 | `Loggable` is a strong enum | **`Loggable::No` / `Loggable::Yes`**, not bare `bool` | Registration call sites read as intent rather than an unexplained `false`. |
 | `ModelFactory::create` attaches the default log | **Single construction path for all topologies** | "Set the log once in `main()`" works uniformly across local and remote topologies. Callers that need a specific identity call `attachActionLog` again afterward. |
+| `setOutboxManaged` opt-out | **Suppress `recordIfAttached`, not `hasActionLog()`** | A store-backed model that logs inside its own transaction (see `journal.md`'s transactional outbox) must stop the framework's auto-append without losing "a log is attached" as a fact holders can still query. |
 | `coalesce` defaults to `false` | **Every execution is a distinct, permanent fact** | The right default for anything resembling a business event. Only actions where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via `BridgeHandler::set`) opt in. |
 
 ## Thread safety
@@ -537,6 +630,7 @@ quiesced with respect to dispatch, before exposing them.
 | Two registrations for the same `(modelId, actionId)` (or same `modelId`) | **Silent last-write-wins.** `ActionDispatcher::registerAction` does `_runners[key] = ...` and `_coalesce[key] = ...`; `ModelRegistryFactory::registerModel` does `insert_or_assign`. No diagnostic; the surviving entry is whichever initialiser ran last, and static-init order across TUs is unspecified. | `registry.hpp` |
 | Two **distinct C++ types** registered under one string id | Same silent overwrite — the string id, not the type, is the key. The second type's runner/factory shadows the first. This is the collision hazard behind the string-vocabulary limitation below. | `registry.hpp` |
 | `dispatch` / `execute` with an unknown `(modelId, actionId)` | Throws `std::runtime_error` **at runtime** — `"unknown action: …"` from `ActionDispatcher::dispatch`, `"unknown action for executeJson: …"` from `ActionExecuteRegistry::execute`. The string-keyed remote path has **no compile-time completeness check** — a pair that was never registered is only discovered when a request for it arrives. | `ActionDispatcher::dispatch`, `ActionExecuteRegistry::execute` |
+| `dispatch` when the decoded action fails `ActionValidator<Action>::ready(...)` | Throws `morph::model::ValidationError` (a `std::runtime_error` subclass) **before** `Model::execute` runs — the action is never executed. Actions with no validator (the common case) are unaffected: `ready()` defaults to `true`. | `ActionDispatcher::registerAction`'s runner |
 | `create` with an unknown model id | Throws `std::runtime_error("unknown model type: …")` at runtime. | `ModelRegistryFactory::create` |
 | `coalesce` for an unknown pair | Does **not** throw — defaults to `false` (every entry kept). | `ActionDispatcher::coalesce` |
 | Allocation failure inside a `register*Once` helper during static init | `registerModelOnce` / `registerActionOnce` (and `registerActionExecutorOnce`) are declared `noexcept` yet allocate (they build `std::string` keys and grow the map). An OOM there raises an exception through a `noexcept` boundary, which calls `std::terminate` — the process aborts during static init. | `registry.hpp` |
@@ -596,15 +690,27 @@ testing obligation, not a compile-time guarantee.
   `ActionExecuteRegistry` class itself (declared in `<morph/bridge.hpp>`, not
   `registry.hpp`). Explains the **hard `#include <morph/bridge.hpp>` requirement**
   for any TU using `BRIDGE_REGISTER_ACTION` (`registerActionExecutorOnce` is only
-  *defined* there) and the parallel executor path this spec's
-  `ActionExecuteRegistry` section summarises.
+  *defined* there), the parallel executor path this spec's
+  `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s
+  `localOp`, which enforces the same `ValidationError` gate as this spec's
+  `ActionDispatcher::registerAction` for the local execution path and performs
+  the same computed-field recompute (`morph::forms::recomputeAll`) for it.
+- **[forms.md](../forms/forms.md)** — `allRequiredEngaged`; the closed
+  cross-field rule vocabulary (`allRulesSatisfied`, `x-rules`) that composes
+  into `validate()` alongside it; and `computed`/`computeList`/`recomputeAll`,
+  both invoked by `ActionDispatcher::registerAction`'s runner before
+  `Model::execute`.
 - **[journal.md](../journal/journal.md)** — `IActionLog`, `LogEntry`, `SessionLog`,
   checkpoint coalescing, and `ScopedActionLog`. Explains how the runner's
   `recordIfAttached` call and `ActionLogPolicy<Action>::coalesce` feed the
-  durable log, and provides the scoped-install pattern the registries lack.
+  durable log, and provides the scoped-install pattern the registries lack. Also
+  `LogEntry::idempotencyKey` and `journal::OutboxRelay`, the transactional
+  outbox this spec's `setOutboxManaged`/`isOutboxManaged` opt-out enables — see
+  [Transactional outbox (opt-in)](../journal/journal.md#transactional-outbox-opt-in).
 - **[backend.md](backend.md)** — backends store `IModelHolder`s in a single map
-  and drive `IBackendChangedSink` / `BackendChangedMixin`; the model instances
-  created by `ModelRegistryFactory` land here.
+  and drive backend-change notification via `IModelHolder::isBackendChangeAware()`/
+  `onBackendChanged()` (in turn backed by `BackendChangedMixin`/`IBackendChangedSink`);
+  the model instances created by `ModelRegistryFactory` land here.
 - **[security.md](../security.md)** — the `session::current()` principal stamped onto
   every logged entry by `recordIfAttached`, and the trust boundary of the
   string-keyed remote dispatch surface.

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include <morph/core/logger.hpp>
-#include <morph/offline/reconnect_coordinator.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <morph/core/logger.hpp>
+#include <morph/core/observability.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -44,18 +45,17 @@ struct Fakes {
 
     [[nodiscard]] ReconnectCoordinator::Deps deps() {
         return ReconnectCoordinator::Deps{
-            .tryReconnect =
-                [this]() -> bool {
-                    int idx = tryReconnectCalls++;
-                    events.emplace_back("tryReconnect");
-                    if (reconnectThrows) {
-                        throw std::runtime_error("boom");
-                    }
-                    if (idx < static_cast<int>(reconnectResults.size())) {
-                        return reconnectResults[static_cast<std::size_t>(idx)];
-                    }
-                    return reconnectDefault;
-                },
+            .tryReconnect = [this]() -> bool {
+                int idx = tryReconnectCalls++;
+                events.emplace_back("tryReconnect");
+                if (reconnectThrows) {
+                    throw std::runtime_error("boom");
+                }
+                if (idx < static_cast<int>(reconnectResults.size())) {
+                    return reconnectResults[static_cast<std::size_t>(idx)];
+                }
+                return reconnectDefault;
+            },
             .activatePrimary =
                 [this] {
                     ++activatePrimaryCalls;
@@ -76,15 +76,14 @@ struct Fakes {
                     ++replayCalls;
                     events.emplace_back("replay");
                 },
-            .shouldContinue =
-                [this]() -> bool {
-                    int idx = shouldContinueCalls_++;
-                    events.emplace_back("shouldContinue");
-                    if (idx < static_cast<int>(continueResults.size())) {
-                        return continueResults[static_cast<std::size_t>(idx)];
-                    }
-                    return continueDefault;
-                },
+            .shouldContinue = [this]() -> bool {
+                int idx = shouldContinueCalls_++;
+                events.emplace_back("shouldContinue");
+                if (idx < static_cast<int>(continueResults.size())) {
+                    return continueResults[static_cast<std::size_t>(idx)];
+                }
+                return continueDefault;
+            },
             .sleep =
                 [this](std::chrono::milliseconds d) {
                     ++sleepCalls;
@@ -128,9 +127,8 @@ TEST_CASE("ReconnectCoordinator: happy path reconnects on first attempt", "[reco
 
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     // Exact call order per spec §6 case 1.
-    REQUIRE(f.events ==
-            std::vector<std::string>{"shouldContinue", "tryReconnect", "activatePrimary", "bindContext",
-                                     "shouldContinue", "replay"});
+    REQUIRE(f.events == std::vector<std::string>{"shouldContinue", "tryReconnect", "activatePrimary", "bindContext",
+                                                 "shouldContinue", "replay"});
 }
 
 TEST_CASE("ReconnectCoordinator: retries then succeeds", "[reconnect]") {
@@ -145,8 +143,8 @@ TEST_CASE("ReconnectCoordinator: retries then succeeds", "[reconnect]") {
     REQUIRE(outcome == ReconnectOutcome::Reconnected);
     REQUIRE(f.tryReconnectCalls == 3);
     REQUIRE(f.sleepCalls == 2);
-    REQUIRE(f.sleepDurations == std::vector<std::chrono::milliseconds>{std::chrono::milliseconds{50},
-                                                                       std::chrono::milliseconds{50}});
+    REQUIRE(f.sleepDurations ==
+            std::vector<std::chrono::milliseconds>{std::chrono::milliseconds{50}, std::chrono::milliseconds{50}});
     REQUIRE(f.replayCalls == 1);
 }
 
@@ -264,4 +262,61 @@ TEST_CASE("ReconnectCoordinator: concurrent calls are serialised", "[reconnect][
     REQUIRE(f.activatePrimaryCalls == 2 * kPerThread);
     REQUIRE(f.bindContextCalls == 2 * kPerThread);
     REQUIRE(f.replayCalls == 2 * kPerThread);
+}
+
+TEST_CASE("ReconnectCoordinator: onOnline emits reconnectAttempts per attempt and a tagged reconnectOutcome once",
+          "[reconnect][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    Fakes f;
+    f.reconnectResults = {false, false, true};
+    ReconnectCoordinator::Config cfg;
+    cfg.retryDelay = std::chrono::milliseconds{1};
+    ReconnectCoordinator coord{f.deps(), cfg};
+
+    std::atomic<int> attemptEvents{0};
+    std::vector<std::string> outcomeTags;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::reconnectAttempts) {
+            attemptEvents.fetch_add(1, std::memory_order_relaxed);
+        } else if (evt.metric == morph::observe::Metric::reconnectOutcome) {
+            for (auto& [key, val] : evt.tags) {
+                if (key == "outcome") {
+                    outcomeTags.emplace_back(val);
+                }
+            }
+        }
+    });
+
+    auto outcome = coord.onOnline();
+
+    REQUIRE(outcome == ReconnectOutcome::Reconnected);
+    REQUIRE(attemptEvents.load() == 3);
+    REQUIRE(outcomeTags == std::vector<std::string>{"Reconnected"});
+}
+
+TEST_CASE("ReconnectCoordinator: giving up tags reconnectOutcome as GaveUp", "[reconnect][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    Fakes f;
+    f.reconnectDefault = false;
+    ReconnectCoordinator::Config cfg;
+    cfg.maxAttempts = 2;
+    cfg.retryDelay = std::chrono::milliseconds{1};
+    ReconnectCoordinator coord{f.deps(), cfg};
+
+    std::vector<std::string> outcomeTags;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::reconnectOutcome) {
+            for (auto& [key, val] : evt.tags) {
+                if (key == "outcome") {
+                    outcomeTags.emplace_back(val);
+                }
+            }
+        }
+    });
+
+    morph::log::ScopedLoggerOverride logGuard{[](morph::log::LogLevel, std::string_view) {}};
+    auto outcome = coord.onOnline();
+
+    REQUIRE(outcome == ReconnectOutcome::GaveUp);
+    REQUIRE(outcomeTags == std::vector<std::string>{"GaveUp"});
 }

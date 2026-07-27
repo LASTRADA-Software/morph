@@ -16,9 +16,10 @@ and ask for coordinated disclosure until a fix ships.
 
 ## Supported versions
 
-morph is pre-1.0: only the latest `master` is supported, and fixes are not
-backported. A formal supported-version and deprecation policy is planned —
-see `docs/planned/api_stability.md`.
+morph is pre-1.0 (`0.x`, per [Semantic Versioning](https://semver.org/)): only
+the latest `master` is supported, and fixes are not backported. The
+supported-version and deprecation policy morph commits to **starting at
+1.0** is published — see `docs/spec/VERSIONING.md`.
 
 ## Scope
 
@@ -38,10 +39,11 @@ guarantees**, for example:
 - log sanitisation failures that let untrusted input forge log lines.
 
 **Out of scope** are the *documented* limitations, which are known and tracked
-as planned hardening work under `docs/planned/` — among them the reference
-`hmacSha256` not being hardened beyond a constant-time compare
-(`vetted_hmac.md`), the self-signed/`VerifyNone` TLS example
-(`tls_peer_verification.md`), absent rate/resource limits
+as planned hardening work under `docs/planned/` (or, once addressed, folded
+into `docs/spec/`) — among them the reference `hmacSha256` not being hardened
+beyond a constant-time compare unless a vetted `MacFunction` is injected (see
+`spec/security.md`, "MAC-primitive recommended wiring"), the self-signed/
+`VerifyNone` TLS example (`tls_peer_verification.md`), absent rate/resource limits
 (`transport_limits.md`), unauthenticated `register` and sequential model ids
 (`instance_authorization.md`), and server-side model leaks on client
 disconnect (`connection_scoped_cleanup.md`). Reports that a documented

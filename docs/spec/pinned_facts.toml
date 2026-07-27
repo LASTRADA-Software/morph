@@ -1,0 +1,32 @@
+# Spec <-> code drift-guard manifest. See CONTRIBUTING.md, "Quality gates".
+#
+# Flat `KEY = value` pairs only -- no nested tables. Each key is a mechanical
+# fact a docs/spec/*.md file states in prose; tests/test_pinned_facts.cpp
+# asserts the *real* code symbol equals the value pinned here (via the header
+# cmake/pinned_facts.cmake renders from this file at CMake configure time),
+# and scripts/check_spec_citations.sh asserts the cited spec file still
+# mentions it. Change a value here only in the same commit that changes the
+# code and the spec prose that cites it.
+#
+# Values are either a double-quoted string or a bare integer -- no other
+# shape is understood by the parser in cmake/pinned_facts.cmake.
+
+# ── Key constants ───────────────────────────────────────────────────────────
+MAX_ENVELOPE_BYTES = 8388608   # morph::wire::kMaxEnvelopeBytes (8 MiB); include/morph/core/wire.hpp
+MAX_DECIMAL_PLACES = 18        # morph::math::kMaxDecimalPlaces; include/morph/util/rational.hpp
+CLOCK_SKEW_MS = 60000          # morph::session::kClockSkewMs (60s); include/morph/session/session_auth.hpp
+
+# ── Enum cardinalities (value = ordinal of the LAST declared enumerator + 1) ─
+AUTH_ERROR_CARDINALITY = 4          # morph::session::AuthError: Malformed/BadSignature/Expired/NotYetValid
+LOG_LEVEL_CARDINALITY = 5           # morph::log::LogLevel: debug/info/warn/error/off
+RECONNECT_OUTCOME_CARDINALITY = 3   # morph::offline::ReconnectOutcome: Reconnected/GaveUp/Aborted
+
+# ── Canonical error `what()` strings ────────────────────────────────────────
+BACKEND_CHANGED_ERROR_WHAT = "backend changed before completion resolved"
+BRIDGE_DESTROYED_ERROR_WHAT = "bridge destroyed before completion resolved"
+DISCONNECTED_ERROR_WHAT = "transport disconnected before completion resolved"
+
+# ── Canonical RemoteServer reply strings ────────────────────────────────────
+UNAUTHORIZED_REPLY = "unauthorized"
+MODEL_NOT_FOUND_REPLY = "model not found"
+REGISTER_REQUIRES_TYPEID_REPLY = "register requires a typeId"

@@ -1,17 +1,27 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
-#include <glaze/glaze.hpp>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace morph::journal {
+
+/// @brief Current line-format version stamped on every newly-written
+///        `LogEntry` (`LogEntry::v`'s default).
+///
+/// Bumped only on a **breaking** change to `LogEntry`'s on-disk/on-wire shape;
+/// an additive key (tolerated by `fromJson`'s lenient decode) does not bump
+/// it. A reader refuses to decode a line whose `v` exceeds this constant —
+/// see `fromJson`.
+inline constexpr std::uint32_t kLogFormatVersion = 1;
 
 /// @brief One recorded execution of an action against a model instance.
 ///
@@ -43,6 +53,24 @@ struct LogEntry {
 
     /// @brief Wall-clock time of execution, milliseconds since the Unix epoch.
     int64_t timestampMs = 0;
+
+    /// @brief Optional dedup token for outbox-relayed entries. Empty by default;
+    ///        ordinary auto-appended entries (from `ActionDispatcher`'s runner or
+    ///        `Bridge::executeVia`'s local op) never set it. Mirrors
+    ///        `morph::offline::QueueItem::idempotencyKey`'s exact contract: opaque,
+    ///        stored verbatim, stable across restarts for one logical outbox row.
+    ///        See `journal::OutboxRelay` (`outbox.hpp`) for how it's used.
+    std::string idempotencyKey{};
+
+    /// @brief Line-format version this entry was written at.
+    ///
+    /// Defaults to `kLogFormatVersion`, so every freshly-constructed entry
+    /// already carries the current version with no separate stamping step. A
+    /// legacy line (written before this field existed) has no `v` key; under
+    /// `fromJson`'s lenient decode that is just an absent key, so it decodes
+    /// with this same default — i.e. legacy data reads as `v == 1`, which is
+    /// correct: v1 is today's shape, `kLogFormatVersion` merely names it.
+    std::uint32_t v = kLogFormatVersion;
 };
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.
@@ -90,10 +118,32 @@ inline std::string toJson(const LogEntry& entry) {
 }
 
 /// @brief Decodes @p json into a `LogEntry`.
-/// @throws SerializationError if @p json is not a valid `LogEntry`.
+///
+/// Reads leniently: `glz::read<glz::opts{.error_on_unknown_keys = false}>`,
+/// the same stance `morph::wire::decode` takes (`include/morph/core/wire.hpp`) —
+/// an unknown/extra JSON key (e.g. an additive field written by a newer morph
+/// build) is ignored rather than rejected. Same duplicate-key caveat as
+/// `wire::decode`: last-wins, not a security boundary (glaze offers no reject
+/// option). Syntactically malformed JSON still throws. After a successful
+/// decode, also enforces the line-format version rule: `v <= kLogFormatVersion`
+/// decodes normally, `v` greater than this build's `kLogFormatVersion` throws
+/// — a build refuses to guess at a line format newer than any it has seen.
+/// @throws SerializationError if @p json is not valid JSON, does not decode
+///         into a `LogEntry`, or decodes with `v` greater than
+///         `kLogFormatVersion`.
 inline LogEntry fromJson(std::string_view json) {
     LogEntry entry{};
-    detail::throwOnGlazeError(glz::read_json(entry, json), json);
+    // `null_terminated = false`: `json` is a caller-supplied view (a line read from a
+    // journal file, with no guaranteed trailing '\0') — see the identical rationale on
+    // `morph::wire::decode` (`wire.hpp`), whose fuzz harness found the resulting
+    // heap-buffer-overflow in glaze's `skip_ws`.
+    static constexpr glz::opts kLenient{.null_terminated = false, .error_on_unknown_keys = false};
+    detail::throwOnGlazeError(glz::read<kLenient>(entry, json), json);
+    if (entry.v > kLogFormatVersion) {
+        throw SerializationError{
+            "journal::fromJson: line format v" + std::to_string(entry.v) +
+            " is newer than this build supports (kLogFormatVersion = " + std::to_string(kLogFormatVersion) + ")"};
+    }
     return entry;
 }
 
@@ -104,16 +154,44 @@ inline LogEntry fromJson(std::string_view json) {
 /// items once retried successfully). Implementations range from in-memory
 /// (`InMemoryActionLog`) to file, SQL, or network-backed stores supplied by the
 /// host application.
+///
+/// @par Idempotency-key dedup (optional)
+/// An implementation MAY treat a non-empty `LogEntry::idempotencyKey` as a dedup
+/// key on `append()`: if an entry with the same key was already recorded, treat
+/// the call as a no-op. This is not required by the interface, but
+/// `InMemoryActionLog` and `FileActionLog` both do it, which is what makes them
+/// safe choices for `journal::OutboxRelay::sink` (see `outbox.hpp`) — a
+/// re-relayed row after a crash between `append()` and marking it relayed lands
+/// here twice but is stored once. An entry with an empty `idempotencyKey` is
+/// never deduped.
 // NOLINTBEGIN(cppcoreguidelines-special-member-functions)
 struct IActionLog {
     virtual ~IActionLog() = default;
 
     /// @brief Appends @p entry. Implementations assign `entry.seq`.
+    ///
+    /// An implementation that can fail to record the entry must throw. Returning
+    /// normally is the sink's promise that the entry is recorded (or, for a
+    /// buffering sink, that it will be by the next successful `flush()`); see
+    /// `flush()` for why silence is not an option here.
+    ///
     /// @param entry Entry to append.
+    /// @throws std::exception (implementation-defined) if the entry could not be recorded.
     virtual void append(LogEntry entry) = 0;
 
     /// @brief Pushes any buffered entries to the durable backend. No-op for sinks
     ///        with nothing to buffer (e.g. `InMemoryActionLog`).
+    ///
+    /// **Must throw if the data did not reach the backend.** The return type is
+    /// `void`, so throwing is the only channel an implementation has, and
+    /// callers rely on it: `OutboxRelay::relay()` calls `markRelayed()` directly
+    /// after this, and a silently-failed flush would mark rows relayed in the
+    /// model's own store while nothing was durably written — dropping them from
+    /// the outbox *and* from the log, with no error anywhere. An implementation
+    /// that cannot fail (nothing to buffer) simply never throws.
+    ///
+    /// @throws std::exception (implementation-defined) if buffered entries could
+    ///         not be made durable.
     virtual void flush() = 0;
 
     /// @brief Returns recorded entries in append order.
@@ -126,13 +204,18 @@ struct IActionLog {
 /// @brief Thread-safe in-memory implementation of `IActionLog`.
 ///
 /// Suitable for testing and for applications that do not need cross-process
-/// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape.
+/// durability. Mirrors `morph::offline::InMemoryOfflineQueue`'s shape. Dedups
+/// `append()` on a non-empty `LogEntry::idempotencyKey` — see `IActionLog`'s
+/// class docs.
 class InMemoryActionLog : public IActionLog {
 public:
     /// @brief Appends @p entry, assigning a monotonically increasing `seq`. Thread-safe.
     /// @param entry Entry to append; `seq` is overwritten regardless of the input value.
     void append(LogEntry entry) override {
         std::scoped_lock const lock{_mtx};
+        if (!entry.idempotencyKey.empty() && !_seenIdempotencyKeys.insert(entry.idempotencyKey).second) {
+            return;  // already recorded once; a re-relayed duplicate is a safe no-op
+        }
         entry.seq = ++_nextSeq;
         _entries.push_back(std::move(entry));
     }
@@ -161,6 +244,7 @@ private:
     mutable std::mutex _mtx;
     std::vector<LogEntry> _entries;
     uint64_t _nextSeq{0};
+    std::unordered_set<std::string> _seenIdempotencyKeys;
 };
 
 namespace detail {
