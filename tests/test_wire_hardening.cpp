@@ -31,7 +31,21 @@
 //   harness (crashing input preserved at
 //   tests/fuzz/findings/dispatch_execute/err_reply_control_char_roundtrip.bin).
 //   Fixed in `makeErr` by replacing control bytes with a printable `\xHH`
-//   placeholder before they reach the writer.
+//   placeholder before they reach the writer. `makeErr` keeps doing this, but
+//   for a different reason now (see Bug E): an err message is log-bound text,
+//   and a raw 0x1B in it would carry an ANSI escape into the reader's terminal.
+//
+// Bug E (control bytes in the remaining string fields): the same writer gap
+//   applies to every `Envelope` string, not just `message` — `body`,
+//   `modelType`, `actionType`, `contextKey`, `typeId`, and the session's
+//   `principal`/`token`. Those carry caller data that must round-trip
+//   byte-for-byte, so the `makeErr` substitution is the wrong instrument for
+//   them. Worse than invalid output, glaze's chunked write path *corrupts* such
+//   a byte when the same string also holds a `\` or `"`, emitting two 0x00
+//   bytes in its place — undetectable downstream, since the result still
+//   decodes. Fixed at the writer with `detail::EscapingWriteOpts`
+//   (glaze's `escape_control_characters`), which is lossless in both
+//   directions.
 
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
@@ -44,6 +58,7 @@ using morph::wire::decode;
 using morph::wire::encode;
 using morph::wire::kMaxEnvelopeBytes;
 using morph::wire::makeErr;
+using morph::wire::makeOk;
 using morph::wire::makeRegister;
 
 // ── Bug A: message-size cap ───────────────────────────────────────────────────
@@ -158,4 +173,119 @@ TEST_CASE("makeErr leaves ordinary text untouched", "[wire][hardening]") {
     morph::wire::Envelope decoded;
     REQUIRE_NOTHROW(decoded = decode(encode(errEnv)));
     CHECK(decoded.message == "model not found");
+}
+
+// ── Bug E: every string field, not just `message`, must survive control bytes ─
+
+namespace {
+// A control byte embedded in ordinary text, plus the round-trip helper the
+// per-field cases below share. Split into one TEST_CASE per field rather than
+// SECTIONs: Catch2 expands each SECTION into a branch, so a single case
+// covering six fields reads as one deeply-branched function.
+// A function, not a namespace-scope object: a `std::string` with static
+// storage duration constructs before main() and could throw where nothing can
+// catch it.
+std::string ctl() { return std::string("a") + static_cast<char>(0x0B) + "b"; }
+
+morph::wire::Envelope roundTrip(const morph::wire::Envelope& env) { return decode(encode(env)); }
+}  // namespace
+
+TEST_CASE("encode escapes control bytes in body", "[wire][hardening]") {
+    CHECK(roundTrip(makeOk(7, ctl())).body == ctl());
+}
+
+TEST_CASE("encode escapes control bytes in contextKey", "[wire][hardening]") {
+    CHECK(roundTrip(makeRegister("T", ctl())).contextKey == ctl());
+}
+
+TEST_CASE("encode escapes control bytes in modelType and actionType", "[wire][hardening]") {
+    morph::wire::Envelope env;
+    env.kind = "execute";
+    env.modelType = ctl();
+    env.actionType = ctl();
+    const auto back = roundTrip(env);
+    CHECK(back.modelType == ctl());
+    CHECK(back.actionType == ctl());
+}
+
+TEST_CASE("encode escapes control bytes in the session principal and token", "[wire][hardening]") {
+    morph::wire::Envelope env;
+    env.kind = "execute";
+    env.session.principal = ctl();
+    env.session.token = ctl();
+    const auto back = roundTrip(env);
+    CHECK(back.session.principal == ctl());
+    CHECK(back.session.token == ctl());
+}
+
+TEST_CASE("encode preserves control bytes exactly rather than replacing them", "[wire][hardening]") {
+    // `body` is a serialized payload: unlike a diagnostic `message`, it has to
+    // come back byte-for-byte. Escaping (not substitution) is what makes that
+    // true, so pin it across the whole control range.
+    std::string all;
+    for (int byte = 0x00; byte < 0x20; ++byte) {
+        all.push_back(static_cast<char>(byte));
+    }
+    const auto back = decode(encode(makeOk(1, all)));
+    CHECK(back.body == all);
+    CHECK(back.body.size() == 32U);
+}
+
+TEST_CASE("encode survives a control byte alongside an escaped character", "[wire][hardening]") {
+    // Regression guard for a *corrupting* failure mode, distinct from invalid
+    // output: with glaze's default options, a `\` or `"` earlier in the same
+    // string sends the writer down a chunked path that rewrote a later 0x0B as
+    // two 0x00 bytes. The payload was destroyed before transmission, so the
+    // envelope decoded cleanly into silently wrong data — which makes the
+    // value comparison here, not merely the absence of a throw, the assertion
+    // that matters. The offset dependence is why the loop sweeps padding.
+    for (std::size_t pad = 0; pad <= 40; ++pad) {
+        std::string payload = "\\" + std::string(pad, 'x');
+        payload.push_back(static_cast<char>(0x0B));
+        payload += "\"tail";
+
+        morph::wire::Envelope back;
+        REQUIRE_NOTHROW(back = decode(encode(makeOk(1, payload))));
+        INFO("padding = " << pad);
+        CHECK(back.body == payload);
+    }
+}
+
+// ── Bug F: a size-rejected frame must still be addressed to its call ─────────
+// A transport that rejects a frame for exceeding its own size cap never decodes
+// it, yet still has to answer. `callId == 0` is the client's synchronous-reply
+// discriminator, so an err sent with a zeroed id resumes whatever unrelated
+// register/deregister is parked, handing it another call's reply — while the
+// execute it was meant for never resolves at all.
+
+TEST_CASE("wire::detail::peekCallId recovers the id without decoding", "[wire][hardening]") {
+    morph::wire::Envelope env;
+    env.kind = "execute";
+    env.callId = 987654321U;
+    env.modelType = "M";
+    env.actionType = "A";
+    env.body = std::string(4096, 'x');  // far beyond the scan window
+    CHECK(morph::wire::detail::peekCallId(encode(env)) == 987654321U);
+}
+
+TEST_CASE("wire::detail::peekCallId degrades to 0 rather than guessing", "[wire][hardening]") {
+    CHECK(morph::wire::detail::peekCallId("") == 0U);
+    CHECK(morph::wire::detail::peekCallId("not json at all") == 0U);
+    CHECK(morph::wire::detail::peekCallId(R"({"kind":"execute"})") == 0U);
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":})") == 0U);
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":"7"})") == 0U);
+    // Past the scan window: not found, so 0 — never a partial parse.
+    const std::string padded = std::string(2048, ' ') + R"({"callId":5})";
+    CHECK(morph::wire::detail::peekCallId(padded) == 0U);
+    // Out of range must not wrap around into a plausible-looking id.
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":99999999999999999999999})") == 0U);
+}
+
+TEST_CASE("wire::detail::peekCallId cannot be spoofed from an earlier string field", "[wire][hardening]") {
+    // `kind` is written before `callId`, so a hostile value there is scanned
+    // first. encode() escapes its quotes, yielding bytes that do not match.
+    morph::wire::Envelope env;
+    env.kind = R"(x","callId":424242,"z":")";
+    env.callId = 5U;
+    CHECK(morph::wire::detail::peekCallId(encode(env)) == 5U);
 }

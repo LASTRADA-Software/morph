@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -146,16 +148,20 @@ namespace detail {
 /// @brief Replaces every ASCII control byte (0x00-0x1F, 0x7F) in @p text with a
 ///        printable `\xHH` textual placeholder.
 ///
-/// Glaze 7.4's JSON writer escapes `"` and `\` correctly but does not escape
-/// control characters, so a `std::string` field containing one serializes to
-/// syntactically invalid JSON that glaze's own reader then rejects on decode —
-/// found by the `fuzz_dispatch_execute` harness via an `err` reply whose
-/// `message` echoed an unrecognized `Envelope::kind` verbatim (see
-/// docs/spec/testing_strategy.md, "Known findings"). `makeErr`'s `message` is
-/// diagnostic text, not data that must round-trip byte-for-byte, so replacing
-/// (rather than preserving) these bytes is an acceptable, guaranteed-safe fix:
-/// the replacement is plain printable ASCII, which glaze already escapes
-/// correctly wherever it needs to (verified: `\` and `"` round-trip).
+/// Applied to `makeErr`'s `message` only, and no longer for JSON validity —
+/// `detail::EscapingWriteOpts` now handles that for every field. What remains is
+/// an output-sanitization concern specific to this one field: an `err` message
+/// echoes untrusted content back (an unrecognized `Envelope::kind`, a caught
+/// exception's `what()`) and is overwhelmingly destined for a log or a console,
+/// where a raw 0x1B would carry an ANSI escape sequence into the reader's
+/// terminal. `message` is diagnostic text rather than data that must round-trip
+/// byte-for-byte, so replacing these bytes with a printable transcription costs
+/// nothing and keeps them inert.
+///
+/// Originally added for the invalid-JSON failure found by the
+/// `fuzz_dispatch_execute` harness via an `err` reply echoing an unrecognized
+/// `kind` verbatim (see docs/spec/testing_strategy.md, "Known findings"); that
+/// finding is now covered at the writer instead.
 /// @param text Untrusted text that may contain raw control bytes.
 /// @return @p text with every control byte replaced by `\xHH`.
 [[nodiscard]] inline std::string sanitizeControlChars(std::string_view text) {
@@ -173,6 +179,88 @@ namespace detail {
         }
     }
     return out;
+}
+
+/// @brief Write options that escape ASCII control bytes as `\\uXXXX` sequences.
+///
+/// glaze 7.4 leaves control bytes unescaped by default, which breaks `encode`
+/// two different ways depending on where the byte lands:
+///
+/// - **Invalid output.** RFC 8259 requires U+0000 through U+001F to be escaped,
+///   and glaze's own reader enforces that, so an envelope carrying a raw 0x0B
+///   anywhere serializes to JSON the peer's `decode` then throws on.
+/// - **Silent corruption.** Worse, the writer's chunked fast path mangles such a
+///   byte outright once the string also contains an escaped character: with a
+///   `\\` or `"` earlier in the same string, a 0x0B at certain offsets is written
+///   as *two* 0x00 bytes. The payload is destroyed before it reaches the wire,
+///   so no amount of post-processing on the serialized form can recover it —
+///   the escaping has to happen inside the writer.
+///
+/// Enabling the option is glaze's documented remedy for exactly this (see its
+/// README, "escape control characters"); it is off by default there only because
+/// embedded nulls are hazardous for C APIs, which does not apply to a
+/// `std::string` wire field. Escaping is lossless in both directions, so any
+/// such byte round-trips unchanged rather than being replaced.
+///
+/// Applies to writing only. `decode` needs no counterpart: glaze's reader
+/// already accepts `\\uXXXX` and turns it back into the original byte.
+struct EscapingWriteOpts : glz::opts {
+    /// @brief Emit control bytes as `\\uXXXX` rather than raw.
+    // NOLINTNEXTLINE(readability-identifier-naming) — the name is glaze's, not ours; the option is matched by name.
+    bool escape_control_characters = true;
+};
+
+/// @brief Best-effort recovery of an envelope's `callId` without decoding it.
+///
+/// For the one case where a transport must answer a message it has decided
+/// *not* to parse — a frame rejected for exceeding a transport-level size cap,
+/// before `decode` is ever called. Such a reply still has to be addressed:
+/// `callId == 0` is the wire's "this is a reply to a synchronous control call"
+/// discriminator (see `QtWebSocketBackend::onTextMessage`), so an `err` sent
+/// with a zeroed id does not merely fail to resolve the execute it was meant
+/// for — it resumes whatever unrelated `register`/`deregister` happens to be
+/// parked, handing it a reply belonging to another call entirely.
+///
+/// Scans at most @p maxScanBytes, so the size cap it serves keeps its value as
+/// a cost bound; `callId` is the second field `encode` writes, so it lands well
+/// inside even a small window. A `"callId":` sequence cannot be forged from
+/// within an earlier string field, because `encode` escapes any embedded quote
+/// (yielding `\"callId\":`, which does not match).
+///
+/// @param json         Raw, undecoded envelope text.
+/// @param maxScanBytes Prefix length to search. Default 1 KiB.
+/// @return The parsed `callId`, or `0` if absent, unparseable, or out of range —
+///         i.e. it degrades to exactly the behavior it replaces.
+[[nodiscard]] inline std::uint64_t peekCallId(std::string_view json, std::size_t maxScanBytes = 1024) noexcept {
+    static constexpr std::string_view kKey = "\"callId\":";
+    const std::string_view window = json.substr(0, std::min(json.size(), maxScanBytes));
+    const auto keyPos = window.find(kKey);
+    if (keyPos == std::string_view::npos) {
+        return 0;
+    }
+    std::size_t idx = keyPos + kKey.size();
+    // idx is bounded by the same condition that guards the access.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+    while (idx < window.size() && (window[idx] == ' ' || window[idx] == '\t')) {
+        ++idx;
+    }
+    std::uint64_t value = 0;
+    bool sawDigit = false;
+    for (; idx < window.size(); ++idx) {
+        // idx is bounded by the loop condition.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+        const char chr = window[idx];
+        if (chr < '0' || chr > '9') {
+            break;
+        }
+        const auto digit = static_cast<std::uint64_t>(chr - '0');
+        if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / 10U) {
+            return 0;  // out of range — treat as unrecoverable rather than wrap
+        }
+        value = (value * 10U) + digit;
+        sawDigit = true;
+    }
+    return sawDigit ? value : 0;
 }
 
 }  // namespace detail
@@ -204,10 +292,22 @@ inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
 }
 
 /// @brief Encodes @p env as a single JSON line.
+///
+/// Writes with `detail::EscapingWriteOpts`, so raw ASCII control bytes in any
+/// string field become `\uXXXX` escapes. Without it, a single 0x0B anywhere in
+/// `body`, `modelType`, `contextKey`, `typeId`, `actionType`, or the session's
+/// `principal`/`token` yields an envelope the peer's `decode` throws on — and,
+/// where the same string also contains a `\` or `"`, one glaze silently
+/// corrupts before it is ever sent. Both are payload-triggered transport
+/// failures, not caller errors. The escape is lossless, so such bytes still
+/// round-trip byte-for-byte.
+///
+/// @param env Envelope to serialize.
+/// @return The serialized envelope as valid, re-decodable JSON.
 /// @throws std::runtime_error on serialisation failure (should never happen for valid input).
 inline std::string encode(const Envelope& env) {
     std::string out;
-    if (auto errCode = glz::write_json(env, out)) {
+    if (auto errCode = glz::write<detail::EscapingWriteOpts{}>(env, out)) {
         throw std::runtime_error("envelope encode failed: " + glz::format_error(errCode, out));
     }
     return out;

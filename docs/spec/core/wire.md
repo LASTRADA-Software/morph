@@ -71,7 +71,7 @@ it internally.
 
 | Function | Signature | Notes |
 |---|---|---|
-| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write_json`. Throws `std::runtime_error` on failure (should never happen for valid input). |
+| `encode` | `std::string encode(const Envelope&)` | Serializes to a single JSON line via `glz::write<detail::EscapingWriteOpts{}>`. Throws `std::runtime_error` on failure (should never happen for valid input). Escapes ASCII control bytes — see [Control bytes in string fields](#control-bytes-in-string-fields). |
 | `decode` | `Envelope decode(std::string_view)` | Deserializes from JSON via `glz::read<{.error_on_unknown_keys = false}>`. Rejects input longer than `kMaxEnvelopeBytes` and throws `std::runtime_error` on an oversized or syntactically malformed envelope. **Ignores unknown/extra keys** (forward compatibility) and **does not reject duplicate JSON keys** — see [Parsing guarantees and hardening](#parsing-guarantees-and-hardening). |
 
 glaze reflects the struct's public members, so the JSON object keys are exactly
@@ -86,6 +86,53 @@ this is the wire's forward-compatibility contract. Syntactically malformed JSON
 is still a hard parse error that throws. Servers catch that thrown exception and
 turn it into an `"err"` reply rather than propagating it (see
 `RemoteServer::handle` / `handleInline`).
+
+### Control bytes in string fields
+
+`encode` writes with `detail::EscapingWriteOpts`, a `glz::opts` refinement that
+turns on glaze's `escape_control_characters`. glaze leaves ASCII control bytes
+(U+0000–U+001F) unescaped by default, which breaks the envelope two distinct
+ways depending on where such a byte lands:
+
+- **Invalid output.** RFC 8259 requires those code points to be escaped, and
+  glaze's own reader enforces it — so an envelope carrying a raw `0x0B`
+  anywhere serializes to JSON the peer's `decode` throws on. Found by the
+  `fuzz_dispatch_execute` harness via an `err` reply echoing an unrecognized
+  `kind`.
+- **Silent corruption.** Worse, with the option off the writer's chunked fast
+  path *mangles* such a byte once the same string also contains an escaped
+  character: with a `\` or `"` earlier in the string, a `0x0B` at certain
+  offsets is written out as *two* `0x00` bytes. The payload is destroyed before
+  it reaches the wire, and the result still decodes — so nothing downstream can
+  detect it.
+
+Escaping is lossless in both directions: such bytes round-trip byte-for-byte,
+which matters because `body`, `modelType`, `actionType`, `contextKey`, `typeId`
+and the session's `principal`/`token` all carry caller data. `decode` needs no
+counterpart — glaze's reader already accepts `\uXXXX`.
+
+`makeErr` additionally replaces control bytes in its `message` with a printable
+`\xHH` transcription. That is no longer about JSON validity but about output
+sanitization: an `err` message echoes untrusted content back and is
+overwhelmingly destined for a log or console, where a raw `0x1B` would carry an
+ANSI escape sequence into the reader's terminal. `message` is diagnostic text,
+not data that must round-trip, so replacement costs nothing there.
+
+### `detail::peekCallId` — addressing a reply to a message never decoded
+
+A transport that rejects a frame *before* decoding it (e.g.
+`QtWebSocketServerConfig::maxMessageBytes`) still has to answer, and the reply
+must be addressed. `wire::detail::peekCallId(json, maxScanBytes = 1024)`
+recovers `callId` with a bounded prefix scan, returning `0` when absent,
+unparseable, or out of range. The bound keeps the size cap meaningful as a cost
+guard; `callId` is the second field `encode` writes, so it lands well inside
+even a small window, and a `"callId":` sequence cannot be forged from an earlier
+string field because `encode` escapes any embedded quote.
+
+Replying with a zeroed `callId` is not a harmless degradation: `0` is the
+client's *synchronous-reply discriminator*, so such a reply resumes whatever
+`register`/`deregister` happens to be parked and hands it another call's
+result, while the execute it was meant for never resolves at all.
 
 ## Parsing guarantees and hardening
 
