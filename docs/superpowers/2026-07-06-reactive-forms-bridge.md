@@ -134,11 +134,9 @@ calls `controller.submitIfValid(actionType, previewLine)` directly.
   independently, last-writer-wins on `resultText`. If this proves janky, a
   ~150 ms debounce timer in `DynamicForm.qml` is a self-contained
   follow-up.
-- `BridgeHandler`'s compile-time fielded-draft API
-  (`set<&Action::field>`/`subscribe<Action>`) is not usable generically:
-  glaze plain-aggregate reflection exposes only field names, not
-  compile-time member pointers. The generic path goes through
-  `executeJson` instead.
+- A compile-time, per-field API is not usable generically: glaze
+  plain-aggregate reflection exposes only field names, not compile-time
+  member pointers. The generic path goes through `executeJson` instead.
 - The options combo-box fetch is not reactive; it runs once per form from
   `Component.onCompleted`.
 - `examples/forms/main.cpp` (schema dump / `--emit-html` / REPL) has no GUI

@@ -310,7 +310,7 @@ Because these are mutually exclusive per topology, recording is automatically se
 
 **`Loggable`** (`morph::model::Loggable::{Yes,No}`) is a strong-typed opt-out on the existing `BRIDGE_REGISTER_ACTION` macro (an optional 4th argument; no separate registration macro). Default is `Yes` — every action is recorded unless explicitly marked `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`). Hand-written `ActionTraits` specialisations that predate this member (as used in several tests) are unaffected: `morph::model::detail::actionLoggable<A>()` defaults to `Yes` when the member is absent, via a `HasLoggableFlag` concept exactly like `ActionValidator`'s `HasValidate`.
 
-**`ActionLogPolicy<A>::coalesce`** (default `false`) decides whether repeated executions of the same action against the same entity should collapse to the latest occurrence at a checkpoint, or whether every occurrence is a distinct, permanent fact. This matters because the fielded/reactive `set<...>` mechanism (see "Subscriptions and fielded actions" below) can already fire the same action many times in a row — without coalescing, every keystroke-driven re-fire would become a permanent log entry. `false` is correct for anything resembling a business event (a deposit); `true` is for drafts/settings where only the final value matters.
+**`ActionLogPolicy<A>::coalesce`** (default `false`) decides whether repeated executions of the same action against the same entity should collapse to the latest occurrence at a checkpoint, or whether every occurrence is a distinct, permanent fact. This matters because a form driving one action per edit can fire the same action many times in a row — without coalescing, every keystroke-driven re-fire would become a permanent log entry. `false` is correct for anything resembling a business event (a deposit); `true` is for drafts/settings where only the final value matters.
 
 **`SessionLog`** (`journal.hpp`) is where coalescing actually happens. It keeps full, uncoalesced history in memory (the raw material for `undoLast()`), and `checkpoint(durableSink)` reduces everything appended since the last checkpoint by `(modelType, entityKey, actionType)` — keeping only the latest entry where `coalesce == true`, every entry otherwise — before forwarding the reduced set to the real sink. `undoLast()` needs no inverse operations: it drops the most recent entry and calls `journal::replay()` over what remains, reusing the same `ActionDispatcher`/`ModelRegistryFactory` `RemoteServer` already relies on for dispatch. This is not a workaround — a model's entire state genuinely is "initial state plus its ordered actions replayed," so reconstructing it by replay is the direct statement of that fact, not a special case.
 
@@ -412,52 +412,51 @@ handler.execute(MyAction{21})
     .onError([](std::exception_ptr e) { /* runs on GUI thread */ });
 ```
 
-## Subscriptions and fielded actions
+## Instance subscriptions
 
-The framework offers two complementary surfaces for invoking actions from the GUI:
+The framework offers two complementary surfaces for talking to a model:
 
-1. **One-shot**: `handler.execute(action) → Completion<R>`. The full action is built in the GUI and sent in a single call. Suitable for actions that fire on a button click ("delete this order", "submit form").
-2. **Fielded / reactive**: `handler.subscribe<A>(cb)` + `handler.set<&A::field>(value)`. Field values stream into a client-side draft, a per-action validator decides when the draft is ready, and the framework dispatches `model.execute(draft)` and pushes the result to the subscriber. Suitable for forms where each widget edits one field and the GUI should respond live as the user types.
+1. **One-shot**: `handler.execute(action) -> Completion<R>`. The action is built
+   at the call site and dispatched in one call.
+2. **Observing**: `handler.subscribe<R>(cb)` fires whenever an `R` is produced
+   on *the instance this handler is attached to* — by this handler, by another
+   handler sharing that instance, or by another screen entirely. Suitable for a
+   view that renders some model state and must stay current when anything
+   changes it.
+
+A subscription names the **result/state type**, not an action. The subscriber
+describes what it renders rather than what somebody else must call to produce
+it, so adding an action that also yields an `R` never breaks an existing
+subscriber.
 
 ### API
 
 ```cpp
-// Per-action validator — template specialisation, no Model coupling.
-template <typename A>
-struct morph::model::ActionValidator {
-    static bool ready(const A&) noexcept { return true; }   // default: one-shot
-};
+morph::bridge::BridgeHandler<AccountModel, morph::bridge::AllowShared> screen{bridge, guiExec};
+morph::bridge::BridgeHandler<AccountModel, morph::bridge::AllowShared> sidebar{bridge, guiExec};
 
-// User specialises (or uses the macro) for actions with fielded readiness.
-BRIDGE_REGISTER_VALIDATOR(FormAction, [](const FormAction& a) {
-    return a.a != 0.0 && a.b != 0.0 && a.c != 0.0;
-})
-```
+screen.attach(42);
+sidebar.attach(42);                       // same instance
 
-```cpp
-morph::bridge::BridgeHandler<FormModel> handler{bridge, &guiExec};
+screen.subscribe<AccountInfo>([](AccountInfo info) { renderBalance(info); });
 
-handler.subscribe<FormAction>([](double sum) { renderTotal(sum); });
-
-handler.set<&FormAction::a>(3.0);
-handler.set<&FormAction::b>(5.0);
-handler.set<&FormAction::c>(7.0);   // validator passes → execute → callback fires
-
-handler.unsubscribe<FormAction>();
-handler.reset<FormAction>();
+sidebar.execute(Deposit{.amountMinor = 5000});
+// -> screen's callback runs: it never had to know Deposit exists
 ```
 
 ### Behavior
 
 | Aspect | Default |
 |---|---|
-| **Validator default** | `ActionValidator<A>::ready` returns `true` for any action without a specialisation. First `set<>` triggers a fire. |
-| **Re-fire** | Every `set<>` that lands a `ready()==true` state dispatches the action again — live recomputation. The draft persists between fires. |
-| **Draft persistence** | Drafts survive successive fires, `unsubscribe`, and `Bridge::switchBackend`. Destroyed with the handler or via `reset<A>()`. |
-| **In-flight coalescing** | If patches land while a previous execute is in flight, exactly one re-fire is queued for when it completes — running with the latest draft snapshot. Further patches during the same flight collapse into that single pending re-fire. Matches typical reactive-UI behaviour. |
-| **Subscriber cardinality** | One subscriber per `(handler, Action type)`. `subscribe<A>(cb)` replaces any prior callback. |
-| **No-subscriber fire** | If `set<>` triggers an execute but no subscriber is installed, the action still runs and the result is silently dropped. |
-| **Subscription thread** | Callbacks always run on the executor passed at handler construction (`guiExec`). |
+| **Keying** | On the result type `R`. Any action producing an `R` notifies. |
+| **Scope** | The instance the handler is currently attached to. Matched at publish time, so a subscription follows a re-pointed handler. |
+| **Subscriber cardinality** | One callback per `(handler, R)`. `subscribe<R>(cb)` replaces any prior callback. |
+| **Echo** | The originating handler is notified too — no "was this mine" bookkeeping in subscribers. |
+| **Failures** | A failed action notifies nobody. |
+| **Ordering** | Per instance, guaranteed by that instance's strand. Nothing is guaranteed between instances. |
+| **Durability** | None. Best-effort and unbuffered: no replay, no cursor, no coalescing. |
+| **Callback thread** | Always the executor passed at handler construction. |
+
 
 ## Exact values, units, and schema-driven forms
 
@@ -546,7 +545,7 @@ required empty-capable field is engaged" — `Quantity`, `Choice`, `Timestamp`,
 or any type with a `hasValue()`) intended as the body of the action's
 `validate()` — which the existing `ActionValidator` resolution picks up
 automatically. One declaration then drives the schema's `required` array, the
-client-side submit gate, and the fielded-action readiness check.
+client-side submit gate, and the server-side readiness check.
 
 ### `morph::time::Timestamp` and `morph::forms::Choice` — dates and combo boxes
 
@@ -703,7 +702,7 @@ documented behavior.
 | Glaze for JSON | Reflects aggregate types automatically; no hand-written serialisation per action. |
 | `CompletionState<T>` internal only | Keeps the public API free of state-handling machinery; implementation can change without breaking callers. |
 | JSON `Envelope` wire protocol | Self-describing and forward-compatible (unknown keys ignored); carries a `callId` so async WebSocket replies can be correlated back to pending `Completion` objects. |
-| Client-side drafts for fielded actions | Avoids new wire messages, server-side draft state, and a server push channel. Patches never leave the client; only the full action is sent when the validator passes. |
+| Subscriptions keyed on the result type, scoped to the instance | A subscriber is a renderer: it names the state it draws, not the actions that produce it, so a new action never breaks it. Scoping to the instance is what lets two screens on one shared model see each other's work without a query-invalidation vocabulary. |
 | `ActionValidator<A>` is action-typed, not model-typed | Different actions on the same model have different readiness requirements; pinning the predicate to the action keeps GUI code oblivious to model internals. |
 | `set<auto FieldPtr>(value)` over `set<Action>(&Action::f, value)` | Member-pointer NTTP encodes both the action type and the field type; the call site stays terse without losing type safety. |
 | `Rational` wire codec canonicalises on read | Wire input is untrusted; every deserialised value passes the reducing constructor, so invariants hold no matter what a client sends. |

@@ -120,7 +120,7 @@ and the call site above are unchanged.
   `Bridge` and share it.
 - **`BridgeHandler<M>`** — your typed, GUI-facing handle to one model type `M`.
   It registers `M` on the bridge on construction and deregisters on destruction
-  (RAII). This is the object you call `.execute(...)` / `.subscribe<A>(...)` on.
+  (RAII). This is the object you call `.execute(...)` / `.subscribe<R>(...)` on.
   Create one per model type, wherever in the UI you need to talk to that model.
 
 ## Multiple models across multiple files
@@ -382,14 +382,19 @@ morph is a young, actively developed library with thorough test coverage of its
 core. It is honest about the following boundaries — read the per-subsystem specs
 in [`docs/spec/`](docs/spec) before relying on any of these in production:
 
-- **Security is app-supplied.** The wire protocol has no version negotiation,
-  no message-size or timeout bounds, and no built-in authentication; `Context`
-  identity is unauthenticated and `RemoteServer` model ids are guessable
-  sequential integers with control messages unauthorized. `RemoteServer`
-  assumes a trusted, authenticated transport — it is not a hardened
-  public-internet server as shipped.
+- **Security is app-supplied.** There is no built-in authentication: `Context`
+  identity is whatever the client claims until an `IAuthorizer` verifies it, and
+  the default authorizer allows everything. Protocol version negotiation,
+  message-size and timeout bounds, opaque model ids, and register/per-instance
+  authorization hooks all ship (see `docs/spec/security.md`), but they are
+  **opt-in** — a server that configures none of them assumes a trusted,
+  authenticated transport and is not a hardened public-internet server.
 - **`Completion<T>` is a leaf callback primitive**, not a composable future: one
   handler per outcome, no `T→U` chaining, no `co_await`, no cancellation.
+- **Instance subscriptions are best-effort and in-process.** `subscribe<R>`
+  fans out to handlers on the same `Bridge`; there is no server-initiated push,
+  so two separate clients sharing an instance do not see each other's results
+  until they ask again. No replay, no durability, no coalescing.
 - **Exact numbers are fixed-width.** `Rational` is an `int64` pair; `+`/`-`/`*`
   can overflow (undefined behaviour) rather than returning an error, and high
   decimal precision shrinks the representable magnitude. Wire input is *clamped*,
@@ -399,8 +404,10 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
   the store/log divergence gap by opting into `IModelHolder::setOutboxManaged` +
   `journal::OutboxRelay` (see `docs/spec/journal/journal.md`); a model that
   doesn't opt in keeps the default fire-after-success append.
-- **Offline durability is bring-your-own.** Only an in-memory queue ships; the
-  crash-safety story depends on a durable queue you implement.
+- **Offline durability is opt-in.** `FileOfflineQueue` (NDJSON, always built)
+  and `SqliteOfflineQueue` (`MORPH_BUILD_OFFLINE_SQLITE`) both persist across
+  restarts; the in-memory queue remains the default, so crash-safety depends on
+  selecting a durable one.
 - **Registration is global and macro-driven** (per-TU, static-init, string type
   ids); there is no runtime deregistration and unknown ids fail at runtime, not
   compile time.

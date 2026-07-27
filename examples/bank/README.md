@@ -123,7 +123,7 @@ integers), so the GUI and CLI are unaffected; models map the relation values to 
 | **Auth** | register, login, change password, `WhoAmI` (session introspection) |
 | **Account** | open (checking/savings/credit), list, get, close; overdraft, interest |
 | **Transaction** | deposit, withdraw, **atomic transfer**, paginated history |
-| **Payee** | add (with IBAN validation + `set<>` streaming), remove, list |
+| **Payee** | add (with IBAN validation), remove, list |
 | **Payment** | one-off bill pay, scheduled payments, standing orders, cancel |
 | **Card** | issue debit/credit, freeze/unfreeze/cancel, set limit, change PIN |
 | **Loan** | apply (disburse), amortization schedule, repay, payoff |
@@ -132,7 +132,7 @@ integers), so the GUI and CLI are unaffected; models map the relation values to 
 | **Statement** | date-ranged credit/debit summary across all accounts |
 
 morph features exercised: `Completion` then/onError, **sessions** (principal scoping +
-authorization), **validation** (`validate()` + the `set<>`/`subscribe<>` streaming
+authorization), **validation** (`validate()` + the dispatch-path validator
 form flow), **local ↔ remote parity**, a custom **`IAuthorizer`**, and the **offline
 queue + `SyncWorker`** replay path.
 

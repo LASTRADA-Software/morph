@@ -211,17 +211,14 @@ public:
   wording ("the renderer resolves each prefill path ... and issues the
   corresponding `set<>`") — `FlowSession` does not push prefill itself.
 - **`Steps...` must be pairwise distinct.** Each step type occupies one slot
-  of both `BridgeHandler`'s per-action-type draft (bridge.md's
-  "Subscription semantics": exactly one `SubscriberEntry` per action type)
-  and `FlowSession`'s own `std::get<A>(_drafts)` tuple lookup, which requires
+  of `FlowSession`'s own `std::get<A>(_drafts)` tuple lookup, which requires
   a unique type. Reusing the same action type as two steps of one wizard is
   not supported (`static_assert`-enforced).
-- **Backend-switch behaviour is inherited, not reimplemented.** Because
-  `set<>`/`subscribe<>` are the real `BridgeHandler` calls, an in-flight
-  step's fire cancelled by `Bridge::switchBackend` surfaces
-  `BackendChangedError` on `FlowSession`'s `onError` callback exactly as
-  bridge.md documents for a lone fielded subscriber, and the draft survives
-  the switch.
+- **Backend-switch behaviour is inherited, not reimplemented.** A step is
+  dispatched with the ordinary `BridgeHandler::execute`, so an in-flight step
+  cancelled by `Bridge::switchBackend` surfaces `BackendChangedError` on
+  `FlowSession`'s `onError` callback exactly as bridge.md documents for any
+  other caller. The draft survives the switch because `FlowSession` owns it.
 
 ## The Qt/QML reference renderer
 
@@ -377,9 +374,8 @@ the typed template API (see [Design decisions](#design-decisions)).
   screen this document reserves but does not yet implement, and the
   precedent (`CollectionView.qml` shipping in `src/qt/forms`) this spec's
   `WizardView.qml` placement follows.
-- [../core/bridge.md](../core/bridge.md) — `BridgeHandler::set<>`/`subscribe<>`/
-  `unsubscribe<>`, `ActionValidator::ready`, draft persistence across fires
-  and backend switches, and `BackendChangedError` — the mechanism
+- [../core/bridge.md](../core/bridge.md) — `BridgeHandler::execute`,
+  `ActionValidator::ready`, and `BackendChangedError` — the mechanism
   `FlowSession` extends to span a sequence without adding a new dispatch path.
 - [../core/registry.md](../core/registry.md) — `ActionTraits::typeId()` and the
   `BRIDGE_REGISTER_ACTION` pattern `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP`

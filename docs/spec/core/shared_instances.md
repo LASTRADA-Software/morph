@@ -1,8 +1,4 @@
-# Keyed, shareable model instances — planned
-
-**Status:** planned, not implemented. This document is a design proposal, not a
-description of current behaviour. The authoritative present-tense specs are in
-[`docs/spec/`](../spec).
+# Keyed, shareable model instances — design
 
 ## Contents
 
@@ -38,7 +34,7 @@ The cost is visible in `examples/bank`: five controllers each construct a
 `Lightweight::DataMapper`, five SQLite connections — for what is logically one
 thing.
 
-Once models hold state ([stateful_bank_example.md](stateful_bank_example.md))
+Once models hold state ([the bank example](../../../examples/bank/README.md))
 the problem stops being wasteful and starts being wrong: five instances of
 account 42 are five divergent copies of that account's balance.
 
@@ -49,24 +45,24 @@ Most of the mechanism is present and only needs connecting.
 - **A stable per-instance identity already exists.** `HandlerBinding::contextKey`
   is documented as "stable identity of this model instance (e.g. an account
   id)" and already travels in the `register` wire envelope
-  ([wire.md](../spec/core/wire.md)). It is used **only** for journal entity keys
+  ([wire.md](wire.md)). It is used **only** for journal entity keys
   and server-side log attachment; `wire.md`'s design-decision table states
   explicitly that `contextKey` plays no part in instance routing. The vocabulary
   is there; the routing is not.
 - **Structural trait detection is an established pattern.**
-  [views.md](../spec/forms/views.md) detects `kind`, `query`, `title`, `rowKey`
+  [views.md](../forms/views.md) detects `kind`, `query`, `title`, `rowKey`
   and friends "via a `requires`-expression, not inheritance or a marker base".
   A model's key type is declared the same way.
 - **Per-instance authorization exists.** `IAuthorizer::authorizeInstance` is
   consulted on every `execute` and every `deregister`, carrying the instance id
-  and its recorded owner ([session.md](../spec/session/session.md)).
+  and its recorded owner ([session.md](../session/session.md)).
 - **One strand per instance** already gives a shared instance the serialisation
   it needs; sharing an instance changes nothing about how its actions run.
 
 ## Declaring a primary key
 
 A model declares its key type as a nested alias. Declaring it is what makes the
-model keyed; a model without it keeps today's behaviour exactly.
+model keyed; a model without it behaves exactly as an unkeyed model always has.
 
 ```cpp
 class AccountModel {
@@ -174,7 +170,7 @@ distinguishes this from a client-side handle cache.
 The directory maps `(modelTypeId, primaryKey) → ModelId`, held under the same
 `_regMtx` that guards `_models`/`_owners`, so directory membership can never
 desync from instance existence — the same invariant the connection-scope map
-already maintains ([backend.md](../spec/core/backend.md), "Connection scopes").
+already maintains ([backend.md](backend.md), "Connection scopes").
 
 Only instances created by an `AllowShared` handler are entered. A plain
 handler's instance is invisible to the directory and unreachable by key.
@@ -208,7 +204,7 @@ construction.
 ## Wire protocol changes
 
 Three additive changes. All are compatible with the additive-only evolution
-policy in [wire.md](../spec/core/wire.md), and the lenient decoding that A6
+policy in [wire.md](wire.md), and the lenient decoding that A6
 established means an older peer ignores what it does not understand.
 
 - **`register` grows `primary` and `shared`.** `primary` is the key as a string
@@ -236,7 +232,7 @@ purposes, which the framework's opt-in discipline forbids.
 `RemoteServer` records an `ownerPrincipal` for each instance at register time
 and consults `authorizeInstance` on every execute, with the documented typical
 policy being `ownerPrincipal.empty() || ownerPrincipal == ctx.principal`
-([session.md](../spec/session/session.md)).
+([session.md](../session/session.md)).
 
 Under that policy, a second client attaching to an instance the first client
 created would be **rejected**. Cross-client sharing and per-instance ownership
@@ -260,13 +256,12 @@ it inside the model, from `Context::principal`, which is the same advice
 
 ## Lifetime and the A7 connection-scope change
 
-This item **changes shipped behaviour**, which nothing in the current
-`todo.md` program did. It is unavoidable.
+This changed shipped A7 behaviour, which nothing in the §A–§E program did. It was
+unavoidable.
 
-`closeConnection(cid)` today "erases every model still recorded in `cid`'s
-scope". With cross-client sharing, that would destroy an instance another live
-client is still attached to. The scope entry must therefore become a
-**reference**, not ownership:
+`closeConnection(cid)` used to erase every model recorded in `cid`'s scope. With
+cross-client sharing that would destroy an instance another live client is still
+attached to, so a scope entry is a **reference**, not ownership:
 
 - Each attach — from any connection — increments an instance's attach count.
 - `deregister`, handler destruction, and `closeConnection` each decrement.
@@ -367,21 +362,21 @@ strictly reduces pressure on it.
   operation spanning both is a domain concern, as it is today.
 - **No state persistence provider.** What an instance holds and how it is loaded
   is entirely the model's business — see
-  [stateful_bank_example.md](stateful_bank_example.md).
+  [the bank example](../../../examples/bank/README.md).
 
 ## Cross-references
 
-- [stateful_bank_example.md](stateful_bank_example.md) — the demonstrator; a key
+- [the bank example](../../../examples/bank/README.md) — the demonstrator; a key
   identifies nothing until models hold state.
-- [instance_subscriptions.md](instance_subscriptions.md) — how attached handlers
+- [bridge.md's subscription semantics](bridge.md#subscription-semantics) — how attached handlers
   learn that a shared instance changed.
-- [bridge.md](../spec/core/bridge.md) — `HandlerBinding`, `contextKey`,
+- [bridge.md](bridge.md) — `HandlerBinding`, `contextKey`,
   `registerHandler`, and `switchBackend`'s re-registration path.
-- [backend.md](../spec/core/backend.md) — `RemoteServer`, connection scopes
+- [backend.md](backend.md) — `RemoteServer`, connection scopes
   (A7), and `LimitPolicy`.
-- [wire.md](../spec/core/wire.md) — the envelope, additive evolution, and the
+- [wire.md](wire.md) — the envelope, additive evolution, and the
   `contextKey`-vs-`modelId` decision this proposal preserves.
-- [session.md](../spec/session/session.md) — `authorizeInstance`,
+- [session.md](../session/session.md) — `authorizeInstance`,
   `authorizeRegister`, and the recorded owner principal.
-- [security.md](../spec/security.md) — the per-instance ownership hook and the
+- [security.md](../security.md) — the per-instance ownership hook and the
   trust boundary the ownerless-shared-instance decision sits inside.

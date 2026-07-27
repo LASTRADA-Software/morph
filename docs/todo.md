@@ -2,17 +2,17 @@
 
 Two programs live here:
 
-- **[§F — Stateful models](#f-stateful-models-open)** is **open**. It came out of
+- **[§F — Stateful models](#f-stateful-models-shipped)** came out of
   [issue #18](https://github.com/LASTRADA-Software/morph/issues/18) ("compare
   against Axelor / Jmix / Causeway / Orleans and find out what we are missing").
-  Its designs are in [`docs/planned/`](planned).
+  All three items have shipped.
 - **§A–§E — Production hardening & GUI generation** is **shipped**, kept for
   the rationale (priority, dependency order) that motivated the work.
   Present-tense designs for those are in [`docs/spec/`](spec).
 
 ---
 
-# §F. Stateful models (open)
+# §F. Stateful models (shipped)
 
 ## What the issue #18 survey actually found
 
@@ -42,7 +42,7 @@ already claims: hold state, be identified, be reachable.
 
 ## Accepted items
 
-### F1 — Reshape `examples/bank` onto stateful models · P0 · planned
+### F1 — Reshape `examples/bank` onto stateful models · P0 · shipped
 
 Split the per-domain models into models keyed by the entity they are named
 after, holding that entity in memory, hydrated on activation and written
@@ -50,9 +50,16 @@ through on mutation. This is first deliberately: it is what introduces the main
 idea of the library, and F2/F3 are unverifiable without it — a primary key
 identifies nothing when instances carry nothing.
 
-See [`planned/stateful_bank_example.md`](planned/stateful_bank_example.md).
+`AccountModel` holds one account in memory, keyed by account id; `CustomerModel`
+took the per-owner half (`ListAccounts`/`OpenAccount`), which was never
+account-scoped. Cross-model ledger writes settle on another model's connection,
+so `bank/db/row_versions.hpp` bumps a per-row counter and cached readers
+re-hydrate on a stale version — the example's sharpest edge, shown rather than
+arranged away. WASM shadow models and the five GUI controllers moved with it.
+See [`examples/bank/README.md`](../examples/bank/README.md), "Stateful, keyed
+models".
 
-### F2 — Keyed, shareable model instances · P0 · planned
+### F2 — Keyed, shareable model instances · P0 · shipped
 
 A model declares a `PrimaryKey`; actions declare which field carries it (or that
 their *result* establishes it); `BridgeHandler<M, AllowShared>` opts a handler
@@ -60,24 +67,34 @@ into a **server-side** instance directory, so instances are reusable across
 clients. `instances<M>()` enumerates the live keys. A keyed action re-points a
 handler rather than re-keying an instance, so key collisions do not arise.
 
-Carries a change to shipped behaviour: A7's `closeConnection` must decrement a
-reference count rather than erase, or one client's disconnect destroys an
-instance another client is using.
+Carried a change to shipped behaviour: A7's `closeConnection` now decrements a
+reference count rather than erasing, since otherwise one client's disconnect
+destroys an instance another client is using.
 
-See [`planned/shared_model_instances.md`](planned/shared_model_instances.md).
+See [`spec/core/shared_instances.md`](spec/core/shared_instances.md).
 
-### F3 — Instance subscriptions · P1 · planned
+### F3 — Instance subscriptions · P1 · shipped
 
 `subscribe<R>(cb)` keyed on the **result/state** type, firing whenever an `R` is
-produced on the attached instance by any handler on any connection. Introduces
-morph's first server-initiated wire message.
+produced on the instance the handler is attached to — by this handler, by
+another handler sharing it, or by another screen entirely.
 
-**Removes** the reactive-draft mechanism (`set<&A::field>`, `reset<A>`, the old
+**Removed** the reactive-draft mechanism (`set<&A::field>`, `reset<A>`, the old
 action-keyed `subscribe`, in-flight coalescing), whose job stateful models do
-better by holding the draft server-side. Blocked on reworking `morph::flows`,
-which is built on the mechanism being deleted.
+better by holding the draft themselves. `morph::flows::FlowSession` already
+owned its own draft tuple and merely mirrored into the handler's, so it now
+gates on `ActionValidator` and dispatches directly; its public API, the
+`w-*`/`app-*` schema, and `WizardView.qml` are unchanged.
 
-See [`planned/instance_subscriptions.md`](planned/instance_subscriptions.md).
+`ActionValidator` survives with its A1 server-side role, losing only its
+draft-readiness one. See
+[`spec/core/bridge.md`](spec/core/bridge.md#subscription-semantics) and
+[`ARCHITECTURE.md`](ARCHITECTURE.md#instance-subscriptions).
+
+**Not included:** cross-*client* push. Fan-out is per `Bridge`, so two handlers
+in one process — the case the bank GUI actually has — see each other's work,
+while two separate clients do not. A server-initiated `notify` frame would need
+both transports to grow an unsolicited-message path; that is its own item.
 
 ## Considered and refused
 
@@ -104,7 +121,7 @@ Recorded so the survey does not get re-run and so the boundary is explicit.
 - **`README.md`'s "Status & limitations" is stale.** It still claims the wire
   protocol has no version negotiation, that `RemoteServer` model ids are
   guessable sequential integers, and that only an in-memory offline queue
-  ships — all fixed by §A/§B below. Worth correcting independently of §F.
+  ships — all fixed by §A/§B below. Corrected as part of this program.
 
 ---
 
@@ -184,7 +201,7 @@ design, not a synthesized wire `deregister`. See `spec/core/backend.md#connectio
 
 > **F2 changes this.** Cross-client instance sharing requires `closeConnection`
 > to decrement a reference count rather than erase. See
-> [`planned/shared_model_instances.md`](planned/shared_model_instances.md).
+> [`spec/core/shared_instances.md`](spec/core/shared_instances.md).
 
 ---
 
