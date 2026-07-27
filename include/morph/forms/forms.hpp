@@ -116,12 +116,14 @@
 /// that distinction matters.
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <compare>
 #include <concepts>
 #include <cstddef>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <morph/detail/fixed_string.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -540,6 +542,41 @@ concept ComparableField = ::morph::forms::EmptyCapableField<V> && requires(const
     { *value <=> *value };
 };
 
+/// @brief The shared compile-time string used to capture an `equals` literal.
+///
+/// Aliased, not redefined: `morph::detail::FixedString` is the project's single
+/// canonical NTTP-capable fixed string (the forms `Choice` layer and the units
+/// layer already alias it too).
+///
+/// `equals(&A::code, "URGENT")` used to store its argument as a `std::string`,
+/// which quietly bounded the documented
+/// `static constexpr auto formRules = ruleList(...)` form to whatever fits the
+/// standard library's small-string buffer — 15 characters on libstdc++. One
+/// character more and the string allocates, so the rule node is no longer a
+/// constant expression and the declaration fails with "refers to a result of
+/// `operator new`". The limit is invisible in the source: the same code
+/// compiles or does not depending only on how long the literal is, and on which
+/// standard library is in use.
+///
+/// Holding the characters inline removes the allocation, so a literal of any
+/// length works. Passing an explicit `std::string` still stores a `std::string`
+/// (see `RuleLiteral`) and still cannot be `constexpr` when it allocates — that
+/// is inherent to the type the caller chose, not something this can fix.
+///
+/// @tparam N Literal length including its trailing NUL.
+template <std::size_t N>
+using LiteralString = ::morph::detail::FixedString<N>;
+
+/// @brief Trait: is @p T a `LiteralString`? `false` for every other type.
+/// @tparam T Type to test.
+template <typename T>
+inline constexpr bool isLiteralString = false;
+
+/// @brief `isLiteralString` specialization recognising `LiteralString<N>`.
+/// @tparam N Literal length of the recognised `LiteralString`.
+template <std::size_t N>
+inline constexpr bool isLiteralString<LiteralString<N>> = true;
+
 }  // namespace detail
 
 /// @brief Broader than `EmptyCapableField`: also covers a plain
@@ -866,7 +903,7 @@ template <typename V, typename A>
 /// never a `double`.
 template <typename T>
 concept RuleLiteral = std::same_as<T, std::int64_t> || std::same_as<T, bool> || std::same_as<T, std::string> ||
-                      std::same_as<T, ::morph::math::Rational>;
+                      std::same_as<T, ::morph::math::Rational> || detail::isLiteralString<T>;
 
 /// @brief Condition: `field`'s engaged value equals @p literal. An
 /// unengaged field is **not** vacuously satisfied here (unlike the
@@ -915,6 +952,12 @@ struct Equals {
             value["num"] = literal.numerator;
             value["den"] = literal.denominator;
             node["value"] = value;
+        } else if constexpr (detail::isLiteralString<L>) {
+            // Serialises identically to a std::string literal — the inline
+            // storage is a compile-time representation detail, not a wire one.
+            // Glaze DOM builder — same shape as every sibling assignment here.
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+            node["value"] = std::string{literal.view()};
         } else {
             node["value"] = literal;
         }
@@ -937,15 +980,24 @@ template <typename V, typename A, RuleLiteral L>
 
 /// @brief `equals` overload for a string-literal argument (`equals(&A::code,
 /// "X")`), so callers do not have to spell `std::string{"X"}` explicitly.
+///
+/// The literal is captured inline as a `detail::LiteralString`, not copied into a
+/// `std::string`, so the resulting node stays a literal type and the documented
+/// `static constexpr auto formRules = ruleList(...)` form works for a literal of
+/// any length. Stored as a `std::string`, it only worked while the text fit the
+/// standard library's small-string buffer — see `detail::LiteralString`.
+/// Serialisation is unaffected: `emitNode()` emits the same JSON string either
+/// way.
+///
 /// @tparam V Field member type (deduced).
 /// @tparam A Action type (deduced).
 /// @tparam N String literal length (deduced), including the trailing `'\0'`.
 /// @param field   Pointer to the member to test.
 /// @param literal The string literal to compare against.
-/// @return The condition node, with the literal stored as `std::string`.
+/// @return The condition node, with the literal stored inline.
 template <typename V, typename A, std::size_t N>
 [[nodiscard]] constexpr auto equals(V A::* field, const char (&literal)[N]) {
-    return Equals<V, A, std::string>{field, std::string{literal}};
+    return Equals<V, A, detail::LiteralString<N>>{field, detail::LiteralString<N>{literal}};
 }
 
 /// @brief Rule: `field` must be engaged whenever @p Cond holds; vacuously

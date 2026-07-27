@@ -287,6 +287,76 @@ TEST_CASE("Forms::Rules::Equals::StringLiteralOverload", "[forms][rules]") {
     CHECK_FALSE(cond.test(action));
 }
 
+// The documented way to declare rules is a `static constexpr formRules`
+// member, so a rule node has to be a literal type. Storing a string literal as
+// a std::string made that true only while the text fit the standard library's
+// small-string buffer (15 chars on libstdc++): one character more and the
+// declaration failed with "refers to a result of operator new". Building the
+// node as a function-local `auto const` -- as the case above does -- never
+// exercised that, which is why the limit went unnoticed. These declare at
+// namespace scope, where the constant evaluation actually happens.
+
+// glaze's reflection-based get_name() needs external linkage — the same
+// convention every other fixture in this file follows.
+// NOLINTNEXTLINE(misc-use-internal-linkage)
+struct CFRLongCodeAction {
+    std::optional<std::string> code;
+    std::optional<std::string> reason;
+    // 17 characters: one past libstdc++'s SSO buffer, so this declaration is
+    // itself the regression test -- it does not compile without the fix.
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRLongCodeAction::reason, morph::forms::equals(&CFRLongCodeAction::code, "AWAITING_APPROVAL")));
+};
+
+// See CFRLongCodeAction.
+// NOLINTNEXTLINE(misc-use-internal-linkage)
+struct CFRVeryLongCodeAction {
+    std::optional<std::string> code;
+    std::optional<std::string> reason;
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRVeryLongCodeAction::reason,
+        morph::forms::equals(&CFRVeryLongCodeAction::code, "A_VERY_LONG_STATUS_CODE_WELL_PAST_ANY_SSO_BUFFER")));
+};
+
+TEST_CASE("Forms::Rules::Equals::StringLiteralOfAnyLengthIsConstexpr", "[forms][rules]") {
+    // Evaluating the rule in a constant expression pins that the node is
+    // genuinely usable at compile time, not merely declarable.
+    static_assert([] {
+        CFRLongCodeAction probe{};
+        probe.code = "AWAITING_APPROVAL";
+        return probe.code.has_value();
+    }());
+
+    CFRLongCodeAction action{};
+    CHECK(morph::forms::allRulesSatisfied(action));  // condition does not hold -> vacuous
+    action.code = "AWAITING_APPROVAL";
+    CHECK_FALSE(morph::forms::allRulesSatisfied(action));  // now required, still unset
+    action.reason = "waiting on legal";
+    CHECK(morph::forms::allRulesSatisfied(action));
+    action.code = "SOMETHING_ELSE";
+    action.reason.reset();
+    CHECK(morph::forms::allRulesSatisfied(action));
+}
+
+TEST_CASE("Forms::Rules::Equals::VeryLongStringLiteralStillCompares", "[forms][rules]") {
+    CFRVeryLongCodeAction action{};
+    action.code = "A_VERY_LONG_STATUS_CODE_WELL_PAST_ANY_SSO_BUFFER";
+    CHECK_FALSE(morph::forms::allRulesSatisfied(action));
+    action.reason = "r";
+    CHECK(morph::forms::allRulesSatisfied(action));
+    // A prefix must not compare equal — the captured length is significant.
+    action.code = "A_VERY_LONG_STATUS_CODE";
+    action.reason.reset();
+    CHECK(morph::forms::allRulesSatisfied(action));
+}
+
+TEST_CASE("Forms::Rules::SchemaJson::LongStringLiteralSerializesAsAPlainJsonString", "[forms][rules]") {
+    // Inline capture is a compile-time representation detail; the wire form is
+    // the same JSON string a std::string literal produced.
+    auto const schema = morph::forms::schemaJson<CFRLongCodeAction>();
+    CHECK(schema.contains(R"("kind":"equals","fields":["code"],"value":"AWAITING_APPROVAL")"));
+}
+
 TEST_CASE("Forms::Rules::SchemaJson::EqualsEmitsRationalValueExactly", "[forms][rules]") {
     auto const schema = morph::forms::schemaJson<CFREqualsForm>();
     CHECK(schema.contains(R"("when":{"kind":"equals","fields":["promo"],"value":{"num":5,"den":1}})"));
