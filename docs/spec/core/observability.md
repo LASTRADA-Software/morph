@@ -133,9 +133,33 @@ first.
 ## Thread safety
 
 Metrics and tracing each have their own mutex (`metricMtx`, `traceMtx`) guarding
-their sink and their own lock-free `std::atomic<bool>` enabled flag
-(`metricsOn`, `traceOn`), independent of each other and of `morph::log`'s
-state — installing a metric sink never contends with logging or tracing.
+*installation and retrieval* of their sink, plus their own lock-free
+`std::atomic<bool>` enabled flag (`metricsOn`, `traceOn`), independent of each
+other and of `morph::log`'s state — installing a metric sink never contends with
+logging or tracing.
+
+**A sink is never invoked while the mutex is held, and never allowed to throw.**
+Each sink is stored behind a `std::shared_ptr`, so an emitter takes a
+reference-count copy under the lock, releases it, and only then calls the sink,
+inside a `catch (...)`. Both properties are load-bearing, because a sink is host
+code called from the framework's hot paths:
+
+- **Outside the lock.** `std::mutex` is not recursive, so a sink that emits a
+  metric of its own — or reinstalls itself via `setMetricSink` — would deadlock
+  against the very mutex its caller holds.
+- **Inside `catch (...)`.** A throwing sink must not escape into the framework.
+  `LocalBackend::execute` brackets each dispatch with `beginSpan` / `emitMetric`
+  / `endSpan` and settles the caller's `Completion` *after* them, precisely so a
+  completion callback cannot observe the dispatch as finished before its metrics
+  land. An exception escaping instrumentation would therefore skip
+  `setValue`/`setException` entirely and be swallowed by `StrandExecutor`'s
+  catch-and-log, leaving that `Completion` unsettled forever — a hung caller
+  with neither a value nor an error, caused by a bug in a metrics callback.
+
+A sink that throws is otherwise ignored (a failed `beginSpan` degrades to the
+`0` sentinel every call site already handles): observability may not change
+program behavior, and reporting the failure through `morph::log` would invite
+the same re-entrancy this tolerates.
 `RemoteServer`'s `_inFlightExecutes` counter (introduced alongside
 `LimitPolicy::maxInFlightExecutes`, see [backend.md](backend.md)) is a plain
 `std::atomic<std::size_t>`, read/written with relaxed ordering (advisory, like

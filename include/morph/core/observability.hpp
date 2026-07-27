@@ -4,6 +4,7 @@
 #include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <span>
 #include <string_view>
@@ -77,18 +78,22 @@ namespace detail {
 ///        mirrors `morph::log::detail::LogState` (`logger.hpp`).
 struct ObserveState {
     /// @brief Metric sink, guarded by `metricMtx`. Default: none (no-op).
-    MetricSink metricSink;
+    ///
+    /// Held behind a `shared_ptr` so an emitter can take a cheap reference-count
+    /// copy under the lock and then *release the lock before invoking it* — see
+    /// `emitMetric` for why calling a host sink under the mutex is not safe.
+    std::shared_ptr<const MetricSink> metricSink;
     /// @brief Lock-free "is a metric sink installed?" flag, read by
     ///        `emitMetric` before constructing any `MetricEvent`.
     std::atomic<bool> metricsOn{false};
-    /// @brief Guards `metricSink` and serialises its invocation.
+    /// @brief Guards installation and retrieval of `metricSink` — not its invocation.
     std::mutex metricMtx;
 
     /// @brief Trace sink, guarded by `traceMtx`. Default: none (no-op).
-    TraceSink traceSink;
+    std::shared_ptr<const TraceSink> traceSink;
     /// @brief Lock-free "is a (complete) trace sink installed?" flag.
     std::atomic<bool> traceOn{false};
-    /// @brief Guards `traceSink` and serialises its invocation.
+    /// @brief Guards installation and retrieval of `traceSink` — not its invocation.
     std::mutex traceMtx;
 };
 
@@ -102,6 +107,29 @@ inline ObserveState& observeState() {
 /// @brief Emits @p metric if a sink is installed; a single relaxed atomic load
 ///        (no mutex, no `MetricEvent` construction) if not.
 ///
+/// @par Why the sink runs outside the lock, inside a `catch (...)`
+/// Both properties are load-bearing, because a `MetricSink` is host code the
+/// framework calls from its hot paths:
+///
+/// - **Outside the lock.** `std::mutex` is not recursive, so a sink that emits a
+///   metric of its own, or reinstalls itself via `setMetricSink`, would deadlock
+///   against the very mutex its caller holds. The sink is copied out (a
+///   reference-count bump, not a `std::function` copy) and the lock released
+///   before the call.
+/// - **Inside `catch (...)`.** A throwing sink must not escape into the
+///   framework. `LocalBackend::execute` brackets each dispatch with `beginSpan`
+///   / `emitMetric` / `endSpan` and settles the caller's `Completion` *after*
+///   them, precisely so a completion callback cannot observe the dispatch as
+///   finished before its metrics land. An exception thrown out of instrumentation
+///   would therefore skip `setValue`/`setException` entirely and be swallowed by
+///   `StrandExecutor`'s catch-and-log, leaving that `Completion` unsettled
+///   forever — a hung caller with neither a value nor an error, caused by a bug
+///   in a metrics callback.
+///
+/// A sink that throws is otherwise ignored: observability is not permitted to
+/// change program behavior, and reporting the failure through `morph::log` would
+/// invite the same re-entrancy this function exists to tolerate.
+///
 /// @param metric Which metric this observation is for.
 /// @param value  The observed value.
 /// @param tags   Dimensions for this observation; empty by default.
@@ -111,9 +139,17 @@ inline void emitMetric(Metric metric, double value,
     if (!state.metricsOn.load(std::memory_order_relaxed)) {
         return;
     }
-    std::scoped_lock const lock{state.metricMtx};
-    if (state.metricSink) {
-        state.metricSink(MetricEvent{.metric = metric, .value = value, .tags = tags});
+    std::shared_ptr<const MetricSink> sink;
+    {
+        std::scoped_lock const lock{state.metricMtx};
+        sink = state.metricSink;
+    }
+    if (!sink || !*sink) {
+        return;
+    }
+    try {
+        (*sink)(MetricEvent{.metric = metric, .value = value, .tags = tags});
+    } catch (...) {  // NOLINT(bugprone-empty-catch)
     }
 }
 
@@ -130,11 +166,22 @@ inline void emitMetric(Metric metric, double value,
     if (!state.traceOn.load(std::memory_order_relaxed)) {
         return SpanId{0};
     }
-    std::scoped_lock const lock{state.traceMtx};
-    if (state.traceSink.beginSpan) {
-        return state.traceSink.beginSpan(requestId, modelType, actionType);
+    std::shared_ptr<const TraceSink> sink;
+    {
+        std::scoped_lock const lock{state.traceMtx};
+        sink = state.traceSink;
     }
-    return SpanId{0};
+    if (!sink || !sink->beginSpan) {
+        return SpanId{0};
+    }
+    // Invoked outside the lock and inside catch(...) for the same two reasons
+    // documented on `emitMetric`. A sink that throws yields the "no span"
+    // sentinel, which every call site already handles.
+    try {
+        return sink->beginSpan(requestId, modelType, actionType);
+    } catch (...) {
+        return SpanId{0};
+    }
 }
 
 /// @brief Ends the span @p id. No-op if @p id is the sentinel `0` (tracing was
@@ -147,9 +194,18 @@ inline void endSpan(SpanId id, bool ok) {
         return;
     }
     auto& state = observeState();
-    std::scoped_lock const lock{state.traceMtx};
-    if (state.traceSink.endSpan) {
-        state.traceSink.endSpan(id, ok);
+    std::shared_ptr<const TraceSink> sink;
+    {
+        std::scoped_lock const lock{state.traceMtx};
+        sink = state.traceSink;
+    }
+    if (!sink || !sink->endSpan) {
+        return;
+    }
+    // Outside the lock, inside catch(...) — see `emitMetric`.
+    try {
+        sink->endSpan(id, ok);
+    } catch (...) {  // NOLINT(bugprone-empty-catch)
     }
 }
 
@@ -164,9 +220,10 @@ inline void endSpan(SpanId id, bool ok) {
 /// @param sink New sink, or an empty `MetricSink` to disable.
 inline void setMetricSink(MetricSink sink) {
     auto& state = detail::observeState();
-    std::scoped_lock const lock{state.metricMtx};
     bool const enabled = static_cast<bool>(sink);
-    state.metricSink = std::move(sink);
+    auto held = std::make_shared<const MetricSink>(std::move(sink));
+    std::scoped_lock const lock{state.metricMtx};
+    state.metricSink = std::move(held);
     state.metricsOn.store(enabled, std::memory_order_relaxed);
 }
 
@@ -186,9 +243,10 @@ inline void setMetricSink(MetricSink sink) {
 /// @param sink New trace sink, or `TraceSink{}` to disable.
 inline void setTraceSink(TraceSink sink) {
     auto& state = detail::observeState();
-    std::scoped_lock const lock{state.traceMtx};
     bool const enabled = static_cast<bool>(sink.beginSpan) && static_cast<bool>(sink.endSpan);
-    state.traceSink = std::move(sink);
+    auto held = std::make_shared<const TraceSink>(std::move(sink));
+    std::scoped_lock const lock{state.traceMtx};
+    state.traceSink = std::move(held);
     state.traceOn.store(enabled, std::memory_order_relaxed);
 }
 
@@ -210,11 +268,15 @@ public:
         auto& state = detail::observeState();
         {
             std::scoped_lock const lock{state.metricMtx};
-            _savedMetricSink = state.metricSink;
+            if (state.metricSink) {
+                _savedMetricSink = *state.metricSink;
+            }
         }
         {
             std::scoped_lock const lock{state.traceMtx};
-            _savedTraceSink = state.traceSink;
+            if (state.traceSink) {
+                _savedTraceSink = *state.traceSink;
+            }
         }
     }
 
