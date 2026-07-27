@@ -417,3 +417,56 @@ TEST_CASE(
     REQUIRE(execWaiter.env.kind == "err");
     REQUIRE(execWaiter.env.message == "model not found");
 }
+
+// ── A register racing its own connection's close must not resurrect the scope ─
+
+TEST_CASE("morph::backend::RemoteServer: a register arriving after closeConnection is refused, not stranded",
+          "[remote][connection-scope]") {
+    // handle() *posts*, while closeConnection() runs synchronously on the
+    // transport's disconnect callback, so a client that registers and
+    // immediately drops its socket genuinely lands in this order. Recording the
+    // model with `_connectionScopes[cid]` would default-construct the scope
+    // that closeConnection just erased, and nothing ever closes a scope twice:
+    // the instance would survive with no connection able to reclaim it.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cid = server->openConnection();
+    server->closeConnection(cid);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(reg), cid);
+    REQUIRE(reg.await());
+    REQUIRE(reg.env.kind == "err");
+    REQUIRE(reg.env.message == "connection closed");
+
+    // The decisive assertion: no instance was retained. A resurrected scope
+    // would leave liveModels at 1 with no way to ever reclaim it, which is what
+    // exhausts LimitPolicy::maxLiveModels and wedges the server.
+    REQUIRE(server->health().liveModels == 0U);
+
+    // And closing again stays a no-op rather than finding a recreated scope.
+    server->closeConnection(cid);
+    REQUIRE(server->health().liveModels == 0U);
+}
+
+TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope never accumulate models",
+          "[remote][connection-scope]") {
+    // The leak is unbounded, not one-shot: every late register on a dead cid
+    // used to add another unreclaimable instance.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cid = server->openConnection();
+    server->closeConnection(cid);
+
+    for (int attempt = 0; attempt < 5; ++attempt) {
+        WaitReply reg;
+        server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(reg), cid);
+        REQUIRE(reg.await());
+        REQUIRE(reg.env.kind == "err");
+    }
+    REQUIRE(server->health().liveModels == 0U);
+}

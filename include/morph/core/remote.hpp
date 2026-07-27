@@ -582,6 +582,10 @@ public:
     }
 
 private:
+    // One flat switch over the wire's `kind` discriminator. Splitting it would
+    // scatter the authorization sequence each branch depends on across helpers,
+    // with no reader benefit.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
         ::morph::wire::Envelope env;
         try {
@@ -609,6 +613,10 @@ private:
                     std::scoped_lock const lock{_limitsMtx};
                     limits = _limits;
                 }
+                // Cheap early rejection, so a server already at its cap does not
+                // pay for authorize()/authenticate() and a model construction it
+                // is about to discard. Advisory only — the binding check is the
+                // re-test under the insert lock further below.
                 if (limits.maxLiveModels != 0) {
                     std::scoped_lock const lock{_regMtx};
                     if (_models.size() >= limits.maxLiveModels) {
@@ -656,19 +664,65 @@ private:
                 // authenticate), never the client's raw claim. This is what
                 // lets `authorizeInstance` later deny a different principal.
                 ::morph::exec::detail::ModelId const mid{nextOpaqueId()};
+                bool scopeAlreadyClosed = false;
+                bool overLiveModelCap = false;
                 {
                     std::scoped_lock const lock{_regMtx};
-                    _models[mid] = std::move(holder);
-                    _owners[mid] = std::move(env.session.principal);
+                    // Authoritative cap re-test, in the same critical section as
+                    // the insert. The check near the top of this branch releases
+                    // _regMtx before authorize(), authenticate() and
+                    // _registry.create() run, so concurrent registers all
+                    // observed the same under-cap size and every one of them
+                    // proceeded to insert -- overshooting maxLiveModels by up to
+                    // the worker pool's width. Only a check that cannot be
+                    // separated from its insert actually bounds anything.
+                    if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
+                        overLiveModelCap = true;
+                    }
                     // A non-zero cid attributes the new instance to that
                     // connection's scope, next to _models/_owners under the
                     // same lock so scope membership can never desync from
                     // instance existence. cid == 0 (the unscoped default)
                     // records nothing, matching today's behavior byte-for-byte.
-                    if (cid != 0) {
-                        _connectionScopes[cid].insert(mid);
-                        _modelConnection[mid] = cid;
+                    //
+                    // find(), never operator[]: the scope may already be gone.
+                    // handle() *posts* this work to the pool, while
+                    // closeConnection() runs synchronously on the transport's
+                    // disconnect callback from another thread, so a client that
+                    // registers and immediately drops its socket genuinely
+                    // interleaves the two. operator[] would default-construct —
+                    // resurrecting a scope closeConnection() had already
+                    // erased — and nothing ever closes a scope twice, so this
+                    // model and every later one on the dead cid would be
+                    // unreclaimable: an unbounded leak that, with
+                    // `maxLiveModels` set, wedges the server permanently at
+                    // `err "too many models"`.
+                    if (!overLiveModelCap && cid != 0) {
+                        auto scopeIter = _connectionScopes.find(cid);
+                        if (scopeIter == _connectionScopes.end()) {
+                            scopeAlreadyClosed = true;
+                        } else {
+                            scopeIter->second.insert(mid);
+                            _modelConnection[mid] = cid;
+                        }
                     }
+                    if (!overLiveModelCap && !scopeAlreadyClosed) {
+                        _models[mid] = std::move(holder);
+                        _owners[mid] = std::move(env.session.principal);
+                    }
+                }
+                if (overLiveModelCap) {
+                    // Lost the race for the last slot. `holder` goes out of
+                    // scope unregistered.
+                    reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
+                    return;
+                }
+                if (scopeAlreadyClosed) {
+                    // The connection that asked for this instance is gone. Let
+                    // `holder` go out of scope unregistered rather than leak it,
+                    // and answer the (already dead) caller honestly.
+                    reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+                    return;
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
             } else if (env.kind == "deregister") {
@@ -729,12 +783,21 @@ private:
         }
     }
 
+    // A single ordered gate sequence — limits, authorize, authenticate, lookup,
+    // per-instance authorize — whose *order* is the security contract itself
+    // (see docs/spec/security.md), so it is deliberately not broken up.
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
     void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
         LimitPolicy limits;
         {
             std::scoped_lock const lock{_limitsMtx};
             limits = _limits;
         }
+        // Cheap early shed, so an overloaded server does not pay for
+        // authorize()/authenticate() on work it is about to refuse. Advisory
+        // only — the binding check is the atomic reservation further below,
+        // since this load and that increment are separated by authorization
+        // and a registry lookup.
         if (limits.maxInFlightExecutes != 0 &&
             _inFlightExecutes.load(std::memory_order_relaxed) >= limits.maxInFlightExecutes) {
             reply(::morph::wire::encode(::morph::wire::makeErr("server busy", env.callId)));
@@ -800,7 +863,34 @@ private:
         // as the executeInFlight metric's gauge, health()'s inFlight field, and
         // drainedWithin()'s drain-detection condition — one counter, four
         // consumers, never double-counted.
-        auto const inFlightAfterInc = _inFlightExecutes.fetch_add(1, std::memory_order_relaxed) + 1;
+        //
+        // Reserved with a compare-exchange rather than an unconditional
+        // fetch_add, so `maxInFlightExecutes` is an actual bound. The advisory
+        // check at the top of this function is a plain load, and authorize(),
+        // authenticate() and the registry lookup all run between it and here —
+        // long enough for every thread in the worker pool to observe the same
+        // under-limit value and proceed, overshooting the cap by up to the
+        // pool's width. That is exactly the burst the limit exists to prevent.
+        // Reserving here, at the last point before the slot is genuinely taken,
+        // needs no unwind on the early-return paths above.
+        std::size_t inFlightAfterInc = 0;
+        if (limits.maxInFlightExecutes != 0) {
+            std::size_t current = _inFlightExecutes.load(std::memory_order_relaxed);
+            for (;;) {
+                if (current >= limits.maxInFlightExecutes) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("server busy", env.callId)));
+                    return;
+                }
+                // compare_exchange_weak refreshes `current` on failure, so a
+                // losing thread re-tests the limit rather than forcing its way in.
+                if (_inFlightExecutes.compare_exchange_weak(current, current + 1, std::memory_order_relaxed)) {
+                    inFlightAfterInc = current + 1;
+                    break;
+                }
+            }
+        } else {
+            inFlightAfterInc = _inFlightExecutes.fetch_add(1, std::memory_order_relaxed) + 1;
+        }
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
         auto self = shared_from_this();
