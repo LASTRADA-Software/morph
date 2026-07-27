@@ -29,12 +29,33 @@ target_compile_options(fuzz_dispatch_execute PRIVATE -Wno-missing-prototypes)
 # that every previously-committed seed and finding still passes -- it does
 # NOT run a fuzzing campaign (that is a manual/scheduled step; see
 # docs/spec/testing_strategy.md).
-file(GLOB FUZZ_WIRE_DECODE_INPUTS CONFIGURE_DEPENDS
-     "${CMAKE_CURRENT_SOURCE_DIR}/corpus/wire_decode/*.txt"
-     "${CMAKE_CURRENT_SOURCE_DIR}/findings/wire_decode/*.txt")
-file(GLOB FUZZ_DISPATCH_EXECUTE_INPUTS CONFIGURE_DEPENDS
-     "${CMAKE_CURRENT_SOURCE_DIR}/corpus/dispatch_execute/*.txt"
-     "${CMAKE_CURRENT_SOURCE_DIR}/findings/dispatch_execute/*.txt")
+#
+# The globs are deliberately extension-agnostic (`*`, not `*.txt`): a fuzzer
+# input is an arbitrary byte string, and crash reproducers minimized by
+# libFuzzer are conventionally saved as `.bin`. An extension-scoped glob
+# silently skips whatever it does not match, so a committed reproducer can stop
+# being replayed without any test turning red -- which is exactly what happened
+# to findings/*/*.bin. Every file present is replayed; nothing else belongs in
+# these directories.
+function(morph_collect_fuzz_inputs out_var harness)
+    file(GLOB inputs CONFIGURE_DEPENDS
+         "${CMAKE_CURRENT_SOURCE_DIR}/corpus/${harness}/*"
+         "${CMAKE_CURRENT_SOURCE_DIR}/findings/${harness}/*")
+    # A replay test over an empty input list is a libFuzzer invocation with no
+    # FILE arguments -- i.e. an unbounded fuzzing campaign, not a regression
+    # check -- so an empty glob is a configuration error, not a silent pass.
+    if(NOT inputs)
+        message(FATAL_ERROR
+            "No fuzz replay inputs found for '${harness}': both "
+            "tests/fuzz/corpus/${harness}/ and tests/fuzz/findings/${harness}/ "
+            "are empty or missing. The replay test would degrade into an "
+            "unbounded fuzzing run.")
+    endif()
+    set(${out_var} "${inputs}" PARENT_SCOPE)
+endfunction()
+
+morph_collect_fuzz_inputs(FUZZ_WIRE_DECODE_INPUTS wire_decode)
+morph_collect_fuzz_inputs(FUZZ_DISPATCH_EXECUTE_INPUTS dispatch_execute)
 
 add_test(NAME fuzz_wire_decode_replay COMMAND fuzz_wire_decode ${FUZZ_WIRE_DECODE_INPUTS})
 add_test(NAME fuzz_dispatch_execute_replay COMMAND fuzz_dispatch_execute ${FUZZ_DISPATCH_EXECUTE_INPUTS})

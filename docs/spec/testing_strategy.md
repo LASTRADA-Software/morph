@@ -42,7 +42,7 @@ the existing hardening tests (`test_wire_hardening.cpp`, `test_server_limits.cpp
 — a valid register/execute/deregister envelope, a duplicate-key envelope, a
 moderately-nested body, a malformed-UTF-8 body, and plain garbage.
 `tests/fuzz/findings/wire_decode/` and `tests/fuzz/findings/dispatch_execute/`
-start empty (marked with a tracked `.gitkeep`) and are where any input that
+hold the committed reproducers (two today) and are where any input that
 triggers a crash/hang/sanitizer report **in a bug that has since been fixed**
 gets committed as a permanent regression case — see "Known findings" below for
 inputs discovered but not yet in that state.
@@ -53,6 +53,18 @@ replay mode — passing individual files, not a directory, so it replays and
 exits rather than starting a mutating fuzzing session) and fails if any input
 now crashes. This is fast and deterministic, suitable for CI; it is **not** a
 fuzzing campaign.
+
+The input globs are deliberately **extension-agnostic** (`*`, not `*.txt`): a
+fuzzer input is an arbitrary byte string, and a libFuzzer-minimized reproducer
+is conventionally saved as `.bin`. An extension-scoped glob silently skips
+whatever it does not match, which is exactly what happened — both committed
+reproducers are `.bin`, so the replay tests ran only the seeds and never the
+crash inputs, leaving the test that exists to catch a `skip_ws` regression green
+if the bug came back. An empty glob is now a configure-time `FATAL_ERROR` too:
+a replay invocation with no `FILE` arguments is an unbounded fuzzing run, not a
+regression check. CI additionally asserts, after the run, that every file under
+`tests/fuzz/findings/` was actually referenced — a guard that never fires is
+indistinguishable from one that works.
 
 **Running an actual campaign** (manual / scheduled, not CI-per-commit):
 ```
@@ -100,9 +112,22 @@ regression cases under `tests/fuzz/findings/`:
   `\xHH` placeholder before it reaches the writer. Diagnostic text doesn't
   need byte-for-byte fidelity; guaranteed-valid JSON does.
 
-Both fixes are covered by dedicated regression tests in
-`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D") in addition to the
-`fuzz_*_replay` findings above.
+  That fix covered `message` only. The same writer gap applies to **every**
+  `Envelope` string — `body`, `modelType`, `actionType`, `contextKey`, `typeId`,
+  and the session's `principal`/`token` — which carry caller data that must
+  round-trip byte-for-byte, so substitution is the wrong instrument there. Worse
+  than invalid output, glaze's chunked write path *corrupts* such a byte when
+  the same string also holds a `\` or `"`, emitting two `0x00` bytes in its
+  place; the envelope still decodes, so nothing downstream can notice. Now fixed
+  at the writer with `wire::detail::EscapingWriteOpts` (glaze's
+  `escape_control_characters`), which is lossless in both directions.
+  `makeErr` keeps its substitution for a different reason: an err message is
+  log-bound text, and a raw `0x1B` in it would carry an ANSI escape into the
+  reader's terminal.
+
+These fixes are covered by dedicated regression tests in
+`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D"/"Bug E"/"Bug F") in addition to
+the `fuzz_*_replay` findings above.
 
 ## Soak tests (`tests/soak/`)
 

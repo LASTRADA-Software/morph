@@ -94,6 +94,25 @@ target_compile_definitions(morph_tests PRIVATE
 
 target_include_directories(morph_tests PRIVATE ${CMAKE_BINARY_DIR}/generated)
 
+# MORPH_REQUIRE_VETTED_HMAC is a *deployment* switch aimed at application call
+# sites; it rides in on morph::morph's INTERFACE compile definitions. morph's
+# own suite deliberately exercises the reference hmacSha256 through its default
+# argument (test_session_auth.cpp, test_security_fixes.cpp,
+# test_policy_hardening.cpp, test_register_authorization.cpp), so the inherited
+# definition is undefined again for this target only. Without this, configuring
+# the documented `-DMORPH_REQUIRE_VETTED_HMAC=ON` would fail to build unless
+# tests were also switched off — which would leave the option itself untested.
+# The guard's own correctness is proven independently by the three try_compile
+# probes below, which set/omit the macro per probe regardless of the option.
+#
+# COMPILE_OPTIONS rather than COMPILE_DEFINITIONS: CMake's compile rule expands
+# <DEFINES> before <FLAGS>, so a `-U` in the flags reliably wins over the `-D`
+# inherited from the interface target.
+if(MORPH_REQUIRE_VETTED_HMAC)
+    target_compile_options(morph_tests PRIVATE
+        "$<IF:$<CXX_COMPILER_ID:MSVC>,/UMORPH_REQUIRE_VETTED_HMAC,-UMORPH_REQUIRE_VETTED_HMAC>")
+endif()
+
 # /w14062 (enabled project-wide) only fires when an enum switch has no
 # `default`; test_pinned_facts.cpp's exhaustive enum-cardinality switches keep
 # a `default:` (so GCC/Clang's -Wswitch-default does not fire), which would

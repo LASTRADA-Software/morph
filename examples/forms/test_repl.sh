@@ -28,8 +28,17 @@ out=$(printf '%s\n%s\n%s\t%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
     'DeleteSample {"id":0}' \
     | "$demo")
 
-echo "$out" | grep -q 'ok:  {"num":5301,"den":2,"dp":4}' || { echo "FAIL: canonical submit"; exit 1; }
-echo "$out" | grep -q 'ok:  {"num":5301,"den":2,"dp":4}' || { echo "FAIL: converted-units submit"; exit 1; }
+# The first two inputs are the same measurement expressed in different units
+# and decimal places, so the property under test is that they reduce to the
+# *same* exact canonical result -- which means counting the matching lines, not
+# grepping for one twice. (Two identical `grep -q` calls, which is what stood
+# here, are satisfied by a single occurrence: the second asserted nothing, and
+# the converted-units submit could have vanished entirely without failing.)
+canonical_hits=$(echo "$out" | grep -c 'ok:  {"num":5301,"den":2,"dp":4}' || true)
+[ "$canonical_hits" -eq 2 ] || {
+    echo "FAIL: expected the canonical and the converted-units submit to yield the same exact result twice, got $canonical_hits matching line(s)"
+    exit 1
+}
 echo "$out" | grep -q 'sample 7 at 2026-07-05T14:30:00.000Z' || { echo "FAIL: tab-separated line"; exit 1; }
 echo "$out" | grep -q 'err: .*syntax_error' || { echo "FAIL: malformed datetime not rejected"; exit 1; }
 echo "$out" | grep -q 'err: action failed validation: LabModel/RecordMeasurement' \

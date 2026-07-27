@@ -225,16 +225,20 @@ configuration the deployer chooses, not on `CMAKE_BUILD_TYPE`: a zero-dependency
 local/low-stakes deployment can keep shipping the reference impl by leaving it
 off. It has no effect on code that already passes a `MacFunction` explicitly.
 
-Because morph's own test suite (`tests/test_session_auth.cpp`) deliberately
-exercises the reference `hmacSha256` via its default argument, building
-`MORPH_BUILD_TESTS=ON` together with `MORPH_REQUIRE_VETTED_HMAC=ON` fails for
-that file specifically; a production build enabling the guard should configure
-with `-DMORPH_BUILD_TESTS=OFF -DMORPH_BUILD_EXAMPLES=OFF`, matching the
-Doxygen-build recipe already used elsewhere in this repo. The guard's own
-correctness — that it blocks the default, still allows an explicit
-`MacFunction`, and is a no-op when off — is proven at configure time by three
-`try_compile` checks in `tests/CMakeLists.txt` (see "Testing" below), which run
-independently of the top-level option's value.
+The guard is a deployment switch aimed at *application* call sites, so it does
+not apply to morph's own suite: several test files (`test_session_auth.cpp`,
+`test_security_fixes.cpp`, `test_policy_hardening.cpp`,
+`test_register_authorization.cpp`) deliberately exercise the reference
+`hmacSha256` through its default argument, and `tests/CMakeLists.txt` undoes
+the inherited definition for the `morph_tests` target alone (a `-U` in that
+target's compile options, which CMake expands after the interface `-D`).
+`MORPH_BUILD_TESTS=ON` and `MORPH_REQUIRE_VETTED_HMAC=ON` therefore compose:
+CI builds and tests exactly that combination, which is what keeps the option
+from rotting. The guard's own correctness — that it blocks the default, still
+allows an explicit `MacFunction`, and is a no-op when off — is proven at
+configure time by three `try_compile` checks in `tests/CMakeLists.txt` (see
+"Testing" below), which set or omit the macro per probe and so run
+independently of both the top-level option's value and that `-U`.
 
 ### Issuing tokens — the login flow
 
