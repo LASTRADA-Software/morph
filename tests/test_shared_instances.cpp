@@ -69,6 +69,13 @@ struct ShiCreated {
     std::int64_t value = 0;
 };
 
+/// Like ShiCreate, but the caller picks the id the reply will carry — the only
+/// way to force a key collision through the public API.
+struct ShiCreateAs {
+    std::int64_t wantId = 0;
+    std::int64_t initial = 0;
+};
+
 struct ShiCounterModel {
     using PrimaryKey = std::int64_t;
 
@@ -86,6 +93,11 @@ struct ShiCounterModel {
         value = act.initial;
         return {.id = nextId.fetch_add(1), .value = value};
     }
+
+    ShiCreated execute(const ShiCreateAs& act) {
+        value = act.initial;
+        return {.id = act.wantId, .value = value};
+    }
 };
 
 BRIDGE_REGISTER_MODEL(ShiCounterModel, "SHI_CounterModel")
@@ -93,10 +105,12 @@ BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiAddTo, "SHI_AddTo")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiRead, "SHI_Read")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiPeek, "SHI_Peek")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiCreate, "SHI_Create")
+BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiCreateAs, "SHI_CreateAs")
 
 BRIDGE_KEY_FROM(ShiAddTo, &ShiAddTo::id);
 BRIDGE_KEY_FROM(ShiRead, &ShiRead::id);
 BRIDGE_KEY_FROM_RESULT(ShiCreate, &ShiCreated::id);
+BRIDGE_KEY_FROM_RESULT(ShiCreateAs, &ShiCreated::id);
 // NOLINTEND(misc-use-internal-linkage)
 
 namespace {
@@ -349,6 +363,45 @@ TEST_CASE("a result-sourced key promotes across a remote backend", "[shared-inst
     auto created = settle(creator.execute(ShiCreate{.initial = 11}));
     REQUIRE(creator.primary().value_or(-1) == created.id);
     REQUIRE(settle(creator.execute(ShiPeek{})).value == 11);
+}
+
+TEST_CASE("promoting onto a key another instance holds leaves the incumbent alone", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    // Hold key 4242 with a real instance carrying state.
+    BridgeHandler<ShiCounterModel, AllowShared> incumbent{bridge, &exec};
+    settle(incumbent.execute(ShiAddTo{.id = 4242, .amount = 99}));
+
+    // A creating action whose generated key collides with it must not displace
+    // the incumbent: the existing holder always wins, so no handler silently
+    // ends up pointing at a different instance than the one it created.
+    BridgeHandler<ShiCounterModel, AllowShared> collider{bridge, &exec};
+    settle(collider.execute(ShiCreateAs{.wantId = 4242, .initial = 7}));
+
+    REQUIRE(settle(incumbent.execute(ShiPeek{})).value == 99);
+    REQUIRE(settle(incumbent.instances()) == std::vector<std::int64_t>{4242});
+}
+
+TEST_CASE("attaching to the key a handler already holds is a no-op", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    settle(handler.execute(ShiAddTo{.id = 55, .amount = 8}));
+
+    // Re-attaching to the same key must not release and re-acquire the
+    // instance, which would silently discard its state.
+    handler.attach(55);
+    handler.attach(55);
+    REQUIRE(settle(handler.execute(ShiPeek{})).value == 8);
+}
+
+TEST_CASE("instances() is empty before anything is attached", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    REQUIRE(settle(handler.instances()).empty());
 }
 
 TEST_CASE("primary keys round-trip through their canonical encoding", "[shared-instances]") {
