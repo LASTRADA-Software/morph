@@ -68,11 +68,14 @@ dto::AccountList CustomerModel::execute(const dto::ListAccounts& action) {
     // than issuing a manual `WHERE user_id = ?` — the relation resolves the join
     // for us and returns the user's accounts directly.
     const auto userId = db::requireUserId(mapper(), owner);
-    auto user = mapper().QuerySingle<db::UserRecord>(userId).value();
+    auto user = mapper().QuerySingle<db::UserRecord>(userId);
+    if (!user.has_value()) {
+        throw NotFound{"owner not found"};
+    }
 
     dto::AccountList out;
-    out.accounts.reserve(user.accounts.Count());
-    for (const auto& account : user.accounts.All()) {
+    out.accounts.reserve(user->accounts.Count());
+    for (const auto& account : user->accounts.All()) {
         out.accounts.push_back(db::toAccountInfo(*account, owner));
     }
     return out;

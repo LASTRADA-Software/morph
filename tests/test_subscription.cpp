@@ -29,6 +29,10 @@
 // ── Fixture: a stateful counter, so a subscription reports real shared state ──
 
 /// The state type subscribers name. Produced by more than one action, which is
+// Model, action and result types need **external** linkage: glaze's
+// plain-aggregate reflection cannot see into an anonymous namespace, and the
+// BRIDGE_REGISTER_* macros specialise templates at global scope.
+// NOLINTBEGIN(misc-use-internal-linkage)
 /// exactly the case result-keyed subscription exists to serve.
 struct SubCounterState {
     std::int64_t value = 0;
@@ -65,8 +69,8 @@ struct SubCounterModel {
         value += act.by;
         return {.value = value};
     }
-    SubCounterState execute(const SubRead& /*act*/) const { return {.value = value}; }
-    SubLabelState execute(const SubLabel& /*act*/) const { return {.text = "label"}; }
+    [[nodiscard]] SubCounterState execute(const SubRead& /*act*/) const { return {.value = value}; }
+    [[nodiscard]] static SubLabelState execute(const SubLabel& /*act*/) { return {.text = "label"}; }
     static SubCounterState execute(const SubExplode& /*act*/) { throw std::runtime_error{"boom"}; }
 };
 
@@ -80,6 +84,7 @@ BRIDGE_KEY_FROM(SubBump, &SubBump::id);
 BRIDGE_KEY_FROM(SubRead, &SubRead::id);
 BRIDGE_KEY_FROM(SubLabel, &SubLabel::id);
 BRIDGE_KEY_FROM(SubExplode, &SubExplode::id);
+// NOLINTEND(misc-use-internal-linkage)
 
 namespace {
 
@@ -91,7 +96,7 @@ using morph::bridge::BridgeHandler;
 template <typename T>
 void drain(morph::async::Completion<T> comp) {
     auto done = std::make_shared<std::atomic<bool>>(false);
-    std::move(comp).then([done](T) { done->store(true); }).onError([done](const std::exception_ptr&) {
+    std::move(comp).then([done](const T&) { done->store(true); }).onError([done](const std::exception_ptr&) {
         done->store(true);
     });
     REQUIRE(morph::testing::waitUntil([&] { return done->load(); }));
@@ -183,7 +188,7 @@ TEST_CASE("distinct result types do not interfere", "[bridge][subscription]") {
     int counters = 0;
     int labels = 0;
     handler.subscribe<SubCounterState>([&](SubCounterState) { ++counters; });
-    handler.subscribe<SubLabelState>([&](SubLabelState) { ++labels; });
+    handler.subscribe<SubLabelState>([&](const SubLabelState&) { ++labels; });
 
     drain(handler.execute(SubBump{.id = 40, .by = 1}));
     REQUIRE(counters == 1);

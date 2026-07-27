@@ -63,8 +63,8 @@ TEST_CASE("two shared handlers on one account reach one instance", "[stateful-ac
     REQUIRE(await(screen.execute(bank::dto::GetAccount{.id = acct}), app.guiLoop()).id == acct);
     REQUIRE(await(sidebar.execute(bank::dto::GetAccount{.id = acct}), app.guiLoop()).id == acct);
 
-    REQUIRE(screen.primary().value() == acct);
-    REQUIRE(sidebar.primary().value() == acct);
+    REQUIRE(screen.primary().value_or(-1) == acct);
+    REQUIRE(sidebar.primary().value_or(-1) == acct);
 
     // The directory holds exactly one entry for the account both handlers named.
     REQUIRE(await(screen.instances(), app.guiLoop()) == std::vector<std::int64_t>{acct});

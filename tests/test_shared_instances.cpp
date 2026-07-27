@@ -35,6 +35,10 @@ namespace {
 }  // namespace
 
 /// A counter whose value lives *in the instance* — the whole point of keying.
+// Model, action and result types need **external** linkage: glaze's
+// plain-aggregate reflection cannot see into an anonymous namespace, and the
+// BRIDGE_REGISTER_* macros specialise templates at global scope.
+// NOLINTBEGIN(misc-use-internal-linkage)
 /// A stateless model would make every one of these tests vacuous.
 struct ShiCounterState {
     std::int64_t value = 0;
@@ -63,8 +67,8 @@ struct ShiCounterModel {
         value += act.amount;
         return {.value = value};
     }
-    ShiCounterState execute(const ShiRead& /*act*/) const { return {.value = value}; }
-    ShiCounterState execute(const ShiPeek& /*act*/) const { return {.value = value}; }
+    [[nodiscard]] ShiCounterState execute(const ShiRead& /*act*/) const { return {.value = value}; }
+    [[nodiscard]] ShiCounterState execute(const ShiPeek& /*act*/) const { return {.value = value}; }
 };
 
 BRIDGE_REGISTER_MODEL(ShiCounterModel, "SHI_CounterModel")
@@ -74,6 +78,7 @@ BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiPeek, "SHI_Peek")
 
 BRIDGE_KEY_FROM(ShiAddTo, &ShiAddTo::id);
 BRIDGE_KEY_FROM(ShiRead, &ShiRead::id);
+// NOLINTEND(misc-use-internal-linkage)
 
 namespace {
 
@@ -125,8 +130,8 @@ TEST_CASE("two AllowShared handlers naming one key reach one instance", "[shared
     REQUIRE(settle(second.execute(ShiAddTo{.id = 42, .amount = 5})).value == 15);
     REQUIRE(settle(first.execute(ShiRead{.id = 42})).value == 15);
 
-    REQUIRE(first.primary().value() == 42);
-    REQUIRE(second.primary().value() == 42);
+    REQUIRE(first.primary().value_or(-1) == 42);
+    REQUIRE(second.primary().value_or(-1) == 42);
 }
 
 TEST_CASE("a plain handler never joins the directory", "[shared-instances]") {
@@ -173,7 +178,7 @@ TEST_CASE("a keyed action re-points the handler rather than re-keying the instan
     // The primary is deliberately not write-once: naming another key moves the
     // *handler*, leaving instance 100 and its state intact for `pinned`.
     settle(mover.execute(ShiAddTo{.id = 200, .amount = 1}));
-    REQUIRE(mover.primary().value() == 200);
+    REQUIRE(mover.primary().value_or(-1) == 200);
     REQUIRE(settle(pinned.execute(ShiPeek{})).value == 50);
 }
 
@@ -240,7 +245,7 @@ TEST_CASE("explicit attach binds without executing an action", "[shared-instance
     REQUIRE_FALSE(handler.primary().has_value());
 
     handler.attach(64);
-    REQUIRE(handler.primary().value() == 64);
+    REQUIRE(handler.primary().value_or(-1) == 64);
     // A keyless action now has an instance to run against.
     REQUIRE(settle(handler.execute(ShiPeek{})).value == 0);
 }

@@ -46,6 +46,8 @@ int defaultInterestBps(int kind) { return kind == static_cast<int>(AccountKind::
 
 }  // namespace
 
+// execute() is morph's dispatch contract; every model spells it as a member.
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 dto::AccountInfo CustomerModel::execute(const dto::OpenAccount& action) {
     if (!action.validate()) {
         throw ValidationError{"invalid account kind/currency/overdraft"};
@@ -69,6 +71,7 @@ dto::AccountInfo CustomerModel::execute(const dto::OpenAccount& action) {
     return toInfo(rec, owner);
 }
 
+// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 dto::AccountList CustomerModel::execute(const dto::ListAccounts& action) {
     const std::string owner = resolveOwner(action.owner);
     if (owner.empty()) {

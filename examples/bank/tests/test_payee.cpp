@@ -66,7 +66,7 @@ TEST_CASE("PayeeModel notifies subscribers of the state it produces", "[payee][s
     // which action produced it.
     std::atomic<bool> fired{false};
     std::int64_t newId = 0;
-    payees.subscribe<bank::dto::PayeeInfo>([&](bank::dto::PayeeInfo info) {
+    payees.subscribe<bank::dto::PayeeInfo>([&](const bank::dto::PayeeInfo& info) {
         newId = info.id;
         fired.store(true);
     });

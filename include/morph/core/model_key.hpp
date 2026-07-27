@@ -49,7 +49,7 @@ concept KeyedModel = requires { typename M::PrimaryKey; } && ModelKey<typename M
 /// @brief The declared key type of a keyed model.
 /// @tparam M Keyed model type.
 template <KeyedModel M>
-using PrimaryKeyOf = typename M::PrimaryKey;
+using PrimaryKeyOf = M::PrimaryKey;
 
 /// @brief Encodes a primary key as its canonical wire string.
 ///
@@ -83,9 +83,12 @@ template <ModelKey K>
         return std::string{text};
     } else {
         K value{};
-        const auto* const first = text.data();
-        const auto* const last = first + text.size();
-        auto [ptr, errc] = std::from_chars(first, last, value);
+        // from_chars is a [first, last) pointer API; a string_view's data()+size()
+        // is the only way to express its end, and is exactly what the standard
+        // intends here.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+        auto [ptr, errc] = std::from_chars(text.data(), text.data() + text.size(), value);
+        const auto* const last = text.data() + text.size();  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
         if (errc != std::errc{} || ptr != last) {
             throw std::runtime_error("invalid primary key encoding: '" + std::string{text} + "'");
         }
@@ -123,6 +126,10 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 
 }  // namespace morph::model
 
+// NOLINTBEGIN(cppcoreguidelines-macro-usage) — declaration macros are the intended public API,
+// matching BRIDGE_REGISTER_MODEL/ACTION in registry.hpp: they must emit a template
+// specialisation at global scope, which no function template can do.
+
 /// @brief Declares that action `A` carries its model's primary key in `MEMBER`.
 ///
 /// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&GetAccount::id`) whose
@@ -158,3 +165,5 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
             return morph::model::keyToString(result.*MEMBER); \
         }                                                     \
     }
+
+// NOLINTEND(cppcoreguidelines-macro-usage)

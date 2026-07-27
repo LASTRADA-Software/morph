@@ -47,7 +47,7 @@ TEST_CASE("Example Model", "[model]") {
         REQUIRE(output.result == 6.0);
         fired.store(true);
     });
-    handler.execute(ActionInput{1.0, 2.0, 3.0});
+    handler.execute(ActionInput{.a = 1.0, .b = 2.0, .c = 3.0});
 
     std::this_thread::sleep_for(std::chrono::milliseconds{50});
     REQUIRE(fired.load() == true);
