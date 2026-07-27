@@ -407,6 +407,12 @@ public:
         std::vector<std::pair<std::function<void(const std::any&)>, ::morph::exec::IExecutor*>> targets;
         {
             std::scoped_lock const lock{_subMtx};
+            // Prune while we are already holding the lock and walking the list:
+            // a handler that is destroyed without unsubscribing would otherwise
+            // leave its entry behind until some *other* handler happened to call
+            // add/removeSubscription, which in a long-lived app with many
+            // transient handlers is never.
+            std::erase_if(_subscriptions, [](const InstanceSubscription& entry) { return entry.binding.expired(); });
             for (const auto& entry : _subscriptions) {
                 auto owner = entry.binding.lock();
                 if (owner && entry.type == type && owner->currentId.load() == mid.v && entry.sink) {
