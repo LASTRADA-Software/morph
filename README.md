@@ -196,6 +196,60 @@ out of scope it cleanly deregisters itself.
 > locally via a capturing factory will fail at `register` time in remote mode if
 > it isn't macro-registered.
 
+## Shared model instances
+
+By default each `BridgeHandler` owns its own model instance — two handlers for
+`AccountModel` are two independent objects. When several screens should be
+looking at *the same* account, give the model a **primary key** and opt the
+handlers into sharing. The model class itself does not change:
+
+```cpp
+struct AccountModel {                        // still a plain C++ class
+    AccountInfo execute(const LoadAccount&); // ← names the account
+    Balance     execute(const Deposit&);     // ← keyless
+    Balance     execute(const GetBalance&);  // ← keyless
+};
+
+BRIDGE_REGISTER_MODEL (AccountModel, "AccountModel")
+BRIDGE_REGISTER_ACTION(AccountModel, LoadAccount, "LoadAccount")
+BRIDGE_REGISTER_ACTION(AccountModel, Deposit,     "Deposit")
+BRIDGE_REGISTER_ACTION(AccountModel, GetBalance,  "GetBalance")
+
+// One line: deduces the key type from the field, and marks LoadAccount as the
+// action that carries it.
+BRIDGE_MODEL_KEY(AccountModel, LoadAccount, &LoadAccount::id);
+```
+
+Attachment is then automatic — a key is named exactly once, and everything
+afterwards follows the handler:
+
+```cpp
+using morph::bridge::AllowShared;
+morph::bridge::BridgeHandler<AccountModel, AllowShared> screen {bridge, &guiExecutor};
+morph::bridge::BridgeHandler<AccountModel, AllowShared> sidebar{bridge, &guiExecutor};
+
+screen .execute(LoadAccount{.id = 32});   // no instance for 32 yet → constructs one
+sidebar.execute(LoadAccount{.id = 32});   // 32 is live → attaches, constructs nothing
+
+screen .execute(Deposit{.amountMinor = 100});   // keyless → instance 32
+sidebar.execute(GetBalance{});                  // keyless → instance 32, sees the 100
+```
+
+- **The directory is server-side**, so with a remote backend two *clients* also
+  meet on one instance, not just two handlers in one process.
+- **Lifetime is refcounted**: the instance lives until the last handler attached
+  to it goes away — including across a dropped connection.
+- **`BridgeHandler<Model>` is unchanged.** Sharing is opt-in per handler; a
+  plain handler still gets its own private instance and is invisible to the
+  directory.
+- `handler.instances()` returns the live keys, and `handler.attach(key)` binds
+  without executing anything.
+
+Sharing only earns its keep when a model actually *holds* state — see
+[`examples/bank`](examples/bank), whose `AccountModel` keeps one account in
+memory. Full design in
+[`docs/spec/core/shared_instances.md`](docs/spec/core/shared_instances.md).
+
 ## Subsystems
 
 morph is layered: the async/bridge core is always present; everything else is an
@@ -205,7 +259,7 @@ opt-in header you include only if you need it.
 |---|---|---|
 | `morph::exec` | `executor.hpp`, `strand.hpp` | `IExecutor`, `ThreadPoolExecutor`, `MainThreadExecutor`, per-model `StrandExecutor` |
 | `morph::async` | `completion.hpp` | `Completion<T>` — move-only result handle with `.then` / `.onError` |
-| `morph::model` | `registry.hpp`, `model.hpp` | Registration traits, validators, `ActionDispatcher`, type-erased holders |
+| `morph::model` | `registry.hpp`, `model.hpp`, `model_key.hpp` | Registration traits, validators, `ActionDispatcher`, type-erased holders, model primary keys |
 | `morph::backend` | `backend.hpp`, `remote.hpp` | `LocalBackend`, `RemoteServer`, `SimulatedRemoteBackend` |
 | `morph::bridge` | `bridge.hpp` | `Bridge`, `BridgeHandler<M>` — the user-facing API |
 | `morph::wire` | `wire.hpp` | JSON `Envelope` protocol between client and server |

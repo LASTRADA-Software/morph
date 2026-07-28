@@ -412,6 +412,41 @@ handler.execute(MyAction{21})
     .onError([](std::exception_ptr e) { /* runs on GUI thread */ });
 ```
 
+## Keyed, shareable model instances
+
+A `BridgeHandler` normally registers its own model instance. A model that
+declares a **primary key** can instead have its instances shared: handlers that
+name the same key reach one instance, through a directory the *server* owns, so
+the sharing spans clients and not merely handlers.
+
+The key is declared beside the registrations, never inside the model class:
+
+```cpp
+BRIDGE_MODEL_KEY(AccountModel, LoadAccount, &LoadAccount::id);  // key type deduced
+BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);               // also carries it
+```
+
+`BRIDGE_MODEL_KEY` appears once per model — it specialises
+`ModelKeyTraits<Model>`, which cannot be repeated — and every other action
+naming the same entity uses `BRIDGE_KEY_FROM`. Actions with neither declaration
+are *keyless*, which is the common case: they run against whichever instance
+their handler is already attached to.
+
+### Behavior
+
+| Aspect | Default |
+|---|---|
+| **Opt-in** | `BridgeHandler<M, AllowShared>`. Plain `BridgeHandler<M>` keeps a private instance and never enters the directory. |
+| **Attachment** | Automatic: executing a keyed action attaches, or re-points, the handler to that key's instance, constructing one only if none is live. |
+| **Re-pointing** | A keyed action naming a different key moves the *handler*. Instances never change identity, so a key always maps to one instance. |
+| **Lifetime** | Refcounted across every attachment, including across connections. The instance dies when the last one goes. |
+| **Ownership** | A shared instance is recorded with no owner principal — per-instance ownership and cross-client sharing are mutually exclusive. |
+| **Creating actions** | `BRIDGE_MODEL_KEY_FROM_RESULT` takes the key from the reply and promotes the instance the action ran on, so nothing it built is stranded. |
+
+Full design, including the wire additions (`primary`/`shared` fields and the
+`attach`/`assign`/`instances` kinds) and the connection-scope refcount, is in
+[`spec/core/shared_instances.md`](spec/core/shared_instances.md).
+
 ## Instance subscriptions
 
 The framework offers two complementary surfaces for talking to a model:

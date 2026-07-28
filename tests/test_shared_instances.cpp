@@ -496,3 +496,214 @@ TEST_CASE("keyed models and keyed actions are detected structurally", "[shared-i
     STATIC_REQUIRE_FALSE(morph::model::detail::PayloadKeyed<ShiPeek>);
     STATIC_REQUIRE_FALSE(morph::model::ActionKeyTraits<ShiPeek>::hasKey);
 }
+
+// ── Paths the happy path never reaches ──────────────────────────────────────
+
+namespace {
+
+/// Refuses everything, to drive the server's unauthorized replies.
+struct DenyAllAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context& /*ctx*/, std::string_view /*modelType*/,
+                                 std::string_view /*actionType*/) const override {
+        return false;
+    }
+    [[nodiscard]] bool authorizeRegister(const morph::session::Context& /*ctx*/,
+                                         std::string_view /*modelType*/) const override {
+        return false;
+    }
+};
+
+/// An IBackend that overrides nothing beyond the two pure virtuals, so the
+/// sharing defaults on the interface itself are exercised: they must degrade to
+/// private, unshared behaviour rather than silently hand two callers one model.
+struct MinimalBackend : morph::backend::detail::IBackend {
+    morph::exec::detail::ModelId registerModel(
+        const std::string& /*typeId*/,
+        std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory) override {
+        auto holder = factory();
+        return morph::exec::detail::ModelId{++nextId};
+    }
+    void deregisterModel(morph::exec::detail::ModelId /*mid*/) override {}
+    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId /*mid*/,
+                                                            morph::backend::detail::ActionCall /*call*/,
+                                                            morph::exec::IExecutor* cbExec) override {
+        auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
+        morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
+        state->setException(std::make_exception_ptr(std::runtime_error("not implemented")));
+        return comp;
+    }
+    void notifyBackendChanged() override {}
+    void cancelPending(const std::exception_ptr& /*exc*/) override {}
+
+    std::uint64_t nextId = 0;
+};
+
+}  // namespace
+
+TEST_CASE("IBackend's sharing defaults degrade to private instances", "[shared-instances]") {
+    MinimalBackend backend;
+    // A backend that has not implemented sharing must not pretend it has: the
+    // default registerModelShared ignores the primary and makes a private
+    // instance, and the directory it does not keep is empty.
+    auto first = backend.registerModelShared("SHI_CounterModel",
+                                             [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+                                             {.contextKey = {}, .primary = "1"});
+    auto second = backend.registerModelShared("SHI_CounterModel",
+                                              [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+                                              {.contextKey = {}, .primary = "1"});
+    REQUIRE(first.v != second.v);
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
+    REQUIRE_NOTHROW(backend.assignPrimary(first, "SHI_CounterModel", "1"));
+}
+
+TEST_CASE("assignPrimary re-files an instance and ignores unusable input", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto mid = backend.registerModelShared("SHI_CounterModel",
+                                           [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+                                           {.contextKey = {}, .primary = "old"});
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"old"});
+
+    // Re-filing drops the previous entry rather than leaving the instance
+    // reachable under two keys, which would break the one-key-one-instance rule.
+    backend.assignPrimary(mid, "SHI_CounterModel", "new");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
+
+    // Neither of these names something actionable, so both are no-ops.
+    backend.assignPrimary(mid, "SHI_CounterModel", "");
+    backend.assignPrimary(morph::exec::detail::ModelId{99999}, "SHI_CounterModel", "ghost");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
+}
+
+TEST_CASE("a shared handler survives switchBackend", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor poolA{2};
+    morph::exec::ThreadPoolExecutor poolB{2};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> attached{bridge, &exec};
+    BridgeHandler<ShiCounterModel, AllowShared> neverAttached{bridge, &exec};
+    settle(attached.execute(ShiAddTo{.id = 77, .amount = 4}));
+
+    // The attached binding is re-registered on the new backend through the
+    // directory; the one that never attached has no instance to re-create and
+    // must simply stay unbound rather than being handed a stray one.
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(poolB));
+
+    REQUIRE(attached.primary().value_or(-1) == 77);
+    REQUIRE(settle(attached.instances()) == std::vector<std::int64_t>{77});
+    REQUIRE_FALSE(neverAttached.primary().has_value());
+}
+
+TEST_CASE("a shared register is refused once the server is at its model cap", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setLimitPolicy({.maxLiveModels = 1});
+
+    morph::wire::Envelope const first = morph::wire::makeRegisterShared("SHI_CounterModel", "1");
+    auto firstReply = morph::wire::decode(server->handleInline(morph::wire::encode(first)));
+    REQUIRE(firstReply.kind == "ok");
+
+    // A *different* key needs a new instance, and there is no room for one.
+    auto second = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "2"))));
+    REQUIRE(second.kind == "err");
+    REQUIRE(second.message == "too many models");
+
+    // Attaching to the key that already exists still works — it creates nothing.
+    auto again = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "1"))));
+    REQUIRE(again.kind == "ok");
+    REQUIRE(again.modelId == firstReply.modelId);
+}
+
+TEST_CASE("attach and instances are refused by an authorizer that denies", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<DenyAllAuthorizer>());
+
+    auto attach = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_CounterModel", "1"))));
+    REQUIRE(attach.kind == "err");
+    REQUIRE(attach.message == "unauthorized");
+
+    // Enumeration is a read channel over the directory, gated separately so a
+    // deployer can refuse listing without refusing use.
+    auto listed = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
+    REQUIRE(listed.kind == "err");
+    REQUIRE(listed.message == "unauthorized");
+}
+
+TEST_CASE("a result-sourced key on an already-attached handler promotes in place", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    handler.attach(600);                                    // already bound…
+    settle(handler.execute(ShiAddTo{.id = 600, .amount = 3}));
+
+    // …so the create does not need an anonymous instance conjured for it; it
+    // runs on the one already held, and that instance is re-filed under the
+    // generated key with its state intact.
+    auto created = settle(handler.execute(ShiCreateAs{.wantId = 601, .initial = 9}));
+    REQUIRE(created.id == 601);
+    REQUIRE(handler.primary().value_or(-1) == 601);
+    REQUIRE(settle(handler.execute(ShiPeek{})).value == 9);
+}
+
+TEST_CASE("a subscriber with no executor is called inline", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> driver{bridge, &exec};
+    BridgeHandler<ShiCounterModel, AllowShared> watcher{bridge, nullptr};  // no callback executor
+    driver.attach(700);
+    watcher.attach(700);
+
+    std::int64_t seen = -1;
+    watcher.subscribe<ShiCounterState>([&](ShiCounterState state) { seen = state.value; });
+    settle(driver.execute(ShiAddTo{.id = 700, .amount = 6}));
+    REQUIRE(seen == 6);
+}
+
+TEST_CASE("instances() surfaces a key this client cannot decode", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    // A key the server is happy to file but that no `std::int64_t` can hold.
+    // The wire carries keys as strings, so nothing upstream rejects it; the
+    // decode has to fail somewhere, and failing loudly at the client boundary
+    // beats handing the caller a silently-wrong 0.
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "not-a-number"))));
+    REQUIRE(reg.kind == "ok");
+
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+
+    auto failed = std::make_shared<std::atomic<bool>>(false);
+    handler.instances().onError([failed](const std::exception_ptr&) { failed->store(true); });
+    REQUIRE(morph::testing::waitUntil([&] { return failed->load(); }));
+}
+
+TEST_CASE("an attached shared handler re-registers through a remote backend on switch",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor localPool{2};
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(localPool)};
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    settle(handler.execute(ShiAddTo{.id = 800, .amount = 2}));
+
+    // Going local -> remote must carry the *key* across, not just re-register
+    // something anonymous: the handler is still attached to 800 afterwards, and
+    // the server's directory knows it under that key.
+    bridge.switchBackend(std::make_unique<morph::backend::SimulatedRemoteBackend>(*server));
+
+    REQUIRE(handler.primary().value_or(-1) == 800);
+    REQUIRE(settle(handler.instances()) == std::vector<std::int64_t>{800});
+}

@@ -840,7 +840,15 @@ private:
                 // pay for authorize()/authenticate() and a model construction it
                 // is about to discard. Advisory only — the binding check is the
                 // re-test under the insert lock further below.
-                if (limits.maxLiveModels != 0) {
+                //
+                // Skipped for a *shared* register, which may well create nothing:
+                // if the key is already live it only takes another reference, and
+                // `maxLiveModels` caps live models, not attachments to them.
+                // Rejecting here would make a loaded server refuse the second
+                // client of an instance it is already hosting — exactly when
+                // sharing is worth the most. `acquireSharedInstance` re-tests the
+                // cap under the insert lock, where it can tell the two apart.
+                if (limits.maxLiveModels != 0 && (!env.shared || env.primary.empty())) {
                     std::scoped_lock const lock{_regMtx};
                     if (_models.size() >= limits.maxLiveModels) {
                         reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));
