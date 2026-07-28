@@ -52,7 +52,8 @@ Most of the mechanism is present and only needs connecting.
 - **Structural trait detection is an established pattern.**
   [views.md](../forms/views.md) detects `kind`, `query`, `title`, `rowKey`
   and friends "via a `requires`-expression, not inheritance or a marker base".
-  A model's key type is declared the same way.
+  `KeyedModel` is detected the same way, over either the deduced
+  `ModelKeyTraits<M>` or an explicit nested alias.
 - **Per-instance authorization exists.** `IAuthorizer::authorizeInstance` is
   consulted on every `execute` and every `deregister`, carrying the instance id
   and its recorded owner ([session.md](../session/session.md)).
@@ -61,32 +62,64 @@ Most of the mechanism is present and only needs connecting.
 
 ## Declaring a primary key
 
-A model declares its key type as a nested alias. Declaring it is what makes the
-model keyed; a model without it behaves exactly as an unkeyed model always has.
+**A model's own class body says nothing about keys.** One line beside the
+registrations the author is already writing designates the action that defines
+the key, and the key's *type* is deduced from the member it names:
 
 ```cpp
-class AccountModel {
+class AccountModel {                       // a plain C++ class — unchanged
 public:
-    using PrimaryKey = std::int64_t;     // detected structurally
-    // ...
+    dto::AccountInfo execute(const dto::GetAccount&);
+    dto::CommandResult execute(const dto::CloseAccount&);
 };
+
+BRIDGE_REGISTER_MODEL (AccountModel, "AccountModel")
+BRIDGE_REGISTER_ACTION(AccountModel, GetAccount,   "GetAccount")
+BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
+
+BRIDGE_MODEL_KEY(AccountModel, GetAccount, &GetAccount::id);  // key type deduced: std::int64_t
+BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);             // also carries it
 ```
 
-`PrimaryKey` must be a type morph can carry on the wire and use as a map key:
-an integral type or `std::string`. The key type is what
-[`instances<M>()`](#enumerating-live-instances) is typed on, so it is visible in
-user code as `AccountModel::PrimaryKey`.
+`BRIDGE_MODEL_KEY` appears **once per model** — it is an explicit
+specialisation of `ModelKeyTraits<Model>` and cannot be repeated. Every *other*
+action naming the same entity uses `BRIDGE_KEY_FROM`, which records only that
+the action carries the key. Most models need just the one line, because most
+have a single loader action and the rest are keyless.
+
+A key type must be one morph can carry on the wire and use as a map key: an
+integral type or `std::string`.
+
+A model may still declare `using PrimaryKey = …` in its own body, and that wins
+over the deduced type — *infer by default, declare to override*, the same rule
+the rest of `morph::forms` follows. It is useful only when the key type differs
+from the field's type.
+
+### Attachment is automatic
+
+A handler names a key exactly once, in a keyed action; everything after it
+follows the handler:
+
+```cpp
+BridgeHandler<AccountModel, AllowShared> first{bridge, gui}, second{bridge, gui};
+
+first .execute(GetAccount{.id = 32});   // no instance for 32 → constructs one
+second.execute(GetAccount{.id = 32});   // 32 is live → attaches, constructs nothing
+
+first .execute(Deposit{.amountMinor = 100});  // keyless → instance 32
+second.execute(GetBalance{});                 // keyless → instance 32, sees the 100
+```
 
 ## Where the key comes from
 
 A keyed action declares which of its fields carries the key. Different actions
 spell it differently, which is why the declaration is per action rather than per
-model:
+model — one of them additionally defines the model's key type:
 
 ```cpp
-BRIDGE_KEY_FROM(GetAccount,   &GetAccount::id)
-BRIDGE_KEY_FROM(Deposit,      &Deposit::accountId)
-BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id)
+BRIDGE_MODEL_KEY(AccountModel, GetAccount, &GetAccount::id)  // defines + carries
+BRIDGE_KEY_FROM(Deposit,      &Deposit::accountId)           // carries
+BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id)             // carries
 ```
 
 An action that *creates* the entity has no key to carry — it produces one. Such
@@ -94,7 +127,7 @@ an action sources the key from its **result**, exactly as a database insert
 returns its generated primary key:
 
 ```cpp
-BRIDGE_KEY_FROM_RESULT(OpenAccount, &dto::AccountInfo::id)
+BRIDGE_MODEL_KEY_FROM_RESULT(CustomerModel, OpenAccount, &dto::AccountInfo::id)
 ```
 
 Actions with neither declaration are **keyless**, and most actions are: they run
@@ -292,11 +325,13 @@ strictly reduces pressure on it.
 
 | Symbol | Signature | Meaning |
 |---|---|---|
-| `Model::PrimaryKey` | nested type alias | Declares the model keyed. Integral or `std::string`. Detected structurally. |
+| `BRIDGE_MODEL_KEY(M, A, &A::f)` | macro | Designates `A` as the action defining `M`'s key, and deduces the key type from `f`. Once per model. |
+| `Model::PrimaryKey` | optional nested alias | Overrides the deduced key type. Integral or `std::string`. |
 | `morph::bridge::AllowShared` | tag type | Second template argument of `BridgeHandler`. Opts the handler into the directory. |
 | `morph::bridge::NoSharing` | tag type | The default. Today's isolated-instance behaviour. |
-| `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that action `A` carries its model's key in `field`. |
-| `BRIDGE_KEY_FROM_RESULT(A, &R::field)` | macro | Declares that `A`'s *result* establishes the key. |
+| `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that a further action `A` also carries the key. |
+| `BRIDGE_MODEL_KEY_FROM_RESULT(M, A, &R::field)` | macro | As `BRIDGE_MODEL_KEY`, but the key comes from `A`'s *result*. |
+| `BRIDGE_KEY_FROM_RESULT(A, &R::field)` | macro | A further creating action whose result establishes the key. |
 | `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. |
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
@@ -307,6 +342,11 @@ strictly reduces pressure on it.
   compile-time property, so it is visible at the declaration and cannot vary per
   call. Which instance it shares is a runtime property, because that is what the
   user is choosing at runtime.
+- **The key type is deduced, not restated.** Writing it in the model class as
+  well as in the action field would be the same fact in two places, free to
+  drift. `BRIDGE_MODEL_KEY` reads it off the member pointer it is already given,
+  which is why a keyed model's class body is indistinguishable from an unkeyed
+  one's.
 - **The directory is server-side.** A client-side cache would solve the bank's
   five-connections problem but not the one that matters — two clients diverging
   on the same entity. Server-side is the whole reason this needs wire changes.

@@ -61,8 +61,9 @@ models".
 
 ### F2 — Keyed, shareable model instances · P0 · shipped
 
-A model declares a `PrimaryKey`; actions declare which field carries it (or that
-their *result* establishes it); `BridgeHandler<M, AllowShared>` opts a handler
+One `BRIDGE_MODEL_KEY(Model, Action, &Action::field)` line beside the existing
+registrations declares a model's key — the type is deduced from the field, so
+the model class itself is untouched; `BridgeHandler<M, AllowShared>` opts a handler
 into a **server-side** instance directory, so instances are reusable across
 clients. `instances<M>()` enumerates the live keys. A keyed action re-points a
 handler rather than re-keying an instance, so key collisions do not arise.

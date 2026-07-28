@@ -19,9 +19,6 @@ namespace bank {
 /// @brief One customer account, cached in the instance (in-memory backend).
 class AccountModel {
 public:
-    /// @brief Account id. Declaring this alias is what makes the model keyed.
-    using PrimaryKey = std::int64_t;
-
     dto::AccountInfo execute(const dto::GetAccount& action);
     dto::CommandResult execute(const dto::CloseAccount& action);
 
@@ -44,5 +41,5 @@ BRIDGE_REGISTER_MODEL(AccountModel, "AccountModel")
 BRIDGE_REGISTER_ACTION(AccountModel, GetAccount, "GetAccount")
 BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
 
-BRIDGE_KEY_FROM(GetAccount, &GetAccount::id);
+BRIDGE_MODEL_KEY(AccountModel, GetAccount, &GetAccount::id);
 BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);

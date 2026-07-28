@@ -32,9 +32,11 @@ API surface).
   (`scripts/check_deprecated_markers.sh`) enforcing that every
   `[[deprecated("...")]]` marker names a replacement and a target removal
   version.
-- **Keyed, shareable model instances.** A model declares a nested `PrimaryKey`
-  alias; actions declare which field carries it (`BRIDGE_KEY_FROM`) or that
-  their result establishes it (`BRIDGE_KEY_FROM_RESULT`).
+- **Keyed, shareable model instances.** One `BRIDGE_MODEL_KEY(Model, Action,
+  &Action::field)` beside the existing registrations designates the action that
+  defines a model's key and deduces the key type from that field, so the model's
+  own class body says nothing about keys; further actions carrying the same key
+  use `BRIDGE_KEY_FROM`, and creating actions use the `…_FROM_RESULT` variants.
   `BridgeHandler<M, AllowShared>` joins a server-side directory keyed on
   `(typeId, primary)`, so handlers in one process — or in two clients over one
   `RemoteServer` — reach the same instance. Adds `attach()`, `primary()` and

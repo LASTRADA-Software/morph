@@ -24,9 +24,6 @@ namespace bank {
 /// @brief One customer: lists and opens the accounts they own.
 class CustomerModel : private db::WithMapper {
 public:
-    /// @brief Owner username. Declaring this alias is what makes the model keyed.
-    using PrimaryKey = std::string;
-
     /// @brief Opens a new account for the requested (or session) owner.
     dto::AccountInfo execute(const dto::OpenAccount& action);
 
@@ -47,5 +44,5 @@ BRIDGE_REGISTER_ACTION(CustomerModel, ListAccounts, "ListAccounts", ::morph::mod
 // Keyed by owner. An empty `owner` means "the session principal", which is not
 // a key the directory can share on, so such a call simply runs on whatever
 // instance the handler already holds.
-BRIDGE_KEY_FROM(ListAccounts, &ListAccounts::owner);
+BRIDGE_MODEL_KEY(CustomerModel, ListAccounts, &ListAccounts::owner);
 BRIDGE_KEY_FROM(OpenAccount, &OpenAccount::owner);

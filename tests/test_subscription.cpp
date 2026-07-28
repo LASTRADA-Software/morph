@@ -61,7 +61,6 @@ struct SubExplode {
 };
 
 struct SubCounterModel {
-    using PrimaryKey = std::int64_t;
 
     std::int64_t value = 0;
 
@@ -80,7 +79,7 @@ BRIDGE_REGISTER_ACTION(SubCounterModel, SubRead, "SUB_Read")
 BRIDGE_REGISTER_ACTION(SubCounterModel, SubLabel, "SUB_Label")
 BRIDGE_REGISTER_ACTION(SubCounterModel, SubExplode, "SUB_Explode")
 
-BRIDGE_KEY_FROM(SubBump, &SubBump::id);
+BRIDGE_MODEL_KEY(SubCounterModel, SubBump, &SubBump::id);
 BRIDGE_KEY_FROM(SubRead, &SubRead::id);
 BRIDGE_KEY_FROM(SubLabel, &SubLabel::id);
 BRIDGE_KEY_FROM(SubExplode, &SubExplode::id);

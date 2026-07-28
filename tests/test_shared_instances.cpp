@@ -58,6 +58,17 @@ struct ShiPeek {
     int unused = 0;
 };
 
+/// Actions for the auto-attach worked example below.
+struct AutoLoad {
+    std::int64_t id = 0;
+};
+struct AutoAdd {
+    std::int64_t amount = 0;
+};
+struct AutoPeek {
+    int unused = 0;
+};
+
 /// Creates the entity, so its key cannot be in the request — it comes back in
 /// the reply, exactly as a database insert returns its generated primary key.
 struct ShiCreate {
@@ -77,7 +88,6 @@ struct ShiCreateAs {
 };
 
 struct ShiCounterModel {
-    using PrimaryKey = std::int64_t;
 
     std::int64_t value = 0;
 
@@ -107,10 +117,39 @@ BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiPeek, "SHI_Peek")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiCreate, "SHI_Create")
 BRIDGE_REGISTER_ACTION(ShiCounterModel, ShiCreateAs, "SHI_CreateAs")
 
-BRIDGE_KEY_FROM(ShiAddTo, &ShiAddTo::id);
+BRIDGE_MODEL_KEY(ShiCounterModel, ShiAddTo, &ShiAddTo::id);
 BRIDGE_KEY_FROM(ShiRead, &ShiRead::id);
 BRIDGE_KEY_FROM_RESULT(ShiCreate, &ShiCreated::id);
 BRIDGE_KEY_FROM_RESULT(ShiCreateAs, &ShiCreated::id);
+// NOLINTEND(misc-use-internal-linkage)
+
+// NOLINTBEGIN(misc-use-internal-linkage)
+/// The whole point of BRIDGE_MODEL_KEY: this class is a plain C++ class. No
+/// nested alias, no base, no macro inside the body — the key is declared once,
+/// below, next to the registrations the author is already writing.
+struct AutoLoadModel {
+    std::int64_t loaded = 0;
+    std::int64_t total = 0;
+
+    ShiCounterState execute(const AutoLoad& act) {
+        loaded = act.id;
+        return {.value = total};
+    }
+    ShiCounterState execute(const AutoAdd& act) {  // keyless
+        total += act.amount;
+        return {.value = total};
+    }
+    [[nodiscard]] ShiCounterState execute(const AutoPeek& /*act*/) const { return {.value = total}; }
+};
+
+BRIDGE_REGISTER_MODEL(AutoLoadModel, "SHI_AutoLoadModel")
+BRIDGE_REGISTER_ACTION(AutoLoadModel, AutoLoad, "SHI_AutoLoad")
+BRIDGE_REGISTER_ACTION(AutoLoadModel, AutoAdd, "SHI_AutoAdd")
+BRIDGE_REGISTER_ACTION(AutoLoadModel, AutoPeek, "SHI_AutoPeek")
+
+// One line. It deduces PrimaryKey = std::int64_t from the member type *and*
+// records AutoLoad as the action that carries it.
+BRIDGE_MODEL_KEY(AutoLoadModel, AutoLoad, &AutoLoad::id);
 // NOLINTEND(misc-use-internal-linkage)
 
 namespace {
@@ -402,6 +441,41 @@ TEST_CASE("instances() is empty before anything is attached", "[shared-instances
     Bridge bridge{makeLocal(exec)};
     BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
     REQUIRE(settle(handler.instances()).empty());
+}
+
+TEST_CASE("a keyed action attaches automatically; keyless ones follow the handler",
+          "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<AutoLoadModel, AllowShared> first{bridge, &exec};
+    BridgeHandler<AutoLoadModel, AllowShared> second{bridge, &exec};
+
+    // The keyed action is the only place a key is ever named.
+    settle(first.execute(AutoLoad{.id = 32}));
+    settle(second.execute(AutoLoad{.id = 32}));
+
+    // One instance, not two: the second handler found the live one for key 32
+    // and constructed nothing.
+    REQUIRE(settle(first.instances()) == std::vector<std::int64_t>{32});
+    REQUIRE(first.primary().value_or(-1) == 32);
+    REQUIRE(second.primary().value_or(-1) == 32);
+
+    // From here on neither handler mentions a key: the keyless actions simply
+    // land on the instance their handler is attached to — the same one.
+    REQUIRE(settle(first.execute(AutoAdd{.amount = 1})).value == 1);
+    REQUIRE(settle(second.execute(AutoAdd{.amount = 2})).value == 3);
+    REQUIRE(settle(first.execute(AutoPeek{})).value == 3);
+    REQUIRE(settle(second.execute(AutoPeek{})).value == 3);
+}
+
+TEST_CASE("a model needs no key declaration in its own class body", "[shared-instances]") {
+    // AutoLoadModel declares no nested PrimaryKey; BRIDGE_MODEL_KEY deduced it
+    // from the action member it was handed.
+    STATIC_REQUIRE(morph::model::KeyedModel<AutoLoadModel>);
+    STATIC_REQUIRE(std::same_as<morph::model::PrimaryKeyOf<AutoLoadModel>, std::int64_t>);
+    STATIC_REQUIRE(morph::model::detail::PayloadKeyed<AutoLoad>);
+    STATIC_REQUIRE_FALSE(morph::model::ActionKeyTraits<AutoAdd>::hasKey);
 }
 
 TEST_CASE("primary keys round-trip through their canonical encoding", "[shared-instances]") {

@@ -47,9 +47,10 @@ GUI / CLI ──actions/results (plain DTOs)──▶ morph Bridge ──▶ Mod
 
 ### Stateful, keyed models
 
-`AccountModel` holds **one account, in memory**, for the lifetime of the instance. It
-declares `using PrimaryKey = std::int64_t`, so morph keys instances by account id, and
-`GetAccount`/`CloseAccount` declare that they carry that key (`BRIDGE_KEY_FROM`). Two
+`AccountModel` holds **one account, in memory**, for the lifetime of the instance. The
+class itself says nothing about keys: a single `BRIDGE_KEY_FROM(AccountModel, GetAccount,
+&GetAccount::id)` next to the other registrations both deduces the key type and records
+which action carries it, so morph keys instances by account id. Two
 `BridgeHandler<AccountModel, AllowShared>` handlers naming the same account — in one
 GUI, or in two clients over one `RemoteServer` — reach a single instance and a single
 balance.

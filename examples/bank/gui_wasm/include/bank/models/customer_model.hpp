@@ -15,9 +15,6 @@ namespace bank {
 /// @brief One customer: lists and opens the accounts they own (in-memory).
 class CustomerModel {
 public:
-    /// @brief Owner username. Declaring this alias is what makes the model keyed.
-    using PrimaryKey = std::string;
-
     dto::AccountInfo execute(const dto::OpenAccount& action);
     dto::AccountList execute(const dto::ListAccounts& action);
 };
@@ -32,5 +29,5 @@ BRIDGE_REGISTER_MODEL(CustomerModel, "CustomerModel")
 BRIDGE_REGISTER_ACTION(CustomerModel, OpenAccount, "OpenAccount")
 BRIDGE_REGISTER_ACTION(CustomerModel, ListAccounts, "ListAccounts")
 
-BRIDGE_KEY_FROM(ListAccounts, &ListAccounts::owner);
+BRIDGE_MODEL_KEY(CustomerModel, ListAccounts, &ListAccounts::owner);
 BRIDGE_KEY_FROM(OpenAccount, &OpenAccount::owner);

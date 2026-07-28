@@ -32,9 +32,6 @@ namespace bank {
 /// @brief One customer account: its row, cached, with reads served from memory.
 class AccountModel : private db::WithMapper {
 public:
-    /// @brief Account id. Declaring this alias is what makes the model keyed.
-    using PrimaryKey = std::int64_t;
-
     /// @brief Returns the account, hydrating from SQLite only when needed.
     dto::AccountInfo execute(const dto::GetAccount& action);
 
@@ -68,5 +65,5 @@ BRIDGE_REGISTER_ACTION(AccountModel, CloseAccount, "CloseAccount")
 
 // Both actions name the account they act on, so a shared handler attaches (or
 // re-points) to that account's instance on the way through.
-BRIDGE_KEY_FROM(GetAccount, &GetAccount::id);
+BRIDGE_MODEL_KEY(AccountModel, GetAccount, &GetAccount::id);
 BRIDGE_KEY_FROM(CloseAccount, &CloseAccount::id);

@@ -587,6 +587,9 @@ public:
     }
 
 private:
+    /// @brief Directory key: the `(model type id, primary)` pair an instance is filed under.
+    using DirectoryKey = std::pair<std::string, std::string>;
+
     /// @brief Releases one reference to @p mid, destroying it at zero. Caller holds `_regMtx`.
     ///
     /// A private instance has no `_attachCount` entry and is erased outright —
@@ -669,6 +672,37 @@ private:
         }
     }
 
+    /// @brief Attaches to an already-live directory entry, if there is one. Caller holds `_regMtx`.
+    ///
+    /// Factored out because `acquireSharedInstance` checks the directory twice —
+    /// once on entry, and again under the insert lock after building a holder
+    /// outside it, in case a concurrent request for the same key won the race.
+    /// The second check is by nature almost never taken, so duplicating the body
+    /// would leave a block that is both untested and free to drift from the one
+    /// that is.
+    ///
+    /// @param dirKey Directory key being acquired.
+    /// @param env    Decoded request, for `callId`.
+    /// @param reply  Reply sink; invoked only when this returns `true`.
+    /// @param cid    Connection scope, or `0` for unscoped.
+    /// @return `true` if an entry existed and @p reply was invoked; `false` to keep going.
+    bool attachExistingLocked(const DirectoryKey& dirKey, const ::morph::wire::Envelope& env,
+                              const std::function<void(std::string)>& reply, ConnectionId cid) {
+        auto found = _directory.find(dirKey);
+        if (found == _directory.end()) {
+            return false;
+        }
+        auto const mid = found->second;
+        _attachCount[mid] += 1;
+        if (!noteScopeAttachLocked(mid, cid)) {
+            releaseInstanceLocked(mid);
+            reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
+            return true;
+        }
+        reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+        return true;
+    }
+
     /// @brief Acquires (or creates) the shared instance for `(typeId, primary)` and replies.
     ///
     /// The register-or-attach core shared by the `register` branch (when
@@ -696,15 +730,7 @@ private:
             if (releaseCurrent.v != 0U) {
                 releaseScopedLocked(releaseCurrent, cid);
             }
-            if (auto found = _directory.find(dirKey); found != _directory.end()) {
-                auto const mid = found->second;
-                _attachCount[mid] += 1;
-                if (!noteScopeAttachLocked(mid, cid)) {
-                    releaseInstanceLocked(mid);
-                    reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
-                    return;
-                }
-                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+            if (attachExistingLocked(dirKey, env, reply, cid)) {
                 return;
             }
         }
@@ -716,15 +742,7 @@ private:
         ::morph::exec::detail::ModelId const fresh{nextOpaqueId()};
         {
             std::scoped_lock const lock{_regMtx};
-            if (auto found = _directory.find(dirKey); found != _directory.end()) {
-                auto const mid = found->second;
-                _attachCount[mid] += 1;
-                if (!noteScopeAttachLocked(mid, cid)) {
-                    releaseInstanceLocked(mid);
-                    reply(::morph::wire::encode(::morph::wire::makeErr("connection closed", env.callId)));
-                    return;
-                }
-                reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, mid.v)));
+            if (attachExistingLocked(dirKey, env, reply, cid)) {
                 return;
             }
             if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
@@ -1290,7 +1308,6 @@ private:
     // _models/_owners so directory membership can never desync from instance
     // existence. Only instances registered with `shared` set and a non-empty
     // primary appear; a private instance has no entry in any of the three.
-    using DirectoryKey = std::pair<std::string, std::string>;
     std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
     std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
     std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;

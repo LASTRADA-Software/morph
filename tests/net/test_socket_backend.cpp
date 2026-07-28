@@ -50,7 +50,6 @@ struct SbTotal {
 };
 
 struct SbCounterModel {
-    using PrimaryKey = std::int64_t;
     int value = 0;
     SbTotal execute(const SbBump& act) {
         value += act.by;
@@ -60,7 +59,7 @@ struct SbCounterModel {
 
 BRIDGE_REGISTER_MODEL(SbCounterModel, "SbCounterModel")
 BRIDGE_REGISTER_ACTION(SbCounterModel, SbBump, "SbBump")
-BRIDGE_KEY_FROM(SbBump, &SbBump::id);
+BRIDGE_MODEL_KEY(SbCounterModel, SbBump, &SbBump::id);
 // NOLINTEND(misc-use-internal-linkage)
 
 struct SbSlowAction {

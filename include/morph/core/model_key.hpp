@@ -40,16 +40,62 @@ template <typename K>
 concept ModelKey =
     (std::integral<K> && !std::same_as<std::remove_cv_t<K>, bool>) || std::same_as<std::remove_cv_t<K>, std::string>;
 
-/// @brief Satisfied by model types that declare a `PrimaryKey` alias.
+/// @brief The key type of a model, when one has been declared *for* it.
 ///
-/// Declaring the alias is what opts a model into keyed, shareable instances.
-template <typename M>
-concept KeyedModel = requires { typename M::PrimaryKey; } && ModelKey<typename M::PrimaryKey>;
+/// Specialised by `BRIDGE_KEY_FROM`, which deduces the type from the action
+/// member it is given — so a model does not have to say anything about keys
+/// inside its own class. The primary template is deliberately empty: a model
+/// with neither this specialisation nor a nested alias is simply unkeyed.
+/// @tparam Model Concrete model type.
+template <typename Model>
+struct ModelKeyTraits {};
 
-/// @brief The declared key type of a keyed model.
+namespace detail {
+
+/// @brief Satisfied by a model that names its own key with a nested alias.
+template <typename M>
+concept SelfDeclaredKey = requires { typename M::PrimaryKey; } && ModelKey<typename M::PrimaryKey>;
+
+/// @brief Satisfied by a model whose key was deduced from a keyed action.
+template <typename M>
+concept DeducedKey = requires { typename ModelKeyTraits<M>::PrimaryKey; } &&
+                     ModelKey<typename ModelKeyTraits<M>::PrimaryKey>;
+
+}  // namespace detail
+
+/// @brief Satisfied by model types that have a primary key, however it was named.
+///
+/// Two ways in, and neither requires touching the model's own class body beyond
+/// the first: a nested `PrimaryKey` alias, or a `BRIDGE_KEY_FROM` declaration
+/// that deduces the type from the action field carrying it. Following
+/// `morph::forms`' standing rule — *infer by default, declare to override* — a
+/// nested alias wins when both are present, which is what lets a model whose
+/// key type differs from the field's type (an `int` column keyed as a
+/// `std::string`, say) state that explicitly.
+template <typename M>
+concept KeyedModel = detail::SelfDeclaredKey<M> || detail::DeducedKey<M>;
+
+namespace detail {
+
+/// @brief Picks the nested alias when present, else the deduced one.
+template <typename M>
+struct KeyTypeOf {
+    /// @brief The resolved key type.
+    using type = ModelKeyTraits<M>::PrimaryKey;
+};
+
+template <SelfDeclaredKey M>
+struct KeyTypeOf<M> {
+    /// @brief The resolved key type — the model's own alias takes precedence.
+    using type = M::PrimaryKey;
+};
+
+}  // namespace detail
+
+/// @brief The primary key type of a keyed model.
 /// @tparam M Keyed model type.
 template <KeyedModel M>
-using PrimaryKeyOf = M::PrimaryKey;
+using PrimaryKeyOf = detail::KeyTypeOf<M>::type;
 
 /// @brief Encodes a primary key as its canonical wire string.
 ///
@@ -114,6 +160,23 @@ struct ActionKeyTraits {
 
 namespace detail {
 
+/// @brief The type of the data member a pointer-to-member points at.
+///
+/// Lets `BRIDGE_KEY_FROM` deduce the model's key type from the action field it
+/// is handed, so the key type is never written out twice.
+template <typename T>
+struct MemberType;
+
+template <typename V, typename C>
+struct MemberType<V C::*> {
+    /// @brief The member's own type.
+    using type = V;
+};
+
+/// @brief Convenience alias for `MemberType<T>::type`.
+template <typename T>
+using MemberTypeOf = MemberType<std::remove_cv_t<T>>::type;
+
 /// @brief Satisfied by actions whose key is carried in the action payload.
 template <typename A>
 concept PayloadKeyed = ActionKeyTraits<A>::hasKey && !ActionKeyTraits<A>::fromResult;
@@ -130,15 +193,53 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 // matching BRIDGE_REGISTER_MODEL/ACTION in registry.hpp: they must emit a template
 // specialisation at global scope, which no function template can do.
 
-/// @brief Declares that action `A` carries its model's primary key in `MEMBER`.
+/// @brief Declares that action `A` is the one that defines model `M`'s primary key.
 ///
-/// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&GetAccount::id`) whose
-/// type satisfies `morph::model::ModelKey`. Executing such an action on a
-/// shareable handler attaches (or re-points) that handler to the instance
-/// holding the named key, creating it if no instance holds it yet.
+/// One line does both jobs, so the model's own class body needs to say nothing
+/// about keys: the key *type* is deduced from `MEMBER`'s type (defining
+/// `ModelKeyTraits<M>`), and `A` is recorded as an action that carries it
+/// (defining `ActionKeyTraits<A>`).
 ///
-/// Must appear at global scope, in exactly one translation unit, like the other
-/// `BRIDGE_REGISTER_*` macros.
+/// Executing such an action on a shareable handler attaches — or re-points —
+/// that handler to the instance holding the named key, constructing one only if
+/// no instance holds it yet. Every *keyless* action on that handler afterwards
+/// lands on the same instance, which is what makes the common case free of
+/// ceremony:
+///
+/// ```cpp
+/// BRIDGE_KEY_FROM(AccountModel, LoadAccount, &LoadAccount::id);
+///
+/// BridgeHandler<AccountModel, AllowShared> first{bridge, gui}, second{bridge, gui};
+/// first .execute(LoadAccount{.id = 32});   // constructs the instance for 32
+/// second.execute(LoadAccount{.id = 32});   // attaches to it; constructs nothing
+/// first .execute(Deposit{.amount = 100});  // keyless -> instance 32
+/// second.execute(GetBalance{});            // keyless -> instance 32, sees the 100
+/// ```
+///
+/// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&LoadAccount::id`) whose
+/// type satisfies `morph::model::ModelKey`. Must appear at global scope, in
+/// exactly one translation unit, like the other `BRIDGE_REGISTER_*` macros.
+#define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                 \
+    template <>                                                                                       \
+    struct morph::model::ActionKeyTraits<A> {                                                         \
+        static constexpr bool hasKey = true;                                                          \
+        static constexpr bool fromResult = false;                                                     \
+        static std::string key(const A& action) { return morph::model::keyToString(action.*MEMBER); } \
+    };                                                                                                \
+    template <>                                                                                       \
+    struct morph::model::ModelKeyTraits<M> {                                                          \
+        using PrimaryKey = morph::model::detail::MemberTypeOf<decltype(MEMBER)>;                      \
+    }
+
+/// @brief Declares that action `A` also carries its model's primary key in `MEMBER`.
+///
+/// The companion to `BRIDGE_MODEL_KEY`, for the *other* actions that name the
+/// same entity — `CloseAccount{.id = ...}` alongside `GetAccount{.id = ...}`.
+/// It records only that `A` carries the key; the key's type has already been
+/// established by the model's one `BRIDGE_MODEL_KEY` line, and an explicit
+/// specialisation cannot be repeated.
+///
+/// Must appear at global scope, in exactly one translation unit.
 #define BRIDGE_KEY_FROM(A, MEMBER)                                                                    \
     template <>                                                                                       \
     struct morph::model::ActionKeyTraits<A> {                                                         \
@@ -153,6 +254,27 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// request, it is generated and returned, exactly as a database insert returns
 /// its generated primary key. `MEMBER` is a pointer-to-data-member of `A`'s
 /// result type (e.g. `&AccountInfo::id`).
+///
+/// Must appear at global scope, in exactly one translation unit.
+#define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                                     \
+    template <>                                                                  \
+    struct morph::model::ActionKeyTraits<A> {                                    \
+        static constexpr bool hasKey = true;                                     \
+        static constexpr bool fromResult = true;                                 \
+        template <typename R>                                                    \
+        static std::string keyOfResult(const R& result) {                        \
+            return morph::model::keyToString(result.*MEMBER);                    \
+        }                                                                        \
+    };                                                                           \
+    template <>                                                                  \
+    struct morph::model::ModelKeyTraits<M> {                                     \
+        using PrimaryKey = morph::model::detail::MemberTypeOf<decltype(MEMBER)>; \
+    }
+
+/// @brief Declares that action `A`'s result also establishes its model's key.
+///
+/// The companion to `BRIDGE_MODEL_KEY_FROM_RESULT`, for a second creating
+/// action on a model whose key type is already established.
 ///
 /// Must appear at global scope, in exactly one translation unit.
 #define BRIDGE_KEY_FROM_RESULT(A, MEMBER)                     \
