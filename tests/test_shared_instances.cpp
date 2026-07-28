@@ -58,6 +58,10 @@ struct ShiPeek {
     int unused = 0;
 };
 
+struct ShiAwareRead {
+    std::int64_t id = 0;
+};
+
 /// Actions for the auto-attach worked example below.
 struct AutoLoad {
     std::int64_t id = 0;
@@ -121,6 +125,21 @@ BRIDGE_MODEL_KEY(ShiCounterModel, ShiAddTo, &ShiAddTo::id);
 BRIDGE_KEY_FROM(ShiRead, &ShiRead::id);
 BRIDGE_KEY_FROM_RESULT(ShiCreate, &ShiCreated::id);
 BRIDGE_KEY_FROM_RESULT(ShiCreateAs, &ShiCreated::id);
+// NOLINTEND(misc-use-internal-linkage)
+
+// NOLINTBEGIN(misc-use-internal-linkage)
+/// Declares onBackendChanged(), so registering it shared must also record it as
+/// change-aware — the bookkeeping LocalBackend keeps to avoid a dynamic_cast
+/// sweep on every backend switch.
+struct ShiAwareModel {
+    std::int64_t notified = 0;
+    void onBackendChanged() { notified += 1; }
+    [[nodiscard]] ShiCounterState execute(const ShiAwareRead& /*act*/) const { return {.value = notified}; }
+};
+
+BRIDGE_REGISTER_MODEL(ShiAwareModel, "SHI_AwareModel")
+BRIDGE_REGISTER_ACTION(ShiAwareModel, ShiAwareRead, "SHI_AwareRead")
+BRIDGE_MODEL_KEY(ShiAwareModel, ShiAwareRead, &ShiAwareRead::id);
 // NOLINTEND(misc-use-internal-linkage)
 
 // NOLINTBEGIN(misc-use-internal-linkage)
@@ -706,4 +725,107 @@ TEST_CASE("an attached shared handler re-registers through a remote backend on s
 
     REQUIRE(handler.primary().value_or(-1) == 800);
     REQUIRE(settle(handler.instances()) == std::vector<std::int64_t>{800});
+}
+
+namespace {
+
+/// Verifies every caller as "verified-user", so the server's attach/instances
+/// branches take their authenticate-and-overwrite path.
+struct VerifyingAuthorizer : morph::session::IAuthorizer {
+    [[nodiscard]] bool authorize(const morph::session::Context& /*ctx*/, std::string_view /*modelType*/,
+                                 std::string_view /*actionType*/) const override {
+        return true;
+    }
+    [[nodiscard]] std::optional<std::string> authenticate(
+        const morph::session::Context& /*ctx*/) const override {
+        return std::string{"verified-user"};
+    }
+};
+
+}  // namespace
+
+TEST_CASE("a change-aware model is tracked when registered shared", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor poolA{2};
+    morph::exec::ThreadPoolExecutor poolB{2};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolA)};
+
+    BridgeHandler<ShiAwareModel, AllowShared> handler{bridge, &exec};
+    settle(handler.execute(ShiAwareRead{.id = 900}));
+
+    // Registering through the shared path must record change-awareness exactly
+    // as the private path does, or the model silently stops being notified.
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(poolB));
+
+    // No polling needed, and none wanted: notifyBackendChanged posts
+    // onBackendChanged onto the instance's strand, and this execute posts onto
+    // the same strand, so it is ordered strictly after — a poll here would
+    // merely hide a real ordering bug behind a retry.
+    REQUIRE(settle(handler.execute(ShiAwareRead{.id = 900})).value == 1);
+}
+
+TEST_CASE("the server re-files an instance onto a new key over the wire", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "old"))));
+    REQUIRE(reg.kind == "ok");
+
+    // Assigning a *new* key to an already-filed instance drops the old entry —
+    // leaving it reachable under two keys would break one-key-one-instance.
+    server->handleInline(morph::wire::encode(morph::wire::makeAssign("SHI_CounterModel", "new", reg.modelId)));
+
+    auto listed = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.body));
+    REQUIRE(keys == std::vector<std::string>{"new"});
+}
+
+TEST_CASE("attach and instances stamp the verified principal", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<VerifyingAuthorizer>());
+
+    // An authenticating authorizer's identity must overwrite the client's claim
+    // on these kinds too, not only on register/execute.
+    auto attached = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_CounterModel", "1"))));
+    REQUIRE(attached.kind == "ok");
+
+    auto listed = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
+    REQUIRE(listed.kind == "ok");
+}
+
+TEST_CASE("a refusing server surfaces as an exception on the remote backend", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<DenyAllAuthorizer>());
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    // Each control call reports the server's refusal rather than returning a
+    // bogus id or an empty list that a caller would mistake for success.
+    REQUIRE_THROWS(backend.registerModelShared(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "1"}));
+    REQUIRE_THROWS(backend.attachModel(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "1"}, morph::exec::detail::ModelId{0}));
+    REQUIRE_THROWS(backend.listInstances("SHI_CounterModel"));
+}
+
+TEST_CASE("an empty primary on the remote backend degrades to a private instance", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    auto held = backend.registerModel("SHI_CounterModel",
+                                      [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); });
+    // No key to share on, so this releases what it holds and registers privately
+    // rather than entering the directory.
+    auto rebound = backend.attachModel(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = {}}, held);
+    REQUIRE(rebound.v != 0U);
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 }
