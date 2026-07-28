@@ -445,7 +445,7 @@ their handler is already attached to.
 
 Full design, including the wire additions (`primary`/`shared` fields and the
 `attach`/`assign`/`instances` kinds) and the connection-scope refcount, is in
-[`spec/core/shared_instances.md`](spec/core/shared_instances.md).
+`docs/spec/core/shared_instances.md`.
 
 ## Instance subscriptions
 
