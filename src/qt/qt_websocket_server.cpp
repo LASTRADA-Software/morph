@@ -139,6 +139,11 @@ void QtWebSocketServer::onNewConnection() {
         return;
     }
     if (_cfg.maxConnections != 0 && _clients.size() >= _cfg.maxConnections) {
+        // To the client this looks exactly like the server being down -- the
+        // one piece of information that would actually explain the symptom
+        // (the configured cap was hit) otherwise never reaches an operator.
+        ::morph::log::logWarn("[QtWebSocketServer] connection refused: at maxConnections ({}/{})", _clients.size(),
+                              _cfg.maxConnections);
         socket->close();
         socket->deleteLater();
         return;
@@ -152,6 +157,9 @@ void QtWebSocketServer::onNewConnection() {
     state.lastRefill = std::chrono::steady_clock::now();
     state.lastActivity = state.lastRefill;
     state.cid = _server.openConnection();
+
+    // +1: this connection is admitted but not yet in `_clients` at this point.
+    ::morph::log::logInfo("[QtWebSocketServer] connection {} accepted ({} live)", state.cid, _clients.size() + 1);
 
     if (_cfg.handshakeTimeout.count() > 0) {
         auto* timer = new QTimer(this);
@@ -248,6 +256,13 @@ void QtWebSocketServer::onDisconnected() {
     }
     auto iter = _clients.find(socket);
     if (iter != _clients.end()) {
+        // Close code and reason are only available on the socket while it is
+        // still around; capture them before erase()/deleteLater() below --
+        // they are the useful part of "why did that one drop?", the question
+        // an operator otherwise has no way to answer from the server side.
+        ::morph::log::logInfo("[QtWebSocketServer] connection {} disconnected ({} live), closeCode={} reason={}",
+                              iter->second.cid, _clients.size() - 1, static_cast<int>(socket->closeCode()),
+                              socket->closeReason().toStdString());
         _server.closeConnection(iter->second.cid);
         if (iter->second.handshakeTimer) {
             iter->second.handshakeTimer->stop();

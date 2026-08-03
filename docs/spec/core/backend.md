@@ -30,6 +30,7 @@ and react to backend changes.
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
+- [Server-side observability](#server-side-observability)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
@@ -390,6 +391,54 @@ trivially, because every queue is already empty. morph never preempts a
 running action to force a drain — a model that can run unboundedly long
 bounds itself; the deadline bounds the *caller's wait*, not the model.
 
+## Server-side observability
+
+`morph::log` exists and both `RemoteServer` and `QtWebSocketServer` have
+access to it, but several outcomes a client cannot distinguish from each
+other used to produce no server-side record at all — the operator questions
+"did the request arrive? was it rejected? how many clients are connected?
+why did that one drop?" had no server-side answer. Four points now log, each
+a one-line call at a point the code already reaches:
+
+- **`RemoteServer::dispatchMessage` — undecodable envelope (`logError`).** A
+  client that swallows its own error (or is malformed precisely because it
+  is confused) previously left no trace of a request that never dispatched
+  at all. Logs the connection id, the exception text, the byte count, and a
+  **truncated** (256-byte) prefix of the raw payload. The payload is the
+  most useful field for diagnosing *why* a client sent something malformed —
+  and the most likely to contain application data, hence truncated rather
+  than logged in full; server logs should already be treated as
+  operationally sensitive (they also carry exception text and, on other
+  lines, connection ids), and this is not a general redaction mechanism.
+- **`RemoteServer::dispatchMessage` — one line per successfully-decoded
+  request (`logDebug`).** `dispatchMessage` is the one place every kind
+  funnels through, so it is the natural spot: connection id, `kind`,
+  `callId`, `typeId`/`modelId`/`modelType`/`actionType` (whichever the kind
+  populates), and the body's byte count. Deliberately omits the session
+  principal (personal data in many deployments; attribution is still
+  possible after the fact by correlating `callId`/connection id with the
+  journal or action log where authentication is configured) and the
+  request body itself (already covered, truncated, on the decode-failure
+  path above — logging every successful body by default would be far higher
+  volume and duplicate what the action log already records for `execute`).
+  At `debug` because of that volume; a deployment that wants a quieter
+  default raises `morph::log::setLogLevel` to `info` or higher (the
+  library's own default minimum level is `debug` — see `logger.hpp` — so
+  this line *does* appear unless a deployer has already opted into a
+  quieter stream).
+- **`QtWebSocketServer::onNewConnection` — connection refused by
+  `maxConnections` (`logWarn`).** To the client this looks exactly like the
+  server being down; the operator previously had no way to learn the cap
+  was hit, which is the one piece of information that would explain the
+  symptom. Names the current live count and the configured cap.
+- **`QtWebSocketServer::onNewConnection`/`onDisconnected` — connect and
+  disconnect (`logInfo`).** Neither was recorded before, so there was no way
+  to reconstruct how many clients were live, or why one went away. Connect
+  logs the connection id and the live count (including the new connection);
+  disconnect logs the connection id, the live count (after removal), and the
+  WebSocket close code + reason — captured from the socket before it is
+  torn down, since those are the useful part of "why did that one drop?".
+
 ## `SimulatedRemoteBackend` — adapter for testing
 
 `SimulatedRemoteBackend` implements `IBackend` by forwarding all calls through
@@ -570,6 +619,14 @@ models instead of leaking them:
   `closeConnection` for every remaining client before aborting its socket, so an
   orderly server stop also reclaims every client's instances.
 
+**Observability.** `onNewConnection` logs at `morph::log::LogLevel::info` once
+a connection is admitted (connection id, live count including the new one);
+a connection refused for being over `cfg.maxConnections` logs at `warn`
+instead (naming the live count and the configured cap) before the socket is
+closed. `onDisconnected` logs at `info` (connection id, live count after
+removal, `QWebSocket::closeCode()`/`closeReason()` captured before teardown).
+See [Server-side observability](#server-side-observability).
+
 **Flow.** `listen()` binds to the requested TCP port on `cfg.bindAddress`
 (`QtWebSocketServerConfig`, default `QHostAddress::LocalHost` — today's
 behavior, unchanged) and starts accepting — unless `cfg.bindAddress` is
@@ -634,7 +691,7 @@ reason as `QtWebSocketBackendConfig`) bounds per-connection resource usage:
 
 | Field | Default | Enforcement |
 |---|---|---|
-| `maxConnections` | `0` (unbounded) | A connection accepted beyond this count is closed immediately in `onNewConnection`, before any signal is wired or the socket is tracked. |
+| `maxConnections` | `0` (unbounded) | A connection accepted beyond this count is closed immediately in `onNewConnection`, before any signal is wired or the socket is tracked. Logged at `morph::log::LogLevel::warn`, naming the live count and the cap — see [Server-side observability](#server-side-observability). |
 | `maxMessageBytes` | `wire::kMaxEnvelopeBytes` | Checked against the UTF-8 byte length of every incoming frame before it reaches `RemoteServer::handle()`; an oversized frame gets an immediate `err` reply and is never dispatched. The reply carries the rejected call's `callId`, recovered by `wire::detail::peekCallId`'s bounded prefix scan since the frame is deliberately never decoded. A zeroed `callId` would not merely fail to resolve the execute — `0` is the client's synchronous-reply discriminator, so it would resume an unrelated parked `register`/`deregister` with another call's reply. |
 | `messagesPerSecond` | `0` (unbounded) | A per-connection token bucket (capacity = `messagesPerSecond`, refilled continuously). A frame that finds an empty bucket is dropped silently — not replied to, not queued. |
 | `handshakeTimeout` | `0` (disabled) | A one-shot timer per connection; if no frame arrives before it fires, the socket is closed. Cancelled on the first frame. Because `QWebSocketServer::newConnection()` only fires after the WS (and TLS, in `SecureMode`) opening handshake completes, this in practice bounds time-to-first-frame after that point, not the handshake itself. |

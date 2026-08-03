@@ -859,9 +859,37 @@ private:
         try {
             env = ::morph::wire::decode(msg);
         } catch (const std::exception& exc) {
+            // Undecodable envelope: the one server-side record of a request
+            // that never dispatched at all. A client that swallows its own
+            // error (or is malformed precisely because it is confused) would
+            // otherwise leave no trace here. The payload prefix is the most
+            // useful field for diagnosing *why* the client sent something
+            // malformed -- and the most likely to carry application data, so
+            // it is capped at kLogPayloadPreviewBytes rather than logged in
+            // full. See docs/spec/core/backend.md, "Server-side observability".
+            constexpr std::size_t kLogPayloadPreviewBytes = 256;
+            std::string_view const preview =
+                std::string_view{msg}.substr(0, std::min(msg.size(), kLogPayloadPreviewBytes));
+            ::morph::log::logError("[dispatchMessage] undecodable envelope from connection {}: {} ({} bytes, "
+                                   "payload prefix: {}{})",
+                                   cid, exc.what(), msg.size(), preview,
+                                   msg.size() > kLogPayloadPreviewBytes ? "..." : "");
             reply(::morph::wire::encode(::morph::wire::makeErr(exc.what())));
             return;
         }
+        // One line per successfully-decoded request -- the point every kind
+        // funnels through, so a client stuck mid-handshake (or one that never
+        // sent anything) is distinguishable from one whose requests are
+        // arriving normally. Deliberately omits the session principal (opt-in
+        // territory: personal data in many deployments) and the payload body
+        // (already covered, truncated, on the decode-failure path above;
+        // logging every successful body by default would be far higher volume
+        // and duplicate what dispatch already records via the action log for
+        // execute).
+        ::morph::log::logDebug("[dispatchMessage] connection {}: kind={} callId={} typeId={} modelId={} "
+                               "modelType={} actionType={} bodyBytes={}",
+                               cid, env.kind, env.callId, env.typeId, env.modelId, env.modelType, env.actionType,
+                               env.body.size());
         // Once shutdown has begun, new work is rejected fast — before any of
         // the existing register/execute validation runs — while `deregister`
         // (and any other kind) still flows through unchanged, so a client can
