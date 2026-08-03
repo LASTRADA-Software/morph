@@ -122,6 +122,21 @@ fires instead. This mirrors the identical forwarding guard in
 path (`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
 forwarding the same way.
 
+Before any of that forwarding, the same `.then` closure checks the bridge's
+`_liveness` token (captured as `alive = liveness()`) and gates every
+bridge-touching side effect on it being unexpired — checked first, before
+`onResult` or `hasSubscribers()` run. A backend completion can in principle
+resolve after the `Bridge` is gone: the backend may be co-owned and outlive
+this `Bridge`, or the callback may already be running when `~Bridge()` runs
+concurrently on another thread. `onResult` — used for a result-keyed action to
+call back into the bridge via a captured raw pointer and adopt the binding's
+primary — and `hasSubscribers()` — which reads `this` — must never run once
+the bridge might be gone; running either on a dangling `Bridge` is a
+use-after-free. The typed result is still delivered to the caller's own
+`Completion` either way (`typedState->setValue` does not touch the bridge) —
+only the two bridge-touching side effects are skipped when the token has
+expired.
+
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
 switch either fully succeeds or leaves everything exactly as it was. It runs
 in two phases under `_mtx`:
@@ -452,7 +467,7 @@ make teardown order-independent.)
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 
