@@ -152,7 +152,8 @@ struct HandlerBinding {
     ///
     /// Empty until a keyed action or an explicit `attach` supplies one. Only
     /// meaningful when `shared` is set; a private binding never consults it.
-    /// Mutated only under `Bridge::_mtx`.
+    /// Mutated only under `Bridge::_attachMtx` (or, during `switchBackend()`
+    /// and the reconnect handler, both `_attachMtx` and `_mtx` together).
     std::string primary;
 
     /// @brief Whether this binding participates in the shared instance directory.
@@ -284,7 +285,7 @@ public:
     /// @param primary Canonical string encoding of the primary key to attach to.
     template <typename Model>
     void attachHandler(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
-        std::scoped_lock const lock{_mtx};
+        std::scoped_lock const lock{_attachMtx};
         if (binding->primary == primary && binding->currentId.load() != 0U) {
             return;
         }
@@ -309,7 +310,7 @@ public:
     /// `assignHandlerPrimary` promotes it in place once the key is known.
     /// @param binding Shared binding to bind.
     void ensureBound(const std::shared_ptr<detail::HandlerBinding>& binding) {
-        std::scoped_lock const lock{_mtx};
+        std::scoped_lock const lock{_attachMtx};
         if (binding->currentId.load() != 0U) {
             return;
         }
@@ -328,7 +329,7 @@ public:
     /// @param primary Canonical string encoding of the key to file it under.
     template <typename Model>
     void assignHandlerPrimary(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
-        std::scoped_lock const lock{_mtx};
+        std::scoped_lock const lock{_attachMtx};
         uint64_t const raw = binding->currentId.load();
         if (raw == 0U || primary.empty()) {
             return;
@@ -342,7 +343,7 @@ public:
     /// @param binding Binding to inspect.
     /// @return Canonical key string, or an empty string when unattached.
     [[nodiscard]] std::string bindingPrimary(const std::shared_ptr<detail::HandlerBinding>& binding) {
-        std::scoped_lock const lock{_mtx};
+        std::scoped_lock const lock{_attachMtx};
         return binding->primary;
     }
 
@@ -497,7 +498,12 @@ public:
         auto newShared = std::shared_ptr<::morph::backend::detail::IBackend>(std::move(newBackend));
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
         {
-            std::scoped_lock const lock{_mtx};
+            // Both mutexes: this phase reads/writes every live binding's
+            // `primary`/`contextKey` (via `_attachMtx`'s ownership of those
+            // fields) as well as `_handlers` itself (via `_mtx`), and must not
+            // race a concurrent attachHandler()/ensureBound()/
+            // assignHandlerPrimary() call on any one of them.
+            std::scoped_lock const lock{_mtx, _attachMtx};
 
             // Phase 1 — register every live binding on the new backend WITHOUT
             // mutating any `currentId` yet, staging (binding, newId) pairs. If a
@@ -793,7 +799,10 @@ private:
                 return;  // The Bridge is gone; do not touch `this`.
             }
             auto pinned = weakBackend.lock();
-            std::scoped_lock const lock{_mtx};
+            // Both mutexes: reads `_handlers` (guarded by `_mtx`) and each
+            // binding's `contextKey` (guarded by `_attachMtx`), same
+            // reasoning as switchBackend() above.
+            std::scoped_lock const lock{_mtx, _attachMtx};
             if (!pinned || pinned != loadBackend()) {
                 return;  // We've moved on to a different backend; ignore.
             }
@@ -813,6 +822,21 @@ private:
     std::shared_ptr<::morph::backend::detail::IBackend> _backend;
     std::mutex _mtx;
     std::vector<std::weak_ptr<detail::HandlerBinding>> _handlers;
+    // Guards the shared-handler attach/register/assign path (ensureBound,
+    // attachHandler, assignHandlerPrimary) separately from `_mtx`, which
+    // guards `_handlers` membership and the active-backend swap.
+    // attachModel/registerModelShared/assignPrimary can block on a full
+    // network round-trip for a remote backend; if that ran under `_mtx`, an
+    // unrelated handler's construction or destruction, or a switchBackend()
+    // call, on the *same* Bridge would block for the same round-trip, and a
+    // reply-delivering thread that itself needed `_mtx` could deadlock
+    // against it. `HandlerBinding::primary`/`contextKey` are therefore
+    // mutated (and must be read) only under `_attachMtx` — never under `_mtx`
+    // alone. `switchBackend()` and the reconnect handler, which also touch
+    // them alongside `_handlers`, take both mutexes together via
+    // `std::scoped_lock{_mtx, _attachMtx}` (deadlock-safe regardless of
+    // acquisition order, by `std::scoped_lock`'s own guarantee).
+    std::mutex _attachMtx;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;
     // Instance subscriptions. Held against the binding rather than a fixed

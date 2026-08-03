@@ -23,6 +23,7 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "test_support.hpp"
@@ -931,4 +932,96 @@ TEST_CASE("the server's attach is a no-op when re-attaching to the key already h
     std::vector<std::string> keys;
     REQUIRE_FALSE(glz::read_json(keys, listed.body));
     REQUIRE(keys == std::vector<std::string>{"5"});
+}
+
+namespace {
+
+/// An IBackend whose shared-register/attach blocks until told to proceed, so
+/// a test can hold Bridge's attach path "in flight" and prove unrelated
+/// handler registration on the same Bridge does not wait behind it.
+struct SlowAttachBackend : morph::backend::detail::IBackend {
+    std::atomic<bool> attachStarted{false};
+    std::atomic<bool> proceed{false};
+    std::atomic<uint64_t> nextId{0};
+
+    morph::exec::detail::ModelId registerModel(
+        const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory) override {
+        auto holder = factory();
+        (void)holder;
+        return morph::exec::detail::ModelId{++nextId};
+    }
+    morph::exec::detail::ModelId registerModelShared(const std::string& typeId,
+                                                      std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                                                      morph::backend::detail::InstanceIdentity identity) override {
+        if (identity.primary.empty()) {
+            return registerModel(typeId, std::move(factory));
+        }
+        attachStarted.store(true);
+        while (!proceed.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        auto holder = factory();
+        (void)holder;
+        return morph::exec::detail::ModelId{++nextId};
+    }
+    void deregisterModel(morph::exec::detail::ModelId) override {}
+    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
+                                                             morph::backend::detail::ActionCall,
+                                                             morph::exec::IExecutor* cbExec) override {
+        auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
+        morph::async::Completion<std::shared_ptr<void>> comp{state, cbExec};
+        state->setException(std::make_exception_ptr(std::runtime_error("not implemented")));
+        return comp;
+    }
+    void notifyBackendChanged() override {}
+    void cancelPending(const std::exception_ptr&) override {}
+};
+
+}  // namespace
+
+TEST_CASE("Bridge: an in-flight shared attach does not block unrelated handler registration", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    auto backend = std::make_unique<SlowAttachBackend>();
+    auto* backendPtr = backend.get();
+    Bridge bridge{std::move(backend)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> attacher{bridge, &exec};
+    std::thread attachThread([&] { attacher.attach(1); });
+    std::thread unrelatedThread;
+    std::atomic<bool> unrelatedDone{false};
+
+    // Guarantees both threads are joined -- even if a REQUIRE below throws --
+    // so a failing assertion never leaves a joinable std::thread dangling
+    // (which would std::terminate) or the backend permanently blocked.
+    // Unblocking the backend before joining means this cleanup itself cannot
+    // hang: once `proceed` is set, attachThread's backend call returns and
+    // releases whatever lock it was holding, so a still-pending
+    // unrelatedThread (blocked acquiring that same lock, pre-fix) is freed to
+    // finish too.
+    auto joinAll = [&] {
+        backendPtr->proceed.store(true);
+        if (attachThread.joinable()) {
+            attachThread.join();
+        }
+        if (unrelatedThread.joinable()) {
+            unrelatedThread.join();
+        }
+    };
+    try {
+        REQUIRE(morph::testing::waitUntil([&] { return backendPtr->attachStarted.load(); }));
+
+        // While the attach above is still blocked inside the backend, registering
+        // an unrelated handler on the same Bridge must not block behind it: a
+        // dedicated attach mutex means registerHandler() no longer contends for
+        // the same lock as a slow shared attach.
+        unrelatedThread = std::thread([&] {
+            BridgeHandler<ShiCounterModel> unrelated{bridge, &exec};
+            unrelatedDone.store(true);
+        });
+        REQUIRE(morph::testing::waitUntil([&] { return unrelatedDone.load(); }));
+    } catch (...) {
+        joinAll();
+        throw;
+    }
+    joinAll();
 }
