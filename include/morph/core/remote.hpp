@@ -436,7 +436,6 @@ public:
             for (std::size_t idx = 0; idx < refs; ++idx) {
                 releaseInstanceLocked(mid);
             }
-            _modelConnection.erase(mid);
         }
         _connectionScopes.erase(scopeIter);
     }
@@ -631,9 +630,7 @@ private:
                 }
             }
         }
-        if (releaseInstanceLocked(mid)) {
-            _modelConnection.erase(mid);
-        }
+        releaseInstanceLocked(mid);
     }
 
     /// @brief Records a new attachment of @p mid to @p cid. Caller holds `_regMtx`.
@@ -649,7 +646,6 @@ private:
             return false;
         }
         scopeIter->second[mid] += 1;
-        _modelConnection[mid] = cid;
         return true;
     }
 
@@ -930,7 +926,6 @@ private:
                             scopeAlreadyClosed = true;
                         } else {
                             scopeIter->second[mid] += 1;
-                            _modelConnection[mid] = cid;
                         }
                     }
                     if (!overLiveModelCap && !scopeAlreadyClosed) {
@@ -1033,26 +1028,15 @@ private:
                 }
                 {
                     std::scoped_lock const lock{_regMtx};
-                    releaseInstanceLocked(mid);
-                    // Keep the connection scope's membership in sync: an
-                    // explicit wire deregister drops one of this connection's
-                    // references, so a later closeConnection never
-                    // double-releases it.
-                    if (auto connIter = _modelConnection.find(mid); connIter != _modelConnection.end()) {
-                        if (auto scopeIter = _connectionScopes.find(connIter->second);
-                            scopeIter != _connectionScopes.end()) {
-                            auto refIter = scopeIter->second.find(mid);
-                            if (refIter != scopeIter->second.end()) {
-                                refIter->second -= 1;
-                                if (refIter->second == 0) {
-                                    scopeIter->second.erase(refIter);
-                                }
-                            }
-                        }
-                        if (!_models.contains(mid)) {
-                            _modelConnection.erase(connIter);
-                        }
-                    }
+                    // Release exactly the reference *this* connection (`cid`,
+                    // the scope the deregister request itself carries) holds,
+                    // not whichever connection happened to attach the
+                    // instance last -- a shared instance may have several
+                    // owning connections at once, and crediting the release
+                    // to the wrong one either strands a reference nobody will
+                    // ever decrement, or lets one connection's deregister
+                    // silently consume another's hold.
+                    releaseScopedLocked(mid, cid);
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
@@ -1323,10 +1307,6 @@ private:
     std::unordered_map<ConnectionId, std::unordered_map<::morph::exec::detail::ModelId, std::size_t,
                                                         ::morph::exec::detail::ModelIdHash>>
         _connectionScopes;
-    // Owning connection recorded per scoped instance; absent means unscoped
-    // (registered via the two-argument handle()/handleInline()).
-    std::unordered_map<::morph::exec::detail::ModelId, ConnectionId, ::morph::exec::detail::ModelIdHash>
-        _modelConnection;
     // Shared-instance directory: (typeId, primary) -> ModelId, its reverse, and
     // the cross-connection attach count. Guarded by _regMtx alongside
     // _models/_owners so directory membership can never desync from instance

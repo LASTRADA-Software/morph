@@ -282,6 +282,63 @@ TEST_CASE("morph::backend::RemoteServer: connection scopes are isolated from one
     REQUIRE(waiterB.env.body == "9");
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer: deregister releases the requesting connection's own reference, not "
+    "whichever connection attached last",
+    "[remote][connection-scope]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA),
+                   cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    auto modelId = regA.env.modelId;
+
+    // B attaches the same shared key -- the connection that "last touched"
+    // the instance, exactly the case a single-owner ModelId->ConnectionId map
+    // would misattribute the instance to.
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regB),
+                   cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.modelId == modelId);
+
+    // A releases its own reference explicitly.
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(modelId)), std::ref(dereg), cidA);
+    REQUIRE(dereg.await());
+    REQUIRE(dereg.env.kind == "ok");
+
+    // The instance must still be reachable -- B's reference is still live.
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.modelId = modelId;
+    execReq.modelType = "CS_SquareModel";
+    execReq.actionType = "CS_SquareAction";
+    execReq.body = R"({"x":3})";
+    WaitReply stillAlive;
+    server->handle(morph::wire::encode(execReq), std::ref(stillAlive));
+    REQUIRE(stillAlive.await());
+    REQUIRE(stillAlive.env.kind == "ok");
+
+    // Closing B's connection must release B's own reference and destroy the
+    // instance -- it must not find its scope entry already (wrongly) cleared
+    // by A's earlier deregister.
+    server->closeConnection(cidB);
+
+    WaitReply gone;
+    server->handle(morph::wire::encode(execReq), std::ref(gone));
+    REQUIRE(gone.await());
+    REQUIRE(gone.env.kind == "err");
+    REQUIRE(gone.env.message == "model not found");
+}
+
 TEST_CASE("morph::backend::RemoteServer: the unscoped two-argument handle() never populates any connection scope",
           "[remote][connection-scope][regression]") {
     morph::exec::ThreadPoolExecutor pool{2};
