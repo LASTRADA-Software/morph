@@ -23,6 +23,15 @@ namespace morph::journal {
 /// see `fromJson`.
 inline constexpr std::uint32_t kLogFormatVersion = 1;
 
+/// @brief Discriminates a recorded `LogEntry` as a successful execution or one
+///        rejected by the validator / thrown by `Model::execute`.
+///
+/// A failed entry has an empty `result` (there was none) and a non-empty
+/// `error`; a succeeded entry is the reverse. Serialises as the string
+/// `"Succeeded"`/`"Failed"` (see the `glz::meta` specialisation below) so the
+/// audit trail stays human-readable without cross-referencing the enum.
+enum class Outcome : std::uint8_t { Succeeded, Failed };
+
 /// @brief One recorded execution of an action against a model instance.
 ///
 /// Produced automatically by `morph::model::detail::IModelHolder::recordIfAttached`
@@ -45,8 +54,18 @@ struct LogEntry {
     std::string payload;
 
     /// @brief JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after
-    ///        successful execution.
+    ///        successful execution. Empty when `outcome == Outcome::Failed`.
     std::string result;
+
+    /// @brief Whether this execution succeeded or was rejected/threw. Defaults to
+    ///        `Succeeded` so a pre-existing on-disk entry (written before this
+    ///        field existed) decodes unchanged under the lenient reader — an
+    ///        absent key is indistinguishable from an explicit `Succeeded`.
+    Outcome outcome = Outcome::Succeeded;
+
+    /// @brief `std::exception::what()` from the exception that rejected the
+    ///        action. Empty unless `outcome == Outcome::Failed`.
+    std::string error{};
 
     /// @brief Auth principal from `morph::session::current()`, if any. Empty if unset.
     std::string principal;
@@ -72,6 +91,20 @@ struct LogEntry {
     /// correct: v1 is today's shape, `kLogFormatVersion` merely names it.
     std::uint32_t v = kLogFormatVersion;
 };
+
+}  // namespace morph::journal
+
+/// @brief Reflects `Outcome` as the strings `"Succeeded"`/`"Failed"` rather than
+/// its underlying `0`/`1`, so a journal line stays readable without
+/// cross-referencing the enum. `LogEntry` otherwise needs no `glz::meta` at
+/// all (see `toJson`'s doc comment) -- this is the one field that does.
+template <>
+struct glz::meta<morph::journal::Outcome> {
+    using enum morph::journal::Outcome;
+    static constexpr auto value = glz::enumerate(Succeeded, Failed);
+};
+
+namespace morph::journal {
 
 /// @brief Thrown by `toJson`/`fromJson` when `LogEntry` (de)serialisation fails.
 struct SerializationError : std::runtime_error {
@@ -106,9 +139,11 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
 /// @brief Encodes @p entry as JSON.
 ///
 /// `LogEntry` is a plain aggregate, so Glaze reflects it without a `glz::meta`
-/// specialisation — the same automatic reflection `BRIDGE_REGISTER_ACTION`
-/// relies on for user action structs. Used by sinks that need an opaque
-/// string representation (`FileActionLog`).
+/// specialisation of its own — the same automatic reflection
+/// `BRIDGE_REGISTER_ACTION` relies on for user action structs. (Its `outcome`
+/// field is `Outcome`, which does have a `glz::meta` — see above — so it reads
+/// back as `"Succeeded"`/`"Failed"`, not `0`/`1`.) Used by sinks that need an
+/// opaque string representation (`FileActionLog`).
 /// @throws SerializationError on encode failure (see `detail::throwOnGlazeError`
 ///         for why this is not realistically reachable for `LogEntry`).
 inline std::string toJson(const LogEntry& entry) {

@@ -48,9 +48,10 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 ## LogEntry — one recorded action execution
 
 `LogEntry` is produced automatically by
-`morph::model::detail::IModelHolder::recordIfAttached` after every successful
-loggable action. Application and model code never construct or append these
-directly.
+`morph::model::detail::IModelHolder::recordIfAttached` after every loggable
+action attempt — **both** a successful `Model::execute` and one that throws
+(a validator rejection, a rejected write). Application and model code never
+construct or append these directly.
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -58,15 +59,23 @@ directly.
 | `modelType` | `std::string` | String type-id of the model (`ModelTraits<M>::typeId()`). |
 | `entityKey` | `std::string` | Stable identity of the model instance (e.g. account id), stamped from `attachActionLog()`. Empty if none was set. |
 | `actionType` | `std::string` | String type-id of the action (`ActionTraits<A>::typeId()`). |
-| `payload` | `std::string` | JSON-encoded request (`ActionTraits<A>::toJson`). |
-| `result` | `std::string` | JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after successful execution. |
+| `payload` | `std::string` | JSON-encoded request (`ActionTraits<A>::toJson`). Always present, regardless of `outcome`. |
+| `result` | `std::string` | JSON-encoded result (`ActionTraits<A>::resultToJson`). Populated when `outcome == Outcome::Succeeded`; empty when `Failed`. |
+| `outcome` | `Outcome` | `Succeeded` or `Failed`. Defaults to `Succeeded` so a pre-existing on-disk entry (written before this field existed) decodes unchanged — an absent key is indistinguishable from an explicit `Succeeded`. Serialises as the string `"Succeeded"`/`"Failed"` via a `glz::meta<Outcome>` specialisation (the one exception to "`LogEntry` needs no `glz::meta`" below). |
+| `error` | `std::string` | `std::exception::what()` from the exception that rejected the action. Empty unless `outcome == Outcome::Failed`. |
 | `principal` | `std::string` | Auth principal from `morph::session::current()`, if any. Empty if unset. |
 | `timestampMs` | `int64_t` | Wall-clock time, milliseconds since the Unix epoch. |
 | `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
 | `v` | `std::uint32_t` | Line-format version this entry was written at. Defaults to `kLogFormatVersion`. See [Line-format version (`v`)](#line-format-version-v). |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
-specialisation, the same automatic reflection `BRIDGE_REGISTER_ACTION` relies on.
+specialisation of its own, the same automatic reflection `BRIDGE_REGISTER_ACTION`
+relies on. Both real `Model::execute()` call sites — `ActionDispatcher::registerAction`'s
+runner (server/remote topologies) and `Bridge::executeVia`'s `localOp`
+(`LocalBackend`) — wrap the call in a `try`/`catch (const std::exception&)`:
+the `catch` records a `Failed` entry (`error = exc.what()`, `result` empty)
+and rethrows unchanged, so the caller's error handling is unaffected — only
+the journal gains an entry it previously lacked.
 
 ## Serialization
 
@@ -444,6 +453,13 @@ std::unique_ptr<IModelHolder> replay(
 Throws `std::runtime_error` if `modelTypeId` or any entry's action type is
 unregistered.
 
+**`Failed` entries are skipped, not replayed.** A rejected/thrown action never
+mutated model state, so there is nothing to reconstruct from it — and
+re-dispatching it would likely throw the very same exception again, aborting
+reconstruction. `replay()` filters out every entry with `outcome ==
+Outcome::Failed` before dispatching; `Succeeded` entries dispatch exactly as
+before.
+
 **Reconstruction does not pollute the live audit trail.** `registry.create(...)`
 (via `ModelFactory::create`) auto-attaches the process-wide default action log
 to the new holder, exactly as for any ordinary model instance. `replay()`
@@ -665,7 +681,8 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta`). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
+| `Outcome` | `enum class : std::uint8_t` | `Succeeded` (default) or `Failed`. Has a `glz::meta` specialisation so it (de)serialises as the string, not the underlying int. |
 | `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON. Throws `SerializationError`. |
 | `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
@@ -726,15 +743,24 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 
 These hold for every sink and are relied on by `replay()`/`undoLast()`:
 
-- **Only successful, loggable actions are recorded.** A `LogEntry` is produced
-  by `IModelHolder::recordIfAttached` *after* an action executes successfully.
-  Actions that throw (business-rule failures), drafts rejected by a validator
-  (`ActionValidator::validate`), and any action registered `Loggable::No`
-  (typically pure queries like `GetAccount`/`ListAccounts`) never appear in the
-  log. The log is a record of committed facts, not of attempts.
-- **`result` reflects post-execution state.** `payload` is the request JSON;
-  `result` is captured only after success, so replaying `payload` re-derives an
-  equivalent `result` for a deterministic model.
+- **Every loggable action attempt is recorded, tagged with its outcome.** A
+  `LogEntry` is produced by `IModelHolder::recordIfAttached` after both a
+  successful `Model::execute` (`outcome = Succeeded`) and one that throws — a
+  business-rule failure, a validator rejection (`ActionValidator::validate`)
+  — (`outcome = Failed`, `error` set, `result` empty). Any action registered
+  `Loggable::No` (typically pure queries like `GetAccount`/`ListAccounts`)
+  still never appears in the log either way. The log is a record of every
+  attempt against a loggable action, not only the ones that committed.
+- **`result` reflects post-execution state; only `Succeeded` entries have one.**
+  `payload` is the request JSON, always present. `result` is captured only on
+  success, so replaying `payload` re-derives an equivalent `result` for a
+  deterministic model. A `Failed` entry has no `result` to derive — see
+  `replay()`, next.
+- **`replay()`/`undoLast()` skip `Failed` entries.** A failed attempt never
+  mutated model state, so there is nothing to reconstruct from it — and
+  re-dispatching it would likely throw the same exception again, aborting
+  reconstruction. `replay()` filters `outcome == Outcome::Failed` entries out
+  before dispatching; `Succeeded` entries replay exactly as before.
 - **`seq` is sink-local and re-stamped on every forward.** Each sink's
   `append()` overwrites `entry.seq` with its own `++_nextSeq`, ignoring any
   incoming value. When `SessionLog::checkpoint()` forwards entries to a durable

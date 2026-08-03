@@ -697,26 +697,51 @@ public:
                                                       ::morph::model::ActionTraits<Action>::typeId()};
             }
             auto& model = holder.template into<Model>();
-            auto result = std::make_shared<R>(model.execute(*sharedAction));
             // Local mode has no client/server split, so this is the same execution
             // site `ActionDispatcher::registerAction`'s runner is for remote modes
-            // (registry.hpp) — see that overload's doc comment for the full story.
-            if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
-                if (holder.hasActionLog()) {
-                    // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                    holder.recordIfAttached(::morph::journal::LogEntry{
-                        .seq = 0,
-                        .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
-                        .entityKey = {},
-                        .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
-                        .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
-                        .result = ::morph::model::ActionTraits<Action>::resultToJson(*result),
-                        .principal = {},
-                        .timestampMs = 0,
-                    });
+            // (registry.hpp) — see that overload's doc comment for the full story,
+            // including why both the success and failure paths below record a
+            // journal entry (a rejected/throwing execute must not leave the audit
+            // trail silent) and why the exception is rethrown unchanged either way.
+            try {
+                auto result = std::make_shared<R>(model.execute(*sharedAction));
+                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                        holder.recordIfAttached(::morph::journal::LogEntry{
+                            .seq = 0,
+                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            .entityKey = {},
+                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            .result = ::morph::model::ActionTraits<Action>::resultToJson(*result),
+                            .outcome = ::morph::journal::Outcome::Succeeded,
+                            .error = {},
+                            .principal = {},
+                            .timestampMs = 0,
+                        });
+                    }
                 }
+                return result;
+            } catch (const std::exception& exc) {
+                if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        holder.recordIfAttached(::morph::journal::LogEntry{
+                            .seq = 0,
+                            .modelType = std::string{::morph::model::ModelTraits<Model>::typeId()},
+                            .entityKey = {},
+                            .actionType = std::string{::morph::model::ActionTraits<Action>::typeId()},
+                            .payload = ::morph::model::ActionTraits<Action>::toJson(*sharedAction),
+                            .result = {},
+                            .outcome = ::morph::journal::Outcome::Failed,
+                            .error = exc.what(),
+                            .principal = {},
+                            .timestampMs = 0,
+                        });
+                    }
+                }
+                throw;
             }
-            return result;
         };
         {
             std::scoped_lock const lock{_sessionMtx};

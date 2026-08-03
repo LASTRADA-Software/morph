@@ -26,7 +26,8 @@ namespace morph::journal {
 /// state from a durable log and powers `SessionLog::undoLast()` below.
 ///
 /// @param modelTypeId String type-id of the model to reconstruct (`ModelTraits<M>::typeId()`).
-/// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`.
+/// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`. Entries
+///                    with `outcome == Outcome::Failed` are skipped (see below).
 /// @param registry    Model factory registry; defaults to the process-level singleton.
 /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.
 /// @return A freshly created holder with @p entries replayed against it.
@@ -42,6 +43,17 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
     // into the live sink, corrupting the very audit trail we are reading from.
     holder->attachActionLog(nullptr, {});
     for (const auto& entry : entries) {
+        // A Failed entry (see action_log.hpp's `Outcome`) never mutated model
+        // state -- Model::execute threw or the validator rejected it before any
+        // state change -- so there is nothing to reconstruct from it. Worse,
+        // re-dispatching it would very likely throw the same exception again
+        // (the same rejected precondition), aborting reconstruction outright.
+        // Skipping it is exactly "replay only committed facts", which is what
+        // this function already promised before Failed entries could appear in
+        // the same log stream (issue #23).
+        if (entry.outcome == Outcome::Failed) {
+            continue;
+        }
         dispatcher.dispatch(entry.modelType, entry.actionType, *holder, entry.payload);
     }
     return holder;
