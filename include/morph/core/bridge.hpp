@@ -709,12 +709,27 @@ public:
                 // then hang forever) and QtExecutor lets it reach the event loop
                 // and std::terminate. Mirrors the forwarding guard in remote.hpp's
                 // SimulatedRemoteBackend::execute. See docs/spec/bridge.md.
+                //
+                // A backend completion can in principle resolve after the
+                // Bridge is gone (see liveness()'s doc comment): the backend
+                // may be co-owned and outlive this Bridge, or this callback
+                // may already be running when ~Bridge() runs concurrently on
+                // another thread. Check liveness FIRST, before touching
+                // anything that reaches into the bridge -- both `onResult`
+                // (which, for a result-keyed action, calls back into this
+                // bridge via a captured raw pointer to assign the binding's
+                // primary) and hasSubscribers() (which reads `this`) must
+                // never run once the bridge might be gone. The typed result
+                // is still delivered to the caller's own Completion either
+                // way -- only the two bridge-touching side effects are
+                // skipped.
                 try {
                     auto* const typedResult = static_cast<R*>(vAny.get());
+                    bool const bridgeAlive = !alive.expired();
                     // Runs before the value is moved out and before the caller's
                     // own .then, so a result-sourced primary key is adopted by
                     // the binding before any user code observes the result.
-                    if (onResult) {
+                    if (onResult && bridgeAlive) {
                         onResult(*typedResult);
                     }
                     // Fan the result out to everything attached to this
@@ -722,7 +737,7 @@ public:
                     // bridge's liveness token: a completion can in principle
                     // resolve after the Bridge is gone.
                     if constexpr (std::is_copy_constructible_v<R>) {
-                        if (hasSubscribers() && !alive.expired()) {
+                        if (bridgeAlive && hasSubscribers()) {
                             publishResult(::morph::exec::detail::ModelId{raw}, std::type_index{typeid(R)},
                                           std::any{*typedResult});
                         }

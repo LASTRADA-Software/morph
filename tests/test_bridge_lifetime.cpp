@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Regression tests for two Bridge memory-safety / robustness fixes:
+// Regression tests for three Bridge memory-safety / robustness fixes:
 //   FIX 2 — ~Bridge clears the active backend's reconnect handler and the
 //           handler guards on the bridge's liveness token, so a reconnect fired
 //           by a co-owned backend after the Bridge is destroyed is a safe no-op
@@ -9,6 +9,11 @@
 //           thrown while moving the result into the typed completion and routes
 //           it to onError, instead of letting it escape the callback executor
 //           (which would hang the completion or terminate the Qt loop).
+//   FIX 5 — executeVia's `.then` closure checks the bridge's liveness token
+//           BEFORE touching anything that reaches into the bridge (`onResult`
+//           and `hasSubscribers()`), so a backend completion that resolves
+//           after `~Bridge()` has run does not dereference the dangling
+//           `Bridge`.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -133,7 +138,56 @@ public:
     void cancelPending(const std::exception_ptr&) override {}
 };
 
+// ── FIX 5 fixtures ───────────────────────────────────────────────────────────
+
+// A plain, copy-constructible result -- unlike ThrowOnMove above, this must
+// move/copy cleanly so the test isolates FIX 5's ordering bug (hasSubscribers()
+// reading a dangling `this`) rather than FIX 4's move-exception path.
+struct DeferredAction {};
+struct DeferredModel {
+    int execute(const DeferredAction&) const { return 0; }
+};
+
+// A backend whose execute() never resolves on its own: it hands back a fresh
+// CompletionState and stashes it, so the test can destroy the Bridge while the
+// completion is still pending and only resolve it afterward -- reproducing the
+// exact race executeVia's liveness guard exists for.
+class DeferredResultBackend : public morph::backend::detail::IBackend {
+public:
+    morph::exec::detail::ModelId registerModel(
+        const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>) override {
+        return morph::exec::detail::ModelId{1};
+    }
+    void deregisterModel(morph::exec::detail::ModelId) override {}
+    morph::async::Completion<std::shared_ptr<void>> execute(morph::exec::detail::ModelId,
+                                                            morph::backend::detail::ActionCall,
+                                                            morph::exec::IExecutor* cbExec) override {
+        state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
+        return {state, cbExec};
+    }
+    void notifyBackendChanged() override {}
+    void cancelPending(const std::exception_ptr&) override {}
+
+    // Left un-resolved by execute(); the test resolves it directly once it
+    // wants the completion to fire.
+    std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
+};
+
 }  // namespace
+
+template <>
+struct morph::model::ModelTraits<DeferredModel> {
+    static constexpr std::string_view typeId() { return "BL_DeferredModel"; }
+};
+template <>
+struct morph::model::ActionTraits<DeferredAction> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "BL_DeferredAction"; }
+    static std::string toJson(const DeferredAction&) { return "{}"; }
+    [[maybe_unused]] static DeferredAction fromJson(std::string_view) { return {}; }
+    static std::string resultToJson(const int&) { return "0"; }
+    static int resultFromJson(std::string_view) { return 0; }
+};
 
 template <>
 struct morph::model::ModelTraits<ThrowModel> {
@@ -221,4 +275,41 @@ TEST_CASE("executeVia routes a throwing result move to onError instead of hangin
     REQUIRE(errFired.load());
     REQUIRE_FALSE(okFired.load());
     REQUIRE(errWhat.find("move threw") != std::string::npos);
+}
+
+// ── FIX 5 ────────────────────────────────────────────────────────────────────
+
+TEST_CASE("Bridge: a completion resolving after the bridge is destroyed does not touch the dead bridge",
+          "[bridge][lifetime]") {
+    auto backendOwner = std::make_unique<DeferredResultBackend>();
+    auto* const backendPtr = backendOwner.get();
+    morph::testing::InlineExecutor cbExec;
+
+    std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> pending;
+    {
+        morph::bridge::Bridge bridge{std::move(backendOwner)};
+
+        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        binding->typeId = "BL_DeferredModel";
+        binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<DeferredModel>(); };
+        bridge.registerHandler(binding);
+
+        // Kicks off executeVia's `.then` chain against `bridge`, but the fake
+        // backend never resolves it -- the completion (and the `this`-capturing
+        // closure attached to it) is still pending when `bridge` goes out of
+        // scope below.
+        auto completion = bridge.executeVia<DeferredModel, DeferredAction>(binding, DeferredAction{}, &cbExec);
+        (void)completion;
+
+        pending = backendPtr->state;
+        REQUIRE(pending);
+        // ~Bridge runs here, with the completion still unresolved.
+    }
+    // The Bridge above is already destroyed. Resolving the backend's completion
+    // now must not crash or touch freed memory -- this is exactly the
+    // "completion resolves after the Bridge is gone" race executeVia's liveness
+    // guard exists for. Catch2 reports a crash (e.g. under ASan) as a test
+    // failure/signal, so no further assertion is needed beyond reaching SUCCEED.
+    pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
+    SUCCEED("resolving a completion after Bridge destruction did not touch the dead bridge");
 }
