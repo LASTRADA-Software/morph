@@ -13,10 +13,20 @@
 //           BEFORE touching anything that reaches into the bridge (`onResult`
 //           and `hasSubscribers()`), so a backend completion that resolves
 //           after `~Bridge()` has run does not dereference the dangling
-//           `Bridge`.
+//           `Bridge`. Two test cases cover the two guarded call sites with
+//           different strength: the `onResult` case is a deterministic,
+//           sanitizer-free regression test (pre-fix, `onResult` ran with no
+//           guard at all, so a flag set as its first statement differs
+//           pre/post fix regardless of memory contents); the
+//           `hasSubscribers()` case is a best-effort probe only -- see its
+//           comment for why a sequential, single-threaded test structurally
+//           cannot observe a behavioural difference there without a working
+//           sanitizer.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <cstring>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -24,6 +34,7 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/core/registry.hpp>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -279,37 +290,131 @@ TEST_CASE("executeVia routes a throwing result move to onError instead of hangin
 
 // ── FIX 5 ────────────────────────────────────────────────────────────────────
 
-TEST_CASE("Bridge: a completion resolving after the bridge is destroyed does not touch the dead bridge",
-          "[bridge][lifetime]") {
+TEST_CASE("Bridge: onResult does not run once the bridge is destroyed", "[bridge][lifetime]") {
+    // Mirrors BridgeHandler::execute's ResultKeyed branch (bridge.hpp, the
+    // `if constexpr (kShared && ResultKeyed<Action>)` case): a non-empty
+    // `onResult` callback that calls back into the bridge through a captured
+    // raw pointer to adopt a result-sourced primary key
+    // (`bridgePtr->assignHandlerPrimary<Model>(...)`) -- the exact shape of
+    // the second bridge-touching side effect FIX 5 guards, and the more
+    // severe half of the original bug: pre-fix, `onResult` ran completely
+    // unconditionally, with no liveness check at all.
+    //
+    // This half is fully deterministic to detect even without a sanitizer.
+    // The lambda's first statement -- `onResultRan.store(true)` -- touches
+    // only a local test variable, not the bridge, so it is always safely
+    // observable if `onResult` is invoked at all, regardless of what the
+    // subsequent (genuinely dangerous) bridge access does. Pre-fix, the
+    // unconditional call means this flag always ends up `true`. Post-fix, the
+    // `onResult && bridgeAlive` guard means `onResult` -- and therefore this
+    // lambda -- never runs at all once the bridge is gone, so the flag stays
+    // `false`. If the dangerous call after it crashes the process on a
+    // pre-fix build (locking/copying the destroyed bridge's `_mtx`/`_backend`
+    // members), Catch2's fatal-signal handling reports that as a failure too
+    // -- either outcome (assertion failure or a crash) correctly fails this
+    // test against the pre-fix ordering.
     auto backendOwner = std::make_unique<DeferredResultBackend>();
     auto* const backendPtr = backendOwner.get();
     morph::testing::InlineExecutor cbExec;
 
-    std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> pending;
-    {
-        morph::bridge::Bridge bridge{std::move(backendOwner)};
+    // Heap-allocated (not stack-local via RAII scope exit) so the freed
+    // memory actually goes back to the allocator instead of merely leaving a
+    // stack frame whose bytes nothing has touched yet.
+    auto* bridge = new morph::bridge::Bridge(std::move(backendOwner));
 
-        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
-        binding->typeId = "BL_DeferredModel";
-        binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<DeferredModel>(); };
-        bridge.registerHandler(binding);
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "BL_DeferredModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<DeferredModel>(); };
+    bridge->registerHandler(binding);
 
-        // Kicks off executeVia's `.then` chain against `bridge`, but the fake
-        // backend never resolves it -- the completion (and the `this`-capturing
-        // closure attached to it) is still pending when `bridge` goes out of
-        // scope below.
-        auto completion = bridge.executeVia<DeferredModel, DeferredAction>(binding, DeferredAction{}, &cbExec);
-        (void)completion;
+    std::atomic<bool> onResultRan{false};
+    auto completion = bridge->executeVia<DeferredModel, DeferredAction>(
+        binding, DeferredAction{}, &cbExec, [bridge, binding, &onResultRan](const int&) {
+            onResultRan.store(true);
+            bridge->assignHandlerPrimary<DeferredModel>(binding, "42");
+        });
+    (void)completion;
 
-        pending = backendPtr->state;
-        REQUIRE(pending);
-        // ~Bridge runs here, with the completion still unresolved.
-    }
-    // The Bridge above is already destroyed. Resolving the backend's completion
-    // now must not crash or touch freed memory -- this is exactly the
-    // "completion resolves after the Bridge is gone" race executeVia's liveness
-    // guard exists for. Catch2 reports a crash (e.g. under ASan) as a test
-    // failure/signal, so no further assertion is needed beyond reaching SUCCEED.
+    auto pending = backendPtr->state;
+    REQUIRE(pending);
+
+    delete bridge;  // ~Bridge runs here; `bridge` is now a dangling pointer.
+    bridge = nullptr;
+
     pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
-    SUCCEED("resolving a completion after Bridge destruction did not touch the dead bridge");
+    REQUIRE_FALSE(onResultRan.load());
+}
+
+TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (best-effort probe)",
+          "[bridge][lifetime]") {
+    // Unlike the onResult case above, this half of FIX 5 cannot be turned
+    // into a deterministic plain-build regression test. `hasSubscribers()`
+    // only reads a trivially-destructible `std::atomic<size_t>`, and -- once
+    // the bridge really is fully destroyed before the completion resolves --
+    // the surviving `!alive.expired()` half of the old
+    // `hasSubscribers() && !alive.expired()` condition is `false` regardless
+    // of which operand is evaluated first. So the *observable branch
+    // outcome* (whether `publishResult` runs) is identical pre- and post-fix
+    // in a sequential, single-threaded destroy-then-resolve test like this
+    // one: no postcondition assertion can tell the two orderings apart here.
+    // The actual bug this guard exists for is either (a) the read of freed
+    // memory being itself undefined behaviour -- detectable only by a
+    // memory-safety tool such as ASan -- or (b) a genuine data race where the
+    // completion's callback runs concurrently with `~Bridge()` on another
+    // thread, which a sequential test cannot reproduce at all (that needs
+    // TSan plus real concurrency).
+    //
+    // We investigated using a sanitizer here: both the whole `morph_tests`
+    // binary and this file's tests in isolation hang indefinitely under this
+    // machine's AppleClang ASan+UBSan combination (confirmed against
+    // unrelated, already-passing tests too -- see the task report), so that
+    // route is not available in this environment. This test is therefore a
+    // best-effort probe, not a regression guard: heap-allocating the bridge
+    // and aggressively overwriting freed memory with a recognizable,
+    // non-zero pattern raises -- but does not guarantee -- the odds that a
+    // pre-fix read of the dangling `this` behaves observably differently
+    // (e.g. a crash while walking a corrupted `_subscriptions` vector, if
+    // `hasSubscribers()` happens to read back a nonzero count from reused
+    // memory). Confirmed empirically that it does NOT reliably fail against
+    // the pre-fix ordering (see the report); do not read this test as proof
+    // of coverage the way the onResult test above is.
+    auto backendOwner = std::make_unique<DeferredResultBackend>();
+    auto* const backendPtr = backendOwner.get();
+    morph::testing::InlineExecutor cbExec;
+
+    auto* bridge = new morph::bridge::Bridge(std::move(backendOwner));
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "BL_DeferredModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<DeferredModel>(); };
+    bridge->registerHandler(binding);
+
+    // No onResult here -- this case isolates the hasSubscribers()/
+    // publishResult side effect from the onResult side effect covered above.
+    auto completion = bridge->executeVia<DeferredModel, DeferredAction>(binding, DeferredAction{}, &cbExec);
+    (void)completion;
+
+    auto pending = backendPtr->state;
+    REQUIRE(pending);
+
+    delete bridge;  // ~Bridge runs here; `bridge` is now a dangling pointer.
+    bridge = nullptr;
+
+    // Raise the odds the allocator hands the freed Bridge's memory back for
+    // one of these same-size allocations, filled with a distinct, non-zero
+    // byte pattern rather than bytes nothing has ever written to.
+    constexpr std::size_t kBridgeSize = sizeof(morph::bridge::Bridge);
+    constexpr int kFillAttempts = 16;
+    for (int i = 0; i < kFillAttempts; ++i) {
+        auto* const filler = static_cast<unsigned char*>(::operator new(kBridgeSize));
+        std::memset(filler, 0xAA, kBridgeSize);
+        // Deliberately leaked for the rest of the test process -- freeing it
+        // immediately would just hand the same memory straight back on the
+        // next iteration, defeating the point of trying several attempts.
+    }
+
+    // Must not crash even if hasSubscribers() does read back the freed,
+    // now-scribbled memory. See the comment above for why this is the
+    // strongest available check without a working sanitizer.
+    pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
+    SUCCEED("resolving after destruction did not crash (best-effort probe; see comment above)");
 }
