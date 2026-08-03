@@ -285,7 +285,7 @@ public:
                     }
                 }
                 return resultJson;
-            } catch (const std::exception& exc) {
+            } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         holder.recordIfAttached(::morph::journal::LogEntry{

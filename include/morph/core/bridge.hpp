@@ -723,7 +723,7 @@ public:
                     }
                 }
                 return result;
-            } catch (const std::exception& exc) {
+            } catch (const std::exception& exc [[maybe_unused]]) {
                 if constexpr (::morph::model::detail::actionLoggable<Action>() == ::morph::model::Loggable::Yes) {
                     if (holder.hasActionLog()) {
                         holder.recordIfAttached(::morph::journal::LogEntry{
