@@ -27,7 +27,7 @@ TEST_CASE("morph::session::Principal: default-constructed has no id and no roles
 
 TEST_CASE("morph::session::Principal::hasRole: true for a present role, false for an absent one",
          "[session][principal]") {
-    Principal principal{.id = "alice", .roles = {"viewer", "editor"}};
+    Principal principal{.id = "alice", .roles = {"viewer", "editor"}, .claims = {}};
     REQUIRE(principal.hasRole("viewer"));
     REQUIRE(principal.hasRole("editor"));
     REQUIRE_FALSE(principal.hasRole("admin"));
@@ -73,7 +73,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: readable without an active dispa
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
 
-    bridge.setPrincipal(Principal{.id = "bob", .roles = {"viewer"}});
+    bridge.setPrincipal(Principal{.id = "bob", .roles = {"viewer"}, .claims = {}});
     REQUIRE(bridge.currentPrincipal().hasRole("viewer"));
     REQUIRE_FALSE(bridge.currentPrincipal().hasRole("editor"));
 }
@@ -83,7 +83,7 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal: passing a default-constructed Pr
     morph::exec::ThreadPoolExecutor pool{2};
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
 
-    bridge.setPrincipal(Principal{.id = "alice", .roles = {"editor"}});
+    bridge.setPrincipal(Principal{.id = "alice", .roles = {"editor"}, .claims = {}});
     REQUIRE(bridge.currentPrincipal().id == "alice");
 
     bridge.setPrincipal(Principal{});  // sign-out
@@ -98,8 +98,8 @@ TEST_CASE("morph::bridge::Bridge::setPrincipal/currentPrincipal: independent per
     morph::bridge::Bridge bridgeA{std::make_unique<morph::backend::LocalBackend>(pool1)};
     morph::bridge::Bridge bridgeB{std::make_unique<morph::backend::LocalBackend>(pool2)};
 
-    bridgeA.setPrincipal(Principal{.id = "alice"});
-    bridgeB.setPrincipal(Principal{.id = "bob"});
+    bridgeA.setPrincipal(Principal{.id = "alice", .roles = {}, .claims = {}});
+    bridgeB.setPrincipal(Principal{.id = "bob", .roles = {}, .claims = {}});
 
     REQUIRE(bridgeA.currentPrincipal().id == "alice");
     REQUIRE(bridgeB.currentPrincipal().id == "bob");
