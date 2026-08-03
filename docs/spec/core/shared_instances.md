@@ -379,10 +379,20 @@ strictly reduces pressure on it.
   observable — `primary()` returning empty after a successful execute is the
   signal — rather than silently degrading.
 - **Attaching to a key whose entity does not exist.** The directory happily
-  creates an instance; hydration fails inside the model and the action completes
-  through `onError`. The instance must not be left in the directory in a
-  half-hydrated state, so a failed *first* action on a freshly created shared
-  instance releases it.
+  creates an instance; hydration fails inside the model and the action
+  completes through `onError`. The instance must not be handed to a *new*
+  attacher in that half-hydrated state, so its very first action's outcome is
+  tracked: if it fails, the instance is marked and evicted from the directory
+  **the next time anyone else attaches to that key** — not immediately. The
+  instance itself is not destroyed; it stays alive (and still counts against
+  `LimitPolicy::maxLiveModels`) until whoever created it releases it
+  normally, the same as any other instance. The handler that hit the failure
+  does not self-heal: its primary is already set to the poisoned key, so
+  retrying the same keyed action re-points nowhere (`attachHandler`'s
+  no-op-on-same-primary guard skips the backend entirely) — it keeps its
+  broken instance until it releases and re-attaches from scratch. A
+  *different* handler attaching to the same key afterward is unaffected and
+  gets a fresh instance.
 - **`instances()` raced against `attach`.** Documented as inherent: the snapshot
   is stale on arrival. An `attach` to a key from a stale list is not an error —
   it simply creates the instance again.
@@ -419,6 +429,12 @@ strictly reduces pressure on it.
 - **Enumeration is per model type and unfiltered.** No paging, no predicate; a
   model type with very many live instances returns all of them.
 - **`instances()` discloses live keys** to any principal `authorize` admits.
+- **A second attacher can still land on an instance whose first action is
+  still in flight.** Poisoning is only checked at attach time, against
+  instances whose first action has already settled and failed; it is not
+  retroactive. Two attaches racing the same not-yet-existing key can both
+  reach the same instance while its first action is still running, and only
+  learn together whether it succeeded.
 
 ## Non-goals
 
