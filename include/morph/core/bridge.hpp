@@ -930,25 +930,44 @@ public:
     ///
     /// @tparam Action Concrete action type registered with `BRIDGE_REGISTER_ACTION`.
     /// @param action Action to execute (moved into the dispatch).
-    /// @return Completion that resolves on the GUI executor.
+    /// @return Completion that resolves on the GUI executor. A payload- or
+    ///         result-keyed action's attach/promote step never throws out of
+    ///         this call, even when the backend refuses it (e.g. a remote
+    ///         server at `LimitPolicy::maxLiveModels`, a transport error, or
+    ///         an unauthorized attach) — the failure is instead delivered
+    ///         through the returned Completion's `.onError(...)`, exactly
+    ///         like any other dispatch failure.
     template <typename Action>
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> execute(Action action) {
+        using R = ::morph::model::ActionTraits<Action>::Result;
         if constexpr (kShared && ::morph::model::detail::PayloadKeyed<Action>) {
             // The action names its instance: attach (or re-point) before
-            // dispatching, so the call lands on the instance it asked for.
-            _bridge.template attachHandler<Model>(_binding, ::morph::model::ActionKeyTraits<Action>::key(action));
+            // dispatching, so the call lands on the instance it asked for. A
+            // remote backend's refusal (LimitPolicy::maxLiveModels, a
+            // transport error, unauthorized) must surface through the
+            // returned Completion's onError, exactly like every other
+            // dispatch failure — not as a synchronous throw out of execute().
+            try {
+                _bridge.template attachHandler<Model>(_binding, ::morph::model::ActionKeyTraits<Action>::key(action));
+            } catch (...) {
+                return failedCompletion<R>(std::current_exception());
+            }
         }
         if constexpr (kShared && ::morph::model::detail::ResultKeyed<Action>) {
             // The action *creates* the instance and its result carries the
             // generated key, exactly as a database insert returns its primary
             // key. Adopt it before any user callback observes the result, so a
             // .then() can immediately run further actions on the new instance.
-            using R = ::morph::model::ActionTraits<Action>::Result;
+            //
             // The action generates its own key, so it must run before the key
             // exists. Give the handler an anonymous instance to run on, then
             // promote *that* instance once the reply names it — re-pointing to a
             // fresh one instead would strand whatever the create just did.
-            _bridge.ensureBound(_binding);
+            try {
+                _bridge.ensureBound(_binding);
+            } catch (...) {
+                return failedCompletion<R>(std::current_exception());
+            }
             auto* const bridgePtr = &_bridge;
             auto binding = _binding;
             return _bridge.template executeVia<Model, Action>(
@@ -976,6 +995,13 @@ public:
     ///         signature is instantiated lazily, since `PrimaryKeyOf` is
     ///         ill-formed for an unkeyed model.
     /// @param key Primary key of the instance to attach to.
+    /// @throws std::runtime_error if the backend refuses the attach (e.g. a
+    ///         remote server at `LimitPolicy::maxLiveModels`, a transport
+    ///         error, or an unauthorized attach). `attach()` is a synchronous
+    ///         `void` call with no `Completion` to route a failure through,
+    ///         unlike `execute()`; a caller that wants the failure delivered
+    ///         asynchronously should attach via a payload-keyed action's
+    ///         `execute()` instead.
     template <typename M = Model>
     void attach(const ::morph::model::PrimaryKeyOf<M>& key)
         requires kShared
@@ -1098,6 +1124,23 @@ public:
     [[nodiscard]] const std::shared_ptr<detail::HandlerBinding>& binding() const { return _binding; }
 
 private:
+    /// @brief Builds an already-failed `Completion<R>`, resolved via `.onError(...)`.
+    ///
+    /// Used to turn a synchronous exception from the attach/promote step of
+    /// `execute()` into the same asynchronous failure shape every other
+    /// dispatch error takes, instead of letting it escape `execute()` as a
+    /// thrown exception.
+    /// @tparam R Result type of the action that failed to attach/promote.
+    /// @param exc Exception to deliver through `.onError(...)`.
+    /// @return A `Completion<R>` already resolved with @p exc.
+    template <typename R>
+    ::morph::async::Completion<R> failedCompletion(std::exception_ptr exc) {
+        auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
+        ::morph::async::Completion<R> comp{state, _guiExec};
+        state->setException(std::move(exc));
+        return comp;
+    }
+
     Bridge& _bridge;
     std::weak_ptr<const void> _bridgeAlive;  // expires when _bridge is destroyed
     ::morph::exec::IExecutor* _guiExec;

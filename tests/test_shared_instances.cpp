@@ -868,3 +868,27 @@ TEST_CASE("an empty primary on the remote backend degrades to a private instance
     REQUIRE(rebound.v != 0U);
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 }
+
+TEST_CASE("execute() reports an attach failure through onError instead of throwing", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setLimitPolicy({.maxLiveModels = 1});
+
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+
+    // Fills the server's one slot with an unrelated private instance.
+    BridgeHandler<ShiCounterModel> filler{bridge, &exec};
+    settle(filler.execute(ShiAddTo{.id = 1, .amount = 1}));
+
+    // A payload-keyed action on a fresh shared handler must attach a *new*
+    // instance for key 2, and the server is already full: the attach call
+    // the framework makes internally throws. That must not escape execute()
+    // as a synchronous exception -- it must surface through .onError(),
+    // exactly like every other dispatch failure.
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    bool failed = false;
+    REQUIRE_NOTHROW(
+        handler.execute(ShiAddTo{.id = 2, .amount = 1}).onError([&](const std::exception_ptr&) { failed = true; }));
+    REQUIRE(failed);
+}
