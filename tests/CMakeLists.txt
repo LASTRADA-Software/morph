@@ -236,6 +236,7 @@ try_compile(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE
     CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
     CXX_STANDARD 23
     COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT
 )
 if(NOT MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE)
     message(FATAL_ERROR
@@ -243,7 +244,9 @@ if(NOT MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE)
         "compile_checks/client_only_no_model_link.cpp failed to link with "
         "MORPH_CLIENT_ONLY defined, even though ClientOnlyModel's constructor "
         "and execute() are never called anywhere in that program (the "
-        "model-owning registrars must be fully suppressed).")
+        "model-owning registrars must be fully suppressed).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT}")
 endif()
 
 unset(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE CACHE)
@@ -251,6 +254,7 @@ try_compile(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE
     SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
     CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
     CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT
 )
 if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
     message(FATAL_ERROR
@@ -259,5 +263,7 @@ if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
         "WITHOUT MORPH_CLIENT_ONLY defined (expected a link failure -- the "
         "probe's undefined constructor/execute() should be referenced by "
         "the default (non-client-only) registrars; if it links anyway, this "
-        "probe is not actually proving anything about the guard).")
+        "probe is not actually proving anything about the guard).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT}")
 endif()
