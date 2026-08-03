@@ -4,9 +4,19 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "~Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7045f7c97ea552add8cfbfc1868daba3", null ],
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4075023106e7be2251049ca4be569410", null ],
     [ "registerHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7c18a6f7785c958a7d2e3ea2df97c107", null ],
+    [ "registerSharedHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3bf4ad2334d1085e4db591164770f2c6", null ],
+    [ "attachHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aa1760de87cd33a1a1559c7a72b213efd", null ],
+    [ "ensureBound", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a691f5af6e6a8b92301d5b209db7760d2", null ],
+    [ "assignHandlerPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a22e009f482dd20475ab4baa1e7a1cb3f", null ],
+    [ "bindingPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac2b6aa45af15dd71a4d513edf1f9ddd6", null ],
+    [ "listInstancesOf", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7bc25d126522f0419addd7fe0bda46c5", null ],
+    [ "addSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4bd239575a908e19fdc953200496ff14", null ],
+    [ "removeSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ad61a7a7ab7a4fe215761fc0f71380144", null ],
+    [ "hasSubscribers", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adf85d1d8abbe32df6c02ce186dfbbecd", null ],
+    [ "publishResult", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876", null ],
     [ "setDefaultSession", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a9933a611e3467284c356bb0083de6834", null ],
     [ "defaultSession", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adaccbb7a89e5625b3e6085d8db59bd97", null ],
     [ "switchBackend", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95", null ],
     [ "deregisterHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a73ac9d12273ad9a5fbf34f999f796b8c", null ],
-    [ "executeVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6676a2e068b5739a465d2c29f4570828", null ]
+    [ "executeVia", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a3e4ee91931517750f483a3bd0a6a0b1f", null ]
 ];

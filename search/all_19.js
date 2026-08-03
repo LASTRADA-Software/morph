@@ -1,7 +1,7 @@
 var searchData=
 [
   ['_7ebridge_0',['~Bridge',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7045f7c97ea552add8cfbfc1868daba3',1,'morph::bridge::Bridge']]],
-  ['_7ebridgehandler_1',['~BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aa29b052a9c1dcb1d287b1ae516b40b37',1,'morph::bridge::BridgeHandler']]],
+  ['_7ebridgehandler_1',['~BridgeHandler',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aca408e945bce108025ed9a93f87944be',1,'morph::bridge::BridgeHandler']]],
   ['_7efileactionlog_2',['~FileActionLog',['../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a9a84c25f2d2b8c8bf8354a4070b0bac1',1,'morph::journal::FileActionLog']]],
   ['_7efileofflinequeue_3',['~FileOfflineQueue',['../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a85dd82f00b279338f24f31e459e27d98',1,'morph::offline::FileOfflineQueue']]],
   ['_7eflowsession_4',['~FlowSession',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a15245d500bf9ac9c384f7e849cdf0366',1,'morph::flows::FlowSession']]],

@@ -138,8 +138,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a1bbaff0063b89c293f427e07da9f1424"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend using <code class="param">workerPool</code> to run model actions.  <br /></td></tr>
 <tr class="memitem:a29cc7bdc74c43b6f9b5e9db52f1b1977" id="r_a29cc7bdc74c43b6f9b5e9db52f1b1977"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977">registerModel</a> (const std::string &amp;, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory) override</td></tr>
 <tr class="memdesc:a29cc7bdc74c43b6f9b5e9db52f1b1977"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates a model instance via <code class="param">factory</code> and registers it.  <br /></td></tr>
+<tr class="memitem:a85c8f88e56660fb9d0e2b1b2de4b16ac" id="r_a85c8f88e56660fb9d0e2b1b2de4b16ac"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a85c8f88e56660fb9d0e2b1b2de4b16ac">registerModelShared</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, detail::InstanceIdentity identity) override</td></tr>
+<tr class="memdesc:a85c8f88e56660fb9d0e2b1b2de4b16ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers or attaches to the shared instance holding <code class="param">primary</code>.  <br /></td></tr>
+<tr class="memitem:a9f6a36333608f40d0b67907c4cc58fd6" id="r_a9f6a36333608f40d0b67907c4cc58fd6"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9f6a36333608f40d0b67907c4cc58fd6">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
+<tr class="memdesc:a9f6a36333608f40d0b67907c4cc58fd6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enters an already-live, still-anonymous instance into the directory under <code class="param">primary</code>. Thread-safe.  <br /></td></tr>
+<tr class="memitem:a0d367f26beb3b5575100ff14775c7e76" id="r_a0d367f26beb3b5575100ff14775c7e76"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a0d367f26beb3b5575100ff14775c7e76">listInstances</a> (const std::string &amp;typeId) override</td></tr>
+<tr class="memdesc:a0d367f26beb3b5575100ff14775c7e76"><td class="mdescLeft">&#160;</td><td class="mdescRight">Lists the primary keys of live shared instances of <code class="param">typeId</code>. Thread-safe.  <br /></td></tr>
 <tr class="memitem:a9a539d67d97dbb987f5a644d2c6073d5" id="r_a9a539d67d97dbb987f5a644d2c6073d5"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
-<tr class="memdesc:a9a539d67d97dbb987f5a644d2c6073d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the model with <code class="param">mid</code>. Thread-safe.  <br /></td></tr>
+<tr class="memdesc:a9a539d67d97dbb987f5a644d2c6073d5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the model with <code class="param">mid</code>, or releases one attachment to it. Thread-safe.  <br /></td></tr>
 <tr class="memitem:adaa4fa967c7321689e55514788800a91" id="r_adaa4fa967c7321689e55514788800a91"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#adaa4fa967c7321689e55514788800a91">notifyBackendChanged</a> () override</td></tr>
 <tr class="memdesc:adaa4fa967c7321689e55514788800a91"><td class="mdescLeft">&#160;</td><td class="mdescRight">Schedules <span class="tt">onBackendChanged()</span> on each change-aware model's strand. Thread-safe.  <br /></td></tr>
 <tr class="memitem:ac638da4c0824021c5a63f1bd5f13b6f4" id="r_ac638da4c0824021c5a63f1bd5f13b6f4"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4">execute</a> (::morph::exec::detail::ModelId mid, detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
@@ -151,7 +157,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>In-process backend that executes model actions on a thread pool strand. </p>
 <p>Each model instance gets its own strand so actions are serialised per-model without a global lock on the pool. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00298">298</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a1bbaff0063b89c293f427e07da9f1424" name="a1bbaff0063b89c293f427e07da9f1424"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1bbaff0063b89c293f427e07da9f1424">&#9670;&#160;</a></span>LocalBackend()</h2>
@@ -184,7 +190,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00302">302</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -225,7 +231,136 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Newly assigned <span class="tt">ModelId</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00184">184</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00313">313</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a85c8f88e56660fb9d0e2b1b2de4b16ac" name="a85c8f88e56660fb9d0e2b1b2de4b16ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a85c8f88e56660fb9d0e2b1b2de4b16ac">&#9670;&#160;</a></span>registerModelShared()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::morph::exec::detail::ModelId morph::backend::LocalBackend::registerModelShared </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Registers or attaches to the shared instance holding <code class="param">primary</code>. </p>
+<p>An empty <code class="param">primary</code> bypasses the directory entirely and produces a private instance, exactly as <span class="tt"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977" title="Creates a model instance via factory and registers it.">registerModel</a></span> does. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id of the model — the directory's first key component. </td></tr>
+    <tr><td class="paramname">factory</td><td>Callable that constructs the <span class="tt">IModelHolder</span>; not called on an attach. </td></tr>
+    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Id of the shared (or newly created) instance. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9f6a36333608f40d0b67907c4cc58fd6" name="a9f6a36333608f40d0b67907c4cc58fd6"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9f6a36333608f40d0b67907c4cc58fd6">&#9670;&#160;</a></span>assignPrimary()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::backend::LocalBackend::assignPrimary </td>
+          <td>(</td>
+          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>mid</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>primary</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Enters an already-live, still-anonymous instance into the directory under <code class="param">primary</code>. Thread-safe. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mid</td><td>Live instance to promote. </td></tr>
+    <tr><td class="paramname">typeId</td><td>Model type id — the directory's first key component. </td></tr>
+    <tr><td class="paramname">primary</td><td>Canonical string encoding of the key to file it under. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00379">379</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0d367f26beb3b5575100ff14775c7e76" name="a0d367f26beb3b5575100ff14775c7e76"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d367f26beb3b5575100ff14775c7e76">&#9670;&#160;</a></span>listInstances()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; morph::backend::LocalBackend::listInstances </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Lists the primary keys of live shared instances of <code class="param">typeId</code>. Thread-safe. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id to enumerate. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Canonical key strings of the live shared instances, in unspecified order. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -252,15 +387,15 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Removes the model with <code class="param">mid</code>. Thread-safe. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Removes the model with <code class="param">mid</code>, or releases one attachment to it. Thread-safe. </p>
+<p>A private instance is erased outright. A shared instance has its attach count decremented and is erased — and removed from the directory — only when that count reaches zero, so releasing one handler never destroys an instance another handler still holds. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">mid</td><td>Id returned by a prior <span class="tt"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977" title="Creates a model instance via factory and registers it.">registerModel()</a></span> call. </td></tr>
+    <tr><td class="paramname">mid</td><td>Id returned by a prior <span class="tt"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977" title="Creates a model instance via factory and registers it.">registerModel()</a></span>/<span class="tt"><a class="el" href="#a85c8f88e56660fb9d0e2b1b2de4b16ac" title="Registers or attaches to the shared instance holding primary.">registerModelShared()</a></span> call. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00427">427</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -288,14 +423,14 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Schedules <span class="tt">onBackendChanged()</span> on each change-aware model's strand. Thread-safe. </p>
-<p>Only models recorded in <span class="tt">_changeAware</span> — maintained by <span class="tt"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977" title="Creates a model instance via factory and registers it.">registerModel</a></span>/ <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid. Thread-safe.">deregisterModel</a></span> from <span class="tt">IModelHolder::isBackendChangeAware()</span>, a compile-time answer per model type — are visited; there is no <span class="tt">dynamic_cast</span> and no scan of models that never opted in. Each such model's <span class="tt">onBackendChanged()</span> (the <span class="tt">IModelHolder</span> base virtual) is <b>posted onto that model's own strand</b> (the same per-<span class="tt">ModelId</span> serial queue <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span> uses), rather than invoked inline on the caller's thread. Two properties follow, and they are the whole point:</p>
+<p>Only models recorded in <span class="tt">_changeAware</span> — maintained by <span class="tt"><a class="el" href="#a29cc7bdc74c43b6f9b5e9db52f1b1977" title="Creates a model instance via factory and registers it.">registerModel</a></span>/ <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid, or releases one attachment to it. Thread-safe.">deregisterModel</a></span> from <span class="tt">IModelHolder::isBackendChangeAware()</span>, a compile-time answer per model type — are visited; there is no <span class="tt">dynamic_cast</span> and no scan of models that never opted in. Each such model's <span class="tt">onBackendChanged()</span> (the <span class="tt">IModelHolder</span> base virtual) is <b>posted onto that model's own strand</b> (the same per-<span class="tt">ModelId</span> serial queue <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span> uses), rather than invoked inline on the caller's thread. Two properties follow, and they are the whole point:</p>
 <ul>
 <li><b>Strand-serialised, lock-free model code.</b> <span class="tt">onBackendChanged()</span> runs on the pool inside the model's strand, so it never overlaps an <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute()</a></span> on the same model. A model reacting to a backend switch (e.g. draining an offline queue and mutating counters) needs no locking of its own state — exactly what <span class="tt">offline.md</span> promises.</li>
 <li><b>Not under <span class="tt">Bridge::_mtx</span>.</b> <span class="tt">Bridge::switchBackend</span> calls this while holding <span class="tt">_mtx</span>, but only the cheap <span class="tt">post()</span> runs there; the model body runs later on a pool thread. A model that re-enters the bridge from <span class="tt">onBackendChanged()</span> (<span class="tt">switchBackend</span>/<span class="tt">registerHandler</span>/<span class="tt">deregisterHandler</span>) therefore acquires <span class="tt">_mtx</span> freshly on the strand thread instead of deadlocking on a lock the switch caller still holds.</li>
 </ul>
-<p>A <span class="tt">shared_ptr</span> copy of each holder is captured into the posted task so a concurrent <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid. Thread-safe.">deregisterModel</a></span> cannot free the model out from under its pending notification (mirrors <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span>'s holder capture). </p>
+<p>A <span class="tt">shared_ptr</span> copy of each holder is captured into the posted task so a concurrent <span class="tt"><a class="el" href="#a9a539d67d97dbb987f5a644d2c6073d5" title="Removes the model with mid, or releases one attachment to it. Thread-safe.">deregisterModel</a></span> cannot free the model out from under its pending notification (mirrors <span class="tt"><a class="el" href="#ac638da4c0824021c5a63f1bd5f13b6f4" title="Schedules call.localOp on the model&#39;s strand and returns a Completion.">execute</a></span>'s holder capture). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00472">472</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +478,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that will carry the result or an exception. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00260">260</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00499">499</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -378,7 +513,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00339">339</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>

@@ -25,6 +25,8 @@ var annotated_dup =
       [ "bridge", null, [
         [ "ActionExecuteRegistry", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html", "db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry" ],
         [ "Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", "d0/ddc/classmorph_1_1bridge_1_1Bridge" ],
+        [ "NoSharing", "d8/d38/structmorph_1_1bridge_1_1NoSharing.html", null ],
+        [ "AllowShared", "dd/dfb/structmorph_1_1bridge_1_1AllowShared.html", null ],
         [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ]
       ] ],
       [ "detail", null, [
@@ -89,11 +91,13 @@ var annotated_dup =
         [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ]
       ] ],
       [ "model", null, [
-        [ "ModelTraits", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
+        [ "ActionKeyTraits", "d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html", null ],
+        [ "ActionLogPolicy", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
         [ "ActionTraits", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],
         [ "ActionValidator", "d5/d92/structmorph_1_1model_1_1ActionValidator.html", null ],
-        [ "ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", "d7/d1a/structmorph_1_1model_1_1ValidationError" ],
-        [ "ActionLogPolicy", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ]
+        [ "ModelKeyTraits", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
+        [ "ModelTraits", "d2/d14/structmorph_1_1model_1_1ModelTraits.html", null ],
+        [ "ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", "d7/d1a/structmorph_1_1model_1_1ValidationError" ]
       ] ],
       [ "net", null, [
         [ "SocketBackend", "d5/d98/classmorph_1_1net_1_1SocketBackend.html", "d5/d98/classmorph_1_1net_1_1SocketBackend" ],

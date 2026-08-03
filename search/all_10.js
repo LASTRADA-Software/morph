@@ -8,11 +8,15 @@ var searchData=
   ['policy_5',['Policy',['../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#abe59e3f6f1cfa9772a9eaaa0bd003ad4',1,'morph::session::SigningAuthorizer']]],
   ['port_6',['port',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a63cf6271f02c0a166bd37efa222deee4',1,'morph::net::SocketServer::port()'],['../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html#ae0c10d4515db3903e09bdd89a66e23b5',1,'morph::qt::QtWebSocketServer::port()']]],
   ['post_7',['post',['../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5',1,'morph::exec::IExecutor::post()'],['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#afead0a3262f89b24d880c22c416911d6',1,'morph::exec::ThreadPoolExecutor::post()'],['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a75c70e9c83fbda739ad5f3d93a820e85',1,'morph::exec::MainThreadExecutor::post()'],['../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f',1,'morph::qt::QtExecutor::post()']]],
-  ['principal_8',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
-  ['probefunction_9',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
-  ['probeinterval_10',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
-  ['propagation_11',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_12',['Wire protocol',['../index.html#wire-protocol',1,'']]],
-  ['protocolrange_13',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
-  ['protocolversion_14',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]]
+  ['primary_8',['primary',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aee97fe75f078c0c2c894a145c1f09f7e',1,'morph::wire::Envelope::primary'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a9b5b501777040b73d91d80815a824cd0',1,'morph::bridge::BridgeHandler::primary()']]],
+  ['primarykey_9',['PrimaryKey',['../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html',1,'morph::model']]],
+  ['primarykeyof_10',['PrimaryKeyOf',['../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d',1,'morph::model']]],
+  ['principal_11',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
+  ['probefunction_12',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
+  ['probeinterval_13',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
+  ['propagation_14',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['protocol_15',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['protocolrange_16',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['protocolversion_17',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
+  ['publishresult_18',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];

@@ -23,9 +23,12 @@ var index =
     [ "Thread safety", "index.html#thread-safety", null ],
     [ "Error propagation", "index.html#error-propagation", null ],
     [ "Adding a new model and actions", "index.html#adding-a-new-model-and-actions", null ],
-    [ "Subscriptions and fielded actions", "index.html#subscriptions-and-fielded-actions", [
-      [ "API", "index.html#api", null ],
+    [ "Keyed, shareable model instances", "index.html#keyed-shareable-model-instances", [
       [ "Behavior", "index.html#behavior", null ]
+    ] ],
+    [ "Instance subscriptions", "index.html#instance-subscriptions", [
+      [ "API", "index.html#api", null ],
+      [ "Behavior", "index.html#behavior-1", null ]
     ] ],
     [ "Exact values, units, and schema-driven forms", "index.html#exact-values-units-and-schema-driven-forms", [
       [ "<span class=\"tt\">morph::math::Rational</span> — exact numbers on the wire", "index.html#morphmathrational--exact-numbers-on-the-wire", null ],

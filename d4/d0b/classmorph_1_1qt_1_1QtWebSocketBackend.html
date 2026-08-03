@@ -150,6 +150,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ad1a2a95d9fa055d297e3176ab981348b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">"hello"</span> envelope to the server and classifies its reply.  <br /></td></tr>
 <tr class="memitem:a5b0bba2d347ea69930d4166c541528fd" id="r_a5b0bba2d347ea69930d4166c541528fd"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd">registerModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory) override</td></tr>
 <tr class="memdesc:a5b0bba2d347ea69930d4166c541528fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">register</span> message to the server and blocks until the reply arrives.  <br /></td></tr>
+<tr class="memitem:af7db92dbacfb0b4f1ce047f0930b3c73" id="r_af7db92dbacfb0b4f1ce047f0930b3c73"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#af7db92dbacfb0b4f1ce047f0930b3c73">registerModelShared</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity) override</td></tr>
+<tr class="memdesc:af7db92dbacfb0b4f1ce047f0930b3c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a shared (register-or-attach) <span class="tt">register</span> and blocks for the reply.  <br /></td></tr>
+<tr class="memitem:a53075c01e7c657d63f9b2e50973d3a07" id="r_a53075c01e7c657d63f9b2e50973d3a07"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a53075c01e7c657d63f9b2e50973d3a07">attachModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override</td></tr>
+<tr class="memdesc:a53075c01e7c657d63f9b2e50973d3a07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">attach</span> and blocks for the reply, re-pointing from <code class="param">current</code>.  <br /></td></tr>
+<tr class="memitem:a2e72e36877b55424f38b5597a6562a6d" id="r_a2e72e36877b55424f38b5597a6562a6d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2e72e36877b55424f38b5597a6562a6d">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
+<tr class="memdesc:a2e72e36877b55424f38b5597a6562a6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files a live server-side instance under <code class="param">primary</code>.  <br /></td></tr>
+<tr class="memitem:a68b32a73162878f79091c4ebbd808084" id="r_a68b32a73162878f79091c4ebbd808084"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a68b32a73162878f79091c4ebbd808084">listInstances</a> (const std::string &amp;typeId) override</td></tr>
+<tr class="memdesc:a68b32a73162878f79091c4ebbd808084"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server for the live shared primary keys of <code class="param">typeId</code>.  <br /></td></tr>
 <tr class="memitem:aa00b19a8994d4d4f2ca9b9b7a3e3a70a" id="r_aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa00b19a8994d4d4f2ca9b9b7a3e3a70a">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
 <tr class="memdesc:aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">deregister</span> message fire-and-forget (does not wait for a reply).  <br /></td></tr>
 <tr class="memitem:a374300e019ee7e66a133f35c60dd8c74" id="r_a374300e019ee7e66a133f35c60dd8c74"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::shared_ptr&lt; void &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74">execute</a> (::morph::exec::detail::ModelId mid, ::morph::backend::detail::ActionCall call, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *cbExec) override</td></tr>
@@ -344,6 +352,198 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="af7db92dbacfb0b4f1ce047f0930b3c73" name="af7db92dbacfb0b4f1ce047f0930b3c73"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af7db92dbacfb0b4f1ce047f0930b3c73">&#9670;&#160;</a></span>registerModelShared()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::morph::exec::detail::ModelId morph::qt::QtWebSocketBackend::registerModelShared </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::backend::detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends a shared (register-or-attach) <span class="tt">register</span> and blocks for the reply. </p>
+<p>An empty primary degrades to the private path. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id of the model. </td></tr>
+    <tr><td class="paramname">factory</td><td>Ignored — model construction is delegated to the server. </td></tr>
+    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">ModelId</span> of the shared (or newly created) instance. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the server errors or the socket is not connected. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a53075c01e7c657d63f9b2e50973d3a07" name="a53075c01e7c657d63f9b2e50973d3a07"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a53075c01e7c657d63f9b2e50973d3a07">&#9670;&#160;</a></span>attachModel()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">::morph::exec::detail::ModelId morph::qt::QtWebSocketBackend::attachModel </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::backend::detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>current</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends an <span class="tt">attach</span> and blocks for the reply, re-pointing from <code class="param">current</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id of the model. </td></tr>
+    <tr><td class="paramname">factory</td><td>Ignored — model construction is delegated to the server. </td></tr>
+    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+    <tr><td class="paramname">current</td><td>Instance currently held, or <span class="tt">ModelId{0}</span> if none. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">ModelId</span> of the instance now attached to. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the server errors or the socket is not connected. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a2e72e36877b55424f38b5597a6562a6d" name="a2e72e36877b55424f38b5597a6562a6d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2e72e36877b55424f38b5597a6562a6d">&#9670;&#160;</a></span>assignPrimary()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::assignPrimary </td>
+          <td>(</td>
+          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>mid</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>primary</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Files a live server-side instance under <code class="param">primary</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mid</td><td>Live instance to promote. </td></tr>
+    <tr><td class="paramname">typeId</td><td>Model type id. </td></tr>
+    <tr><td class="paramname">primary</td><td>Canonical string encoding of the key to file it under. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a68b32a73162878f79091c4ebbd808084" name="a68b32a73162878f79091c4ebbd808084"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a68b32a73162878f79091c4ebbd808084">&#9670;&#160;</a></span>listInstances()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::vector&lt; std::string &gt; morph::qt::QtWebSocketBackend::listInstances </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Asks the server for the live shared primary keys of <code class="param">typeId</code>. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id to enumerate. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Canonical key strings of the live shared instances. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the server errors or the socket is not connected. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
 <a id="aa00b19a8994d4d4f2ca9b9b7a3e3a70a" name="aa00b19a8994d4d4f2ca9b9b7a3e3a70a"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa00b19a8994d4d4f2ca9b9b7a3e3a70a">&#9670;&#160;</a></span>deregisterModel()</h2>
 
@@ -449,7 +649,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00134">134</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

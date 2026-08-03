@@ -12,6 +12,6 @@ var searchData=
   ['units_20as_20types_9',['&lt;span class=&quot;tt&quot;&gt;morph::units::Quantity&amp;lt;U&amp;gt;&lt;/span&gt; — one kind of empty, units as types',['../index.html#morphunitsquantityu--one-kind-of-empty-units-as-types',1,'']]],
   ['units_20time_10',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]],
   ['unittraits_11',['UnitTraits',['../de/d93/structmorph_1_1units_1_1UnitTraits.html',1,'morph::units']]],
-  ['unsubscribe_12',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a6ea83bd14e9cb81f66f9613b0ce75576',1,'morph::bridge::BridgeHandler']]],
+  ['unsubscribe_12',['unsubscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028',1,'morph::bridge::BridgeHandler']]],
   ['util_20—_20exact_20values_20units_20time_13',['&lt;span class=&quot;tt&quot;&gt;util/&lt;/span&gt; — exact values, units, time',['../index.html#util--exact-values-units-time',1,'']]]
 ];

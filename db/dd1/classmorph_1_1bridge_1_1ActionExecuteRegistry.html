@@ -149,7 +149,7 @@ Static Public Member Functions</h2></td></tr>
 <p>Populated automatically by <span class="tt">BRIDGE_REGISTER_ACTION</span> — no action-specific code is required at any call site. Every entry calls through the real <span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a>&lt;Model&gt;::<a class="el" href="#abc6521631ae08814323f707f748dbc47" title="Looks up and invokes the executor for (modelId, actionId).">execute</a>&lt;Action&gt;()</span> (so sessions, backend switches, and completions all behave exactly as they do for hand-written call sites), unlike <span class="tt">morph::model::detail::ActionDispatcher</span>, which calls <span class="tt">Model::execute</span> directly against an already-owned model holder and is only ever used server-side.</p>
 <p>HARD REQUIREMENT (other direction of the same constraint documented on <span class="tt">morph::model::detail::registerActionExecutorOnce</span> in <span class="tt"><a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a></span>): registration into this registry happens via <span class="tt">registerActionExecutorOnce&lt;Model, Action&gt;</span>, which <span class="tt">BRIDGE_REGISTER_ACTION</span> calls unconditionally but which is only defined here, in <span class="tt"><a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></span>. Every translation unit that calls <span class="tt">BRIDGE_REGISTER_ACTION</span> must therefore include this header (directly or transitively), or that translation unit's static initializer will fail to link. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="a053dc5bfc617902b5a2debb208be722d" name="a053dc5bfc617902b5a2debb208be722d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a053dc5bfc617902b5a2debb208be722d">&#9670;&#160;</a></span>Executor</h2>
@@ -165,7 +165,7 @@ Static Public Member Functions</h2></td></tr>
 
 <p>Deserialises <span class="tt">bodyJson</span>, dispatches through the handler's <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>, and resolves with the JSON-encoded result. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -216,7 +216,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <p>Out-of-line definition of <a class="el" href="#a117beb21e93ba420dbc7dd9692cbac20" title="Registers the executor for (Model, Action) under the given string ids. Defined out-of-line after Brid...">ActionExecuteRegistry::registerAction</a>. Placed here after <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a> is fully defined so we can safely cast and call its methods. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00856">856</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01195">1195</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -275,7 +275,7 @@ template&lt;typename Model, typename Action&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -305,7 +305,7 @@ template&lt;typename Model, typename Action&gt; </div>
 <p>Returns the process-level singleton registry. </p>
 <dl class="section return"><dt>Returns</dt><dd>Reference to the singleton <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00086">86</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00090">90</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

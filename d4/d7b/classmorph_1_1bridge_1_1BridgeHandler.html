@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::bridge::BridgeHandler&lt; Model &gt; Class Template Reference</title>
+<title>morph: morph::bridge::BridgeHandler&lt; Model, Sharing &gt; Class Template Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -117,7 +117,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d7b/classmo
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::bridge::BridgeHandler&lt; Model &gt; Class Template Reference</div></div>
+  <div class="headertitle"><div class="title">morph::bridge::BridgeHandler&lt; Model, Sharing &gt; Class Template Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
@@ -128,51 +128,62 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d4/d7b/classmo
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:a25d3e99c7bfb7dff687e179f40265432" id="r_a25d3e99c7bfb7dff687e179f40265432"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a25d3e99c7bfb7dff687e179f40265432">BridgeHandler</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec)</td></tr>
-<tr class="memdesc:a25d3e99c7bfb7dff687e179f40265432"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs and registers the handler using the default model factory.  <br /></td></tr>
-<tr class="memitem:a517ee85d31fa9a5f835fa82900de8018" id="r_a517ee85d31fa9a5f835fa82900de8018"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a517ee85d31fa9a5f835fa82900de8018">BridgeHandler</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec, std::shared_ptr&lt; detail::HandlerBinding &gt; binding)</td></tr>
-<tr class="memdesc:a517ee85d31fa9a5f835fa82900de8018"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the handler with a pre-built binding (for dependency injection).  <br /></td></tr>
-<tr class="memitem:aa29b052a9c1dcb1d287b1ae516b40b37" id="r_aa29b052a9c1dcb1d287b1ae516b40b37"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aa29b052a9c1dcb1d287b1ae516b40b37">~BridgeHandler</a> ()</td></tr>
-<tr class="memdesc:aa29b052a9c1dcb1d287b1ae516b40b37"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the binding from the bridge.  <br /></td></tr>
-<tr class="memitem:a9956a886b6118a8211cd97b34c6ea552" id="r_a9956a886b6118a8211cd97b34c6ea552"><td class="memItemLeft"><a id="a9956a886b6118a8211cd97b34c6ea552" name="a9956a886b6118a8211cd97b34c6ea552"></a>
+<tr class="memitem:ac2ad5f0697f10ec9320058718e30768f" id="r_ac2ad5f0697f10ec9320058718e30768f"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ac2ad5f0697f10ec9320058718e30768f">BridgeHandler</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec)</td></tr>
+<tr class="memdesc:ac2ad5f0697f10ec9320058718e30768f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs and registers the handler using the default model factory.  <br /></td></tr>
+<tr class="memitem:ad6b1039524998f20d3b2cfd17d9eee12" id="r_ad6b1039524998f20d3b2cfd17d9eee12"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ad6b1039524998f20d3b2cfd17d9eee12">BridgeHandler</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec, std::shared_ptr&lt; detail::HandlerBinding &gt; binding)</td></tr>
+<tr class="memdesc:ad6b1039524998f20d3b2cfd17d9eee12"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the handler with a pre-built binding (for dependency injection).  <br /></td></tr>
+<tr class="memitem:aca408e945bce108025ed9a93f87944be" id="r_aca408e945bce108025ed9a93f87944be"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#aca408e945bce108025ed9a93f87944be">~BridgeHandler</a> ()</td></tr>
+<tr class="memdesc:aca408e945bce108025ed9a93f87944be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters the binding from the bridge.  <br /></td></tr>
+<tr class="memitem:a4a984ca754d11e1a4277fc241e8cd42d" id="r_a4a984ca754d11e1a4277fc241e8cd42d"><td class="memItemLeft"><a id="a4a984ca754d11e1a4277fc241e8cd42d" name="a4a984ca754d11e1a4277fc241e8cd42d"></a>
 &#160;</td><td class="memItemRight"><b>BridgeHandler</b> (const BridgeHandler &amp;)=delete</td></tr>
-<tr class="memitem:a46e37aabf025cdb3f16d44503a09ccbf" id="r_a46e37aabf025cdb3f16d44503a09ccbf"><td class="memItemLeft"><a id="a46e37aabf025cdb3f16d44503a09ccbf" name="a46e37aabf025cdb3f16d44503a09ccbf"></a>
-<a class="el" href="#a25d3e99c7bfb7dff687e179f40265432">BridgeHandler</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a25d3e99c7bfb7dff687e179f40265432">BridgeHandler</a> &amp;)=delete</td></tr>
-<tr class="memitem:a8c6341aaf8719bd097f2af013204b03b" id="r_a8c6341aaf8719bd097f2af013204b03b"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
-<tr class="memitem:a8c6341aaf8719bd097f2af013204b03b template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a8c6341aaf8719bd097f2af013204b03b">execute</a> (Action action)</td></tr>
-<tr class="memdesc:a8c6341aaf8719bd097f2af013204b03b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">action</code> via the underlying <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> and returns a <span class="tt">Completion</span>.  <br /></td></tr>
-<tr class="memitem:a5ad7969d7f0857c922f56a74a02e3897" id="r_a5ad7969d7f0857c922f56a74a02e3897"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5ad7969d7f0857c922f56a74a02e3897">executeJson</a> (std::string_view actionType, std::string_view bodyJson)</td></tr>
-<tr class="memdesc:a5ad7969d7f0857c922f56a74a02e3897"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type-erased execute: looks up the action by its registered string id and dispatches it through <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>.  <br /></td></tr>
-<tr class="memitem:ac515f6cc1ed451d1f0eff55ff356ad89" id="r_ac515f6cc1ed451d1f0eff55ff356ad89"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *&#160;</td><td class="memItemRight"><a class="el" href="#ac515f6cc1ed451d1f0eff55ff356ad89">guiExecutor</a> () const noexcept</td></tr>
-<tr class="memdesc:ac515f6cc1ed451d1f0eff55ff356ad89"><td class="mdescLeft">&#160;</td><td class="mdescRight">The executor used to deliver this handler's <span class="tt">Completion</span> callbacks.  <br /></td></tr>
-<tr class="memitem:aa289505b2d7130d3a250e76745ef8753" id="r_aa289505b2d7130d3a250e76745ef8753"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
-<tr class="memitem:aa289505b2d7130d3a250e76745ef8753 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa289505b2d7130d3a250e76745ef8753">subscribe</a> (std::function&lt; void(typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result)&gt; cb)</td></tr>
-<tr class="memdesc:aa289505b2d7130d3a250e76745ef8753"><td class="mdescLeft">&#160;</td><td class="mdescRight">Subscribes to results of action type <code class="param">Action</code>.  <br /></td></tr>
-<tr class="memitem:aabaa0fe62aaa0b8cb2a454cec96f1412" id="r_aabaa0fe62aaa0b8cb2a454cec96f1412"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
-<tr class="memitem:aabaa0fe62aaa0b8cb2a454cec96f1412 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aabaa0fe62aaa0b8cb2a454cec96f1412">subscribe</a> (std::function&lt; void(typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result)&gt; cb, std::function&lt; void(std::exception_ptr)&gt; errCb)</td></tr>
-<tr class="memdesc:aabaa0fe62aaa0b8cb2a454cec96f1412"><td class="mdescLeft">&#160;</td><td class="mdescRight">Subscribes to both results and errors of action type <code class="param">Action</code>.  <br /></td></tr>
-<tr class="memitem:a6ea83bd14e9cb81f66f9613b0ce75576" id="r_a6ea83bd14e9cb81f66f9613b0ce75576"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
-<tr class="memitem:a6ea83bd14e9cb81f66f9613b0ce75576 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a6ea83bd14e9cb81f66f9613b0ce75576">unsubscribe</a> ()</td></tr>
-<tr class="memdesc:a6ea83bd14e9cb81f66f9613b0ce75576"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the subscriber for action type <code class="param">Action</code>.  <br /></td></tr>
-<tr class="memitem:a3c0073a5561c27bdc775d9fe64e546e1" id="r_a3c0073a5561c27bdc775d9fe64e546e1"><td class="memTemplParams" colspan="2">template&lt;auto FieldPtr&gt; </td></tr>
-<tr class="memitem:a3c0073a5561c27bdc775d9fe64e546e1 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a3c0073a5561c27bdc775d9fe64e546e1">set</a> (detail::MemberPointerTraits&lt; decltype(FieldPtr)&gt;::ValueType value)</td></tr>
-<tr class="memdesc:a3c0073a5561c27bdc775d9fe64e546e1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sets one field of the in-progress draft and fires the action if ready.  <br /></td></tr>
-<tr class="memitem:a31897ee8c8ce3e117300632fdd8e3fd0" id="r_a31897ee8c8ce3e117300632fdd8e3fd0"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
-<tr class="memitem:a31897ee8c8ce3e117300632fdd8e3fd0 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a31897ee8c8ce3e117300632fdd8e3fd0">reset</a> ()</td></tr>
-<tr class="memdesc:a31897ee8c8ce3e117300632fdd8e3fd0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Discards the in-progress draft for action <code class="param">Action</code>.  <br /></td></tr>
-<tr class="memitem:a1df59509d497c7362aae2b5bf1666747" id="r_a1df59509d497c7362aae2b5bf1666747"><td class="memItemLeft">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a1df59509d497c7362aae2b5bf1666747">binding</a> () const</td></tr>
-<tr class="memdesc:a1df59509d497c7362aae2b5bf1666747"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the underlying <span class="tt">HandlerBinding</span>.  <br /></td></tr>
+<tr class="memitem:a8842198820664579fdd4b4a60a896520" id="r_a8842198820664579fdd4b4a60a896520"><td class="memItemLeft"><a id="a8842198820664579fdd4b4a60a896520" name="a8842198820664579fdd4b4a60a896520"></a>
+<a class="el" href="#ac2ad5f0697f10ec9320058718e30768f">BridgeHandler</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#ac2ad5f0697f10ec9320058718e30768f">BridgeHandler</a> &amp;)=delete</td></tr>
+<tr class="memitem:a08411eb2c1621f941b5a8fab45f29646" id="r_a08411eb2c1621f941b5a8fab45f29646"><td class="memTemplParams" colspan="2">template&lt;typename Action&gt; </td></tr>
+<tr class="memitem:a08411eb2c1621f941b5a8fab45f29646 template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646">execute</a> (Action action)</td></tr>
+<tr class="memdesc:a08411eb2c1621f941b5a8fab45f29646"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dispatches <code class="param">action</code> via the underlying <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> and returns a <span class="tt">Completion</span>.  <br /></td></tr>
+<tr class="memitem:a421fba9e2f183185c0f05f8b43c66d78" id="r_a421fba9e2f183185c0f05f8b43c66d78"><td class="memTemplParams" colspan="2">template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></td></tr>
+<tr class="memitem:a421fba9e2f183185c0f05f8b43c66d78 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78">attach</a> (const <a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &amp;key)</td></tr>
+<tr class="memdesc:a421fba9e2f183185c0f05f8b43c66d78"><td class="mdescLeft">&#160;</td><td class="mdescRight">Attaches (or re-points) this handler to the instance for <code class="param">key</code>.  <br /></td></tr>
+<tr class="memitem:a9b5b501777040b73d91d80815a824cd0" id="r_a9b5b501777040b73d91d80815a824cd0"><td class="memTemplParams" colspan="2">template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></td></tr>
+<tr class="memitem:a9b5b501777040b73d91d80815a824cd0 template"><td class="memItemLeft">std::optional&lt;<a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a9b5b501777040b73d91d80815a824cd0">primary</a> ()</td></tr>
+<tr class="memdesc:a9b5b501777040b73d91d80815a824cd0"><td class="mdescLeft">&#160;</td><td class="mdescRight">This handler's current primary key, or <span class="tt">nullopt</span> if unattached.  <br /></td></tr>
+<tr class="memitem:a30fc608c0c73cee91e8a1481cacd4b00" id="r_a30fc608c0c73cee91e8a1481cacd4b00"><td class="memTemplParams" colspan="2">template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></td></tr>
+<tr class="memitem:a30fc608c0c73cee91e8a1481cacd4b00 template"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt;<a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a30fc608c0c73cee91e8a1481cacd4b00">instances</a> ()</td></tr>
+<tr class="memdesc:a30fc608c0c73cee91e8a1481cacd4b00"><td class="mdescLeft">&#160;</td><td class="mdescRight">Snapshot of the live shared instance keys for <span class="tt">Model</span>.  <br /></td></tr>
+<tr class="memitem:a71c17b7c7473dcbef2bc19cebd6ba337" id="r_a71c17b7c7473dcbef2bc19cebd6ba337"><td class="memItemLeft"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a71c17b7c7473dcbef2bc19cebd6ba337">executeJson</a> (std::string_view actionType, std::string_view bodyJson)</td></tr>
+<tr class="memdesc:a71c17b7c7473dcbef2bc19cebd6ba337"><td class="mdescLeft">&#160;</td><td class="mdescRight">Type-erased execute: looks up the action by its registered string id and dispatches it through <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>.  <br /></td></tr>
+<tr class="memitem:a7cf0765d2e6bdcc796695116019542f4" id="r_a7cf0765d2e6bdcc796695116019542f4"><td class="memItemLeft"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *&#160;</td><td class="memItemRight"><a class="el" href="#a7cf0765d2e6bdcc796695116019542f4">guiExecutor</a> () const noexcept</td></tr>
+<tr class="memdesc:a7cf0765d2e6bdcc796695116019542f4"><td class="mdescLeft">&#160;</td><td class="mdescRight">The executor used to deliver this handler's <span class="tt">Completion</span> callbacks.  <br /></td></tr>
+<tr class="memitem:a0bd97352408cfd46af1ad547676d1940" id="r_a0bd97352408cfd46af1ad547676d1940"><td class="memTemplParams" colspan="2">template&lt;typename R&gt; </td></tr>
+<tr class="memitem:a0bd97352408cfd46af1ad547676d1940 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a0bd97352408cfd46af1ad547676d1940">subscribe</a> (std::function&lt; void(R)&gt; cb)</td></tr>
+<tr class="memdesc:a0bd97352408cfd46af1ad547676d1940"><td class="mdescLeft">&#160;</td><td class="mdescRight">Subscribes to results of type <code class="param">R</code> produced on the attached instance.  <br /></td></tr>
+<tr class="memitem:aec8bdef725857e4a58d733ce13ea9028" id="r_aec8bdef725857e4a58d733ce13ea9028"><td class="memTemplParams" colspan="2">template&lt;typename R&gt; </td></tr>
+<tr class="memitem:aec8bdef725857e4a58d733ce13ea9028 template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aec8bdef725857e4a58d733ce13ea9028">unsubscribe</a> ()</td></tr>
+<tr class="memdesc:aec8bdef725857e4a58d733ce13ea9028"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes this handler\'s subscription for <code class="param">R</code>.  <br /></td></tr>
+<tr class="memitem:a24d6eae36421f68e51d54b24f6d2d087" id="r_a24d6eae36421f68e51d54b24f6d2d087"><td class="memItemLeft">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a24d6eae36421f68e51d54b24f6d2d087">binding</a> () const</td></tr>
+<tr class="memdesc:a24d6eae36421f68e51d54b24f6d2d087"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the underlying <span class="tt">HandlerBinding</span>.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a6f6ce0f93ff2ad46b30a72fa196fef42" id="r_a6f6ce0f93ff2ad46b30a72fa196fef42"><td class="memItemLeft">static std::shared_ptr&lt; detail::HandlerBinding &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a6f6ce0f93ff2ad46b30a72fa196fef42">makeBinding</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;bridge)</td></tr>
+<tr class="memdesc:a6f6ce0f93ff2ad46b30a72fa196fef42"><td class="mdescLeft">&#160;</td><td class="mdescRight">Creates this handler's binding: deferred when shared, immediate otherwise.  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
+Static Public Attributes</h2></td></tr>
+<tr class="memitem:a02ceca31457428a939cafa4f904aa2ff" id="r_a02ceca31457428a939cafa4f904aa2ff"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a> = std::is_same_v&lt;Sharing, <a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html">AllowShared</a>&gt;</td></tr>
+<tr class="memdesc:a02ceca31457428a939cafa4f904aa2ff"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this handler participates in the shared instance directory.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
-class morph::bridge::BridgeHandler&lt; Model &gt;</div><p>RAII wrapper that binds a single model type to a <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>. </p>
+<div class="textblock"><div class="compoundTemplParams">template&lt;typename Model, typename Sharing = NoSharing&gt;<br />
+class morph::bridge::BridgeHandler&lt; Model, Sharing &gt;</div><p>RAII wrapper that binds a single model type to a <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>. </p>
 <p>On construction, registers a <span class="tt">HandlerBinding</span> on the bridge. On destruction, deregisters it automatically. The handler is non-copyable.</p>
-<dl class="section user"><dt>Fielded actions and subscriptions</dt><dd>Beyond the one-shot <span class="tt">execute(action) -&gt; Completion&lt;R&gt;</span> API, the handler offers a streaming surface for actions whose values arrive field-by-field from a GUI (typically one widget per field):</dd></dl>
+<dl class="section user"><dt>Instance subscriptions</dt><dd>Beyond the one-shot <span class="tt">execute(action) -&gt; Completion&lt;R&gt;</span> API, a handler can observe <em>the instance it is attached to</em>:</dd></dl>
 <ul>
-<li><span class="tt"><a class="el" href="#aa289505b2d7130d3a250e76745ef8753" title="Subscribes to results of action type Action.">subscribe</a>&lt;A&gt;(cb)</span> stashes a result callback for action type <span class="tt">A</span>.</li>
-<li><span class="tt"><a class="el" href="#a3c0073a5561c27bdc775d9fe64e546e1" title="Sets one field of the in-progress draft and fires the action if ready.">set</a>&lt;&amp;A::field&gt;(value)</span> updates one field of the in-progress draft of <span class="tt">A</span>.</li>
-<li><span class="tt"><a class="el" href="#a6ea83bd14e9cb81f66f9613b0ce75576" title="Removes the subscriber for action type Action.">unsubscribe</a>&lt;A&gt;()</span> drops the callback.</li>
-<li><span class="tt"><a class="el" href="#a31897ee8c8ce3e117300632fdd8e3fd0" title="Discards the in-progress draft for action Action.">reset</a>&lt;A&gt;()</span> discards the in-progress draft of <span class="tt">A</span>.</li>
+<li><span class="tt"><a class="el" href="#a0bd97352408cfd46af1ad547676d1940" title="Subscribes to results of type R produced on the attached instance.">subscribe</a>&lt;R&gt;(cb)</span> fires whenever an <span class="tt">R</span> is produced on that instance, by any handler attached to it.</li>
+<li><span class="tt"><a class="el" href="#aec8bdef725857e4a58d733ce13ea9028" title="Removes this handler\&#39;s subscription for R.">unsubscribe</a>&lt;R&gt;()</span> drops the callback.</li>
 </ul>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
@@ -181,21 +192,21 @@ class morph::bridge::BridgeHandler&lt; Model &gt;</div><p>RAII wrapper that bind
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00920">920</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="a25d3e99c7bfb7dff687e179f40265432" name="a25d3e99c7bfb7dff687e179f40265432"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a25d3e99c7bfb7dff687e179f40265432">&#9670;&#160;</a></span>BridgeHandler() <span class="overload">[1/2]</span></h2>
+<a id="ac2ad5f0697f10ec9320058718e30768f" name="ac2ad5f0697f10ec9320058718e30768f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac2ad5f0697f10ec9320058718e30768f">&#9670;&#160;</a></span>BridgeHandler() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::BridgeHandler </td>
+          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::BridgeHandler </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span>, </td>
         </tr>
@@ -221,23 +232,23 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00575">575</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00929">929</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a517ee85d31fa9a5f835fa82900de8018" name="a517ee85d31fa9a5f835fa82900de8018"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a517ee85d31fa9a5f835fa82900de8018">&#9670;&#160;</a></span>BridgeHandler() <span class="overload">[2/2]</span></h2>
+<a id="ad6b1039524998f20d3b2cfd17d9eee12" name="ad6b1039524998f20d3b2cfd17d9eee12"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad6b1039524998f20d3b2cfd17d9eee12">&#9670;&#160;</a></span>BridgeHandler() <span class="overload">[2/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::BridgeHandler </td>
+          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::BridgeHandler </td>
           <td>(</td>
           <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span>, </td>
         </tr>
@@ -269,23 +280,23 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00591">591</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00943">943</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aa29b052a9c1dcb1d287b1ae516b40b37" name="aa29b052a9c1dcb1d287b1ae516b40b37"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa29b052a9c1dcb1d287b1ae516b40b37">&#9670;&#160;</a></span>~BridgeHandler()</h2>
+<a id="aca408e945bce108025ed9a93f87944be" name="aca408e945bce108025ed9a93f87944be"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aca408e945bce108025ed9a93f87944be">&#9670;&#160;</a></span>~BridgeHandler()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::~<a class="el" href="#a25d3e99c7bfb7dff687e179f40265432">BridgeHandler</a> </td>
+          <td class="memname"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::~<a class="el" href="#ac2ad5f0697f10ec9320058718e30768f">BridgeHandler</a> </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -301,18 +312,18 @@ template&lt;typename Model&gt; </div>
 <p>Deregisters the binding from the bridge. </p>
 <p>If the <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> has already been destroyed (liveness token expired), this is a no-op: there is nothing to deregister from and dereferencing the dangling <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a>&amp;</span> would be undefined behaviour. Destroying the bridge before its handlers is still discouraged, but is now safe rather than a use-after-free. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00610">610</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00958">958</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
 <a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
-<a id="a8c6341aaf8719bd097f2af013204b03b" name="a8c6341aaf8719bd097f2af013204b03b"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a8c6341aaf8719bd097f2af013204b03b">&#9670;&#160;</a></span>execute()</h2>
+<a id="a08411eb2c1621f941b5a8fab45f29646" name="a08411eb2c1621f941b5a8fab45f29646"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a08411eb2c1621f941b5a8fab45f29646">&#9670;&#160;</a></span>execute()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <div class="memtemplate">
 template&lt;typename Action&gt; </div>
 <table class="mlabels">
@@ -320,7 +331,7 @@ template&lt;typename Action&gt; </div>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::execute </td>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::execute </td>
           <td>(</td>
           <td class="paramtype">Action</td>          <td class="paramname"><span class="paramname"><em>action</em></span></td><td>)</td>
           <td></td>
@@ -347,25 +358,164 @@ template&lt;typename Action&gt; </div>
   </table>
   </dd>
 </dl>
-<dl class="section return"><dt>Returns</dt><dd>Completion that resolves on the GUI executor. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion that resolves on the GUI executor. A payload- or result-keyed action's attach/promote step never throws out of this call, even when the backend refuses it (e.g. a remote server at <span class="tt">LimitPolicy::maxLiveModels</span>, a transport error, or an unauthorized attach) — the failure is instead delivered through the returned Completion's <span class="tt">.onError(...)</span>, exactly like any other dispatch failure. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00629">629</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00983">983</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a5ad7969d7f0857c922f56a74a02e3897" name="a5ad7969d7f0857c922f56a74a02e3897"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a5ad7969d7f0857c922f56a74a02e3897">&#9670;&#160;</a></span>executeJson()</h2>
+<a id="a421fba9e2f183185c0f05f8b43c66d78" name="a421fba9e2f183185c0f05f8b43c66d78"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a421fba9e2f183185c0f05f8b43c66d78">&#9670;&#160;</a></span>attach()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<div class="memtemplate">
+template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::executeJson </td>
+          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::attach </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>key</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Attaches (or re-points) this handler to the instance for <code class="param">key</code>. </p>
+<p>Creates the instance if no live instance holds <code class="param">key</code>, otherwise joins the existing one. Re-pointing an already-attached handler releases the old instance, which survives only if another handler still holds it.</p>
+<p>The primary is deliberately <b>not</b> write-once: naming a different key is how a screen switches which entity it is looking at. Instances never change their own identity — the <em>handler</em> moves — so a key always maps to exactly one instance and no collision case can arise.</p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">M</td><td>Defaulted to <span class="tt">Model</span>; never named explicitly. Present only so the signature is instantiated lazily, since <span class="tt">PrimaryKeyOf</span> is ill-formed for an unkeyed model. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">key</td><td>Primary key of the instance to attach to. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">std::runtime_error</td><td>if the backend refuses the attach (e.g. a remote server at <span class="tt">LimitPolicy::maxLiveModels</span>, a transport error, or an unauthorized attach). <span class="tt"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78" title="Attaches (or re-points) this handler to the instance for key.">attach()</a></span> is a synchronous <span class="tt">void</span> call with no <span class="tt">Completion</span> to route a failure through, unlike <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span>; a caller that wants the failure delivered asynchronously should attach via a payload-keyed action's <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute()</a></span> instead. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9b5b501777040b73d91d80815a824cd0" name="a9b5b501777040b73d91d80815a824cd0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9b5b501777040b73d91d80815a824cd0">&#9670;&#160;</a></span>primary()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<div class="memtemplate">
+template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::optional&lt;<a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::primary </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>This handler's current primary key, or <span class="tt">nullopt</span> if unattached. </p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">M</td><td>Defaulted to <span class="tt">Model</span>; never named explicitly. See <span class="tt"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78" title="Attaches (or re-points) this handler to the instance for key.">attach</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The attached key, or <span class="tt">nullopt</span> before the first attach. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01058">1058</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a30fc608c0c73cee91e8a1481cacd4b00" name="a30fc608c0c73cee91e8a1481cacd4b00"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a30fc608c0c73cee91e8a1481cacd4b00">&#9670;&#160;</a></span>instances()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<div class="memtemplate">
+template&lt;typename M = Model&gt; <br />
+requires <a class="el" href="#a02ceca31457428a939cafa4f904aa2ff">kShared</a></div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::vector&lt;<a class="el" href="../../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d">::morph::model::PrimaryKeyOf</a>&lt; M &gt; &gt; &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::instances </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Snapshot of the live shared instance keys for <span class="tt">Model</span>. </p>
+<p>Asynchronous even in local mode: the directory is backend state, and in remote mode answering costs a round trip. Returning a bare <span class="tt">std::vector</span> would work in-process and force a different call site everywhere else, breaking the local/remote symmetry the framework is built on.</p>
+<p>The result is a snapshot, stale the moment it arrives — another client may attach or release before the callback runs. Treat a returned key as "was
+live recently", never as a guarantee that a later <span class="tt"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78" title="Attaches (or re-points) this handler to the instance for key.">attach</a></span> finds the same instance.</p>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">M</td><td>Defaulted to <span class="tt">Model</span>; never named explicitly. See <span class="tt"><a class="el" href="#a421fba9e2f183185c0f05f8b43c66d78" title="Attaches (or re-points) this handler to the instance for key.">attach</a></span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>Completion resolving on the GUI executor with the live keys. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01083">1083</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a71c17b7c7473dcbef2bc19cebd6ba337" name="a71c17b7c7473dcbef2bc19cebd6ba337"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a71c17b7c7473dcbef2bc19cebd6ba337">&#9670;&#160;</a></span>executeJson()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">::morph::async::Completion</a>&lt; std::string &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::executeJson </td>
           <td>(</td>
           <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>actionType</em></span>, </td>
         </tr>
@@ -383,7 +533,7 @@ template&lt;typename Model&gt; </div>
 </div><div class="memdoc">
 
 <p>Type-erased execute: looks up the action by its registered string id and dispatches it through <span class="tt"><a class="el" href="../../db/dd1/classmorph_1_1bridge_1_1ActionExecuteRegistry.html" title="Type-erased, JSON-in/JSON-out execute path for actions whose concrete C++ type is only known by its r...">ActionExecuteRegistry</a></span>. </p>
-<p>Use this only when the concrete <span class="tt">Action</span> type is not known at the call site (e.g. a schema-driven UI reading action names out of a JSON Schema at runtime). Prefer the templated <span class="tt"><a class="el" href="#a8c6341aaf8719bd097f2af013204b03b" title="Dispatches action via the underlying Bridge and returns a Completion.">execute</a>&lt;Action&gt;()</span> whenever the type is known at compile time.</p>
+<p>Use this only when the concrete <span class="tt">Action</span> type is not known at the call site (e.g. a schema-driven UI reading action names out of a JSON Schema at runtime). Prefer the templated <span class="tt"><a class="el" href="#a08411eb2c1621f941b5a8fab45f29646" title="Dispatches action via the underlying Bridge and returns a Completion.">execute</a>&lt;Action&gt;()</span> whenever the type is known at compile time.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">actionType</td><td>Registered action type-id (the <span class="tt">NAME</span> passed to <span class="tt">BRIDGE_REGISTER_ACTION</span>). </td></tr>
@@ -399,23 +549,61 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00645">645</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01113">1113</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="ac515f6cc1ed451d1f0eff55ff356ad89" name="ac515f6cc1ed451d1f0eff55ff356ad89"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac515f6cc1ed451d1f0eff55ff356ad89">&#9670;&#160;</a></span>guiExecutor()</h2>
+<a id="a6f6ce0f93ff2ad46b30a72fa196fef42" name="a6f6ce0f93ff2ad46b30a72fa196fef42"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6f6ce0f93ff2ad46b30a72fa196fef42">&#9670;&#160;</a></span>makeBinding()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> * <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::guiExecutor </td>
+          <td class="memname">std::shared_ptr&lt; detail::HandlerBinding &gt; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::makeBinding </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Creates this handler's binding: deferred when shared, immediate otherwise. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bridge</td><td><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a> to create the binding on. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The new binding. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01122">1122</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a7cf0765d2e6bdcc796695116019542f4" name="a7cf0765d2e6bdcc796695116019542f4"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7cf0765d2e6bdcc796695116019542f4">&#9670;&#160;</a></span>guiExecutor()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> * <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::guiExecutor </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td> const</td>
@@ -431,27 +619,27 @@ template&lt;typename Model&gt; </div>
 <p>The executor used to deliver this handler's <span class="tt">Completion</span> callbacks. </p>
 <dl class="section return"><dt>Returns</dt><dd>The GUI/callback executor passed at construction. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00653">653</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01132">1132</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aa289505b2d7130d3a250e76745ef8753" name="aa289505b2d7130d3a250e76745ef8753"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aa289505b2d7130d3a250e76745ef8753">&#9670;&#160;</a></span>subscribe() <span class="overload">[1/2]</span></h2>
+<a id="a0bd97352408cfd46af1ad547676d1940" name="a0bd97352408cfd46af1ad547676d1940"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0bd97352408cfd46af1ad547676d1940">&#9670;&#160;</a></span>subscribe()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <div class="memtemplate">
-template&lt;typename Action&gt; </div>
+template&lt;typename R&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::subscribe </td>
+          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::subscribe </td>
           <td>(</td>
-          <td class="paramtype">std::function&lt; void(typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result)&gt;</td>          <td class="paramname"><span class="paramname"><em>cb</em></span></td><td>)</td>
+          <td class="paramtype">std::function&lt; void(R)&gt;</td>          <td class="paramname"><span class="paramname"><em>cb</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -462,89 +650,41 @@ template&lt;typename Action&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Subscribes to results of action type <code class="param">Action</code>. </p>
+<p>Subscribes to results of type <code class="param">R</code> produced on the attached instance. </p>
+<p>Fires whenever an <span class="tt">R</span> is produced on the instance this handler is attached to — by this handler, by another handler sharing the instance, or by another screen entirely. The subscriber names <em>what it renders</em>, not what somebody else must call to produce it, so adding an action that also yields an <span class="tt">R</span> never breaks an existing subscriber.</p>
+<p>One callback per <span class="tt">(handler, R)</span>: subscribing again replaces the previous one. Callbacks are delivered on this handler\'s executor. Failed actions notify nobody; delivery is best-effort and unbuffered, with no replay.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
-    <tr><td class="paramname">Action</td><td>Concrete action type registered with <span class="tt">BRIDGE_REGISTER_ACTION</span>. </td></tr>
+    <tr><td class="paramname">R</td><td>Result/state type to observe. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">cb</td><td>Callable receiving the action's <span class="tt">Result</span> by value on the GUI executor. </td></tr>
+    <tr><td class="paramname">cb</td><td>Callable receiving the value by value on the GUI executor. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00660">660</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01149">1149</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="aabaa0fe62aaa0b8cb2a454cec96f1412" name="aabaa0fe62aaa0b8cb2a454cec96f1412"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aabaa0fe62aaa0b8cb2a454cec96f1412">&#9670;&#160;</a></span>subscribe() <span class="overload">[2/2]</span></h2>
+<a id="aec8bdef725857e4a58d733ce13ea9028" name="aec8bdef725857e4a58d733ce13ea9028"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aec8bdef725857e4a58d733ce13ea9028">&#9670;&#160;</a></span>unsubscribe()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <div class="memtemplate">
-template&lt;typename Action&gt; </div>
+template&lt;typename R&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::subscribe </td>
-          <td>(</td>
-          <td class="paramtype">std::function&lt; void(typename <a class="el" href="../../d5/d09/structmorph_1_1model_1_1ActionTraits.html">::morph::model::ActionTraits</a>&lt; Action &gt;::Result)&gt;</td>          <td class="paramname"><span class="paramname"><em>cb</em></span>, </td>
-        </tr>
-        <tr>
-          <td class="paramkey"></td>
-          <td></td>
-          <td class="paramtype">std::function&lt; void(std::exception_ptr)&gt;</td>          <td class="paramname"><span class="paramname"><em>errCb</em></span>&#160;)</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Subscribes to both results and errors of action type <code class="param">Action</code>. </p>
-<dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Action</td><td>Concrete action type registered with <span class="tt">BRIDGE_REGISTER_ACTION</span>. </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">cb</td><td>Result callback invoked on success. </td></tr>
-    <tr><td class="paramname">errCb</td><td>Error callback invoked on failure (replaces orphan logging). </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00673">673</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a6ea83bd14e9cb81f66f9613b0ce75576" name="a6ea83bd14e9cb81f66f9613b0ce75576"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6ea83bd14e9cb81f66f9613b0ce75576">&#9670;&#160;</a></span>unsubscribe()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Model&gt; </div>
-<div class="memtemplate">
-template&lt;typename Action&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::unsubscribe </td>
+          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::unsubscribe </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td></td>
@@ -557,103 +697,31 @@ template&lt;typename Action&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Removes the subscriber for action type <code class="param">Action</code>. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00682">682</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a3c0073a5561c27bdc775d9fe64e546e1" name="a3c0073a5561c27bdc775d9fe64e546e1"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a3c0073a5561c27bdc775d9fe64e546e1">&#9670;&#160;</a></span>set()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Model&gt; </div>
-<div class="memtemplate">
-template&lt;auto FieldPtr&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::set </td>
-          <td>(</td>
-          <td class="paramtype">detail::MemberPointerTraits&lt; decltype(FieldPtr)&gt;::ValueType</td>          <td class="paramname"><span class="paramname"><em>value</em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Sets one field of the in-progress draft and fires the action if ready. </p>
+<p>Removes this handler\'s subscription for <code class="param">R</code>. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
-    <tr><td class="paramname">FieldPtr</td><td>Pointer-to-data-member of the action struct (encodes both action and field type). </td></tr>
-  </table>
-  </dd>
-</dl>
-<dl class="params"><dt>Parameters</dt><dd>
-  <table class="params">
-    <tr><td class="paramname">value</td><td>New value for the field. </td></tr>
+    <tr><td class="paramname">R</td><td>Result/state type to stop hearing about. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00696">696</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01158">1158</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a31897ee8c8ce3e117300632fdd8e3fd0" name="a31897ee8c8ce3e117300632fdd8e3fd0"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a31897ee8c8ce3e117300632fdd8e3fd0">&#9670;&#160;</a></span>reset()</h2>
+<a id="a24d6eae36421f68e51d54b24f6d2d087" name="a24d6eae36421f68e51d54b24f6d2d087"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a24d6eae36421f68e51d54b24f6d2d087">&#9670;&#160;</a></span>binding()</h2>
 
 <div class="memitem">
 <div class="memproto">
 <div class="memtemplate">
-template&lt;typename Model&gt; </div>
-<div class="memtemplate">
-template&lt;typename Action&gt; </div>
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
       <table class="memname">
         <tr>
-          <td class="memname">void <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::reset </td>
-          <td>(</td>
-          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>Discards the in-progress draft for action <code class="param">Action</code>. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00711">711</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a1df59509d497c7362aae2b5bf1666747" name="a1df59509d497c7362aae2b5bf1666747"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a1df59509d497c7362aae2b5bf1666747">&#9670;&#160;</a></span>binding()</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Model&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model &gt;::binding </td>
+          <td class="memname">const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp; <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::binding </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
           <td> const</td>
@@ -669,7 +737,36 @@ template&lt;typename Model&gt; </div>
 <p>Returns the underlying <span class="tt">HandlerBinding</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the binding owned by this handler. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00722">722</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01166">1166</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
+<a id="a02ceca31457428a939cafa4f904aa2ff" name="a02ceca31457428a939cafa4f904aa2ff"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a02ceca31457428a939cafa4f904aa2ff">&#9670;&#160;</a></span>kShared</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model, typename Sharing = NoSharing&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool <a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html">morph::bridge::BridgeHandler</a>&lt; Model, Sharing &gt;::kShared = std::is_same_v&lt;Sharing, <a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html">AllowShared</a>&gt;</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether this handler participates in the shared instance directory. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00923">923</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
