@@ -1072,6 +1072,12 @@ TEST_CASE("a failed first action releases a freshly created shared instance from
     // fresh instance instead, on which the same key's normal action succeeds.
     BridgeHandler<ShiHydrateModel, AllowShared> second{bridge, &exec};
     REQUIRE(settle(second.execute(ShiHydrateOk{.id = 1})).value == 1);
+    // ShiHydrateModel carries no observable state, so the value check above
+    // cannot by itself tell a fresh instance apart from the reused, poisoned
+    // one. `first` is still attached (its attachment was never released), so
+    // the poisoned instance is still alive; confirm `second` really landed on
+    // a *different* instance, not the same one reused.
+    REQUIRE(second.binding()->currentId.load() != first.binding()->currentId.load());
 }
 
 TEST_CASE("the server releases a freshly created shared instance whose first action fails", "[shared-instances]") {
