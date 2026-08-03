@@ -3,7 +3,9 @@
 #pragma once
 #include <QHostAddress>
 #include <QObject>
+#ifndef QT_NO_SSL
 #include <QSslConfiguration>
+#endif
 #include <QTimer>
 #include <QWebSocket>
 #include <QWebSocketServer>
@@ -79,6 +81,12 @@ struct QtWebSocketServerConfig {
 /// Pass a `QSslConfiguration` to enable `wss://`. The configuration should be built
 /// from a certificate file, a Qt resource, or a byte array before being passed in.
 ///
+/// @par SSL-less Qt builds (`QT_NO_SSL`, including the standard Qt-for-WebAssembly build)
+/// The constructor's `tls` parameter does not exist at all when Qt itself was
+/// configured without SSL — `QSslConfiguration` isn't a type Qt provides in that
+/// configuration. Such a server always constructs in `NonSecureMode`; see
+/// `QtWebSocketBackend`'s equivalent doc comment for the client-side rationale.
+///
 /// @par Resource limits
 /// Pass a `QtWebSocketServerConfig` to bound connection count, per-frame size,
 /// per-connection message rate, and handshake/idle time. All fields default to
@@ -107,13 +115,17 @@ public:
     ///
     /// @param server  `RemoteServer` instance that processes incoming messages.
     /// @param port    TCP port to listen on. Pass 0 to let the OS pick a free port.
-    /// @param tls     If non-null, enables TLS (`wss://`) with this configuration.
+    /// @param tls     If non-null, enables TLS (`wss://`) with this configuration. Not
+    ///                declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see the
+    ///                class doc comment's "SSL-less Qt builds" section.
     /// @param cfg     Per-connection resource limits. Default: everything unbounded
     ///                (today's behavior) except `maxMessageBytes`, which defaults to
     ///                the wire-layer cap.
     /// @param parent  Optional Qt parent object.
     explicit QtWebSocketServer(::morph::backend::RemoteServer& server, quint16 port = 0,
+#ifndef QT_NO_SSL
                                std::optional<QSslConfiguration> tls = std::nullopt,
+#endif
                                QtWebSocketServerConfig cfg = QtWebSocketServerConfig{}, QObject* parent = nullptr);
 
     /// @brief Closes the server and disconnects all clients.
