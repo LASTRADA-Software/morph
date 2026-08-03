@@ -13,20 +13,22 @@
 //           BEFORE touching anything that reaches into the bridge (`onResult`
 //           and `hasSubscribers()`), so a backend completion that resolves
 //           after `~Bridge()` has run does not dereference the dangling
-//           `Bridge`. Two test cases cover the two guarded call sites with
-//           different strength: the `onResult` case is a deterministic,
-//           sanitizer-free regression test (pre-fix, `onResult` ran with no
-//           guard at all, so a flag set as its first statement differs
-//           pre/post fix regardless of memory contents); the
-//           `hasSubscribers()` case is a best-effort probe only -- see its
-//           comment for why a sequential, single-threaded test structurally
-//           cannot observe a behavioural difference there without a working
-//           sanitizer.
+//           `Bridge`. Two test cases cover the two guarded call sites, both
+//           deterministic: the `onResult` case observes a flag set as the
+//           very first statement of a callback that pre-fix ran completely
+//           unguarded; the `hasSubscribers()` case (POSIX-only) places the
+//           Bridge on an `mmap`'d guard page, destroys it in place, then
+//           `mprotect`s the page to `PROT_NONE` -- pre-fix, `hasSubscribers()`
+//           dereferences the protected page and faults (SIGSEGV or, on this
+//           machine's Darwin kernel, SIGBUS), which the test's own
+//           `sigsetjmp`/`siglongjmp`-based handler converts into a normal,
+//           reported Catch2 test failure; post-fix, the liveness check gates
+//           the call out before the page is ever touched.
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
-#include <cstring>
+#include <cstdint>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -38,6 +40,13 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+
+#if !defined(_WIN32)
+#include <csignal>
+#include <csetjmp>
+#include <sys/mman.h>
+#include <unistd.h>
+#endif
 
 #include "test_support.hpp"
 
@@ -183,6 +192,28 @@ public:
     // wants the completion to fire.
     std::shared_ptr<morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
 };
+
+#if !defined(_WIN32)
+// Recovery machinery for the guard-page death test below. A signal handler
+// may only call async-signal-safe functions, so this does the minimum: record
+// which signal fired in a `sig_atomic_t` and jump back to the `sigsetjmp`
+// checkpoint in the test body via `siglongjmp` (which, unlike plain
+// `longjmp`, also restores the signal mask the jump point had -- required so
+// the signal being handled isn't left permanently blocked after we resume).
+//
+// PROT_NONE protection faults are not portable across POSIX platforms: this
+// machine's AppleClang/Darwin delivers SIGBUS for them (confirmed
+// empirically -- see the report), while Linux typically delivers SIGSEGV for
+// the same fault. Both are installed with the same handler so the test works
+// either way.
+volatile std::sig_atomic_t gGuardPageFaultSignal = 0;
+sigjmp_buf gGuardPageJumpBuf;
+
+void guardPageFaultHandler(int sig) {
+    gGuardPageFaultSignal = sig;
+    siglongjmp(gGuardPageJumpBuf, 1);
+}
+#endif
 
 }  // namespace
 
@@ -345,76 +376,133 @@ TEST_CASE("Bridge: onResult does not run once the bridge is destroyed", "[bridge
     REQUIRE_FALSE(onResultRan.load());
 }
 
-TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (best-effort probe)",
+#if !defined(_WIN32)
+// POSIX-only (mmap/mprotect): the guard-page death test below relies on them,
+// so it is compiled out on Windows rather than approximated with something
+// weaker there. See its comment for the technique and why it is deterministic
+// where the superseded heap-reuse probe this replaced was not.
+TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guard-page death test)",
           "[bridge][lifetime]") {
-    // Unlike the onResult case above, this half of FIX 5 cannot be turned
-    // into a deterministic plain-build regression test. `hasSubscribers()`
-    // only reads a trivially-destructible `std::atomic<size_t>`, and -- once
-    // the bridge really is fully destroyed before the completion resolves --
-    // the surviving `!alive.expired()` half of the old
-    // `hasSubscribers() && !alive.expired()` condition is `false` regardless
-    // of which operand is evaluated first. So the *observable branch
-    // outcome* (whether `publishResult` runs) is identical pre- and post-fix
-    // in a sequential, single-threaded destroy-then-resolve test like this
-    // one: no postcondition assertion can tell the two orderings apart here.
-    // The actual bug this guard exists for is either (a) the read of freed
-    // memory being itself undefined behaviour -- detectable only by a
-    // memory-safety tool such as ASan -- or (b) a genuine data race where the
-    // completion's callback runs concurrently with `~Bridge()` on another
-    // thread, which a sequential test cannot reproduce at all (that needs
-    // TSan plus real concurrency).
+    // A prior version of this test heap-allocated the Bridge with plain
+    // `new`/`delete` and tried to raise the odds of observing a crash by
+    // scribbling over freed memory. That could not reliably fail pre-fix
+    // (confirmed empirically -- see the report): reading a freed-but-still
+    // mapped `std::atomic<size_t>` is undefined behaviour, but not something
+    // that reliably *faults*, and downstream of that read the surviving
+    // `!alive.expired()` half of the pre-fix `hasSubscribers() &&
+    // !alive.expired()` condition is false regardless of evaluation order --
+    // so `publishResult()` never actually ran in either ordering, leaving no
+    // difference for a postcondition assertion to observe.
     //
-    // We investigated using a sanitizer here: both the whole `morph_tests`
-    // binary and this file's tests in isolation hang indefinitely under this
-    // machine's AppleClang ASan+UBSan combination (confirmed against
-    // unrelated, already-passing tests too -- see the task report), so that
-    // route is not available in this environment. This test is therefore a
-    // best-effort probe, not a regression guard: heap-allocating the bridge
-    // and aggressively overwriting freed memory with a recognizable,
-    // non-zero pattern raises -- but does not guarantee -- the odds that a
-    // pre-fix read of the dangling `this` behaves observably differently
-    // (e.g. a crash while walking a corrupted `_subscriptions` vector, if
-    // `hasSubscribers()` happens to read back a nonzero count from reused
-    // memory). Confirmed empirically that it does NOT reliably fail against
-    // the pre-fix ordering (see the report); do not read this test as proof
-    // of coverage the way the onResult test above is.
+    // This version instead makes the touch of the dangling `this` itself
+    // fault, deterministically: the Bridge is placement-new'd inside a page
+    // obtained via `mmap`, manually destroyed in place (not `delete` -- the
+    // memory isn't heap-owned), and the page is then `mprotect`'d to
+    // `PROT_NONE`. `hasSubscribers()` is a member function call that
+    // dereferences `this` to read `_subscriptionCount`; pre-fix, that
+    // dereference lands on a `PROT_NONE` page and faults immediately, before
+    // it can return any value at all.
+    //
+    // The fault is recovered in-process via `sigsetjmp`/`siglongjmp` (see
+    // `guardPageFaultHandler` above) rather than relying on Catch2's built-in
+    // fatal-signal handler: empirically (see the report), a PROT_NONE
+    // protection fault on this machine's Darwin kernel delivers **SIGBUS**,
+    // not SIGSEGV -- and Catch2's POSIX handler list is SIGINT/SIGILL/
+    // SIGFPE/SIGSEGV/SIGTERM/SIGABRT, which does not include SIGBUS, so an
+    // uncaught SIGBUS would kill the whole test *process* (not just this test
+    // case) with no Catch2 report at all. Installing our own handler for both
+    // SIGSEGV and SIGBUS and jumping back into ordinary control flow converts
+    // either one into a normal, explicit `FAIL(...)` -- a clean, attributable
+    // Catch2 failure for this one test case, and (unlike an uncaught signal)
+    // safe to run alongside every other test in one process. Post-fix,
+    // `bridgeAlive` is checked first and is false, so `hasSubscribers()` is
+    // never called at all -- the protected page is never touched, no signal
+    // fires, and the test runs through to a clean pass.
     auto backendOwner = std::make_unique<DeferredResultBackend>();
     auto* const backendPtr = backendOwner.get();
     morph::testing::InlineExecutor cbExec;
 
-    auto* bridge = new morph::bridge::Bridge(std::move(backendOwner));
+    long const pageSizeRaw = sysconf(_SC_PAGESIZE);
+    REQUIRE(pageSizeRaw > 0);
+    auto const pageSize = static_cast<std::size_t>(pageSizeRaw);
+    REQUIRE(sizeof(morph::bridge::Bridge) <= pageSize);
+
+    void* const region = mmap(nullptr, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    REQUIRE(region != MAP_FAILED);
+
+    // Place the Bridge flush against the end of the page (rounded down to its
+    // required alignment), so a touch of any of its member data lands inside
+    // the page that gets protected below, not in whatever precedes it.
+    auto const regionEnd = reinterpret_cast<std::uintptr_t>(region) + pageSize;
+    auto objAddr = regionEnd - sizeof(morph::bridge::Bridge);
+    objAddr -= objAddr % alignof(morph::bridge::Bridge);
+    void* const bridgeMem = reinterpret_cast<void*>(objAddr);  // NOLINT(performance-no-int-to-ptr)
+
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory) -- placement new into
+    // the mmap'd region above; destroyed via an explicit dtor call below, not
+    // `delete` (the memory is not heap-owned).
+    auto* const bridge = new (bridgeMem) morph::bridge::Bridge(std::move(backendOwner));
+
     auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
     binding->typeId = "BL_DeferredModel";
     binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<DeferredModel>(); };
     bridge->registerHandler(binding);
 
     // No onResult here -- this case isolates the hasSubscribers()/
-    // publishResult side effect from the onResult side effect covered above.
+    // publishResult side effect from the onResult side effect covered by the
+    // test above.
     auto completion = bridge->executeVia<DeferredModel, DeferredAction>(binding, DeferredAction{}, &cbExec);
     (void)completion;
 
     auto pending = backendPtr->state;
     REQUIRE(pending);
 
-    delete bridge;  // ~Bridge runs here; `bridge` is now a dangling pointer.
-    bridge = nullptr;
+    bridge->~Bridge();  // Manually destroyed in place -- see the comment above on why not `delete`.
 
-    // Raise the odds the allocator hands the freed Bridge's memory back for
-    // one of these same-size allocations, filled with a distinct, non-zero
-    // byte pattern rather than bytes nothing has ever written to.
-    constexpr std::size_t kBridgeSize = sizeof(morph::bridge::Bridge);
-    constexpr int kFillAttempts = 16;
-    for (int i = 0; i < kFillAttempts; ++i) {
-        auto* const filler = static_cast<unsigned char*>(::operator new(kBridgeSize));
-        std::memset(filler, 0xAA, kBridgeSize);
-        // Deliberately leaked for the rest of the test process -- freeing it
-        // immediately would just hand the same memory straight back on the
-        // next iteration, defeating the point of trying several attempts.
+    REQUIRE(mprotect(region, pageSize, PROT_NONE) == 0);
+
+    struct sigaction sa {};
+    sa.sa_handler = guardPageFaultHandler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    struct sigaction oldSegv {};
+    struct sigaction oldBus {};
+    REQUIRE(sigaction(SIGSEGV, &sa, &oldSegv) == 0);
+    REQUIRE(sigaction(SIGBUS, &sa, &oldBus) == 0);
+
+    gGuardPageFaultSignal = 0;
+    // sigsetjmp(..., 1) saves the signal mask along with the jump point, so
+    // siglongjmp restores it too -- required so the signal we just caught
+    // isn't left blocked for the rest of the process after we resume here.
+    // A nonzero return means we got here via siglongjmp from the handler
+    // (i.e. a fault happened); a zero return means the call below is about
+    // to run for the first time.
+    bool const faulted = sigsetjmp(gGuardPageJumpBuf, 1) != 0;
+    if (!faulted) {
+        // Pre-fix: hasSubscribers() dereferences the now-protected `this`,
+        // faults, and control jumps straight to the `faulted` branch below
+        // instead of returning here. Post-fix: bridgeAlive gates
+        // hasSubscribers() out entirely, so this resolves and returns
+        // normally, and `faulted` stays false.
+        pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
     }
 
-    // Must not crash even if hasSubscribers() does read back the freed,
-    // now-scribbled memory. See the comment above for why this is the
-    // strongest available check without a working sanitizer.
-    pending->setValue(std::static_pointer_cast<void>(std::make_shared<int>(42)));
-    SUCCEED("resolving after destruction did not crash (best-effort probe; see comment above)");
+    // Restore the default handlers before doing anything else, whether or not
+    // we faulted.
+    sigaction(SIGSEGV, &oldSegv, nullptr);
+    sigaction(SIGBUS, &oldBus, nullptr);
+
+    if (faulted) {
+        // The crash happened inside a single, lock-free atomic load
+        // (hasSubscribers() takes no locks), so nothing was left mid-mutation
+        // for this best-effort cleanup to worry about disturbing.
+        munmap(region, pageSize);
+        std::string const message = "hasSubscribers() touched the destroyed bridge after ~Bridge() ran "
+                                     "(caught signal " +
+                                     std::to_string(gGuardPageFaultSignal) + ")";
+        FAIL(message);
+    }
+
+    REQUIRE(munmap(region, pageSize) == 0);
 }
+#endif  // !defined(_WIN32)
