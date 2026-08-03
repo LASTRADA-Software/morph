@@ -176,10 +176,13 @@ struct IBackend {
     /// strand everything the create just did, so instead the instance the action
     /// ran on is given the generated key in place.
     ///
-    /// A no-op when @p primary is empty, when @p mid is not live, or when another
-    /// instance already holds that key — the existing holder always wins, so a
+    /// A no-op when @p primary is empty, when @p mid is not live, when another
+    /// instance already holds that key, or when @p mid itself already holds a
+    /// *different* real key. The existing holder of a key always wins (a
     /// promotion can never silently displace a directory entry other handlers
-    /// are already attached to.
+    /// are attached to), and an already-keyed instance never changes key (a
+    /// promotion can never silently move one out from under handlers already
+    /// attached to it) — only a still-anonymous instance can ever be promoted.
     ///
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
@@ -354,7 +357,8 @@ public:
         return mid;
     }
 
-    /// @brief Enters an already-live instance into the directory under @p primary. Thread-safe.
+    /// @brief Enters an already-live, still-anonymous instance into the
+    ///        directory under @p primary. Thread-safe.
     /// @param mid     Live instance to promote.
     /// @param typeId  Model type id — the directory's first key component.
     /// @param primary Canonical string encoding of the key to file it under.
@@ -371,9 +375,14 @@ public:
         if (_directory.contains(dirKey)) {
             return;
         }
-        if (auto prevIter = _sharedKeyOf.find(mid); prevIter != _sharedKeyOf.end()) {
-            _directory.erase(prevIter->second);
-            _sharedKeyOf.erase(prevIter);
+        // Only a truly anonymous instance (no existing directory entry) can
+        // be promoted. An instance already filed under a *different* real key
+        // must not be silently re-filed onto this one -- instances never
+        // change key; re-pointing the handler is the supported way to move to
+        // a different entity, and it leaves the old key, and every other
+        // client still attached under it, untouched.
+        if (_sharedKeyOf.contains(mid)) {
+            return;
         }
         _directory.emplace(dirKey, mid);
         _sharedKeyOf.emplace(mid, std::move(dirKey));

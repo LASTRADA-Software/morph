@@ -323,7 +323,12 @@ public:
     ///
     /// The instance keeps everything the creating action just did — nothing is
     /// re-created and nothing is stranded. A no-op if another instance already
-    /// holds that key; the existing holder always wins.
+    /// holds that key (the existing holder always wins) or if @p binding
+    /// already holds a *different* real key — `IBackend::assignPrimary` only
+    /// ever promotes a still-anonymous instance, so the locally cached primary
+    /// must not race ahead of it: updating it here regardless would make
+    /// `primary()` report a key the backend never actually filed the instance
+    /// under.
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding whose instance is being promoted.
     /// @param primary Canonical string encoding of the key to file it under.
@@ -331,7 +336,7 @@ public:
     void assignHandlerPrimary(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
         std::scoped_lock const lock{_attachMtx};
         uint64_t const raw = binding->currentId.load();
-        if (raw == 0U || primary.empty()) {
+        if (raw == 0U || primary.empty() || !binding->primary.empty()) {
             return;
         }
         loadBackend()->assignPrimary(::morph::exec::detail::ModelId{raw}, binding->typeId, primary);

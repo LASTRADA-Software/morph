@@ -775,11 +775,14 @@ private:
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, fresh.v)));
     }
 
-    /// @brief Files a live instance under a primary key, in place.
+    /// @brief Files a live, still-anonymous instance under a primary key, in place.
     ///
     /// The existing holder of a key always wins: promoting onto a key another
-    /// instance already holds is a silent no-op rather than a displacement, so a
-    /// promotion can never steal an entry handlers are already attached to.
+    /// instance already holds is a silent no-op rather than a displacement.
+    /// Symmetrically, an instance that already holds a *different* real key is
+    /// left exactly where it is — also a silent no-op — since instances never
+    /// change key (docs/spec/core/shared_instances.md); only a still-anonymous
+    /// `mid` (no existing `_sharedKeyOf` entry) can ever be promoted.
     /// @param env Decoded request; uses `typeId`, `primary`, `modelId`.
     void applyAssignLocked(const ::morph::wire::Envelope& env) {
         ::morph::exec::detail::ModelId const mid{env.modelId};
@@ -790,9 +793,8 @@ private:
         if (_directory.contains(dirKey)) {
             return;
         }
-        if (auto prevIter = _sharedKeyOf.find(mid); prevIter != _sharedKeyOf.end()) {
-            _directory.erase(prevIter->second);
-            _sharedKeyOf.erase(prevIter);
+        if (_sharedKeyOf.contains(mid)) {
+            return;
         }
         _directory.emplace(dirKey, mid);
         _sharedKeyOf.emplace(mid, std::move(dirKey));

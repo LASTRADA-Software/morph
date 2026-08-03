@@ -251,13 +251,17 @@ established means an older peer ignores what it does not understand.
   `ModelId`. Semantically a `deregister` + `register` pair, made atomic so a
   re-pointing handler cannot lose its slot to `LimitPolicy::maxLiveModels` in
   between.
-- **A new `assign` request.** Files an already-live `modelId` under a primary
-  key, in place. This is what makes a result-sourced key work without losing
-  state: an action that creates its own entity runs on a not-yet-keyed
-  instance, and only the reply carries the generated key, so the instance the
-  action ran on is promoted rather than abandoned for a fresh one. The existing
-  holder of a key always wins — promoting onto a taken key is a silent no-op,
-  never a displacement.
+- **A new `assign` request.** Files an already-live, still-anonymous `modelId`
+  under a primary key, in place. This is what makes a result-sourced key work
+  without losing state: an action that creates its own entity runs on a
+  not-yet-keyed instance, and only the reply carries the generated key, so the
+  instance the action ran on is promoted rather than abandoned for a fresh
+  one. Promotion only ever applies to a still-anonymous instance: the
+  existing holder of a key always wins (promoting onto a taken key is a
+  silent no-op, never a displacement), and an instance that already holds a
+  *different* real key is left exactly where it is (also a silent no-op) —
+  instances never change key, so `assign` never reaches for one still in use
+  elsewhere.
 - **A new `instances` request.** Takes a model type id, replies with the live
   primary keys for it. Subject to `authorize` like any other request; see below.
 

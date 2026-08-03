@@ -576,21 +576,26 @@ TEST_CASE("IBackend's sharing defaults degrade to private instances", "[shared-i
     REQUIRE_NOTHROW(backend.assignPrimary(first, "SHI_CounterModel", "1"));
 }
 
-TEST_CASE("assignPrimary re-files an instance and ignores unusable input", "[shared-instances]") {
+TEST_CASE("assignPrimary promotes an anonymous instance and ignores unusable input", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
     morph::backend::LocalBackend backend{pool};
 
+    // An anonymous instance -- no primary yet -- is the only kind
+    // assignPrimary may ever promote.
     auto mid = backend.registerModelShared("SHI_CounterModel",
                                            [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
-                                           {.contextKey = {}, .primary = "old"});
-    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"old"});
+                                           {.contextKey = {}, .primary = {}});
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 
-    // Re-filing drops the previous entry rather than leaving the instance
-    // reachable under two keys, which would break the one-key-one-instance rule.
     backend.assignPrimary(mid, "SHI_CounterModel", "new");
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
 
-    // Neither of these names something actionable, so both are no-ops.
+    // Already keyed, so a second promotion is a no-op: instances never change
+    // key once they have a real one.
+    backend.assignPrimary(mid, "SHI_CounterModel", "other");
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
+
+    // Neither of these names something actionable, so both are also no-ops.
     backend.assignPrimary(mid, "SHI_CounterModel", "");
     backend.assignPrimary(morph::exec::detail::ModelId{99999}, "SHI_CounterModel", "ghost");
     REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"new"});
@@ -673,21 +678,25 @@ TEST_CASE("assign is refused by an authorizer that denies", "[shared-instances]"
     REQUIRE(assign.message == "unauthorized");
 }
 
-TEST_CASE("a result-sourced key on an already-attached handler promotes in place", "[shared-instances]") {
+TEST_CASE("a result-sourced key is not promoted when the handler already holds a real key", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     Bridge bridge{makeLocal(exec)};
 
     BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
-    handler.attach(600);                                    // already bound…
+    handler.attach(600);                                    // already bound to a real key…
     settle(handler.execute(ShiAddTo{.id = 600, .amount = 3}));
 
-    // …so the create does not need an anonymous instance conjured for it; it
-    // runs on the one already held, and that instance is re-filed under the
-    // generated key with its state intact.
+    // …so a creating action's result-sourced key must not re-file this
+    // instance out from under 600: instances never change key, and another
+    // client may still be attached under it.
     auto created = settle(handler.execute(ShiCreateAs{.wantId = 601, .initial = 9}));
     REQUIRE(created.id == 601);
-    REQUIRE(handler.primary().value_or(-1) == 601);
-    REQUIRE(settle(handler.execute(ShiPeek{})).value == 9);
+    REQUIRE(handler.primary().value_or(-1) == 600);
+
+    // Key 601 was never filed: a fresh attach to it starts from zero.
+    BridgeHandler<ShiCounterModel, AllowShared> other{bridge, &exec};
+    other.attach(601);
+    REQUIRE(settle(other.execute(ShiPeek{})).value == 0);
 }
 
 TEST_CASE("a subscriber with no executor is called inline", "[shared-instances]") {
@@ -783,7 +792,7 @@ TEST_CASE("a change-aware model is tracked when registered shared", "[shared-ins
     REQUIRE(settle(handler.execute(ShiAwareRead{.id = 900})).value == 1);
 }
 
-TEST_CASE("the server re-files an instance onto a new key over the wire", "[shared-instances]") {
+TEST_CASE("the server refuses to re-file an already-keyed instance onto a different key", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool);
 
@@ -791,15 +800,16 @@ TEST_CASE("the server re-files an instance onto a new key over the wire", "[shar
         server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "old"))));
     REQUIRE(reg.kind == "ok");
 
-    // Assigning a *new* key to an already-filed instance drops the old entry —
-    // leaving it reachable under two keys would break one-key-one-instance.
+    // The instance already has a real key ("old"); assign must leave it there
+    // rather than silently moving it, which would strand any other client
+    // still attached under "old".
     server->handleInline(morph::wire::encode(morph::wire::makeAssign("SHI_CounterModel", "new", reg.modelId)));
 
     auto listed = morph::wire::decode(
         server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
     std::vector<std::string> keys;
     REQUIRE_FALSE(glz::read_json(keys, listed.body));
-    REQUIRE(keys == std::vector<std::string>{"new"});
+    REQUIRE(keys == std::vector<std::string>{"old"});
 }
 
 TEST_CASE("an attach that creates the instance carries contextKey to a configured LogProvider", "[shared-instances]") {
