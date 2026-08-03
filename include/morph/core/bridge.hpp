@@ -327,13 +327,24 @@ public:
     /// @brief Files @p binding's current instance under @p primary, in place.
     ///
     /// The instance keeps everything the creating action just did — nothing is
-    /// re-created and nothing is stranded. A no-op if another instance already
-    /// holds that key (the existing holder always wins) or if @p binding
-    /// already holds a *different* real key — `IBackend::assignPrimary` only
-    /// ever promotes a still-anonymous instance, so the locally cached primary
-    /// must not race ahead of it: updating it here regardless would make
-    /// `primary()` report a key the backend never actually filed the instance
-    /// under.
+    /// re-created and nothing is stranded. A no-op if @p binding already holds
+    /// a different real primary (the locally cached primary must not race
+    /// ahead of the backend's own refusal to re-key an already-keyed
+    /// instance — see `IBackend::assignPrimary`).
+    ///
+    /// Known gap: if @p binding was still anonymous but the *target* key is
+    /// already held by a different instance, the backend's `assignPrimary`
+    /// silently declines to promote (the existing holder always wins), but
+    /// this method has no way to learn that and still caches @p primary as
+    /// though the promotion succeeded — `binding->primary()` can then report
+    /// a key the backend never actually filed this instance under, and a
+    /// same-key `attach()` after that becomes a silent no-op (the "already
+    /// primary == primary" guard in `attachHandler`), so the binding can
+    /// never reach the instance actually holding that key. Closing this
+    /// requires `assignPrimary`'s outcome to become observable (e.g. a
+    /// `bool` return threaded across every `IBackend` implementation and, for
+    /// wire backends, a reply field) — tracked as a follow-up, not fixed
+    /// here.
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding whose instance is being promoted.
     /// @param primary Canonical string encoding of the key to file it under.
