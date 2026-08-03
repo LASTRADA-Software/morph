@@ -172,6 +172,29 @@ BRIDGE_REGISTER_ACTION(AutoLoadModel, AutoPeek, "SHI_AutoPeek")
 BRIDGE_MODEL_KEY(AutoLoadModel, AutoLoad, &AutoLoad::id);
 // NOLINTEND(misc-use-internal-linkage)
 
+// NOLINTBEGIN(misc-use-internal-linkage)
+/// A model whose first action can be made to fail on demand, to exercise
+/// "a failed first action on a freshly created shared instance releases it"
+/// (docs/spec/core/shared_instances.md's Failure modes).
+struct ShiHydrateFail {
+    std::int64_t id = 0;
+};
+struct ShiHydrateOk {
+    std::int64_t id = 0;
+};
+struct ShiHydrateModel {
+    ShiCounterState execute(const ShiHydrateFail&) { throw std::runtime_error("hydration failed"); }
+    ShiCounterState execute(const ShiHydrateOk&) { return {.value = 1}; }
+};
+
+BRIDGE_REGISTER_MODEL(ShiHydrateModel, "SHI_HydrateModel")
+BRIDGE_REGISTER_ACTION(ShiHydrateModel, ShiHydrateFail, "SHI_HydrateFail")
+BRIDGE_REGISTER_ACTION(ShiHydrateModel, ShiHydrateOk, "SHI_HydrateOk")
+
+BRIDGE_MODEL_KEY(ShiHydrateModel, ShiHydrateFail, &ShiHydrateFail::id);
+BRIDGE_KEY_FROM(ShiHydrateOk, &ShiHydrateOk::id);
+// NOLINTEND(misc-use-internal-linkage)
+
 namespace {
 
 using morph::bridge::AllowShared;
@@ -1034,4 +1057,46 @@ TEST_CASE("Bridge: an in-flight shared attach does not block unrelated handler r
         throw;
     }
     joinAll();
+}
+
+TEST_CASE("a failed first action releases a freshly created shared instance from the directory", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiHydrateModel, AllowShared> first{bridge, &exec};
+    bool failed = false;
+    first.execute(ShiHydrateFail{.id = 1}).onError([&](const std::exception_ptr&) { failed = true; });
+    REQUIRE(failed);
+
+    // The broken instance must not be handed to a second attacher: it gets a
+    // fresh instance instead, on which the same key's normal action succeeds.
+    BridgeHandler<ShiHydrateModel, AllowShared> second{bridge, &exec};
+    REQUIRE(settle(second.execute(ShiHydrateOk{.id = 1})).value == 1);
+}
+
+TEST_CASE("the server releases a freshly created shared instance whose first action fails", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+    REQUIRE(reg.kind == "ok");
+
+    morph::wire::Envelope failExec;
+    failExec.kind = "execute";
+    failExec.modelId = reg.modelId;
+    failExec.modelType = "SHI_HydrateModel";
+    failExec.actionType = "SHI_HydrateFail";
+    failExec.body = R"({"id":1})";
+    morph::testing::WaitReply waiter;
+    server->handle(morph::wire::encode(failExec), std::ref(waiter));
+    REQUIRE(waiter.await());
+    REQUIRE(waiter.env.kind == "err");
+
+    // A second shared register for the same key must not reach the poisoned
+    // instance -- it gets a fresh one.
+    auto second = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_HydrateModel", "1"))));
+    REQUIRE(second.kind == "ok");
+    REQUIRE(second.modelId != reg.modelId);
 }

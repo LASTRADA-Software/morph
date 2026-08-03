@@ -612,6 +612,8 @@ private:
         }
         _models.erase(mid);
         _owners.erase(mid);
+        _firstActionPending.erase(mid);
+        _poisoned.erase(mid);
         return true;
     }
 
@@ -689,6 +691,16 @@ private:
             return false;
         }
         auto const mid = found->second;
+        if (_poisoned.contains(mid)) {
+            // This instance's first action already failed; it must not be
+            // handed to a new attacher. Evict it from the directory -- its
+            // own eventual release still tears it down normally -- and report
+            // a miss so the caller falls through to creating a fresh
+            // instance.
+            _directory.erase(found);
+            _sharedKeyOf.erase(mid);
+            return false;
+        }
         _attachCount[mid] += 1;
         if (!noteScopeAttachLocked(mid, cid)) {
             releaseInstanceLocked(mid);
@@ -771,6 +783,7 @@ private:
             _directory.emplace(dirKey, fresh);
             _sharedKeyOf.emplace(fresh, std::move(dirKey));
             _attachCount[fresh] = 1;
+            _firstActionPending.insert(fresh);
         }
         reply(::morph::wire::encode(::morph::wire::makeOk(env.callId, {}, fresh.v)));
     }
@@ -1227,6 +1240,7 @@ private:
         }
 
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
+            ::morph::exec::detail::ModelId const mid{env.modelId};
             auto const start = std::chrono::steady_clock::now();
             auto const spanId =
                 ::morph::observe::detail::beginSpan(env.session.requestId, env.modelType, env.actionType);
@@ -1261,6 +1275,10 @@ private:
                 std::array<std::pair<std::string_view, std::string_view>, 2> const tags{
                     {{"modelType", env.modelType}, {"actionType", env.actionType}}};
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
+                {
+                    std::scoped_lock const lock{self->_regMtx};
+                    self->_firstActionPending.erase(mid);
+                }
                 complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
                 {
@@ -1276,6 +1294,13 @@ private:
                     {{"modelType", env.modelType}, {"actionType", env.actionType}}};
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
+                {
+                    std::scoped_lock const lock{self->_regMtx};
+                    if (auto iter = self->_firstActionPending.find(mid); iter != self->_firstActionPending.end()) {
+                        self->_firstActionPending.erase(iter);
+                        self->_poisoned.insert(mid);
+                    }
+                }
                 complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
@@ -1334,6 +1359,21 @@ private:
     std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
     std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
     std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
+    // First-action hydration tracking for freshly-created shared instances
+    // (docs/spec/core/shared_instances.md's Failure modes: a failed first
+    // action on a freshly created shared instance must not be left in the
+    // directory in a half-hydrated state). `_firstActionPending` holds a mid
+    // while its very first execute hasn't settled yet; `_poisoned` holds a
+    // mid whose first action failed. Consulted lazily by
+    // attachExistingLocked, which evicts and falls through to creating a
+    // fresh instance instead of handing a poisoned one to a new attacher.
+    // Guarded by `_regMtx` alongside `_models`/`_directory`. `dispatchExecute`'s
+    // strand task safely mutates these directly via its own `self =
+    // shared_from_this()` capture (this class's documented heap-allocation
+    // contract), unlike LocalBackend's strand task, which must never touch
+    // raw `this`.
+    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _firstActionPending;
+    std::unordered_set<::morph::exec::detail::ModelId, ::morph::exec::detail::ModelIdHash> _poisoned;
     std::atomic<uint64_t> _nextId{0};
     std::atomic<uint64_t> _nextConnectionId{0};
     std::atomic<std::uint32_t> _minVersion{::morph::wire::kProtocolVersion};

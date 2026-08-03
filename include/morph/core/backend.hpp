@@ -342,8 +342,21 @@ public:
         DirectoryKey dirKey{typeId, std::string{identity.primary}};
         std::scoped_lock const lock{_regMtx};
         if (auto found = _directory.find(dirKey); found != _directory.end()) {
-            _attachCount[found->second] += 1;
-            return found->second;
+            auto const foundMid = found->second;
+            auto flagsIter = _hydrationFlags.find(foundMid);
+            if (flagsIter != _hydrationFlags.end() && flagsIter->second->poisoned.load()) {
+                // Its first action already failed; it must not be handed to a
+                // new attacher. Evict it and fall through to the fresh-
+                // instance path below, exactly as if this had been a
+                // directory miss. Its own attachCount reference is untouched,
+                // so whoever created it still tears it down normally when
+                // they release it.
+                _directory.erase(found);
+                _sharedKeyOf.erase(foundMid);
+            } else {
+                _attachCount[foundMid] += 1;
+                return foundMid;
+            }
         }
         ::morph::exec::detail::ModelId const mid{_nextId.fetch_add(1) + 1};
         auto holder = factory();
@@ -354,6 +367,7 @@ public:
         _directory.emplace(dirKey, mid);
         _sharedKeyOf.emplace(mid, std::move(dirKey));
         _attachCount[mid] = 1;
+        _hydrationFlags[mid] = std::make_shared<HydrationFlags>();
         return mid;
     }
 
@@ -426,6 +440,7 @@ public:
         }
         _models.erase(mid);
         _changeAware.erase(mid);
+        _hydrationFlags.erase(mid);
     }
 
     /// @brief Schedules `onBackendChanged()` on each change-aware model's strand. Thread-safe.
@@ -488,11 +503,15 @@ public:
         ::morph::async::Completion<std::shared_ptr<void>> comp{compState, cbExec};
 
         std::shared_ptr<::morph::model::detail::IModelHolder> holder;
+        std::shared_ptr<HydrationFlags> hydration;
         {
             std::scoped_lock const lock{_regMtx};
             auto iter = _models.find(mid);
             if (iter != _models.end()) {
                 holder = iter->second;
+            }
+            if (auto flagsIter = _hydrationFlags.find(mid); flagsIter != _hydrationFlags.end()) {
+                hydration = flagsIter->second;
             }
         }
         if (!holder) {
@@ -509,14 +528,15 @@ public:
         // Constraints note on `~StrandExecutor`'s member-destruction-order
         // subtlety. A shared_ptr copy has its own lifetime, independent of
         // LocalBackend's, so it stays valid even if the backend is torn down
-        // while this task is still queued or running.
+        // while this task is still queued or running. `hydration` follows the
+        // same rule and may be null (a private instance has no entry).
         auto inFlightCounter = _inFlight;
         auto const inFlightAfterInc = inFlightCounter->fetch_add(1, std::memory_order_relaxed) + 1;
         ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                              static_cast<double>(inFlightAfterInc));
         _strand.post(mid, [localOp = std::move(localOp), holder = std::move(holder), compState,
                            session = std::move(session), modelTypeId = std::move(modelTypeId),
-                           actionTypeId = std::move(actionTypeId), inFlightCounter]() mutable {
+                           actionTypeId = std::move(actionTypeId), inFlightCounter, hydration]() mutable {
             auto const start = std::chrono::steady_clock::now();
             auto const spanId = ::morph::observe::detail::beginSpan(session.requestId, modelTypeId, actionTypeId);
             bool ok = false;
@@ -547,6 +567,14 @@ public:
             auto const inFlightAfterDec = inFlightCounter->fetch_sub(1, std::memory_order_relaxed) - 1;
             ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeInFlight,
                                                  static_cast<double>(inFlightAfterDec));
+            // Only a freshly created shared instance carries a HydrationFlags
+            // token (a private instance, or one that was already live at
+            // attach time, has none). Its very first action's outcome decides
+            // whether it gets poisoned; a later action's failure is an
+            // ordinary error, not a hydration failure.
+            if (hydration && hydration->firstActionPending.exchange(false) && !ok) {
+                hydration->poisoned.store(true);
+            }
             // Resolve last: the Completion is still settled exactly once, only
             // its position relative to the now-recorded instrumentation moved.
             if (ok) {
@@ -598,10 +626,28 @@ private:
     // maintain. Only instances registered with a non-empty primary appear here;
     // a private instance has no entry in any of the three, which is exactly what
     // makes deregisterModel's decrement path a no-op for it.
+    // Tracks, per freshly created shared instance, whether its very first
+    // action has settled yet and — if it has — whether that first action
+    // failed. Consulted lazily by registerModelShared's directory-hit branch,
+    // which evicts a "poisoned" instance (its first action failed, so per
+    // docs/spec/core/shared_instances.md's Failure modes it must not be left
+    // half-hydrated in the directory) and falls through to creating a fresh
+    // one, instead of handing the broken instance to a new attacher. Owned
+    // via shared_ptr and captured that way — never via raw `this` — into
+    // execute()'s strand task, which may still be running after LocalBackend
+    // itself is destroyed (see execute()'s existing capture-by-shared_ptr
+    // rationale).
+    struct HydrationFlags {
+        std::atomic<bool> firstActionPending{true};
+        std::atomic<bool> poisoned{false};
+    };
+
     using DirectoryKey = std::pair<std::string, std::string>;
     std::unordered_map<DirectoryKey, ::morph::exec::detail::ModelId, ::morph::model::detail::PairKeyHash> _directory;
     std::unordered_map<::morph::exec::detail::ModelId, DirectoryKey, ::morph::exec::detail::ModelIdHash> _sharedKeyOf;
     std::unordered_map<::morph::exec::detail::ModelId, std::size_t, ::morph::exec::detail::ModelIdHash> _attachCount;
+    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<HydrationFlags>, ::morph::exec::detail::ModelIdHash>
+        _hydrationFlags;
     std::atomic<uint64_t> _nextId{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
