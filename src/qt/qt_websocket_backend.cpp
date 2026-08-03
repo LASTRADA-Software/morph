@@ -39,6 +39,11 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
         if (_syncLoop) {
             _syncLoop->quit();
         }
+        // Fires on every successful connect, first included -- the general
+        // "transport is up" notification a status indicator wants.
+        if (_connectHandler) {
+            _connectHandler();
+        }
         // Fire the reconnect handler only on subsequent connects, never on the
         // first one — initial registration is handled by the BridgeHandler ctors.
         if (isReconnect && _reconnectHandler) {
@@ -47,6 +52,11 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
     });
     QObject::connect(&_socket, &QWebSocket::disconnected, [this]() {
         _connected = false;
+        // Fires before reconnect scheduling below, so an observer sees the
+        // disconnected state even when a retry follows immediately.
+        if (_disconnectHandler) {
+            _disconnectHandler();
+        }
         // Unblock any parked synchronous call (e.g. a register whose reply is
         // outstanding). Without this the nested QEventLoop in sendSync never
         // quits, freezing the Qt thread forever. We clear _pendingReply first so
@@ -265,6 +275,10 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
 }
 
 void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handler) { _reconnectHandler = handler; }
+
+void QtWebSocketBackend::setConnectHandler(const std::function<void()>& handler) { _connectHandler = handler; }
+
+void QtWebSocketBackend::setDisconnectHandler(const std::function<void()>& handler) { _disconnectHandler = handler; }
 
 void QtWebSocketBackend::scheduleReconnect() {
     _reconnectTimer.start(static_cast<int>(_currentReconnectDelay.count()));

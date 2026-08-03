@@ -200,6 +200,19 @@ public:
     ///                Pass `nullptr` to clear.
     void setReconnectHandler(const std::function<void()>& handler) override;
 
+    /// @brief Installs a handler invoked on every successful connect, including the first.
+    /// @param handler Callable invoked on the Qt thread after every successful connect
+    ///                (first and subsequent). Pass `nullptr` to clear.
+    void setConnectHandler(const std::function<void()>& handler) override;
+
+    /// @brief Installs a handler invoked whenever the socket drops.
+    ///
+    /// Fires before reconnect scheduling, so an observer sees the disconnected
+    /// state even when a retry follows immediately.
+    /// @param handler Callable invoked on the Qt thread whenever the connection
+    ///                drops. Pass `nullptr` to clear.
+    void setDisconnectHandler(const std::function<void()>& handler) override;
+
 private:
     /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
     std::string sendSync(const std::string& msg);
@@ -225,6 +238,8 @@ private:
     bool _everConnected{false};
     bool _shuttingDown{false};
     std::function<void()> _reconnectHandler;
+    std::function<void()> _connectHandler;
+    std::function<void()> _disconnectHandler;
 
     std::string _pendingReply;
     QEventLoop* _syncLoop{nullptr};

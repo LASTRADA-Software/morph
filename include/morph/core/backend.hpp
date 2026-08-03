@@ -242,11 +242,50 @@ struct IBackend {
     /// `QtWebSocketBackend`). `Bridge` installs a handler that re-registers every
     /// live `HandlerBinding` so model ids stay valid after the reconnect.
     ///
+    /// Deliberately fires only on the *second and later* connects, never the
+    /// first — re-registering handlers only makes sense after a drop; on the
+    /// first connect there is nothing yet to re-register. See
+    /// `setConnectHandler` for a hook that also covers the first connect.
+    ///
     /// Default implementation: store-and-ignore. Backends with no transport (e.g.
     /// `LocalBackend`) never invoke it.
     /// @param handler Callable invoked on the backend's transport thread after a
     ///                successful reconnect. Pass `nullptr` to clear.
     virtual void setReconnectHandler(const std::function<void()>& handler) { (void)handler; }
+
+    /// @brief Installs a callback invoked on every successful connect, including the first.
+    ///
+    /// `setReconnectHandler` deliberately skips the first connect (there is
+    /// nothing to re-register yet); this is the complementary hook for UI that
+    /// needs to know the transport is up at all — a "connecting… / connected /
+    /// offline" status indicator, for instance. `waitForConnected()` (where a
+    /// concrete backend offers one, e.g. `QtWebSocketBackend`) answers the same
+    /// question but blocks the calling thread, which is unusable on a
+    /// browser/WASM main thread and undesirable even on desktop if it means
+    /// blocking startup on a network round-trip; this hook is fired
+    /// asynchronously instead.
+    ///
+    /// Default implementation: store-and-ignore. Backends with no transport (e.g.
+    /// `LocalBackend`) never invoke it.
+    /// @param handler Callable invoked on the backend's transport thread after
+    ///                every successful connect (first and subsequent). Pass
+    ///                `nullptr` to clear.
+    virtual void setConnectHandler(const std::function<void()>& handler) { (void)handler; }
+
+    /// @brief Installs a callback invoked whenever the transport drops.
+    ///
+    /// Fires before any reconnect is scheduled, so an observer sees the
+    /// disconnected state even when a retry follows immediately — a status
+    /// indicator that skipped straight from "connected" to a fresh "connected"
+    /// (after an instant reconnect) would misreport an outage that did happen.
+    /// Without this hook a client learns the socket dropped only indirectly,
+    /// when a later action fails.
+    ///
+    /// Default implementation: store-and-ignore. Backends with no transport (e.g.
+    /// `LocalBackend`) never invoke it.
+    /// @param handler Callable invoked on the backend's transport thread whenever
+    ///                the connection drops. Pass `nullptr` to clear.
+    virtual void setDisconnectHandler(const std::function<void()>& handler) { (void)handler; }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 
