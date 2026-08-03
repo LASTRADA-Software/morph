@@ -86,7 +86,12 @@ re-register all live bindings on reconnection.
 `ModelFactory::create<Model>()` factory and registers it on the active
 backend. Returns the `shared_ptr<HandlerBinding>`. An overload accepts a
 pre-built binding (for dependency injection, custom `contextKey`, or custom
-factory captures).
+factory captures). Both funnel through a shared `registerHandlerImpl`, which
+prefers the backend's `IBackend::registerModelAsync` when it offers one (see
+`backend.md`, "Asynchronous registration") and falls back to the synchronous
+`registerModelWithContext` otherwise — the returned binding may therefore come
+back **unbound** (`currentId == 0`) if the backend registered asynchronously
+and the reply has not arrived yet.
 
 **`executeVia<Model, Action>(binding, action, cbExec)`** dispatches one
 action. Takes a short snapshot of the backend `shared_ptr` under the dedicated
@@ -522,8 +527,8 @@ make teardown order-independent.)
 |---|---|---|
 | ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend. |
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
-| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. |
-| `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. |
+| `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Prefers `IBackend::registerModelAsync`; see `backend.md`. |
+| `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |

@@ -104,6 +104,57 @@ struct IBackend {
         return registerModel(typeId, std::move(factory));
     }
 
+    /// @brief Optional non-blocking counterpart to `registerModelWithContext`.
+    ///
+    /// `registerModelWithContext`/`registerModel` are synchronous: a backend
+    /// whose registration requires a round-trip (a socket backend) can only
+    /// implement that by blocking the calling thread until the reply arrives —
+    /// `QtWebSocketBackend` does this via a nested `QEventLoop`. On a WASM main
+    /// thread, Qt refuses to spin a nested loop at all
+    /// (`WaitForMoreEvents is not supported on the main thread without asyncify`),
+    /// so that blocking call aborts the page — the very first `registerModel`
+    /// a WASM client makes.
+    ///
+    /// Overriding this lets such a backend register without blocking: send the
+    /// request and return `true` immediately, then invoke exactly one of
+    /// @p onRegistered / @p onError once the reply arrives, on the backend's own
+    /// thread (unless the backend is destroyed first, in which case neither
+    /// fires). `Bridge::registerHandler()` prefers this path when it is
+    /// available and falls back to the synchronous `registerModelWithContext`
+    /// otherwise, so every backend that has not opted in (every backend as of
+    /// this writing, other than `QtWebSocketBackend`) is unaffected.
+    ///
+    /// The default implementation offers no async path and returns `false`
+    /// without calling either callback — the caller (`Bridge::registerHandler`)
+    /// falls back to `registerModelWithContext` in that case, matching every
+    /// caller's behavior before this method existed.
+    ///
+    /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
+    ///       registration path — a `BridgeHandler`'s initial construction —
+    ///       uses this. Shared/keyed registration (`registerModelShared`,
+    ///       `attachModel`) and the re-registration `switchBackend()`/the
+    ///       reconnect handler perform after a backend swap remain
+    ///       synchronous; see docs/spec/core/backend.md.
+    /// @param typeId       String type-id of the model to instantiate.
+    /// @param factory      Callable that constructs the `IModelHolder` (local path only).
+    /// @param contextKey   Stable identity of the new instance; empty if none.
+    /// @param onRegistered Invoked with the assigned `ModelId` on success.
+    /// @param onError      Invoked with a diagnostic message on failure.
+    /// @return `true` if this backend accepted the request and will invoke
+    ///         exactly one callback later; `false` if it has no async path
+    ///         (neither callback is invoked in that case).
+    virtual bool registerModelAsync(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        std::string_view contextKey, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+        std::function<void(const std::string&)> onError) {
+        (void)typeId;
+        (void)factory;
+        (void)contextKey;
+        (void)onRegistered;
+        (void)onError;
+        return false;
+    }
+
     /// @brief Registers or attaches to the shared instance holding @p primary.
     ///
     /// A *register-or-attach*: if an instance for `(typeId, primary)` is already
