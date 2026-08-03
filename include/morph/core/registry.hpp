@@ -428,22 +428,63 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 #define BRIDGE_DETAIL_CAT_(a, b) a##b
 #define BRIDGE_DETAIL_CAT(a, b) BRIDGE_DETAIL_CAT_(a, b)
 
-/// @brief Registers model type @p M with the string id @p NAME.
+/// @brief Suppresses the two registrars whose bodies reference a model's
+///        constructor/`execute()` definitions (`registerModelOnce`,
+///        `registerActionOnce`), for a pure client that dispatches every
+///        action to a remote peer and never constructs a model locally.
 ///
-/// Specialises `morph::model::ModelTraits<M>` and registers a factory with the
-/// process-level `ModelRegistryFactory` at static-init time.
+/// A model's constructor and `Model::execute` are ordinary functions the
+/// compiler emits a call to inside these registrars' lambda bodies, whether
+/// or not that lambda is ever invoked at runtime — so a plain client-only
+/// build still forces the linker to resolve them, pulling in implementations
+/// (a database driver, a native UI framework, an OS-specific API) the client
+/// target may have no link path for at all, and will never call regardless.
+/// The third registrar (`registerActionExecutorOnce`, `bridge.hpp`) routes
+/// through `Bridge::executeVia` -> `IBackend::execute` (fully abstract) and
+/// needs only the action's JSON codecs plus `Model::execute`'s *declaration*
+/// (for `ActionTraits::Result`, via `decltype`) — never its definition — so
+/// it is unaffected and always emitted.
 ///
-/// @param M    Concrete model type.
-/// @param NAME String literal used as the type-id.
-#define BRIDGE_REGISTER_MODEL(M, NAME)                                                                   \
-    template <>                                                                                          \
-    struct morph::model::ModelTraits<M> {                                                                \
-        static constexpr std::string_view typeId() noexcept { return NAME; }                             \
-    };                                                                                                   \
+/// Defined on the `morph` target's INTERFACE via the `MORPH_CLIENT_ONLY`
+/// CMake option, never per translation unit: two TUs disagreeing on whether a
+/// model registers itself would violate ODR. See docs/spec/core/registry.md,
+/// "MORPH_CLIENT_ONLY".
+///
+/// @warning NEVER define this for a process that hosts models (a server, or
+/// any `Bridge` running `LocalBackend`) — it silently registers nothing, and
+/// the model fails at runtime with "unknown model type" rather than at
+/// compile/link time.
+#ifdef MORPH_CLIENT_ONLY
+#define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
+#define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
+#else
+#define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)                                                       \
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __COUNTER__) =                      \
         morph::model::detail::registerModelOnce<M>(NAME);                                                \
     }
+#define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)                                                   \
+    namespace {                                                                                          \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
+        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
+    }
+#endif
+
+/// @brief Registers model type @p M with the string id @p NAME.
+///
+/// Specialises `morph::model::ModelTraits<M>` and registers a factory with the
+/// process-level `ModelRegistryFactory` at static-init time — unless
+/// `MORPH_CLIENT_ONLY` is defined, in which case that registrar is suppressed
+/// (see `MORPH_DETAIL_REGISTER_MODEL_LOCAL`'s doc comment above).
+///
+/// @param M    Concrete model type.
+/// @param NAME String literal used as the type-id.
+#define BRIDGE_REGISTER_MODEL(M, NAME)                        \
+    template <>                                                \
+    struct morph::model::ModelTraits<M> {                      \
+        static constexpr std::string_view typeId() noexcept { return NAME; } \
+    };                                                          \
+    MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
 ///
@@ -522,9 +563,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
             return result;                                                                                     \
         }                                                                                                      \
     };                                                                                                         \
+    MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)                                                             \
     namespace {                                                                                                \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                           \
-        morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }

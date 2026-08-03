@@ -719,6 +719,20 @@ public:
                 throw ::morph::model::ValidationError{::morph::model::ModelTraits<Model>::typeId(),
                                                       ::morph::model::ActionTraits<Action>::typeId()};
             }
+#ifdef MORPH_CLIENT_ONLY
+            // A MORPH_CLIENT_ONLY build never links Model::execute's definition
+            // (see docs/spec/core/registry.md, "MORPH_CLIENT_ONLY") -- this
+            // #ifdef, not just the registration macros, is what actually makes
+            // that true: ActionCall::localOp is constructed unconditionally
+            // here regardless of which backend ends up installed, so the
+            // `model.execute(...)` call below would otherwise still force the
+            // linker to resolve it even for a build that only ever installs a
+            // remote backend. LocalBackend must not be used in such a build;
+            // reaching this point means it was anyway.
+            static_cast<void>(holder);
+            throw std::logic_error(
+                "Bridge::executeVia: localOp invoked in a MORPH_CLIENT_ONLY build -- LocalBackend must not be used");
+#else
             auto& model = holder.template into<Model>();
             // Local mode has no client/server split, so this is the same execution
             // site `ActionDispatcher::registerAction`'s runner is for remote modes
@@ -765,6 +779,7 @@ public:
                 }
                 throw;
             }
+#endif
         };
         {
             std::scoped_lock const lock{_sessionMtx};

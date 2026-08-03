@@ -212,3 +212,52 @@ if(NOT MORPH_VETTED_HMAC_GUARD_DEFAULT_WORKS_UNGATED)
         "without MORPH_REQUIRE_VETTED_HMAC defined (regression: the default "
         "hmacSha256 argument must keep working when the option is off).")
 endif()
+
+# ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
+# Configure-time proof that MORPH_CLIENT_ONLY actually suppresses the two
+# model-owning registrars (registerModelOnce, registerActionOnce) -- see
+# docs/spec/core/registry.md, "MORPH_CLIENT_ONLY". Reuses
+# MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS (morph + glaze include dirs; see that
+# guard's own comments above for why try_compile needs them forwarded this
+# way rather than via LINK_LIBRARIES).
+#
+# compile_checks/client_only_no_model_link.cpp declares (never defines)
+# ClientOnlyModel's constructor and execute(). Two probes, in opposite
+# directions, prove the guard does something real rather than the probe being
+# vacuously satisfied either way:
+#   - WITH MORPH_CLIENT_ONLY defined: must LINK (the model-owning registrars
+#     are macroed away, so nothing in the program ever references either
+#     undefined symbol).
+#   - WITHOUT it (today's default): must FAIL TO LINK (the registrars' lambda
+#     bodies do reference them, and the linker cannot resolve either symbol).
+unset(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE CACHE)
+try_compile(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+)
+if(NOT MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_no_model_link.cpp failed to link with "
+        "MORPH_CLIENT_ONLY defined, even though ClientOnlyModel's constructor "
+        "and execute() are never called anywhere in that program (the "
+        "model-owning registrars must be fully suppressed).")
+endif()
+
+unset(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE CACHE)
+try_compile(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+)
+if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_no_model_link.cpp linked successfully "
+        "WITHOUT MORPH_CLIENT_ONLY defined (expected a link failure -- the "
+        "probe's undefined constructor/execute() should be referenced by "
+        "the default (non-client-only) registrars; if it links anyway, this "
+        "probe is not actually proving anything about the guard).")
+endif()
