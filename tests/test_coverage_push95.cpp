@@ -523,3 +523,25 @@ TEST_CASE("morph::offline::SyncWorker: a payload is dead-lettered after kMaxAtte
     REQUIRE(after.failed == 0);
     REQUIRE(after.deadLettered == 0);
 }
+
+// ── backend.hpp:273,288 — IBackend::setConnectHandler/setDisconnectHandler default bodies ──
+//
+// QtWebSocketBackend overrides both, so the base "store-and-ignore" bodies are
+// otherwise dead. LocalBackend does not override either, so calling them
+// through a LocalBackend exercises the real default implementation.
+
+TEST_CASE("morph::backend::LocalBackend: setConnectHandler/setDisconnectHandler are store-and-ignore no-ops",
+          "[coverage][backend]") {
+    morph::exec::ThreadPoolExecutor pool{1};
+    ::morph::backend::LocalBackend backend{pool};
+
+    bool fired = false;
+    REQUIRE_NOTHROW(backend.setConnectHandler([&] { fired = true; }));
+    REQUIRE_NOTHROW(backend.setDisconnectHandler([&] { fired = true; }));
+    // LocalBackend has no transport, so neither handler is ever invoked.
+    REQUIRE_FALSE(fired);
+
+    // Clearing with nullptr, as the docs promise, must not throw either.
+    REQUIRE_NOTHROW(backend.setConnectHandler(nullptr));
+    REQUIRE_NOTHROW(backend.setDisconnectHandler(nullptr));
+}
