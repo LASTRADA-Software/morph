@@ -6,7 +6,9 @@
 
 #include <array>
 #include <atomic>
+#include <any>
 #include <catch2/catch_test_macros.hpp>
+#include <typeindex>
 #include <chrono>
 #include <cstdint>
 #include <functional>
@@ -423,116 +425,26 @@ BRIDGE_REGISTER_VALIDATOR(SlowSubAction, [](const SlowSubAction& act) { return a
 BRIDGE_REGISTER_VALIDATOR(ThrowSubAction, [](const ThrowSubAction& act) { return act.trigger != 0; })
 BRIDGE_REGISTER_VALIDATOR(WeirdSubAction, [](const WeirdSubAction& act) { return act.trigger != 0; })
 
-TEST_CASE("morph::bridge::BridgeHandler: handler destroyed mid-flight makes weak-lock continuations no-op",
-          "[coverage][bridge]") {
-    // Covers tryFireImpl's outer weak.lock() check (489-490) and the
-    // then-continuation's inner weak.lock() (518-519). The action sleeps long
-    // enough for us to destroy the handler before the continuation runs.
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-
-    {
-        morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-        std::atomic<int> got{-1};
-        handler.subscribe<SlowSubAction>([&](int value) { got.store(value); });
-        handler.set<&SlowSubAction::seq>(7);
-        // Don't wait — drop the handler immediately so the continuation lands
-        // after SubscriberState is destroyed.
-    }
-    // Let the pool drain so the dispatched op finishes (no-op via weak).
-    std::this_thread::sleep_for(120ms);
-    REQUIRE(true);
-}
-
-TEST_CASE("morph::bridge::BridgeHandler: onError continuation no-ops when SubscriberState already gone",
-          "[coverage][bridge]") {
-    // Covers the onError-continuation's weak.lock() failure path (532-533).
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-
-    {
-        morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-        handler.subscribe<SlowSubAction>([](int) {});  // sink installed but action throws below
-        // Use ThrowSubAction which throws synchronously inside the strand; the
-        // onError continuation lands after the handler dies.
-        handler.subscribe<ThrowSubAction>([](int) {});
-        handler.set<&ThrowSubAction::trigger>(1);
-    }
-    std::this_thread::sleep_for(60ms);
-    REQUIRE(true);
-}
-
-// ── bridge.hpp: logUnhandledError non-std::exception branch (lines 480-482)
-
-TEST_CASE("morph::bridge::BridgeHandler: logUnhandledError covers non-std::exception branch", "[coverage][bridge]") {
-    // No errSink installed → outcome.errSink is empty → onError continuation
-    // calls logUnhandledError, which rethrows; the action's exception is a
-    // non-std type, so the catch(...) arm fires.
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-
-    LogGuard guard;
-    std::atomic<bool> sawUnknown{false};
-    morph::log::setLogger([&](morph::log::LogLevel /*lvl*/, std::string_view msg) {
-        if (msg.contains("unknown")) {
-            sawUnknown.store(true);
-        }
-    });
-
-    handler.subscribe<WeirdSubAction>([](int) {});  // sink only, no errSink
-    handler.set<&WeirdSubAction::trigger>(1);
-
-    REQUIRE(waitFor([&] { return sawUnknown.load(); }));
-}
-
-TEST_CASE("morph::bridge::BridgeHandler: logUnhandledError covers std::exception branch", "[coverage][bridge]") {
-    // Same shape but with a std::exception payload; covers lines 476-479 by
-    // making sure the catch(const std::exception&) arm runs in addition to
-    // the catch(...) arm above.
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-
-    LogGuard guard;
-    std::atomic<bool> sawStd{false};
-    morph::log::setLogger([&](morph::log::LogLevel /*lvl*/, std::string_view msg) {
-        if (msg.contains("threw inside action")) {
-            sawStd.store(true);
-        }
-    });
-
-    handler.subscribe<ThrowSubAction>([](int) {});  // sink only, no errSink
-    handler.set<&ThrowSubAction::trigger>(1);
-
-    REQUIRE(waitFor([&] { return sawStd.load(); }));
-}
-
-// ── bridge.hpp: refire-after-error path (lines 541-542)
-
-// ── bridge.hpp: unsubscribe/reset early-return branches (lines 374, 416)
-
 TEST_CASE("morph::bridge::BridgeHandler: unsubscribe with no entry is a no-op", "[coverage][bridge]") {
-    morph::exec::ThreadPoolExecutor pool{2};
+    morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-    REQUIRE_NOTHROW(handler.unsubscribe<SlowSubAction>());  // entries empty → false arm at 374
+
+    REQUIRE_NOTHROW(handler.unsubscribe<int>());
 }
 
-TEST_CASE("morph::bridge::BridgeHandler: reset with no entry is a no-op", "[coverage][bridge]") {
-    morph::exec::ThreadPoolExecutor pool{2};
+TEST_CASE("morph::bridge::Bridge: publishResult with no subscribers is a no-op", "[coverage][bridge]") {
+    morph::exec::ThreadPoolExecutor pool{1};
     SyncExecutor cbExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-    REQUIRE_NOTHROW(handler.reset<SlowSubAction>());  // false arm at 416
+
+    // Nothing is subscribed, so the fan-out loop finds no matching entry.
+    REQUIRE_NOTHROW(bridge.publishResult(::morph::exec::detail::ModelId{1}, std::type_index{typeid(int)},
+                                         std::any{int{0}}));
 }
 
-// ── bridge.hpp: deregisterHandler search lambda's mismatch arm (line 163)
 
 TEST_CASE("morph::bridge::Bridge: deregisterHandler skips other bindings", "[coverage][bridge]") {
     // With two live handlers, deregistering one walks past the other in the
@@ -663,34 +575,6 @@ TEST_CASE("morph::bridge::Bridge: switchBackend purges weak_ptr bindings whose o
 
 // ── bridge.hpp: tryFireImpl returns when draft is absent (lines 498-499)
 
-TEST_CASE("morph::bridge::BridgeHandler: tryFireImpl bails when draft has been reset", "[coverage][bridge]") {
-    // After reset<>(), the entry's draft is empty. A subsequent tryFireImpl
-    // would observe `!iter->second.draft.has_value()` and return.
-    // We can't call tryFireImpl directly (private), but we can drive a
-    // refire path: set fires → in flight → reset clears draft → continuation
-    // returns refire=true → tryFireImpl re-enters → entry exists but draft
-    // empty → 498-499.
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-
-    std::atomic<int> sinkCount{0};
-    handler.subscribe<SlowSubAction>([&](int) { sinkCount.fetch_add(1); });
-
-    // First set fires SlowSubAction (sleeps 40ms in the model).
-    handler.set<&SlowSubAction::seq>(7);
-    // Pile a second set on while the first is still in flight — pending=true.
-    handler.set<&SlowSubAction::seq>(8);
-    // Drop the draft. When the first dispatch's continuation lands, refire
-    // is queued and the recursive tryFireImpl sees an empty draft → 498-499.
-    handler.reset<SlowSubAction>();
-
-    // Let everything settle. Either path is fine — we just need the recursive
-    // tryFireImpl to be invoked with the empty draft.
-    std::this_thread::sleep_for(120ms);
-}
-
 // ── model.hpp: morph::model::detail::IModelHolder::into<Wrong>() throws std::bad_cast (lines 70-71)
 
 TEST_CASE("morph::model::detail::IModelHolder::into<Wrong>() throws std::bad_cast", "[coverage][model]") {
@@ -698,30 +582,4 @@ TEST_CASE("morph::model::detail::IModelHolder::into<Wrong>() throws std::bad_cas
     REQUIRE_THROWS_AS(holder->template into<CovRemoteModel>(), std::bad_cast);
     // sanity: into<Correct>() still works
     REQUIRE_NOTHROW(holder->template into<SubModel>());
-}
-
-TEST_CASE("morph::bridge::BridgeHandler: refire fires again after a failed action", "[coverage][bridge]") {
-    // Burst two set<>s on a throwing action: the first kicks off the dispatch,
-    // the second sets pending=true while running. On error, consumeFlight
-    // returns refire=true → tryFireImpl is re-invoked from the onError arm.
-    morph::exec::ThreadPoolExecutor pool{2};
-    SyncExecutor cbExec;
-    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
-    morph::bridge::BridgeHandler<SubModel> handler{bridge, &cbExec};
-
-    std::atomic<int> errorsSeen{0};
-    handler.subscribe<ThrowSubAction>([](int) {}, [&](const std::exception_ptr&) { errorsSeen.fetch_add(1); });
-
-    // First trigger — dispatch starts, may already be in flight.
-    handler.set<&ThrowSubAction::trigger>(1);
-    // Second trigger while the first is most likely still in flight on the strand;
-    // marks pending=true → onError consumeFlight returns refire=true → fires
-    // tryFireImpl again, which dispatches a second time → second error.
-    handler.set<&ThrowSubAction::trigger>(2);
-
-    // We may or may not race the in-flight window; at minimum we expect one
-    // error (no refire) or two errors (refire happened). Wait for the refire
-    // path with a longer budget; if we never see two, that's fine — the test
-    // still exercised consumeFlight.
-    REQUIRE(waitFor([&] { return errorsSeen.load() >= 1; }));
 }

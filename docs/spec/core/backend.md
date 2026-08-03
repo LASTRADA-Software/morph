@@ -312,13 +312,21 @@ nothing for a caller that never uses it.
 
 - `openConnection()` returns a fresh non-zero `ConnectionId` and opens an empty
   scope for it. Call once per accepted transport connection.
-- The scoped `handle(msg, reply, cid)` overload attributes any `register`
-  decoded from `msg` to `cid`'s scope: the new `ModelId` is recorded in both a
-  `cid → set<ModelId>` map and a `ModelId → ConnectionId` map, next to
-  `_models`/`_owners` under the same `_regMtx`, so scope membership can never
-  desync from instance existence. A `deregister` (via either entry point)
-  removes the id from its scope as well as from `_models`/`_owners`, so a
-  later `closeConnection` never double-erases it.
+- The scoped `handle(msg, reply, cid)` overload attributes any `register` (or
+  register-or-attach `attach`) decoded from `msg` to `cid`'s scope: the
+  `ModelId` is recorded in a `cid → (ModelId → count)` map, next to
+  `_models`/`_owners`/the shared-instance directory under the same `_regMtx`,
+  so scope membership can never desync from instance existence. The count
+  lets one connection hold more than one reference to the same shared
+  instance (e.g. two handlers on one connection attaching the same key)
+  without either reference leaking the other's release.
+- A `deregister` releases exactly the reference **the requesting connection**
+  holds — decrementing `cid`'s own scope entry for that `ModelId`, using the
+  `cid` the deregister call itself carries, never whichever connection
+  happened to attach the instance last. A shared instance can have several
+  owning connections at once; crediting the release to the wrong one would
+  either strand a reference no one will ever decrement, or let one
+  connection's deregister silently consume another's hold.
 - `closeConnection(cid)` erases every model still recorded in `cid`'s scope
   (`_models`, `_owners`, and the per-instance connection entry) exactly as the
   `deregister` path does, then drops the scope itself. Passing `0`, an

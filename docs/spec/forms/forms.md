@@ -1128,15 +1128,13 @@ table below); an action that declares no `computedFields` emits neither key.
 
 ### Where the value is authoritative
 
-`recomputeAll` runs at four call sites:
+`recomputeAll` runs at three call sites, all authoritative:
 
-1. `BridgeHandler::set<>`'s reactive path (`tryFireImpl`, [bridge.md](../core/bridge.md))
-   — live, client-side, **not authoritative**, for display only.
-2. `ActionExecuteRegistry::registerAction`'s executor (the client-bridge JSON
+1. `ActionExecuteRegistry::registerAction`'s executor (the client-bridge JSON
    dispatch path behind `BridgeHandler::executeJson`, [bridge.md](../core/bridge.md)).
-3. `Bridge::executeVia`'s `localOp` (the in-process execution path `LocalBackend`
+2. `Bridge::executeVia`'s `localOp` (the in-process execution path `LocalBackend`
    uses for every `execute<Action>()`/`executeJson` call, [bridge.md](../core/bridge.md)).
-4. `ActionDispatcher::registerAction`'s runner (the server-side execution path
+3. `ActionDispatcher::registerAction`'s runner (the server-side execution path
    `RemoteServer` uses for `SimulatedRemoteBackend` and the Qt WebSocket
    transport, [registry.md](../core/registry.md)).
 
@@ -1394,7 +1392,7 @@ wrong or un-merged schema rather than fail loudly.
 | [rational.md](../util/rational.md) | Exact `Rational` values; the `num`/`den` in each `x-unitAlternatives` entry are a `Rational` numerator/denominator, which is why unit switches recompute exactly. Also the comparison/equality `greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`equals` use for numeric fields, so client and server compare identical values. |
 | [security.md](../security.md) | The dispatcher's trust boundary — why `required` gates only the client and handlers must re-validate. |
 | [session.md](../session/session.md) | `Context::locale`, the server-side hook for data (not chrome) localisation — the one place `session::current()->locale` participates, for `Choice` option-row labels. |
-| [bridge.md](../core/bridge.md) | The reactive `set<>`/`tryFireImpl` live recompute, and the `ActionExecuteRegistry`/`executeVia` authoritative recompute sites. |
+| [bridge.md](../core/bridge.md) | The `ActionExecuteRegistry`/`executeVia` authoritative recompute sites. |
 | [registry.md](../core/registry.md) | `ActionDispatcher::registerAction`'s runner — the server-side authoritative recompute site. |
 
 ## Out of scope

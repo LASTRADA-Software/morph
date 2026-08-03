@@ -57,25 +57,32 @@ TEST_CASE("PayeeModel add/list/remove scoped to the owner", "[payee]") {
     }
 }
 
-TEST_CASE("PayeeModel form-style streaming via subscribe/set", "[payee][subscribe]") {
+TEST_CASE("PayeeModel notifies subscribers of the state it produces", "[payee][subscribe]") {
     bank::app::App app{testConnection()};
     app.login("heidi-form");
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{app.bridge(), app.gui()};
 
+    // Subscribing names the result type, so the observer never has to know
+    // which action produced it.
     std::atomic<bool> fired{false};
     std::int64_t newId = 0;
-    payees.subscribe<bank::dto::AddPayee>([&](bank::dto::PayeeInfo info) {
+    payees.subscribe<bank::dto::PayeeInfo>([&](const bank::dto::PayeeInfo& info) {
         newId = info.id;
         fired.store(true);
     });
 
-    // Setting the name alone does not satisfy validate() (no IBAN yet)...
-    payees.set<&bank::dto::AddPayee::name>("Streamed Payee");
-    app.guiLoop().runFor(std::chrono::milliseconds{50});
+    // An incomplete payee fails validate() (no IBAN), so the dispatch-path
+    // validator rejects it and no subscriber is notified.
+    std::atomic<bool> rejected{false};
+    payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = ""})
+        .onError([&](const std::exception_ptr&) { rejected.store(true); });
+    REQUIRE(waitUntil([&] { return rejected.load(); }, std::chrono::milliseconds{2000},
+                      std::chrono::milliseconds{5}, app.guiLoop()));
     REQUIRE_FALSE(fired.load());
 
-    // ...completing the IBAN makes the draft ready and fires the action.
-    payees.set<&bank::dto::AddPayee::iban>("FR1420041010050500013M02606");
+    // A complete one succeeds and the subscription fires.
+    await(payees.execute(bank::dto::AddPayee{.name = "Streamed Payee", .iban = "FR1420041010050500013M02606"}),
+          app.guiLoop());
     REQUIRE(waitUntil([&] { return fired.load(); }, std::chrono::milliseconds{2000}, std::chrono::milliseconds{5},
                       app.guiLoop()));
     REQUIRE(newId > 0);

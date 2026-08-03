@@ -11,6 +11,7 @@
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
 #include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/transaction_model.hpp"
 #include "bank_test_support.hpp"
 
@@ -24,9 +25,9 @@ std::string testConnection() {
 }
 
 /// Opens a fresh checking account in the given currency and returns its id.
-std::int64_t openAccount(bank::app::App& app, morph::bridge::BridgeHandler<bank::AccountModel>& accounts,
+std::int64_t openAccount(bank::app::App& app, morph::bridge::BridgeHandler<bank::CustomerModel>& customer,
                          bank::Currency currency = bank::Currency::USD) {
-    auto info = await(accounts.execute(bank::dto::OpenAccount{
+    auto info = await(customer.execute(bank::dto::OpenAccount{
                           .kind = static_cast<int>(bank::AccountKind::Checking),
                           .currency = static_cast<int>(currency),
                           .overdraftMinor = 0,
@@ -41,9 +42,10 @@ TEST_CASE("TransactionModel deposit / withdraw adjust balances and ledger", "[tr
     bank::app::App app{testConnection()};
     app.login("erin-txn");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
 
-    const std::int64_t acct = openAccount(app, accounts);
+    const std::int64_t acct = openAccount(app, accountsOwner);
 
     SECTION("deposit increases the balance and records a credit") {
         auto entry =
@@ -79,10 +81,11 @@ TEST_CASE("TransactionModel transfer is atomic and balance-preserving", "[transa
     bank::app::App app{testConnection()};
     app.login("frank-transfer");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
 
-    const std::int64_t src = openAccount(app, accounts);
-    const std::int64_t dst = openAccount(app, accounts);
+    const std::int64_t src = openAccount(app, accountsOwner);
+    const std::int64_t dst = openAccount(app, accountsOwner);
     await(txns.execute(bank::dto::Deposit{.accountId = src, .amountMinor = 10000}), app.guiLoop());
 
     SECTION("a valid transfer moves money and conserves the total") {

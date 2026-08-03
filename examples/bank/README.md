@@ -37,12 +37,43 @@ GUI / CLI ──actions/results (plain DTOs)──▶ morph Bridge ──▶ Mod
   `entities.hpp`), the shared `WithMapper` mixin (one lazily-opened `DataMapper` per
   model), `user_ops.hpp` (principal→`user_id` resolution), and reusable `ledger_ops.hpp`
   (relation-aware debit/credit/post-entry + the `loadOwned` ownership guard).
-- **`include/bank/models/` + `src/models/`** — one model per banking domain. The
-  `BRIDGE_REGISTER_*` macros live in the **model header** so every `.execute()` call
-  site sees the `ActionTraits` specialisation.
+- **`include/bank/models/` + `src/models/`** — the models. The `BRIDGE_REGISTER_*`
+  macros live in the **model header** so every `.execute()` call site sees the
+  `ActionTraits` specialisation. `AccountModel` and `CustomerModel` are **stateful
+  and keyed** (see below); the remaining models are still per-domain and stateless.
 - **`src/db/schema.cpp`** — all `LIGHTWEIGHT_SQL_MIGRATION` table definitions.
 - **`include/bank/app/` + `src/app/`** — `App`: shared worker pool, GUI executor,
   `Bridge`, database setup, and login (which sets the bridge's default session).
+
+### Stateful, keyed models
+
+`AccountModel` holds **one account, in memory**, for the lifetime of the instance. The
+class itself says nothing about keys: a single `BRIDGE_KEY_FROM(AccountModel, GetAccount,
+&GetAccount::id)` next to the other registrations both deduces the key type and records
+which action carries it, so morph keys instances by account id. Two
+`BridgeHandler<AccountModel, AllowShared>` handlers naming the same account — in one
+GUI, or in two clients over one `RemoteServer` — reach a single instance and a single
+balance.
+
+This is the shape morph is built around, and it is what makes the per-model strand
+load-bearing: the instance owns mutable state, so its unsynchronised read-modify-write
+is correct precisely because no two actions on one instance ever overlap.
+
+`CustomerModel` is the per-*owner* half that `AccountModel` used to also be doing:
+`ListAccounts` and `OpenAccount` were never account-scoped, which is why both DTOs
+carry an `owner` while `GetAccount`/`CloseAccount` carry an account id. It is keyed by
+owner username.
+
+SQLite stays authoritative. The instance is a cache with identity: hydrated on first
+use, written through on every mutation, dropped when the instance goes away.
+
+**The honest edge.** `Transfer`, bill payment and loan disbursement move money across
+two accounts inside a single `SqlTransaction` owned by a *different* model, because
+morph has no cross-instance transaction and this example must not imply it does. Those
+writes land behind a cached row's back, so every balance write bumps a counter in
+[`bank/db/row_versions.hpp`](include/bank/db/row_versions.hpp) and a cached reader
+re-hydrates when the version it captured is stale. A real deployment would use the
+store's own row version instead.
 
 ### Why per-model `DataMapper`?
 
@@ -93,7 +124,7 @@ integers), so the GUI and CLI are unaffected; models map the relation values to 
 | **Auth** | register, login, change password, `WhoAmI` (session introspection) |
 | **Account** | open (checking/savings/credit), list, get, close; overdraft, interest |
 | **Transaction** | deposit, withdraw, **atomic transfer**, paginated history |
-| **Payee** | add (with IBAN validation + `set<>` streaming), remove, list |
+| **Payee** | add (with IBAN validation), remove, list |
 | **Payment** | one-off bill pay, scheduled payments, standing orders, cancel |
 | **Card** | issue debit/credit, freeze/unfreeze/cancel, set limit, change PIN |
 | **Loan** | apply (disburse), amortization schedule, repay, payoff |
@@ -102,7 +133,7 @@ integers), so the GUI and CLI are unaffected; models map the relation values to 
 | **Statement** | date-ranged credit/debit summary across all accounts |
 
 morph features exercised: `Completion` then/onError, **sessions** (principal scoping +
-authorization), **validation** (`validate()` + the `set<>`/`subscribe<>` streaming
+authorization), **validation** (`validate()` + the dispatch-path validator
 form flow), **local ↔ remote parity**, a custom **`IAuthorizer`**, and the **offline
 queue + `SyncWorker`** replay path.
 

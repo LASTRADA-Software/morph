@@ -25,7 +25,7 @@ their `kind` needs and leave the rest as default-constructed values.
 
 | `kind`       | Direction | Purpose | Key fields |
 |---|---|---|---|
-| `"register"` | request   | Client requests model creation. | `typeId`, `contextKey` (optional stable identity) |
+| `"register"` | request   | Client requests model creation. | `typeId`, `contextKey` (optional stable identity, also carried on `"attach"`) |
 | `"deregister"` | request | Client destroys an instance. | `modelId` |
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
 | `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
@@ -36,8 +36,12 @@ their `kind` needs and leave the rest as default-constructed values.
 
 `contextKey` is an optional stable identity for the new instance (e.g. an account
 id). When present, the server-side holder gets an action log attached (if a
-`LogProvider` is configured). When empty, no action log is attached. Ignored on
-every kind other than `"register"`.
+`LogProvider` is configured). When empty, no action log is attached. Carried on
+`"register"` and `"attach"` — see
+[shared_instances.md](shared_instances.md#the-instance-directory) — so an
+instance created by its *first* `attach` (rather than a shared `register`)
+gets a log attached exactly as one created via `register` would. Ignored on
+every other kind.
 
 ### `session` — authorization context
 
@@ -323,7 +327,7 @@ is:
 | `kind` | `std::string` | `""` | All — the discriminator. |
 | `callId` | `uint64_t` | `0` | `"execute"`, `"ok"`, `"err"` — correlation id for async matching. |
 | `typeId` | `std::string` | `""` | `"register"` — model type id. |
-| `contextKey` | `std::string` | `""` | `"register"` — stable identity for the new instance. |
+| `contextKey` | `std::string` | `""` | `"register"`, `"attach"` — stable identity for the new instance. |
 | `modelId` | `uint64_t` | `0` | `"deregister"`, `"execute"`, `"ok"(register)` — instance id. |
 | `modelType` | `std::string` | `""` | `"execute"` — routing key for `ActionDispatcher`. |
 | `actionType` | `std::string` | `""` | `"execute"` — second routing key. |

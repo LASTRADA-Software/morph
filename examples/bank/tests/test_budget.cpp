@@ -12,7 +12,7 @@
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/budget_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/budget_model.hpp"
 #include "bank/models/transaction_model.hpp"
 #include "bank_test_support.hpp"
@@ -32,7 +32,7 @@ std::string testConnection() {
 TEST_CASE("BudgetModel upserts budgets and computes spending", "[budget]") {
     bank::app::App app{testConnection()};
     app.login("laura-budget");
-    morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::BudgetModel> budgets{app.bridge(), app.gui()};
 

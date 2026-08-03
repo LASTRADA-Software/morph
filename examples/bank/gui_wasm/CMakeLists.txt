@@ -26,6 +26,7 @@ qt_add_executable(bank_gui_wasm
     # In-memory model implementations (persistence-free):
     src/models/auth_model_wasm.cpp
     src/models/account_model_wasm.cpp
+    src/models/customer_model_wasm.cpp
     src/models/transaction_model_wasm.cpp
     src/models/card_model_wasm.cpp
     src/models/payee_model_wasm.cpp

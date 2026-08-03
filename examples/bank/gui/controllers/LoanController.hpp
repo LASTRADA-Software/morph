@@ -10,7 +10,7 @@
 #ifndef Q_MOC_RUN
 #include <morph/core/bridge.hpp>
 
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/loan_model.hpp"
 #endif
 
@@ -47,7 +47,7 @@ private:
     void reloadAccounts();
 
     morph::bridge::BridgeHandler<bank::LoanModel> _loanModel;
-    morph::bridge::BridgeHandler<bank::AccountModel> _accountModel;
+    morph::bridge::BridgeHandler<bank::CustomerModel> _accountModel;
     QVariantList _loans;
     QVariantList _accounts;
     QVariantList _schedule;

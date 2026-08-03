@@ -142,6 +142,70 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
     return ::morph::wire::interpretHelloReply(::morph::wire::decode(replyJson));
 }
 
+namespace {
+
+/// @brief Decodes a synchronous control reply and returns its `modelId`.
+/// @param replyJson Raw reply text.
+/// @param what      Verb name used in the error message.
+/// @return The replied `ModelId`.
+/// @throws std::runtime_error if the reply is an `err`.
+::morph::exec::detail::ModelId modelIdFromReply(const std::string& replyJson, std::string_view what) {
+    auto reply = ::morph::wire::decode(replyJson);
+    if (reply.kind == "ok") {
+        return ::morph::exec::detail::ModelId{reply.modelId};
+    }
+    throw std::runtime_error(std::string{what} + " failed: " + reply.message);
+}
+
+}  // namespace
+
+::morph::exec::detail::ModelId QtWebSocketBackend::registerModelShared(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+    ::morph::backend::detail::InstanceIdentity identity) {
+    if (identity.primary.empty()) {
+        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    }
+    return modelIdFromReply(sendSync(::morph::wire::encode(::morph::wire::makeRegisterShared(
+                                typeId, std::string{identity.primary}, std::string{identity.contextKey}))),
+                            "register");
+}
+
+::morph::exec::detail::ModelId QtWebSocketBackend::attachModel(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+    ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) {
+    if (identity.primary.empty()) {
+        if (current.v != 0U) {
+            deregisterModel(current);
+        }
+        return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+    }
+    return modelIdFromReply(
+        sendSync(::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                                                  std::string{identity.contextKey}))),
+        "attach");
+}
+
+void QtWebSocketBackend::assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                                       std::string_view primary) {
+    if (primary.empty() || mid.v == 0U) {
+        return;
+    }
+    (void)modelIdFromReply(
+        sendSync(::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v))), "assign");
+}
+
+std::vector<std::string> QtWebSocketBackend::listInstances(const std::string& typeId) {
+    auto reply = ::morph::wire::decode(sendSync(::morph::wire::encode(::morph::wire::makeInstances(typeId))));
+    if (reply.kind != "ok") {
+        throw std::runtime_error("instances failed: " + reply.message);
+    }
+    std::vector<std::string> keys;
+    if (auto errCode = glz::read_json(keys, reply.body)) {
+        throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, reply.body));
+    }
+    return keys;
+}
+
 void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     // Fire-and-forget — avoids a nested QEventLoop during destructor which can
     // trigger Qt asserts. The server does no connection-scoped cleanup, so an

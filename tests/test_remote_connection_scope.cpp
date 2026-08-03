@@ -282,6 +282,63 @@ TEST_CASE("morph::backend::RemoteServer: connection scopes are isolated from one
     REQUIRE(waiterB.env.body == "9");
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer: deregister releases the requesting connection's own reference, not "
+    "whichever connection attached last",
+    "[remote][connection-scope]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA),
+                   cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    auto modelId = regA.env.modelId;
+
+    // B attaches the same shared key -- the connection that "last touched"
+    // the instance, exactly the case a single-owner ModelId->ConnectionId map
+    // would misattribute the instance to.
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regB),
+                   cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.modelId == modelId);
+
+    // A releases its own reference explicitly.
+    WaitReply dereg;
+    server->handle(morph::wire::encode(morph::wire::makeDeregister(modelId)), std::ref(dereg), cidA);
+    REQUIRE(dereg.await());
+    REQUIRE(dereg.env.kind == "ok");
+
+    // The instance must still be reachable -- B's reference is still live.
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.modelId = modelId;
+    execReq.modelType = "CS_SquareModel";
+    execReq.actionType = "CS_SquareAction";
+    execReq.body = R"({"x":3})";
+    WaitReply stillAlive;
+    server->handle(morph::wire::encode(execReq), std::ref(stillAlive));
+    REQUIRE(stillAlive.await());
+    REQUIRE(stillAlive.env.kind == "ok");
+
+    // Closing B's connection must release B's own reference and destroy the
+    // instance -- it must not find its scope entry already (wrongly) cleared
+    // by A's earlier deregister.
+    server->closeConnection(cidB);
+
+    WaitReply gone;
+    server->handle(morph::wire::encode(execReq), std::ref(gone));
+    REQUIRE(gone.await());
+    REQUIRE(gone.env.kind == "err");
+    REQUIRE(gone.env.message == "model not found");
+}
+
 TEST_CASE("morph::backend::RemoteServer: the unscoped two-argument handle() never populates any connection scope",
           "[remote][connection-scope][regression]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -468,5 +525,205 @@ TEST_CASE("morph::backend::RemoteServer: repeated registers on a closed scope ne
         REQUIRE(reg.await());
         REQUIRE(reg.env.kind == "err");
     }
+    REQUIRE(server->health().liveModels == 0U);
+}
+
+// ── Shared instance directory: the server side of keyed instances ────────────
+//
+// The directory keys on the `(typeId, primary)` strings the envelope carries,
+// so it needs no keyed model type to exercise — that is a client-side concept.
+// These drive RemoteServer directly, which is the only way to reach the
+// refcount-and-scope interactions that make cross-client sharing safe.
+
+TEST_CASE("morph::backend::RemoteServer: two connections sharing a key reach one instance",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA), cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regB), cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.kind == "ok");
+
+    // One instance, not two: the second register attached to the first's.
+    REQUIRE(regB.env.modelId == regA.env.modelId);
+    REQUIRE(server->health().liveModels == 1U);
+
+    // Closing one connection releases only *its* reference — the instance must
+    // survive for the connection still attached. This is the A7 change.
+    server->closeConnection(cidA);
+    REQUIRE(server->health().liveModels == 1U);
+
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.modelId = regA.env.modelId;
+    execReq.modelType = "CS_SquareModel";
+    execReq.actionType = "CS_SquareAction";
+    execReq.body = R"({"x":5})";
+    WaitReply stillThere;
+    server->handle(morph::wire::encode(execReq), std::ref(stillThere));
+    REQUIRE(stillThere.await());
+    REQUIRE(stillThere.env.kind == "ok");
+    REQUIRE(stillThere.env.body == "25");
+
+    // The last reference goes, and so does the instance.
+    server->closeConnection(cidB);
+    REQUIRE(server->health().liveModels == 0U);
+}
+
+TEST_CASE("morph::backend::RemoteServer: instances lists live shared keys",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    // Unrolled rather than looped: each Catch2 REQUIRE expands to branches, and
+    // a loop around them trips the cognitive-complexity gate for no benefit.
+    WaitReply regSeven;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "7")), std::ref(regSeven),
+                   cid);
+    REQUIRE(regSeven.await());
+    REQUIRE(regSeven.env.kind == "ok");
+
+    WaitReply regNine;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "9")), std::ref(regNine), cid);
+    REQUIRE(regNine.await());
+    REQUIRE(regNine.env.kind == "ok");
+
+    // A private register is invisible to the directory by construction.
+    WaitReply priv;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(priv), cid);
+    REQUIRE(priv.await());
+
+    WaitReply listed;
+    server->handle(morph::wire::encode(morph::wire::makeInstances("CS_SquareModel")), std::ref(listed), cid);
+    REQUIRE(listed.await());
+    REQUIRE(listed.env.kind == "ok");
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.env.body));
+    std::ranges::sort(keys);
+    REQUIRE(keys == std::vector<std::string>{"7", "9"});
+}
+
+TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old instance",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(first), cid);
+    REQUIRE(first.await());
+    REQUIRE(first.env.kind == "ok");
+    REQUIRE(server->health().liveModels == 1U);
+
+    WaitReply moved;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "2", first.env.modelId)),
+                   std::ref(moved), cid);
+    REQUIRE(moved.await());
+    REQUIRE(moved.env.kind == "ok");
+    REQUIRE(moved.env.modelId != first.env.modelId);
+    // Nobody else held key 1, so re-pointing destroyed it rather than leaking.
+    REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a key",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    // A private instance, as a create-style action would run on.
+    WaitReply anon;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(anon), cid);
+    REQUIRE(anon.await());
+    REQUIRE(anon.env.kind == "ok");
+
+    WaitReply promoted;
+    server->handle(morph::wire::encode(morph::wire::makeAssign("CS_SquareModel", "100", anon.env.modelId)),
+                   std::ref(promoted), cid);
+    REQUIRE(promoted.await());
+    REQUIRE(promoted.env.kind == "ok");
+
+    // It is the *same* instance, now reachable by key — nothing was recreated.
+    WaitReply attached;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "100")), std::ref(attached),
+                   cid);
+    REQUIRE(attached.await());
+    REQUIRE(attached.env.modelId == anon.env.modelId);
+
+}
+
+TEST_CASE("morph::backend::RemoteServer: assign never displaces the incumbent holder of a key",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply incumbent;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "200")), std::ref(incumbent),
+                   cid);
+    REQUIRE(incumbent.await());
+    REQUIRE(incumbent.env.kind == "ok");
+
+    // A second instance promoting onto the taken key is a silent no-op: the
+    // incumbent always wins, so no already-attached client is redirected.
+    WaitReply other;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(other), cid);
+    REQUIRE(other.await());
+    WaitReply clash;
+    server->handle(morph::wire::encode(morph::wire::makeAssign("CS_SquareModel", "200", other.env.modelId)),
+                   std::ref(clash), cid);
+    REQUIRE(clash.await());
+    REQUIRE(clash.env.kind == "ok");
+
+    WaitReply again;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "200")), std::ref(again), cid);
+    REQUIRE(again.await());
+    REQUIRE(again.env.modelId == incumbent.env.modelId);
+}
+
+TEST_CASE("morph::backend::RemoteServer: the new kinds reject an empty typeId",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    for (const auto& request : {morph::wire::makeAttach("", "1"), morph::wire::makeAssign("", "1", 7),
+                                morph::wire::makeInstances("")}) {
+        WaitReply reply;
+        server->handle(morph::wire::encode(request), std::ref(reply));
+        REQUIRE(reply.await());
+        REQUIRE(reply.env.kind == "err");
+    }
+}
+
+TEST_CASE("morph::backend::RemoteServer: a shared register on a closed scope is refused",
+          "[remote][connection-scope][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cid = server->openConnection();
+    server->closeConnection(cid);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "5")), std::ref(reg), cid);
+    REQUIRE(reg.await());
+    REQUIRE(reg.env.kind == "err");
+    REQUIRE(reg.env.message == "connection closed");
     REQUIRE(server->health().liveModels == 0U);
 }

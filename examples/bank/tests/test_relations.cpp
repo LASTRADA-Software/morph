@@ -28,7 +28,7 @@
 #include "bank/dto/payee_dto.hpp"
 #include "bank/dto/payment_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/card_model.hpp"
 #include "bank/models/payee_model.hpp"
 #include "bank/models/payment_model.hpp"
@@ -52,7 +52,7 @@ TEST_CASE("ORM relations: BelongsTo navigation and HasMany inverses", "[relation
     bank::app::App app{dbConnectionForTests()};
     app.login(principal);  // provisions the users row
 
-    morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::CardModel> cards{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::PayeeModel> payees{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::PaymentModel> payments{app.bridge(), app.gui()};

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "bank/db/row_versions.hpp"
+
 #include <chrono>
 #include <cstdint>
 #include <optional>
@@ -109,6 +111,7 @@ inline TxnRow postEntry(Db& db, const AccountRow& account, TxnDirection directio
 inline TxnRow applyCredit(Db& db, AccountRow& account, std::int64_t amountMinor, TxnKind kind,
                           std::int64_t counterpartyId, const std::string& description) {
     account.balanceMinor += amountMinor;
+    db::bumpRowVersion(static_cast<std::int64_t>(account.id));
     db.accounts.update(account);
     return postEntry(db, account, TxnDirection::Credit, kind, amountMinor, counterpartyId, description);
 }
@@ -122,6 +125,7 @@ inline TxnRow applyDebit(Db& db, AccountRow& account, std::int64_t amountMinor, 
         throw InsufficientFunds{"amount exceeds available balance plus overdraft"};
     }
     account.balanceMinor = projected;
+    db::bumpRowVersion(static_cast<std::int64_t>(account.id));
     db.accounts.update(account);
     return postEntry(db, account, TxnDirection::Debit, kind, amountMinor, counterpartyId, description);
 }

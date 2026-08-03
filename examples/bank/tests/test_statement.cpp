@@ -11,7 +11,7 @@
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/statement_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
-#include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/statement_model.hpp"
 #include "bank/models/transaction_model.hpp"
 #include "bank_test_support.hpp"
@@ -31,7 +31,7 @@ std::string testConnection() {
 TEST_CASE("StatementModel aggregates credits and debits across accounts", "[statement]") {
     bank::app::App app{testConnection()};
     app.login("nina-stmt");
-    morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accounts{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::StatementModel> statements{app.bridge(), app.gui()};
 

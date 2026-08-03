@@ -1,10 +1,138 @@
-# Production-hardening program — status
+# Program tracker
+
+Two programs live here:
+
+- **[§F — Stateful models](#f-stateful-models-shipped)** came out of
+  [issue #18](https://github.com/LASTRADA-Software/morph/issues/18) ("compare
+  against Axelor / Jmix / Causeway / Orleans and find out what we are missing").
+  All three items have shipped.
+- **§A–§E — Production hardening & GUI generation** is **shipped**, kept for
+  the rationale (priority, dependency order) that motivated the work.
+  Present-tense designs for those are in [`docs/spec/`](spec).
+
+---
+
+# §F. Stateful models (shipped)
+
+## What the issue #18 survey actually found
+
+The four projects named in the issue are not comparable to morph as a set:
+Axelor, Jmix and Causeway are full-stack Java business-application platforms;
+Orleans is a .NET distributed actor runtime. Reading their feature lists side by
+side produces a backlog of ~25 items, most of which morph should never build —
+it does not own a database, a process engine, or an IDE.
+
+So the survey was done the other way round: against **use cases in
+`examples/bank`**, morph's largest worked example, asking where a developer hits
+a wall rather than which boxes are unticked. That produced one finding that
+subsumes most of the others.
+
+**morph's models are anonymous and stateless, so the model layer is doing
+nothing.** Every bank model's only member is the `std::optional<DataMapper>` it
+inherits from `WithMapper` — a connection, not domain state. The per-instance
+strand that morph advertises as its core service therefore protects nothing;
+every action is a full round trip to SQLite; and because a `BridgeHandler`
+registers one instance, the desktop GUI holds five `AccountModel` instances (and
+five SQLite connections) for what is logically one thing.
+
+Orleans is the comparator that names this directly — a grain is *identity +
+behaviour + state*, and morph has only behaviour. But the fix is not to become
+an actor runtime. It is to make morph's existing model layer do the job it
+already claims: hold state, be identified, be reachable.
+
+## Accepted items
+
+### F1 — Reshape `examples/bank` onto stateful models · P0 · shipped
+
+Split the per-domain models into models keyed by the entity they are named
+after, holding that entity in memory, hydrated on activation and written
+through on mutation. This is first deliberately: it is what introduces the main
+idea of the library, and F2/F3 are unverifiable without it — a primary key
+identifies nothing when instances carry nothing.
+
+`AccountModel` holds one account in memory, keyed by account id; `CustomerModel`
+took the per-owner half (`ListAccounts`/`OpenAccount`), which was never
+account-scoped. Cross-model ledger writes settle on another model's connection,
+so `bank/db/row_versions.hpp` bumps a per-row counter and cached readers
+re-hydrate on a stale version — the example's sharpest edge, shown rather than
+arranged away. WASM shadow models and the five GUI controllers moved with it.
+See [`examples/bank/README.md`](../examples/bank/README.md), "Stateful, keyed
+models".
+
+### F2 — Keyed, shareable model instances · P0 · shipped
+
+One `BRIDGE_MODEL_KEY(Model, Action, &Action::field)` line beside the existing
+registrations declares a model's key — the type is deduced from the field, so
+the model class itself is untouched; `BridgeHandler<M, AllowShared>` opts a handler
+into a **server-side** instance directory, so instances are reusable across
+clients. `instances<M>()` enumerates the live keys. A keyed action re-points a
+handler rather than re-keying an instance, so key collisions do not arise.
+
+Carried a change to shipped behaviour: A7's `closeConnection` now decrements a
+reference count rather than erasing, since otherwise one client's disconnect
+destroys an instance another client is using.
+
+See [`spec/core/shared_instances.md`](spec/core/shared_instances.md).
+
+### F3 — Instance subscriptions · P1 · shipped
+
+`subscribe<R>(cb)` keyed on the **result/state** type, firing whenever an `R` is
+produced on the instance the handler is attached to — by this handler, by
+another handler sharing it, or by another screen entirely.
+
+**Removed** the reactive-draft mechanism (`set<&A::field>`, `reset<A>`, the old
+action-keyed `subscribe`, in-flight coalescing), whose job stateful models do
+better by holding the draft themselves. `morph::flows::FlowSession` already
+owned its own draft tuple and merely mirrored into the handler's, so it now
+gates on `ActionValidator` and dispatches directly; its public API, the
+`w-*`/`app-*` schema, and `WizardView.qml` are unchanged.
+
+`ActionValidator` survives with its A1 server-side role, losing only its
+draft-readiness one. See
+[`spec/core/bridge.md`](spec/core/bridge.md#subscription-semantics) and
+[`ARCHITECTURE.md`](ARCHITECTURE.md#instance-subscriptions).
+
+**Not included:** cross-*client* push. Fan-out is per `Bridge`, so two handlers
+in one process — the case the bank GUI actually has — see each other's work,
+while two separate clients do not. A server-initiated `notify` frame would need
+both transports to grow an unsolicited-message path; that is its own item.
+
+## Considered and refused
+
+Recorded so the survey does not get re-run and so the boundary is explicit.
+
+| Not building | Why |
+|---|---|
+| **Entity metamodel / naked objects** (Causeway) | morph's unit is the *action*, deliberately. Rows plus row-bound actions already are an object UI; what is missing is metadata on the row, not a second parallel metamodel. |
+| **Server-authoritative per-instance action availability** ("see it, use it, do it") | Real gap — `CloseAccount` is implemented, tested and exposed in no GUI because the client cannot ask "may I?". Judged not worth the surface area now. |
+| **Query invalidation / live lists** | Superseded in part by F3, which gives shared instances a change channel without a query-invalidation vocabulary. |
+| **Paging / sorting contract on view schemas** | `views.md` already records "no server-side query language" as a non-goal; paging stays a field on the query action. |
+| **Result-type presentation metadata** (money, enum labels, badge severity) | Every GUI controller hand-writes a `toMap()` projection. Genuine duplication, but it is a forms-layer concern, not a model-layer one. |
+| **Field- and row-level permissions** (Jmix, Causeway SecMan) | They own the ORM and the whole app; morph owns a seam. Per-principal schema redaction would break the one-cached-schema-per-type design. The model is the right place, and `bank`'s `loadOwned` guard shows it works. |
+| **BPM / BPMN engine** (Axelor, Jmix) | A process engine without a store is meaningless, and morph does not own the store. |
+| **Grain call filters / interceptor pipeline** (Orleans) | morph already has validator + authorizer + `observe` + journal on every dispatch path. No observed friction. |
+| **Clustering, silos, placement, grain versioning, stateless workers, distributed ACID transactions** (Orleans) | morph is a UI bridge with one server, not a distributed runtime. |
+| **Managed streams with cursors and checkpoints** (Orleans) | F3 is best-effort and unbuffered by design; durability here is a distributed-runtime concern. |
+| **Reporting engine** (BIRT, JasperReports), **ORM + schema migration**, **IDE Studio** | Out of identity. morph owns neither the store nor the tooling. |
+| **Runtime custom fields / dynamic attributes** (Axelor, Jmix) | Hard against compile-time reflection, and no observed need. |
+| **REST / GraphQL facade, blob transfer, tabular export, multi-tenancy discriminator** | Plausible, no observed need. Revisit when one exists. |
+
+## Also surfaced
+
+- **`README.md`'s "Status & limitations" is stale.** It still claims the wire
+  protocol has no version negotiation, that `RemoteServer` model ids are
+  guessable sequential integers, and that only an in-memory offline queue
+  ships — all fixed by §A/§B below. Corrected as part of this program.
+
+---
+
+# Production hardening & GUI generation (shipped)
 
 This tracked a design-approved, prioritized checklist of production-hardening
-and GUI-generation work. **Every item below has shipped.** The authoritative,
-present-tense design for each is in `docs/spec/`; this file is now a changelog
-of what landed and why, kept for the rationale (priority, dependency order)
-that motivated the work.
+and GUI-generation work. **Every item in §A–§E has shipped.** The authoritative,
+present-tense design for each is in `docs/spec/`; this section is a record of
+what landed and why, kept for the rationale (priority, dependency order) that
+motivated the work.
 
 Readiness depended on deployment mode:
 
@@ -71,6 +199,10 @@ additive-only action-evolution policy actually hold. See `spec/core/wire.md`'s
 dropped socket now reclaims its models instead of stranding them until process
 exit. `closeConnection` is server housekeeping — it bypasses `IAuthorizer` by
 design, not a synthesized wire `deregister`. See `spec/core/backend.md#connection-scopes`.
+
+> **F2 changes this.** Cross-client instance sharing requires `closeConnection`
+> to decrement a reference count rather than erase. See
+> [`spec/core/shared_instances.md`](spec/core/shared_instances.md).
 
 ---
 
@@ -202,6 +334,9 @@ stays renderer-agnostic) is now documented in
   `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP`) and the `src/qt/forms`
   `WizardView.qml` reference renderer plus the demo's `AppShell.qml`.
 
+  > **F3 reworks this.** `FlowSession` is built on the reactive-draft mechanism
+  > F3 removes; it must be re-expressed as a stateful, keyed flow model first.
+
 ### Ecosystem
 
 - **E-G9 — Renderer toolkit** · P1 · shipped — `spec/forms/forms.md`
@@ -219,12 +354,11 @@ stays renderer-agnostic) is now documented in
 
 ## Notes
 
-- Every item landed opt-in or backward compatible by default — none change
-  existing behavior unless enabled.
-- `docs/planned/` no longer holds any implemented-item specs; the
-  authoritative current-state specs are entirely in `docs/spec/`.
-- Two items surfaced *by* this program, not originally on it, and fixed before
-  it closed out: C3's fuzz harness found two real bugs in `morph::wire`'s
+- Every §A–§E item landed opt-in or backward compatible by default — none change
+  existing behavior unless enabled. **§F breaks this pattern deliberately:** F2
+  changes A7's cleanup semantics and F3 removes a public API.
+- Two items surfaced *by* the §A–§E program, not originally on it, and fixed
+  before it closed out: C3's fuzz harness found two real bugs in `morph::wire`'s
   glaze-based parsing (a heap-buffer-overflow reachable by a 5-byte input, and
   a case where `RemoteServer`'s own error reply didn't round-trip through
   `encode`/`decode`). See `docs/spec/testing_strategy.md`'s "Known findings"

@@ -10,6 +10,7 @@
 #include "bank/core/types.hpp"
 #include "bank/dto/account_dto.hpp"
 #include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank_test_support.hpp"
 
 using bank::testing::await;
@@ -29,9 +30,10 @@ TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]")
     app.login("alice-account-basic");
 
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
 
     SECTION("open populates an account with a number and zero balance") {
-        auto info = await(accounts.execute(bank::dto::OpenAccount{
+        auto info = await(accountsOwner.execute(bank::dto::OpenAccount{
                               .owner = "",
                               .kind = static_cast<int>(bank::AccountKind::Checking),
                               .currency = static_cast<int>(bank::Currency::EUR),
@@ -49,7 +51,7 @@ TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]")
     }
 
     SECTION("savings accounts get a non-zero interest rate") {
-        auto info = await(accounts.execute(bank::dto::OpenAccount{
+        auto info = await(accountsOwner.execute(bank::dto::OpenAccount{
                               .kind = static_cast<int>(bank::AccountKind::Savings),
                               .currency = static_cast<int>(bank::Currency::USD),
                           }),
@@ -58,10 +60,10 @@ TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]")
     }
 
     SECTION("list returns only the session owner's accounts") {
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 1, .currency = 0}), app.guiLoop());
+        await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
+        await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 1, .currency = 0}), app.guiLoop());
 
-        auto list = await(accounts.execute(bank::dto::ListAccounts{}), app.guiLoop());
+        auto list = await(accountsOwner.execute(bank::dto::ListAccounts{}), app.guiLoop());
         REQUIRE(list.accounts.size() >= 2);
         for (const auto& acct : list.accounts) {
             REQUIRE(acct.owner == "alice-account-basic");
@@ -69,14 +71,14 @@ TEST_CASE("AccountModel opens, lists, fetches and closes accounts", "[account]")
     }
 
     SECTION("get returns the same account that was opened") {
-        auto opened = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
+        auto opened = await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
         auto fetched = await(accounts.execute(bank::dto::GetAccount{.id = opened.id}), app.guiLoop());
         REQUIRE(fetched.id == opened.id);
         REQUIRE(fetched.number == opened.number);
     }
 
     SECTION("closing a zero-balance account succeeds") {
-        auto opened = await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
+        auto opened = await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop());
         auto result = await(accounts.execute(bank::dto::CloseAccount{.id = opened.id}), app.guiLoop());
         REQUIRE(result.ok);
 
@@ -89,6 +91,7 @@ TEST_CASE("AccountModel reports errors through onError", "[account]") {
     bank::app::App app{dbConnectionForTests()};
     app.login("bob-account-errors");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
 
     SECTION("fetching a non-existent account throws NotFound") {
         REQUIRE_THROWS_AS(await(accounts.execute(bank::dto::GetAccount{.id = 999999}), app.guiLoop()), bank::NotFound);
@@ -99,7 +102,7 @@ TEST_CASE("AccountModel reports errors through onError", "[account]") {
         // so morph's ActionValidator gate catches this before AccountModel::
         // execute() runs -- see docs/spec/forms/forms.md, "Security / trust
         // boundary".
-        REQUIRE_THROWS_AS(await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
+        REQUIRE_THROWS_AS(await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 99}), app.guiLoop()),
                           morph::model::ValidationError);
     }
 }

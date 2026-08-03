@@ -11,6 +11,7 @@
 #include "bank/core/errors.hpp"
 #include "bank/core/types.hpp"
 #include "bank/db/entities.hpp"
+#include "bank/db/row_versions.hpp"
 #include "bank/db/user_ops.hpp"
 
 /// @file
@@ -120,6 +121,7 @@ inline TxnRecord applyCredit(Lightweight::DataMapper& mapper, AccountRecord& acc
                              std::int64_t amountMinor, TxnKind kind, std::int64_t counterpartyId,
                              const std::string& description) {
     account.balanceMinor = account.balanceMinor.Value() + amountMinor;
+    bumpRowVersion(static_cast<std::int64_t>(account.id.Value()));
     mapper.Update(account);
     return postEntry(mapper, account, TxnDirection::Credit, kind, amountMinor, counterpartyId, description);
 }
@@ -135,6 +137,7 @@ inline TxnRecord applyDebit(Lightweight::DataMapper& mapper, AccountRecord& acco
         throw InsufficientFunds{"amount exceeds available balance plus overdraft"};
     }
     account.balanceMinor = projected;
+    bumpRowVersion(static_cast<std::int64_t>(account.id.Value()));
     mapper.Update(account);
     return postEntry(mapper, account, TxnDirection::Debit, kind, amountMinor, counterpartyId, description);
 }

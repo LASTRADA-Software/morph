@@ -49,10 +49,9 @@ registers on construction, deregisters on destruction.
 (compile-time dispatch) and `executeJson(actionType, bodyJson)` (runtime
 dispatch via `ActionExecuteRegistry`).
 
-For GUI-led workflows, `subscribe<Action>(cb)` registers a result callback,
-`set<&Action::field>(value)` fills one field of an in-progress draft, and
-`reset<Action>()` discards the draft. When all required fields are filled, the
-handler automatically fires the action.
+For GUI-led workflows, `subscribe<R>(cb)` observes *the instance the handler is
+attached to*: it fires whenever an `R` is produced there, by any handler
+attached to it. `unsubscribe<R>()` drops the callback.
 
 ## `HandlerBinding`
 
@@ -122,6 +121,21 @@ fires instead. This mirrors the identical forwarding guard in
 `SimulatedRemoteBackend::execute` (remote.hpp). The type-erased `executeJson`
 path (`ActionExecuteRegistry::registerAction`) guards its own `resultToJson`
 forwarding the same way.
+
+Before any of that forwarding, the same `.then` closure checks the bridge's
+`_liveness` token (captured as `alive = liveness()`) and gates every
+bridge-touching side effect on it being unexpired — checked first, before
+`onResult` or `hasSubscribers()` run. A backend completion can in principle
+resolve after the `Bridge` is gone: the backend may be co-owned and outlive
+this `Bridge`, or the callback may already be running when `~Bridge()` runs
+concurrently on another thread. `onResult` — used for a result-keyed action to
+call back into the bridge via a captured raw pointer and adopt the binding's
+primary — and `hasSubscribers()` — which reads `this` — must never run once
+the bridge might be gone; running either on a dangling `Bridge` is a
+use-after-free. The typed result is still delivered to the caller's own
+`Completion` either way (`typedState->setValue` does not touch the bridge) —
+only the two bridge-touching side effects are skipped when the token has
+expired.
 
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
 switch either fully succeeds or leaves everything exactly as it was. It runs
@@ -213,8 +227,8 @@ destruction. Non-copyable.
 **Construction** takes a `Bridge&` and a GUI executor. Optionally accepts a
 pre-built `HandlerBinding` (for dependency injection). It captures the bridge's
 `liveness()` weak token into `_bridgeAlive`, holds a strong `Bridge&`, and
-stores a `SubscriberState` shared pointer that supports the field-by-field and
-subscription APIs.
+and carries the sharing policy as its second template argument (see
+`BridgeHandler<Model, Sharing>` below).
 
 **Destruction** deregisters the binding via `Bridge::deregisterHandler` — but
 only if `_bridgeAlive.lock()` still succeeds. If the `Bridge` was already
@@ -259,51 +273,22 @@ the reactive `set<>` path rather than trusting the raw wire body:
   if it returns `false` the executor throws `std::invalid_argument` and the
   completion resolves through `onError` (a proper error reply upstream) — the
   handler is never invoked with an invalid action. This closes a gap where the
-  request/reply path skipped the readiness/validity check that the reactive
-  `set<>` path (`tryFireImpl`) already performs. `ActionValidator::ready`
+  request/reply path skipped the readiness/validity check the dispatch paths
+  perform. `ActionValidator::ready`
   auto-detects a `bool validate() const` member and defaults to `true`, so
   actions without a validator dispatch exactly as before (backward compatible).
 
-**`subscribe<Action>(cb)`** / **`subscribe<Action>(cb, errCb)`** stores a
-result (and optional error) callback keyed by
-`ActionTraits<Action>::typeId()`. Callbacks execute on the GUI executor.
+**`unsubscribe<R>()`** removes this handler's callback for result type `R`.
 
-**`unsubscribe<Action>()`** clears both result and error callbacks for the
-action type.
-
-**`set<&Action::field>(value)`** updates one field of the in-progress draft.
-Uses `MemberPointerTraits` to recover the action and field types from the
-pointer-to-member. After setting the value, recomputes any declared computed
-fields on the snapshot (`morph::forms::recomputeAll`, [forms.md](../forms/forms.md),
-a no-op for actions with no `computedFields`), then checks
-`ActionValidator<Action>::ready(snapshot)`. If all required fields are
-present, fires the action via `Bridge::executeVia` and delivers the result
+**`subscribe<R>(cb)`** registers `cb` against this handler's binding. The
+subscription is matched at publish time by comparing the binding's current
+instance, so it follows the handler when it re-points. Delivers the result
 to the registered `sink` callback. If a flight is already in progress, marks
 `pending = true` and refires when the current flight completes
 (debounce-like coalescence). On failure, the registered `errSink` is invoked;
 if none is registered, the error is logged via `morph::log::logError`
-(tagged `[subscription:<typeId>]`) rather than silently dropped.
-
-**`reset<Action>()`** discards the in-progress draft.
 
 **`guiExecutor()`** returns the executor passed at construction.
-
-### SubscriberState
-
-```cpp
-struct SubscriberState {
-    std::mutex mtx;
-    Bridge* bridge;
-    std::shared_ptr<HandlerBinding> binding;
-    IExecutor* guiExec;
-    std::unordered_map<std::string_view, SubscriberEntry> entries;
-};
-```
-
-Keys are `std::string_view` pointing to `ActionTraits<A>::typeId()` string
-literals (static storage duration — keys never dangle). Each `SubscriberEntry`
-holds a `draft` (`std::any` of the action struct), `sink`, `errSink`, and
-`running`/`pending` flags for flight tracking.
 
 ## `ActionExecuteRegistry`
 
@@ -369,71 +354,75 @@ struct MemberPointerTraits<V A::*> {
 };
 ```
 
-Compile-time decomposition of a pointer-to-data-member type. Used by
-`BridgeHandler::set<auto FieldPtr>` to recover both the action type (`A`)
-and the field type (`V`) from a single non-type template parameter, so
-callers write `handler.set<&MyAction::c>(7.0)` with no redundant type
-arguments.
+Compile-time decomposition of a pointer-to-data-member type. Recovers both the
+class (`A`) and the member type (`V`) from a single non-type template
+parameter, so a caller names a field as `&MyAction::c` with no redundant type
+arguments. Used by `morph::flows::FlowSession::set<>`
+([workflows_navigation.md](../forms/workflows_navigation.md)) and by
+`morph::forms`' computed-field declarations.
 
 ## Subscription semantics
 
-The fielded/reactive surface (`subscribe`, `set`, `unsubscribe`, `reset`) is
-built on the per-handler `SubscriberState`. Exactly one `SubscriberEntry`
-exists per action type, keyed by `ActionTraits<A>::typeId()`. The rules:
+`subscribe<R>(cb)` is keyed on the **result/state type**, not on an action. It
+fires whenever an `R` is produced on the instance the handler is attached to —
+by this handler, by another handler sharing that instance, or by another screen
+entirely. The subscriber names *what it renders*, not what somebody else must
+call to produce it, so adding an action that also yields an `R` never breaks an
+existing subscriber.
 
-- **One subscriber per `(handler, action type)`.** `subscribe<A>(cb)` (or the
-  two-argument `subscribe<A>(cb, errCb)`) *replaces* any callback previously
-  registered for `A` on this handler — there is no fan-out. The two-argument
-  overload additionally stores the error sink; the one-argument overload leaves
-  the existing `errSink` untouched.
-- **Fire without a subscriber.** A `set<>`-triggered fire runs whether or not a
-  subscriber is installed. If no `sink` is registered when the result arrives,
-  the result is simply dropped (the entry exists because `set<>` created the
-  draft, but its `sink` is empty). Errors are different: with no `errSink` the
-  error is logged via `morph::log::logError` tagged `[subscription:<typeId>]`,
-  never silently dropped.
-- **Default validator fires on the first `set<>`.** `ActionValidator<A>::ready`
-  returns `true` only for an action that has *neither* a
-  `BRIDGE_REGISTER_VALIDATOR` specialisation *nor* a `bool validate() const`
-  member — for such an action the very first `set<>` puts the
-  (single-field-populated) draft into a ready state and dispatches immediately.
-  Actions that need several fields before firing add a `validate()` member (the
-  preferred, macro-free path — auto-detected via the `HasValidate` concept) or
-  specialise the validator.
-- **Every ready `set<>` re-fires.** Each `set<>` recomputes any declared
-  computed fields on the draft snapshot (`morph::forms::recomputeAll`,
-  [forms.md](../forms/forms.md), a no-op for actions with no
-  `computedFields`) before the `ready()` check, then — landing a
-  `ready()==true` snapshot — dispatches the action again with the recomputed
-  value already in place: live recomputation. This recompute is client-side
-  and **not authoritative** (for display only); every dispatch path below
-  recomputes it again, authoritatively, before `Model::execute`. Rapid patches
-  coalesce: while a flight is running, further `set<>` calls set
-  `pending=true`, and exactly one re-fire with the latest snapshot is issued
-  when the in-flight completion resolves (`consumeFlight`).
-- **Draft lifetime.** A draft is created lazily on the first `set<>` for its
-  action type and persists across fires, across `unsubscribe<A>()`, and across
-  `Bridge::switchBackend` (the draft lives in the handler's `SubscriberState`,
-  not the backend). It is destroyed only when the handler is destroyed or when
-  `reset<A>()` is called. `unsubscribe<A>()` clears both callbacks but leaves
-  the draft intact.
+- **Scope is the instance, not the model type.** A subscription is matched at
+  publish time by comparing the binding's *current* instance, so re-pointing a
+  handler ([`attach`](#bridgehandlermodel-sharing)) moves its subscriptions with
+  it. A handler with no primary hears only its own results, because nothing else
+  is attached to what it holds.
+- **One callback per `(handler, R)`.** Subscribing again replaces the previous
+  callback; there is no fan-out within a handler.
+- **The originating handler is notified too.** Suppressing the echo would force
+  every subscriber to special-case "was this mine", which is exactly the
+  bookkeeping this replaces.
+- **Callbacks run on the handler's executor**, as `.then` does. Two handlers in
+  one process with different executors each get their callback where they asked
+  for it.
+- **Ordering is per instance.** Every action on an instance runs on that
+  instance's strand, so notifications are naturally ordered; nothing is
+  guaranteed *between* instances.
+- **Failed actions notify nobody.** A notification is produced from a successful
+  result only.
+- **Delivery is best-effort and unbuffered.** There is no replay, no cursor, no
+  checkpointing, and no coalescing — a model that emits at high frequency must
+  throttle itself. Sinks are snapshotted under the registry lock and invoked
+  outside it, so a subscriber that re-enters the bridge cannot deadlock.
+- **Only copy-constructible results are published.** A result type that cannot
+  be copied is delivered to its caller's `Completion` as usual but is never
+  boxed for subscribers.
+- **Fan-out is per `Bridge`, i.e. per client process.** This is the one place
+  subscriptions are narrower than instance sharing: an instance really is shared
+  across clients ([shared_instances.md](shared_instances.md)), but a result
+  produced by *another client* on that instance does not reach this client's
+  subscribers — there is no server-initiated frame, and both transports would
+  need an unsolicited-message path to carry one. Two handlers in one process see
+  each other's work; two clients do not, and must re-read to notice a change.
+
 
 ## Thread safety
 
 `Bridge` is fully thread-safe (see the `Bridge` section: separate
-`_backendMtx`, `_mtx`, and `_sessionMtx`, with `executeVia` taking its backend
-snapshot under the short, dedicated `_backendMtx` rather than `_mtx`).
+`_backendMtx`, `_mtx`, `_sessionMtx`, and `_attachMtx`, with `executeVia`
+taking its backend snapshot under the short, dedicated `_backendMtx` rather
+than `_mtx`, and a shared handler's `attachHandler`/`ensureBound`/
+`assignHandlerPrimary` running under `_attachMtx` rather than `_mtx`, so a
+slow remote round-trip on one handler's attach never blocks another
+handler's construction, destruction, or a `switchBackend()` call on the same
+`Bridge`).
 
-`BridgeHandler`'s individual mutating operations — `set`, `subscribe`,
-`unsubscribe`, `reset` — are each internally safe: they take the
-`SubscriberState::mtx` while touching the entry map. Result and error callbacks
-never run under that mutex; they are marshalled to the `guiExec` executor
-passed at construction, and `tryFireImpl` captures a `weak_ptr<SubscriberState>`
-so a callback that fires after the handler is destroyed is a no-op. The
-intended usage is nonetheless **single-GUI-thread affinity**: a handler and its
-subscriptions belong to one GUI thread, and interleaving concurrent `set<>`
-storms from multiple threads onto the same handler, while memory-safe, has no
-defined ordering guarantee beyond the per-operation locking.
+`subscribe`/`unsubscribe` mutate the bridge's subscription registry under
+`_subMtx`. Callbacks never run under that mutex: `publishResult` snapshots the
+matching sinks under the lock and invokes them outside it, marshalled to the
+`guiExec` executor passed at construction, so a subscriber that re-enters the
+bridge cannot deadlock. A subscription holds a `weak_ptr` to its binding, so one
+belonging to a destroyed handler is skipped and pruned rather than dangling. The
+intended usage remains **single-GUI-thread affinity**: a handler and its
+subscriptions belong to one GUI thread.
 
 ## Lifetime & ownership
 
@@ -481,9 +470,9 @@ make teardown order-independent.)
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. |
-| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. |
+| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 
@@ -494,13 +483,13 @@ make teardown order-independent.)
 | ctor (default) | `BridgeHandler(Bridge&, IExecutor*)` | Registers via `Bridge::registerHandler<Model>()`. |
 | ctor (custom binding) | `BridgeHandler(Bridge&, IExecutor*, shared_ptr<HandlerBinding>)` | Registers pre-built binding. |
 | dtor | `~BridgeHandler()` | Deregisters via `Bridge::deregisterHandler`, but only if the bridge's liveness token is still alive; a no-op if the `Bridge` was already destroyed. |
-| `execute<Action>` | `Completion<R> execute(Action)` | Typed dispatch through the bridge. |
+| `execute<Action>` | `Completion<R> execute(Action)` | Typed dispatch through the bridge. For a shared handler, a payload-/result-keyed action's attach or promote step never throws synchronously — a backend refusal (e.g. `LimitPolicy::maxLiveModels`) resolves the returned `Completion` via `.onError(...)`. |
 | `executeJson` | `Completion<string> executeJson(string_view actionType, string_view bodyJson)` | Type-erased dispatch through `ActionExecuteRegistry`. |
-| `subscribe<Action>(cb)` | `void subscribe(function<void(R)>)` | Result callback. |
-| `subscribe<Action>(cb, errCb)` | `void subscribe(function<void(R)>, function<void(exception_ptr)>)` | Result + error callbacks. |
-| `unsubscribe<Action>` | `void unsubscribe()` | Clears both callbacks. |
-| `set<auto FieldPtr>` | `void set(MemberPointerTraits<decltype(FieldPtr)>::ValueType value)` | Field-by-field update; auto-fires when ready. |
-| `reset<Action>` | `void reset()` | Discards in-progress draft. |
+| `subscribe<R>(cb)` | `void subscribe(function<void(R)>)` | Fire `cb` whenever an `R` is produced on the attached instance. |
+| `unsubscribe<R>` | `void unsubscribe()` | Drops this handler's callback for `R`. |
+| `attach(key)` | `void attach(const PrimaryKeyOf<Model>&)` | Attaches/re-points a shared handler. |
+| `primary()` | `optional<PrimaryKeyOf<Model>> primary()` | The handler's current primary, or empty. |
+| `instances()` | `Completion<vector<PrimaryKeyOf<Model>>> instances()` | Snapshot of live shared keys. |
 | `guiExecutor` | `IExecutor* guiExecutor() const noexcept` | Returns the callback executor. |
 | `binding` | `const shared_ptr<HandlerBinding>& binding() const` | Returns the underlying binding. |
 
@@ -518,13 +507,14 @@ make teardown order-independent.)
 | Decision | Choice | Why |
 |---|---|---|
 | Binding storage | **`vector<weak_ptr<HandlerBinding>>`** | `Bridge` does not own the bindings — `BridgeHandler` holds the `shared_ptr`. Weak references let `switchBackend` and the reconnect handler skip dead bindings without keeping handlers alive. (Handler *teardown* after the bridge is made safe separately, by the `_liveness` token — not by this weak storage.) |
-| Teardown order | **`shared_ptr<const void> _liveness` + per-handler `weak_ptr`** | Makes bridge-vs-handler destruction order-independent: a handler outliving its bridge skips deregistration instead of dereferencing a dangling `Bridge&`. Normal `execute`/`set` still require the bridge to outlive its handlers. |
+| Teardown order | **`shared_ptr<const void> _liveness` + per-handler `weak_ptr`** | Makes bridge-vs-handler destruction order-independent: a handler outliving its bridge skips deregistration instead of dereferencing a dangling `Bridge&`. Normal `execute`/`subscribe` still require the bridge to outlive its handlers. |
 | Backend pointer | **Short snapshot under the dedicated `_backendMtx`** | `executeVia()` reads the backend through a `loadBackend()` helper that copies the `shared_ptr` under `_backendMtx` (never `_mtx`), so it never blocks on `switchBackend()`'s `_mtx`. |
 | Session storage | **Separate `_sessionMtx` from `_mtx`** | Session access is a hot path (every `executeVia` reads it). A separate mutex avoids contention with handler registration/switchBackend. |
+| Attach-path locking | **Separate `_attachMtx` from `_mtx`** | `attachHandler`/`ensureBound`/`assignHandlerPrimary` can block on a full network round-trip for a remote backend. A dedicated mutex means that round-trip never blocks unrelated `registerHandler`/`deregisterHandler`/`switchBackend` calls on the same `Bridge`, closing a deadlock hazard if the thread expected to deliver the pending reply itself needs `_mtx`. `HandlerBinding::primary`/`contextKey` are mutated only under `_attachMtx`; `switchBackend()` and the reconnect handler, which also touch them, take both mutexes together. |
 | Reconnect handler | **Liveness guard + weak‑backend guard + stale check; cleared in `~Bridge`** | The lambda captures a `weak_ptr<const void>` to `_liveness` and a `weak_ptr<IBackend>`. On invocation it first locks the liveness token — if the `Bridge` is gone it returns without touching `this` (no use-after-free). It then checks `pinned == loadBackend()` — if a switch occurred since the handler was installed, the reconnect is ignored. `~Bridge` and `switchBackend` also clear the outgoing backend's handler via `setReconnectHandler(nullptr)`; the liveness guard covers a reconnect already in flight when teardown races it. |
-| Fielded actions | **`SubscriberState` shared across `BridgeHandler` copy-unsafe design** | The handler is non-copyable; the subscriber state is `shared_ptr` so `tryFireImpl` can capture a `weak_ptr` and survive handler destruction. Flight tracking (`running`/`pending`) coalesces rapid `set` calls. |
+| Subscription keying | **On the result type, and against the binding rather than an instance id** | A subscriber is a renderer: it cares about the state it draws, not about which of several actions produced it, so a new action yielding the same type never breaks it. Storing against the binding makes a subscription follow a re-pointed handler, which is what "tell me about the account I am looking at" requires. |
 | Action readiness | **`ActionValidator<Action>::ready(snapshot)`** | Framework-agnostic validation — each action struct defines its own required-field semantics. The bridge never interprets action fields. |
-| Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | Closes the gap where an `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (bypassing the reactive `set<>` gate) reached the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner (`registry.md`). Backward compatible: `ready()` defaults to `true` for actions with no validator. |
+| Local-path validation enforcement | **`localOp` checks `ActionValidator<Action>::ready` before `Model::execute`** | Closes the gap where an `Action` built by hand and dispatched via `BridgeHandler::execute<Action>()` (without a client-side gate) reached the model unvalidated; mirrors `ActionDispatcher::registerAction`'s server-side runner (`registry.md`). Backward compatible: `ready()` defaults to `true` for actions with no validator. |
 | Subscription keys | **`string_view` into static storage** | `ActionTraits::typeId()` returns `constexpr` string literals with static duration. The `unordered_map` holds non-owning keys; no allocation, no lifetime issues. |
 | `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map<(modelId, actionId), Executor, PairKeyHash>` lets any translation unit register its actions without central registration or RTTI. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |

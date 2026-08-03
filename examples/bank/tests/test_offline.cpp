@@ -19,6 +19,7 @@
 #include "bank/dto/account_dto.hpp"
 #include "bank/dto/transaction_dto.hpp"
 #include "bank/models/account_model.hpp"
+#include "bank/models/customer_model.hpp"
 #include "bank/models/transaction_model.hpp"
 #include "bank_test_support.hpp"
 
@@ -38,10 +39,11 @@ TEST_CASE("Offline deposits are queued and replayed on reconnect", "[offline]") 
     bank::app::App app{testConnection()};
     app.login("peter-offline");
     morph::bridge::BridgeHandler<bank::AccountModel> accounts{app.bridge(), app.gui()};
+    morph::bridge::BridgeHandler<bank::CustomerModel> accountsOwner{app.bridge(), app.gui()};
     morph::bridge::BridgeHandler<bank::TransactionModel> txns{app.bridge(), app.gui()};
 
     const auto acct =
-        await(accounts.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
+        await(accountsOwner.execute(bank::dto::OpenAccount{.kind = 0, .currency = 0}), app.guiLoop()).id;
 
     // --- While "offline": park deposits in the durable queue instead of sending.
     morph::offline::InMemoryOfflineQueue queue;

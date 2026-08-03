@@ -145,6 +145,81 @@ public:
         throw std::runtime_error("register failed: " + reply.message);
     }
 
+    /// @brief Sends a shared (register-or-attach) `register` and blocks for the reply.
+    ///
+    /// An empty primary degrades to the private path. Same synchronous-call
+    /// constraint as `registerModel`.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Ignored — the server constructs via its own registry.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @return `ModelId` of the shared (or newly created) instance.
+    /// @throws std::runtime_error if the server replies with an error or the socket is down.
+    ::morph::exec::detail::ModelId registerModelShared(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        ::morph::backend::detail::InstanceIdentity identity) override {
+        if (identity.primary.empty()) {
+            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+        }
+        return sendControlForId(::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
+                                                                 std::string{identity.contextKey}),
+                                "register");
+    }
+
+    /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
+    /// @param typeId   String type-id of the model.
+    /// @param factory  Ignored — the server constructs via its own registry.
+    /// @param identity Entity key for the action log plus the directory primary key.
+    /// @param current  Instance currently held, or `ModelId{0}` if none.
+    /// @return `ModelId` of the instance now attached to.
+    /// @throws std::runtime_error if the server replies with an error or the socket is down.
+    ::morph::exec::detail::ModelId attachModel(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override {
+        if (identity.primary.empty()) {
+            if (current.v != 0U) {
+                deregisterModel(current);
+            }
+            return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
+        }
+        return sendControlForId(
+            ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey}),
+            "attach");
+    }
+
+    /// @brief Files a live server-side instance under @p primary.
+    /// @param mid     Live instance to promote.
+    /// @param typeId  Model type id.
+    /// @param primary Canonical string encoding of the key to file it under.
+    void assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                       std::string_view primary) override {
+        if (primary.empty() || mid.v == 0U) {
+            return;
+        }
+        (void)sendControlForId(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v), "assign");
+    }
+
+    /// @brief Asks the server for the live shared primary keys of @p typeId.
+    /// @param typeId String type-id to enumerate.
+    /// @return Canonical key strings of the live shared instances.
+    /// @throws std::runtime_error if the server replies with an error or the socket is down.
+    std::vector<std::string> listInstances(const std::string& typeId) override {
+        std::string replyJson;
+        try {
+            replyJson = sendSync(::morph::wire::encode(::morph::wire::makeInstances(typeId)));
+        } catch (const std::exception& exc) {
+            throw std::runtime_error(std::string{"instances failed: "} + exc.what());
+        }
+        auto reply = ::morph::wire::decode(replyJson);
+        if (reply.kind != "ok") {
+            throw std::runtime_error("instances failed: " + reply.message);
+        }
+        std::vector<std::string> keys;
+        if (auto errCode = glz::read_json(keys, reply.body)) {
+            throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, reply.body));
+        }
+        return keys;
+    }
+
     /// @brief Sends a `deregister` message fire-and-forget (does not wait for a reply).
     /// @param mid Id of the model to remove on the server.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
@@ -158,6 +233,25 @@ public:
                 // the server (see docs/spec/core/backend.md's Limitations).
             }
         }
+    }
+
+    /// @brief Sends one synchronous control envelope and returns the replied `modelId`.
+    /// @param env  Envelope to send.
+    /// @param what Verb name used in the error message.
+    /// @return `ModelId` carried by the `ok` reply.
+    /// @throws std::runtime_error if the server errors or the socket is down.
+    ::morph::exec::detail::ModelId sendControlForId(const ::morph::wire::Envelope& env, std::string_view what) {
+        std::string replyJson;
+        try {
+            replyJson = sendSync(::morph::wire::encode(env));
+        } catch (const std::exception& exc) {
+            throw std::runtime_error(std::string{what} + " failed: " + exc.what());
+        }
+        auto reply = ::morph::wire::decode(replyJson);
+        if (reply.kind == "ok") {
+            return ::morph::exec::detail::ModelId{reply.modelId};
+        }
+        throw std::runtime_error(std::string{what} + " failed: " + reply.message);
     }
 
     /// @brief Sends an `execute` message and returns a `Completion` resolved on reply.

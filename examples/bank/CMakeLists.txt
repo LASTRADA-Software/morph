@@ -50,6 +50,7 @@ add_library(bank_lib STATIC
     src/core/money.cpp
     src/db/schema.cpp
     src/models/account_model.cpp
+    src/models/customer_model.cpp
     src/models/auth_model.cpp
     src/models/transaction_model.cpp
     src/models/payee_model.cpp
@@ -97,6 +98,7 @@ if(MORPH_BUILD_TESTS)
             tests/test_remote.cpp
             tests/test_offline.cpp
             tests/test_relations.cpp
+            tests/test_stateful_account.cpp
         )
         target_include_directories(bank_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         target_link_libraries(bank_tests PRIVATE bank_lib Catch2::Catch2WithMain)
