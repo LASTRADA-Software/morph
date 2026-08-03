@@ -381,13 +381,18 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 // NOLINTBEGIN(bugprone-macro-parentheses)
 
-// Keying the generated registrar names on `__LINE__` (rather than on the type spelling)
+// Keying the generated registrar names on `__COUNTER__` (rather than on the type spelling)
 // keeps them valid identifiers regardless of how `M`/`A` are written. A namespace-qualified
 // or template type (e.g. `app::models::Report`) would otherwise be pasted directly into the
-// identifier, producing invalid tokens like `bridge_model_reg_app::models::Report`. There is
-// exactly one registration per macro invocation, so `__LINE__` is equally unique. The extra
-// indirection (`_CAT` calling `_CAT_`) is required so `__LINE__` is expanded to its numeric
-// value before the paste, rather than being pasted as the literal text "__LINE__".
+// identifier, producing invalid tokens like `bridge_model_reg_app::models::Report`.
+// `__LINE__` was tried first, but it is only unique *within a single physical file*: two
+// headers that each invoke this macro on the same line number (e.g. `card_model.hpp:38` and
+// `payment_model.hpp:38`) produce the same identifier once both are `#include`d into one
+// translation unit, and since C++ unnamed namespaces are per-TU (not per-file), that is a
+// hard redefinition error. `__COUNTER__` increments monotonically for the entire translation
+// unit regardless of which file expands it, so it cannot collide this way. The extra
+// indirection (`_CAT` calling `_CAT_`) is required so `__COUNTER__` is expanded to its numeric
+// value before the paste, rather than being pasted as the literal text "__COUNTER__".
 #define BRIDGE_DETAIL_CAT_(a, b) a##b
 #define BRIDGE_DETAIL_CAT(a, b) BRIDGE_DETAIL_CAT_(a, b)
 
@@ -404,7 +409,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         static constexpr std::string_view typeId() noexcept { return NAME; }                             \
     };                                                                                                   \
     namespace {                                                                                          \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __LINE__) =                         \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __COUNTER__) =                      \
         morph::model::detail::registerModelOnce<M>(NAME);                                                \
     }
 
@@ -486,9 +491,9 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                      \
     };                                                                                                         \
     namespace {                                                                                                \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __LINE__) =                              \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                           \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);          \
-    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __LINE__) =                         \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
 /// @endcond

@@ -469,6 +469,20 @@ variables).
 
 ## Registration macros
 
+Both macros below name their generated anonymous-namespace variable by pasting
+a fixed prefix onto `__COUNTER__` (via the two-level `BRIDGE_DETAIL_CAT`/
+`BRIDGE_DETAIL_CAT_` indirection needed to force macro expansion before the
+paste), not onto the spelling of `M`/`A`. Pasting the type directly (the
+original approach) breaks for namespace-qualified or template types —
+`app::models::Report` pastes `::` into the identifier. `__LINE__` was tried as
+a replacement key but is only unique *within a single physical file*; two
+different headers that each invoke one of these macros on the same line
+number produce the same identifier once both are transitively `#include`d
+into one translation unit, which is a hard redefinition error because C++
+unnamed namespaces are per-TU, not per-file. `__COUNTER__` increments
+monotonically across the whole translation unit regardless of which file
+expands it, so it cannot collide this way.
+
 ### `BRIDGE_REGISTER_MODEL(M, NAME)`
 
 Specialises `ModelTraits<M>` and registers a factory at static-init time.
