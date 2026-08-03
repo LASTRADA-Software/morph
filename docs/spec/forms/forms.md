@@ -908,9 +908,9 @@ so it never satisfies `EmptyCapableField` in the first place. (This differs from
 the `required`-array derivation in `mergeSchemaExtras`, which checks
 `isStdOptional` **explicitly** — see [Required-ness rule](#required-ness-rule).)
 The predicate is `noexcept` and `constexpr`, and it inspects only the action's
-**own top-level members** — the same flat-actions-only scope as schema
-generation ([Scope: flat actions only](#scope-flat-actions-only)); it does not
-recurse into nested aggregates.
+**own top-level members**; unlike `schemaJson<A>()`'s schema generation (see
+[Nested aggregates (one level)](#nested-aggregates-one-level)), it does **not**
+recurse into a nested aggregate member's own fields.
 
 ## Cross-field rules — the `x-rules` vocabulary
 
@@ -1257,19 +1257,60 @@ for the exhaustive tables and design rationale.
 
 ## Failure modes
 
-### Scope: flat actions only
+### Nested aggregates (one level)
 
-Annotation and `required`-derivation operate **exclusively on the action's
-top-level members**. `mergeSchemaExtras` reflects `A`'s members with
-`forEachNamedMember(probe, …)` and patches `dom["properties"][name]` for each —
-it never descends into member types. A member that is itself an aggregate is
-emitted by glaze into `$defs` and referenced by `$ref`; the generator does not
-recurse into that definition, so its sub-members receive **none** of the `x-*`
-annotations and are **not** part of any synthesised `required` array (the nested
-`$def` gets no `required` at all). Actions meant to drive a generated form must
-therefore be **flat**: every field the renderer should understand has to be a
-direct member of the action type. Nesting is not a documented form-generation
-path.
+A member whose type is itself a reflectable aggregate — a plain nested
+struct, or `std::vector<Sub>` (a repeated aggregate) — gets its **own**
+members annotated too, one level down: `x-order`, `title`/`FieldMeta`,
+`required`, and the `Quantity`/`Choice`/widget/ranged-bounds rules the top
+level already applies. This closes the gap a flat-only generator has for
+domains that are naturally nested (a measurement with a repeated specimen
+sub-record, a document with a nested address) — previously such a member's
+sub-fields were silently unannotated and absent from the generated form.
+
+Two schema shapes exist for a nested aggregate, and both are recursed into:
+
+- **Deduplicated (`$ref`/`$defs`)** — glaze shares one `$defs` entry, `$ref`'d
+  from every property, when the nested type is used **two or more times**
+  anywhere in the schema. The shared `$defs` entry is annotated once; every
+  property that `$ref`s it sees the same annotations.
+- **Inlined** — glaze writes the object schema directly into the property
+  itself (no `$ref`/`$defs` at all) when the nested type is used **exactly
+  once**. The property node itself is annotated in place.
+
+`mergeSchemaExtras` resolves whichever form applies (`annotateNestedAggregateRef`,
+`forms.hpp`) and hands the resolved node to the same per-member annotation
+logic the top level uses (`annotateBasicMemberProperty`), applied against the
+nested type's own reflection.
+
+**Depth is capped at exactly one level.** If the nested type itself has a
+member that is itself an aggregate, that member's own sub-members are left
+exactly as glaze emitted them — unannotated, matching this generator's
+original flat-only behaviour for anything past one level. Computed fields,
+`formLayout`/`fieldSpans`, and `formRules` also remain **top-level only**: a
+nested aggregate declaring any of those has no effect on the generated
+schema. Both limits keep generated forms comprehensible and keep the
+generator itself simple, rather than becoming a general recursive-descent
+schema compiler.
+
+**Purely additive.** An action with no nested-aggregate member has nothing
+here to trigger on, so its generated schema is byte-for-byte unchanged. A
+pre-existing action that *does* have a nested-aggregate member sees its
+schema gain annotations it previously lacked — the whole point of this
+feature — with no change to any of its flat top-level members.
+
+The nested type must be **default-constructible**, exactly like the
+top-level action type (see below): the recursion builds its own probe
+instance purely to enumerate its members via reflection.
+
+### Scope: flat actions only (form layout, computed fields, and rules)
+
+`formLayout`/`fieldSpans` ([Layout & grouping](#layout--grouping)) and
+`formRules` ([Cross-field rules](#cross-field-rules-x-rules)) are read only
+from the top-level action type — they are not consulted on a nested
+aggregate, even at the one level `mergeSchemaExtras` does otherwise recurse
+into (see [Nested aggregates (one level)](#nested-aggregates-one-level)
+above). Computed fields (`computedFields`) are likewise top-level only.
 
 The action type must also be **default-constructible**: `mergeSchemaExtras`
 builds a probe instance (`A probe{}`) purely to enumerate member names and types

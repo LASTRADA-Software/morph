@@ -68,6 +68,16 @@
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
 ///
+/// **Nested aggregates (one level).** A member whose type is itself a
+/// reflectable aggregate — a plain nested struct, or `std::vector<Sub>` — gets
+/// its own members annotated too, one level down: `x-order`, title/`FieldMeta`,
+/// `required`, and the `Quantity`/`Choice`/widget/ranged-bounds rules above,
+/// applied against the nested type's own reflection. Recursion stops after
+/// this one level (a nested aggregate's own nested-aggregate members are left
+/// unannotated), and computed fields/`formLayout`/`fieldSpans`/`formRules`
+/// remain top-level-only. See docs/spec/forms/forms.md, "Nested aggregates
+/// (one level)", and `detail::annotateNestedAggregateRef`.
+///
 /// @par Declaring optional fields
 /// Required is the default. An action opts individual fields out with a
 /// static member list:
@@ -1534,6 +1544,194 @@ void collectComputedInputs(const A& probe, const ComputedField<Dst, Fn, Inputs..
     out.emplace(resolveMemberName(probe, Dst), std::vector<std::string_view>{resolveMemberName(probe, Inputs)...});
 }
 
+/// @brief Trait: is `T` a `std::vector<...>`? Exposes the element type as
+///        `ValueType` (`void` when `T` is not a vector).
+template <typename T>
+struct IsStdVector : std::false_type {
+    using ValueType = void;
+};
+
+template <typename T, typename Alloc>
+struct IsStdVector<std::vector<T, Alloc>> : std::true_type {
+    using ValueType = T;
+};
+
+/// @brief Concept: `T` is glaze-reflectable as a JSON object -- the same test
+///        that decides whether glaze emits a member into `$defs`/`$ref`
+///        rather than inline. Shared by the one-level nested-aggregate
+///        recursion below and `reconcileDeclaredPrecision` elsewhere.
+template <typename T>
+concept ReflectableAggregate = glz::reflectable<T> || glz::glaze_object_t<T>;
+
+/// @brief Applies the same title/`FieldMeta`/`Quantity`/`Choice`/widget/
+///        ranged-bounds annotations `mergeSchemaExtras`'s top-level pass
+///        applies, to one property node. Shared by that top-level pass and
+///        `annotateNestedAggregate` below (the one-level nested-aggregate pass) so
+///        both apply identical per-member rules.
+///
+/// Deliberately excludes computed-field annotations (`x-computed`/
+/// `x-readonly`) and `x-order`: computed fields are not supported inside a
+/// nested aggregate (see `annotateNestedAggregate`), and `x-order`'s source index
+/// differs by caller, so each caller sets it itself.
+/// @tparam Owner  The type declaring @p name (drives `FieldMeta`/widget-override lookup).
+/// @tparam Member The static type of the member itself (drives type-driven annotations).
+/// @param property DOM node for this one property; annotations are merged in, not replacing.
+/// @param name     Wire (JSON) name of the member, for `FieldMeta`/widget-override lookup.
+template <typename Owner, typename Member>
+void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view name) {
+    const FieldMeta* fieldMeta = findFieldMeta<Owner>(name);
+    std::string_view const declaredLabel = fieldMeta != nullptr ? fieldMeta->label : std::string_view{};
+    property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};
+    if (fieldMeta != nullptr) {
+        if (!fieldMeta->help.empty()) {
+            property["description"] = std::string{fieldMeta->help};
+        }
+        if (!fieldMeta->placeholder.empty()) {
+            property["x-placeholder"] = std::string{fieldMeta->placeholder};
+        }
+        if (fieldMeta->readOnly) {
+            property["x-readonly"] = true;
+        }
+        if (fieldMeta->hidden) {
+            property["x-hidden"] = true;
+        }
+        if (!fieldMeta->i18nKey.empty()) {
+            property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
+        }
+    }
+
+    if constexpr (units::isQuantity<Member>) {
+        property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
+        auto const alternatives = Member::unitAlternatives();
+        if (!alternatives.empty()) {
+            glz::generic_u64::array_t list{};
+            for (auto const& alternative : alternatives) {
+                auto const meta =
+                    units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
+                glz::generic_u64 entry{};
+                entry["id"] = std::string{meta.id};
+                entry["display"] = std::string{meta.display};
+                entry["decimals"] = std::uint64_t{meta.defaultDecimals};
+                entry["num"] = alternative.num;
+                entry["den"] = alternative.den;
+                list.emplace_back(std::move(entry));
+            }
+            property["x-unitAlternatives"] = list;
+        }
+    }
+    if constexpr (isChoice<Member>) {
+        property["x-optionsAction"] = std::string{Member::optionsAction()};
+        property["x-optionValue"] = std::string{Member::valueField()};
+        property["x-optionLabel"] = std::string{Member::labelField()};
+        if constexpr (!Member::optionsDependsOn().empty()) {
+            glz::generic_u64::array_t dependsOn{};
+            for (auto const& parentName : Member::optionsDependsOn()) {
+                dependsOn.emplace_back(std::string{parentName});
+            }
+            property["x-optionsDependsOn"] = dependsOn;
+        }
+    }
+
+    std::string_view widgetHint{};
+    if constexpr (DeclaresWidget<Member>) {
+        widgetHint = Member::widget();
+    }
+    if constexpr (HasFieldMetadataWidgets<Owner>) {
+        if (auto const overrideWidget = widgetOverride<Owner>(name); !overrideWidget.empty()) {
+            widgetHint = overrideWidget;
+        }
+    }
+    if (!widgetHint.empty()) {
+        property["x-widget"] = std::string{widgetHint};
+    }
+    if constexpr (DeclaresRangedBounds<Member>) {
+        using Bound = std::remove_cvref_t<decltype(Member::min())>;
+        if constexpr (std::floating_point<Bound>) {
+            property["x-min"] = static_cast<double>(Member::min());
+            property["x-max"] = static_cast<double>(Member::max());
+            property["x-step"] = static_cast<double>(Member::step());
+        } else {
+            property["x-min"] = static_cast<std::int64_t>(Member::min());
+            property["x-max"] = static_cast<std::int64_t>(Member::max());
+            property["x-step"] = static_cast<std::int64_t>(Member::step());
+        }
+    }
+}
+
+/// @brief One level of recursion (see `docs/spec/forms/forms.md`, "Nested
+///        aggregates (one level)"): annotates @p node -- the object-schema
+///        DOM node for a nested-aggregate member -- applying `required` and
+///        `annotateBasicMemberProperty`'s rules to its own properties.
+///
+/// @p node is @e which DOM node depends on how many places in the whole
+/// schema reference `Sub`: glaze **inlines** the object schema directly into
+/// the referencing property when `Sub` is used exactly once (so @p node
+/// *is* that property node), but **deduplicates** via `$defs`/`$ref` when
+/// `Sub` is used two or more times (so @p node is the shared `$defs` entry,
+/// resolved by the caller). Both forms have the identical `{"properties":
+/// {...}}` shape this function needs, so one implementation handles both --
+/// see the call site in `mergeSchemaExtras` for how @p node is resolved.
+///
+/// Deliberately does **not** recurse again: if `Sub` itself has a member that
+/// is itself an aggregate, that member is left exactly as glaze emitted it --
+/// unannotated, matching today's behaviour beyond one level. This bounds the
+/// generator to one level of nesting, as `docs/spec/forms/forms.md` documents.
+/// Computed fields, `formLayout`/`fieldSpans`, and `formRules` also stay
+/// top-level-only; a nested `Sub` declaring any of those has no effect here.
+///
+/// @tparam Sub  Nested aggregate type (default-constructible, glaze-reflectable
+///              -- the same requirements the top-level action type already has).
+/// @param node The object-schema DOM node to annotate in place (see above).
+template <typename Sub>
+void annotateNestedAggregate(glz::generic_u64& node) {
+    Sub probe{};
+    glz::generic_u64::array_t requiredNames{};
+    forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
+        using Member = std::remove_cvref_t<decltype(member)>;
+        if (!(isStdOptional<Member> || declaredOptional<Sub>(name))) {
+            requiredNames.emplace_back(std::string{name});
+        }
+        auto& property = node["properties"][std::string{name}];
+        property["x-order"] = std::uint64_t{I};
+        annotateBasicMemberProperty<Sub, Member>(property, name);
+    });
+    // Idempotent if two members (or two actions sharing this schema call)
+    // resolve to the same $defs entry: re-deriving the identical required
+    // array is harmless.
+    node["required"] = requiredNames;
+}
+
+/// @brief Resolves the object-schema DOM node for a nested-aggregate member,
+///        given the property (or array `items`) node glaze wrote for it, and
+///        annotates it via `annotateNestedAggregate<Sub>`.
+///
+/// Handles both forms `Sub` can take in the schema (see
+/// `annotateNestedAggregate`'s doc comment): a `$ref` into `$defs` (`Sub` used
+/// 2+ times somewhere in the schema) resolves to that shared def; anything
+/// else is assumed to be the inlined object schema itself (`Sub` used exactly
+/// once). A property that is neither -- glaze emitted something other than an
+/// object schema for a type this function's caller already confirmed is a
+/// `ReflectableAggregate` -- is left untouched rather than guessed at.
+/// @tparam Sub          Nested aggregate type, as `annotateNestedAggregate` requires.
+/// @param dom           The whole schema DOM (so a `$ref`'s `$defs` entry can be found).
+/// @param propertyOrItems The property node itself (single nested member) or its
+///                        array `items` node (`std::vector<Sub>` member).
+template <typename Sub>
+void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propertyOrItems) {
+    constexpr std::string_view kDefsPrefix = "#/$defs/";
+    if (propertyOrItems.contains("$ref")) {
+        if (auto const* ref = propertyOrItems["$ref"].get_if<std::string>()) {
+            if (std::string_view{*ref}.starts_with(kDefsPrefix)) {
+                annotateNestedAggregate<Sub>(dom["$defs"][std::string{ref->substr(kDefsPrefix.size())}]);
+            }
+        }
+        return;
+    }
+    if (propertyOrItems.contains("properties")) {
+        annotateNestedAggregate<Sub>(propertyOrItems);
+    }
+}
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
@@ -1692,6 +1890,27 @@ template <typename A>
                 property["x-min"] = static_cast<std::int64_t>(Member::min());
                 property["x-max"] = static_cast<std::int64_t>(Member::max());
                 property["x-step"] = static_cast<std::int64_t>(Member::step());
+            }
+        }
+
+        // Nested aggregates (one level -- docs/spec/forms/forms.md, "Nested
+        // aggregates (one level)"): a member whose type is itself a
+        // reflectable aggregate gets an object schema from glaze -- either
+        // inlined directly into this property (the type is used exactly once
+        // in the whole schema) or shared via `$defs`/`$ref` (used 2+ times);
+        // `annotateNestedAggregateRef` resolves whichever form it is. Recurse
+        // one level so that object schema's own members get `x-order`/
+        // `required`/title/Quantity/Choice/widget annotations too, instead of
+        // being silently unannotated. Purely additive: an action with no
+        // nested aggregate member has nothing here to trigger on, so its
+        // schema is byte-for-byte unchanged.
+        if constexpr (ReflectableAggregate<Member>) {
+            annotateNestedAggregateRef<Member>(dom, property);
+        } else if constexpr (IsStdVector<Member>::value &&
+                             ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
+            using ItemType = typename IsStdVector<Member>::ValueType;
+            if (property.contains("items")) {
+                annotateNestedAggregateRef<ItemType>(dom, property["items"]);
             }
         }
     });
