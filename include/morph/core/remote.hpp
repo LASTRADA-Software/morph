@@ -712,7 +712,12 @@ private:
     /// @param env            Decoded request; uses `typeId`, `primary`, `contextKey`, `callId`.
     /// @param reply          Reply sink; always invoked exactly once.
     /// @param cid            Connection scope, or `0` for unscoped.
-    /// @param releaseCurrent Instance to release first (an `attach` re-point), or `ModelId{0}`.
+    /// @param releaseCurrent Instance to release *after* acquiring the target
+    ///                       (an `attach` re-point), or `ModelId{0}`. Acquire
+    ///                       runs first so a same-key re-attach lands on the
+    ///                       same instance instead of destroying and
+    ///                       recreating it, and so a failing acquire never
+    ///                       touches it.
     void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
                                ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
         LimitPolicy limits;
@@ -723,12 +728,24 @@ private:
         DirectoryKey dirKey{env.typeId, env.primary};
         {
             std::scoped_lock const lock{_regMtx};
-            if (releaseCurrent.v != 0U) {
-                releaseScopedLocked(releaseCurrent, cid);
-            }
             if (attachExistingLocked(dirKey, env, reply, cid)) {
+                // Acquired (or re-confirmed) the target before touching
+                // `releaseCurrent` -- a same-key re-attach lands on the exact
+                // same mid attachExistingLocked just incremented, so
+                // releasing it here cancels out only the redundant reference
+                // that call just took, never the caller's sole hold on the
+                // instance it is "re-pointing" to itself. A genuinely
+                // different-key re-point releases the real old instance, same
+                // as before.
+                if (releaseCurrent.v != 0U) {
+                    releaseScopedLocked(releaseCurrent, cid);
+                }
                 return;
             }
+        }
+        if (releaseCurrent.v != 0U) {
+            std::scoped_lock const lock{_regMtx};
+            releaseScopedLocked(releaseCurrent, cid);
         }
         // Directory miss. Construct outside the lock, exactly as the private
         // register path does, then re-check under the insert lock: a concurrent

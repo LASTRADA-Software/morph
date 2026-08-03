@@ -133,11 +133,14 @@ struct IBackend {
 
     /// @brief Re-points from @p current to the shared instance holding @p primary.
     ///
-    /// The default implementation releases @p current (when non-zero) and then
-    /// calls `registerModelShared`, which is exactly right for an in-process
-    /// backend. Backends behind a wire protocol override this with the single
-    /// `attach` request so a re-pointing client cannot lose its slot to
-    /// `LimitPolicy::maxLiveModels` between the release and the acquire.
+    /// The default implementation acquires the replacement via
+    /// `registerModelShared` first and only then releases @p current (when
+    /// non-zero), so a same-key re-attach never destroys and recreates the
+    /// instance it already holds, and a throwing acquire never strands the
+    /// caller with neither instance. Backends behind a wire protocol override
+    /// this with the single `attach` request so a re-pointing client cannot
+    /// lose its slot to `LimitPolicy::maxLiveModels` between the release and
+    /// the acquire.
     ///
     /// @param typeId     String type-id of the model.
     /// @param factory    Callable that constructs the `IModelHolder` (local path only).
@@ -147,10 +150,21 @@ struct IBackend {
     virtual ::morph::exec::detail::ModelId attachModel(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         InstanceIdentity identity, ::morph::exec::detail::ModelId current) {
+        // Acquire the replacement before releasing `current`, not after: a
+        // same-key re-attach (registerModelShared finds `current` already
+        // live in the directory and takes a second reference to it) then
+        // hands back the identical id instead of destroying and recreating
+        // it, and a throwing acquire never touches `current` at all, so the
+        // caller's existing instance is never stranded by a failed attach.
+        // Either way, exactly one reference on `current` needs releasing
+        // afterward: the genuinely old instance's, if this re-pointed to a
+        // different key; or the redundant one registerModelShared just took,
+        // if it did not.
+        auto next = registerModelShared(typeId, std::move(factory), identity);
         if (current.v != 0U) {
             deregisterModel(current);
         }
-        return registerModelShared(typeId, std::move(factory), identity);
+        return next;
     }
 
     /// @brief Enters an already-live instance into the directory under @p primary.

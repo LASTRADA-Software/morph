@@ -892,3 +892,43 @@ TEST_CASE("execute() reports an attach failure through onError instead of throwi
         handler.execute(ShiAddTo{.id = 2, .amount = 1}).onError([&](const std::exception_ptr&) { failed = true; }));
     REQUIRE(failed);
 }
+
+TEST_CASE("IBackend::attachModel's default re-attach to an already-held key does not destroy the instance",
+          "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::backend::LocalBackend backend{pool};
+
+    auto held = backend.registerModelShared(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "9"});
+
+    // Re-attaching to the exact key already held must hand back the same
+    // instance, not destroy and recreate it -- exercised directly against the
+    // backend since Bridge::attachHandler's own primary-unchanged guard would
+    // otherwise short-circuit before ever reaching attachModel.
+    auto again = backend.attachModel(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = "9"}, held);
+    REQUIRE(again.v == held.v);
+    REQUIRE(backend.listInstances("SHI_CounterModel") == std::vector<std::string>{"9"});
+}
+
+TEST_CASE("the server's attach is a no-op when re-attaching to the key already held", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "5"))));
+    REQUIRE(reg.kind == "ok");
+
+    auto again = morph::wire::decode(server->handleInline(
+        morph::wire::encode(morph::wire::makeAttach("SHI_CounterModel", "5", reg.modelId))));
+    REQUIRE(again.kind == "ok");
+    REQUIRE(again.modelId == reg.modelId);
+
+    auto listed = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeInstances("SHI_CounterModel"))));
+    std::vector<std::string> keys;
+    REQUIRE_FALSE(glz::read_json(keys, listed.body));
+    REQUIRE(keys == std::vector<std::string>{"5"});
+}
