@@ -462,7 +462,21 @@ TEST_CASE("Bridge: hasSubscribers is not read once the bridge is destroyed (guar
     REQUIRE(mprotect(region, pageSize, PROT_NONE) == 0);
 
     struct sigaction sa {};
+    // glibc's <bits/sigaction.h> defines `sa_handler` as a macro
+    // (`__sigaction_handler.sa_handler`) for POSIX compatibility; clang's
+    // -Wdisabled-macro-expansion flags the resulting member-access expansion
+    // as a false positive (the code is correct and portable -- this is a
+    // known rough edge between clang's macro-hygiene checker and glibc's
+    // headers, not a bug here) that only reproduces on Linux, not on the
+    // BSD-derived <signal.h> this test was authored and verified against.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
     sa.sa_handler = guardPageFaultHandler;
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
     struct sigaction oldSegv {};
