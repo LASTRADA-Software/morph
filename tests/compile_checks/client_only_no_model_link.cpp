@@ -9,6 +9,16 @@
 // ever references either symbol and it links; without the guard, both
 // registrars' lambda bodies call them, and the link fails with an unresolved
 // external symbol.
+//
+// Uses BRIDGE_REGISTER_ACTION_4 directly rather than the public
+// BRIDGE_REGISTER_ACTION(...) variadic-dispatch macro: MSVC's preprocessor
+// emits "not enough arguments for function-like macro invocation
+// BRIDGE_REGISTER_ACTION_PICK" (C4003) for the 3-arg form, which is normally
+// benign, but combined with MORPH_CLIENT_ONLY's empty
+// MORPH_DETAIL_REGISTER_ACTION_LOCAL expansion produced hard compile errors
+// in this probe on cl.exe specifically (not reproducible on Clang/GCC).
+// Calling _4 directly sidesteps the variadic dispatch while still exercising
+// the exact registrar-suppression path this guard exists to prove.
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/registry.hpp>
@@ -23,7 +33,7 @@ struct ClientOnlyModel {
 };
 
 BRIDGE_REGISTER_MODEL(ClientOnlyModel, "ClientOnlyModel")
-BRIDGE_REGISTER_ACTION(ClientOnlyModel, ClientOnlyAction, "ClientOnlyAction")
+BRIDGE_REGISTER_ACTION_4(ClientOnlyModel, ClientOnlyAction, "ClientOnlyAction", ::morph::model::Loggable::Yes)
 
 int main() {
     return 0;
