@@ -497,6 +497,34 @@ public:
         return _defaultSession;
     }
 
+    /// @brief Installs the verified `Principal` for this `Bridge`. Thread-safe.
+    ///
+    /// Typically called once right after a successful login dispatch, from
+    /// data the server actually returned (see `session::Principal`'s doc
+    /// comment on the trust model). Distinct from `setDefaultSession`: that
+    /// installs the per-call `Context` forwarded with every dispatch; this
+    /// installs the longer-lived identity UI code reads *outside* a dispatch
+    /// via `currentPrincipal()` to shape itself. Guarded by its own mutex
+    /// (`_principalMtx`, not `_sessionMtx`) since it is read far more
+    /// frequently, by UI code, than the per-call session snapshot.
+    /// @param principal Verified identity to install. Pass a
+    ///        default-constructed `Principal{}` (or call this from a sign-out
+    ///        handler) to clear it.
+    void setPrincipal(::morph::session::Principal principal) {
+        std::scoped_lock const lock{_principalMtx};
+        _principal = std::move(principal);
+    }
+
+    /// @brief Returns a copy of the currently installed `Principal`. Thread-safe.
+    ///
+    /// Default-constructed (empty `id`, no `roles`) if `setPrincipal` was
+    /// never called or the application signed out by clearing it.
+    /// @return Snapshot of the installed `Principal`.
+    [[nodiscard]] ::morph::session::Principal currentPrincipal() const {
+        std::scoped_lock const lock{_principalMtx};
+        return _principal;
+    }
+
     /// @brief Atomically replaces the active backend with @p newBackend.
     ///
     /// All live bindings are re-registered on the new backend and their
@@ -908,6 +936,8 @@ private:
     std::mutex _attachMtx;
     mutable std::mutex _sessionMtx;
     ::morph::session::Context _defaultSession;
+    mutable std::mutex _principalMtx;
+    ::morph::session::Principal _principal;
     // Instance subscriptions. Held against the binding rather than a fixed
     // instance id so a re-pointed handler keeps its subscriptions; matched at
     // publish time by comparing the binding's current instance.

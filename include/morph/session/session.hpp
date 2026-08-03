@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace morph::session {
 
@@ -47,6 +49,48 @@ struct Context {
 
     /// @brief Free-form bag of string→string metadata (feature flags, A/B buckets, …).
     std::unordered_map<std::string, std::string> metadata;
+};
+
+/// @brief The signed-in user's verified identity, readable outside a dispatch.
+///
+/// `Context::principal` only exists *during* a dispatch — `session::current()`
+/// returns `nullptr` outside one, so UI code (a button's enabled state, a menu
+/// item's visibility) has no way to ask "who is signed in and what may they do?"
+/// without attempting the action and catching the failure. `Principal` is the
+/// longer-lived counterpart an application installs once, typically right
+/// after a successful login dispatch, and reads from UI code to shape itself
+/// instead: `bridge.currentPrincipal().hasRole("editor")`.
+///
+/// Deliberately **not** a process-wide global: the caller installs it on the
+/// specific `Bridge` (or other session-scoped object) whose backend it came
+/// from — see `Bridge::setPrincipal`/`Bridge::currentPrincipal`
+/// (`core/bridge.hpp`) — rather than one ambient value shared by every backend
+/// a process happens to hold.
+///
+/// @warning Populate this only from data the server actually returned (e.g. an
+/// action's `Result`, such as the bank example's `AuthResult`), never from a
+/// client-side guess — the server remains the sole authority for what a
+/// principal may do; this is a read-only cache of what it last told the
+/// client, not a second, independently-decided permission set. Roles can
+/// change server-side mid-session, so every dispatch is still authorized
+/// there regardless of what a stale `Principal` says client-side; this only
+/// shapes the UI, it never replaces server-side authorization.
+struct Principal {
+    /// @brief Verified identity (e.g. username), as returned by the server. Empty if signed out.
+    std::string id;
+
+    /// @brief Coarse-grained roles the app can gate UI on (e.g. `"editor"`, `"admin"`).
+    std::vector<std::string> roles;
+
+    /// @brief Free-form bag of string→string claims beyond `id`/`roles`.
+    std::unordered_map<std::string, std::string> claims;
+
+    /// @brief Returns `true` if `roles` contains @p role.
+    /// @param role Role name to look for.
+    /// @return `true` if @p role is present in `roles`.
+    [[nodiscard]] bool hasRole(std::string_view role) const {
+        return std::ranges::find(roles, role) != roles.end();
+    }
 };
 
 /// @brief Authorizes incoming actions on a `RemoteServer`.
