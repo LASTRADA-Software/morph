@@ -181,7 +181,9 @@ public:
             }
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        return sendControlForId(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v), "attach");
+        return sendControlForId(
+            ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey}),
+            "attach");
     }
 
     /// @brief Files a live server-side instance under @p primary.

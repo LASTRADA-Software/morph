@@ -1444,8 +1444,8 @@ public:
             }
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto reply = ::morph::wire::decode(_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v))));
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeAttach(
+            typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey}))));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }

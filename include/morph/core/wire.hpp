@@ -71,10 +71,11 @@ struct Envelope {
     /// @brief Model type id for `register`.
     std::string typeId;
 
-    /// @brief Stable identity of the model instance being registered (e.g. an
-    ///        account id). Empty means "no identity" — the server-side holder
-    ///        gets no action log attached even if a `LogProvider` is configured.
-    ///        Ignored on every kind other than `register`.
+    /// @brief Stable identity of the model instance being registered or
+    ///        attached to (e.g. an account id). Empty means "no identity" —
+    ///        the server-side holder gets no action log attached even if a
+    ///        `LogProvider` is configured. Carried on `register` and
+    ///        `attach`; ignored on every other kind.
     std::string contextKey;
 
     /// @brief Primary key of the instance being registered or attached to.
@@ -183,15 +184,20 @@ inline Envelope makeRegisterShared(std::string typeId, std::string primary, std:
 /// so a re-pointing handler cannot lose its slot to `LimitPolicy::maxLiveModels`
 /// between releasing the old instance and acquiring the new one.
 ///
-/// @param typeId  Model type id.
-/// @param primary Canonical string encoding of the primary key to attach to.
-/// @param modelId Instance the client is currently attached to; `0` if none.
-inline Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0) {
+/// @param typeId     Model type id.
+/// @param primary    Canonical string encoding of the primary key to attach to.
+/// @param modelId    Instance the client is currently attached to; `0` if none.
+/// @param contextKey Optional entity key for the action log, carried the same
+///                    way `register` carries it, so an instance created via
+///                    its *first* `attach` (rather than a shared `register`)
+///                    still gets a configured `LogProvider`'s log attached.
+inline Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0, std::string contextKey = {}) {
     Envelope env;
     env.kind = "attach";
     env.typeId = std::move(typeId);
     env.primary = std::move(primary);
     env.modelId = modelId;
+    env.contextKey = std::move(contextKey);
     env.shared = true;
     return env;
 }

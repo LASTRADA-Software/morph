@@ -801,6 +801,27 @@ TEST_CASE("the server re-files an instance onto a new key over the wire", "[shar
     REQUIRE(keys == std::vector<std::string>{"new"});
 }
 
+TEST_CASE("an attach that creates the instance carries contextKey to a configured LogProvider", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    std::vector<std::string> requestedFor;
+    server->setLogProvider([&](std::string_view modelType, std::string_view contextKey) {
+        requestedFor.emplace_back(std::string{modelType} + ":" + std::string{contextKey});
+        return nullptr;
+    });
+
+    // The first touch of key "77" goes through `attach` (not a shared
+    // `register`) -- exercised directly at the wire level since
+    // wire::makeAttach previously had no contextKey parameter at all, so the
+    // entity's stable identity was silently dropped before it ever reached
+    // the server.
+    auto reply = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_CounterModel", "77", 0, "77"))));
+    REQUIRE(reply.kind == "ok");
+    REQUIRE(requestedFor == std::vector<std::string>{"SHI_CounterModel:77"});
+}
+
 TEST_CASE("attach and instances stamp the verified principal", "[shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<VerifyingAuthorizer>());

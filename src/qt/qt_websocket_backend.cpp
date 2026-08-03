@@ -180,7 +180,8 @@ namespace {
         return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
     }
     return modelIdFromReply(
-        sendSync(::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v))),
+        sendSync(::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                                                  std::string{identity.contextKey}))),
         "attach");
 }
 
