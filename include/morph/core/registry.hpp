@@ -381,6 +381,16 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 
 // NOLINTBEGIN(bugprone-macro-parentheses)
 
+// Keying the generated registrar names on `__LINE__` (rather than on the type spelling)
+// keeps them valid identifiers regardless of how `M`/`A` are written. A namespace-qualified
+// or template type (e.g. `app::models::Report`) would otherwise be pasted directly into the
+// identifier, producing invalid tokens like `bridge_model_reg_app::models::Report`. There is
+// exactly one registration per macro invocation, so `__LINE__` is equally unique. The extra
+// indirection (`_CAT` calling `_CAT_`) is required so `__LINE__` is expanded to its numeric
+// value before the paste, rather than being pasted as the literal text "__LINE__".
+#define BRIDGE_DETAIL_CAT_(a, b) a##b
+#define BRIDGE_DETAIL_CAT(a, b) BRIDGE_DETAIL_CAT_(a, b)
+
 /// @brief Registers model type @p M with the string id @p NAME.
 ///
 /// Specialises `morph::model::ModelTraits<M>` and registers a factory with the
@@ -394,7 +404,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         static constexpr std::string_view typeId() noexcept { return NAME; }                             \
     };                                                                                                   \
     namespace {                                                                                          \
-    [[maybe_unused]] const bool bridge_model_reg_##M = morph::model::detail::registerModelOnce<M>(NAME); \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __LINE__) =                         \
+        morph::model::detail::registerModelOnce<M>(NAME);                                                \
     }
 
 /// @brief Registers action type @p A (for model @p M) with the string id @p NAME.
@@ -475,9 +486,9 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                      \
     };                                                                                                         \
     namespace {                                                                                                \
-    [[maybe_unused]] const bool bridge_action_reg_##M##_##A =                                                  \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __LINE__) =                              \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);          \
-    [[maybe_unused]] const bool bridge_action_exec_reg_##M##_##A =                                             \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __LINE__) =                         \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
 /// @endcond
