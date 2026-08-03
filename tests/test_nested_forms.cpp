@@ -13,13 +13,36 @@
 // docs/spec/forms/forms.md, "Nested aggregates (one level)").
 
 #include <algorithm>
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
+#include <morph/forms/choice.hpp>
 #include <morph/forms/forms.hpp>
+#include <morph/util/quantity.hpp>
 #include <optional>
 #include <string>
 #include <vector>
+
+// A minimal application unit system, purely so a nested-aggregate member can
+// carry a Quantity field (see RichSub below) -- exercises the
+// `annotateBasicMemberProperty` Quantity branch one level down, which none of
+// the plain-scalar nested types above (Specimen/Attachment/Provenance)
+// touch. No `relations`: unitAlternatives() is empty either way, and that is
+// not what this file is testing.
+enum class NestedFormUnit : std::uint8_t { scalar, kg };
+
+template <>
+struct morph::units::UnitTraits<NestedFormUnit> {
+    static constexpr morph::units::UnitMeta meta(NestedFormUnit unit) noexcept {
+        switch (unit) {
+            case NestedFormUnit::kg:
+                return {.id = "kg", .display = "kg", .defaultDecimals = 3};
+            default:
+                return {.id = "scalar", .display = "", .defaultDecimals = 3};
+        }
+    }
+};
 
 // Named namespace (not anonymous): glaze reflection requires the reflected
 // type to have linkage (see test_bridge_fixes.cpp for the same note).
@@ -74,6 +97,32 @@ struct DeepRecord {
     DeepSpecimen sample;
 };
 
+// A nested aggregate whose own members carry the same annotation-worthy
+// shapes the top-level pass already covers elsewhere (FieldMeta, Quantity,
+// Choice): proves `annotateBasicMemberProperty` applies those rules one level
+// down too, not just title/x-order/required (the only things Specimen/
+// Attachment/Provenance above exercise).
+struct RichSub {
+    std::int64_t code = 0;
+    morph::units::Quantity<NestedFormUnit::kg> mass{};
+    morph::forms::Choice<std::int64_t, "NestedFormListOptions"> option;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "code",
+                                 .label = "Custom Code",
+                                 .help = "Help text",
+                                 .placeholder = "e.g. 42",
+                                 .readOnly = true,
+                                 .hidden = true},
+    };
+};
+
+// RichSub used exactly once -- inlined, not deduplicated via $defs/$ref (see
+// the "inline form" tests above for why that matters to resolution).
+struct RichRecord {
+    RichSub rich;
+};
+
 }  // namespace nestedforms
 
 using nestedforms::Attachment;
@@ -81,6 +130,7 @@ using nestedforms::DeepRecord;
 using nestedforms::DeepSpecimen;
 using nestedforms::Provenance;
 using nestedforms::Record;
+using nestedforms::RichRecord;
 using nestedforms::SingleUseRecord;
 using nestedforms::SingleUseVectorRecord;
 using nestedforms::Specimen;
@@ -250,6 +300,52 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: recursion stops after one level (
     CHECK_FALSE(innerDef.contains("required"));
     CHECK_FALSE(innerDef["properties"]["collectedBy"].contains("x-order"));
     CHECK_FALSE(innerDef["properties"]["collectedBy"].contains("title"));
+}
+
+// ── FieldMeta/Quantity/Choice rules apply one level down too ────────────────
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: FieldMeta/Quantity/Choice annotations apply to a nested member's own "
+    "properties",
+    "[forms][nested][issue25]") {
+    auto const schema = morph::forms::schemaJson<RichRecord>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    REQUIRE(dom["properties"].contains("rich"));
+    CHECK_FALSE(dom["properties"]["rich"].contains("$ref"));  // RichSub used exactly once -> inlined
+    auto const& def = resolveNestedSchema(dom, dom["properties"]["rich"]);
+
+    // FieldMeta: label/help/placeholder/readOnly/hidden, from RichSub's own
+    // fieldMetadata (looked up against RichSub, the Owner one level down —
+    // not against RichRecord).
+    auto const& codeProp = def["properties"]["code"];
+    CHECK(codeProp["title"].get<std::string>() == "Custom Code");
+    CHECK(codeProp["description"].get<std::string>() == "Help text");
+    CHECK(codeProp["x-placeholder"].get<std::string>() == "e.g. 42");
+    CHECK(codeProp["x-readonly"].get<bool>() == true);
+    CHECK(codeProp["x-hidden"].get<bool>() == true);
+    // code has no FieldMeta-driven readOnly/hidden peers to compare against in
+    // this fixture, so also confirm a field the fieldMetadata list does not
+    // name -- mass -- carries none of these keys.
+    auto const& massProp = def["properties"]["mass"];
+    CHECK_FALSE(massProp.contains("x-readonly"));
+    CHECK_FALSE(massProp.contains("x-hidden"));
+    CHECK_FALSE(massProp.contains("x-placeholder"));
+
+    // Quantity: x-decimalPlaces from the unit's declared decimals.
+    CHECK(massProp["x-decimalPlaces"].as<std::uint64_t>() == 3);
+
+    // Choice: x-optionsAction/x-optionValue/x-optionLabel.
+    auto const& optionProp = def["properties"]["option"];
+    CHECK(optionProp["x-optionsAction"].get<std::string>() == "NestedFormListOptions");
+    CHECK(optionProp.contains("x-optionValue"));
+    CHECK(optionProp.contains("x-optionLabel"));
+
+    // required still derives correctly one level down alongside all of the above.
+    REQUIRE(def.contains("required"));
+    auto const requiredNames = requiredNamesOf(def);
+    CHECK(std::find(requiredNames.begin(), requiredNames.end(), "code") != requiredNames.end());
 }
 
 // ── Idempotence: two members sharing the same nested type ──────────────────
