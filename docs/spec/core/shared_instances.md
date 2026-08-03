@@ -405,6 +405,17 @@ strictly reduces pressure on it.
   attached explicitly after login.
 - **One key per instance.** No secondary keys, no alternate indexes, no
   querying the directory by anything but model type.
+- **An empty-string primary key means "no primary".** `primary.empty()` is the
+  sentinel every layer (`LocalBackend::registerModelShared`/`assignPrimary`,
+  `Bridge::assignHandlerPrimary`, `RemoteServer`'s directory operations) uses
+  for "anonymous, therefore unshareable" — there is no separate encoding for
+  "a real key whose value happens to be the empty string". A model whose
+  `PrimaryKey` is `std::string` and whose legitimate key value is `""` will
+  silently get a private, unshared instance instead of an error or real
+  sharing; two callers both attaching with `primary == ""` never reach the
+  same instance. Choose a non-empty key encoding (e.g. reserve a sentinel
+  string, or key on something that is never empty) if this applies to your
+  model.
 - **Enumeration is per model type and unfiltered.** No paging, no predicate; a
   model type with very many live instances returns all of them.
 - **`instances()` discloses live keys** to any principal `authorize` admits.
