@@ -284,6 +284,11 @@ authorizer silently defeat the feature:
   `authorize` (per model type and action) or of the model itself.
 - **`authorizeRegister` still gates creation.** An authorizer that refuses
   `register` for a model type refuses it whether or not the request is shared.
+- **`attach` and `assign` are gated by `authorizeRegister` too**, the same
+  hook `register` uses. Filing an instance into the directory — whether by
+  creating it (`register`, `attach`) or by promoting one already live
+  (`assign`) — is bounds-checked identically; there is no path that reaches
+  the directory without it.
 - **`instances` is gated by `authorize`** for the model type with an empty
   action id, so an authorizer can refuse enumeration without refusing use. It
   leaks the set of live keys to anyone permitted to call it, which is a

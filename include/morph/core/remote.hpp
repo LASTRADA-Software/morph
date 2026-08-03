@@ -970,6 +970,22 @@ private:
                 if (env.typeId.empty()) {
                     throw std::runtime_error("assign requires a typeId");
                 }
+                // Mirrors "attach"'s gate: filing an instance into the shared
+                // directory -- whether by creating it (register) or by
+                // promoting one already live (assign) -- is bounds-checked
+                // identically. Unlike "attach"/"register", assign never
+                // constructs a model, but it still changes what a future
+                // attacher of `primary` reaches, so it must not be reachable
+                // by an unauthenticated or unauthorized caller either.
+                if (auto verified = _authorizer->authenticate(env.session)) {
+                    env.session.principal = std::move(*verified);
+                } else {
+                    env.session.principal.clear();
+                }
+                if (!_authorizer->authorizeRegister(env.session, env.typeId)) {
+                    reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+                    return;
+                }
                 {
                     std::scoped_lock const lock{_regMtx};
                     applyAssignLocked(env);

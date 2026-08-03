@@ -654,6 +654,24 @@ TEST_CASE("attach and instances are refused by an authorizer that denies", "[sha
     REQUIRE(listed.message == "unauthorized");
 }
 
+TEST_CASE("assign is refused by an authorizer that denies", "[shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, std::make_shared<DenyAllAuthorizer>());
+
+    // Register a plain (non-shared) instance first -- register itself is
+    // refused too, but we want an `assign` attempt against a *known* modelId
+    // to prove assign has its own gate, not just an incidental empty-primary
+    // no-op.
+    auto reg = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeRegister("SHI_CounterModel"))));
+    REQUIRE(reg.kind == "err");  // register is refused too, as expected
+
+    auto assign = morph::wire::decode(server->handleInline(
+        morph::wire::encode(morph::wire::makeAssign("SHI_CounterModel", "1", 0))));
+    REQUIRE(assign.kind == "err");
+    REQUIRE(assign.message == "unauthorized");
+}
+
 TEST_CASE("a result-sourced key on an already-attached handler promotes in place", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     Bridge bridge{makeLocal(exec)};
