@@ -47,3 +47,46 @@ catch_discover_tests(morph_qt_tests
     DL_PATHS "${_qt_bin_dir}"
     PROPERTIES TIMEOUT 120
 )
+
+# ── QT_NO_SSL compile guard ───────────────────────────────────────────────────
+# Configure-time proof that qt_websocket_backend.cpp/.hpp compile against an
+# SSL-less Qt (QT_NO_SSL) -- the standard Qt-for-WebAssembly configuration --
+# without needing an actual SSL-less Qt install to test against. Qt's own
+# <QSslConfiguration> header self-guards on this exact macro
+# (`#ifndef QT_NO_SSL ... #endif // QT_NO_SSL`) regardless of how the linked
+# Qt was actually built, so forcing the macro against this project's normal
+# SSL-enabled Qt reliably reproduces the same "QSslConfiguration is an
+# incomplete type" failure an actual SSL-less Qt hits -- confirmed by
+# compiling the pre-fix source this way, which fails with exactly that error.
+# See qt_websocket_backend.hpp's class doc comment, "SSL-less Qt builds".
+#
+# get_target_property() rather than generator expressions in CMAKE_FLAGS:
+# try_compile() runs its nested configure immediately, at ordinary configure
+# time, before generator expressions would be evaluated (same rationale as
+# the MORPH_REQUIRE_VETTED_HMAC / MORPH_CLIENT_ONLY guards in
+# tests/CMakeLists.txt). Qt6::Core/Network/WebSockets are imported targets
+# from find_package(Qt6 ...), so (unlike the plain INTERFACE `morph` target)
+# they can be passed via LINK_LIBRARIES directly.
+get_target_property(MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS morph INTERFACE_INCLUDE_DIRECTORIES)
+get_target_property(MORPH_QT_NO_SSL_GUARD_GLAZE_INCLUDE_DIRS glaze::glaze INTERFACE_INCLUDE_DIRECTORIES)
+list(APPEND MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS ${MORPH_QT_NO_SSL_GUARD_GLAZE_INCLUDE_DIRS})
+string(REPLACE ";" "\\;" MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS "${MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS}")
+
+unset(MORPH_QT_NO_SSL_GUARD_COMPILES CACHE)
+try_compile(MORPH_QT_NO_SSL_GUARD_COMPILES
+    SOURCES
+        "${CMAKE_SOURCE_DIR}/src/qt/qt_websocket_backend.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../compile_checks/qt_no_ssl_main.cpp"
+    LINK_LIBRARIES Qt6::Core Qt6::Network Qt6::WebSockets
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_QT_NO_SSL_GUARD_MORPH_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DQT_NO_SSL"
+)
+if(NOT MORPH_QT_NO_SSL_GUARD_COMPILES)
+    message(FATAL_ERROR
+        "QT_NO_SSL guard check failed: src/qt/qt_websocket_backend.cpp failed "
+        "to compile with QT_NO_SSL defined. An SSL-less Qt build (including "
+        "the standard Qt-for-WebAssembly configuration) must still compile "
+        "this file -- see qt_websocket_backend.hpp's class doc comment, "
+        "\"SSL-less Qt builds\".")
+endif()

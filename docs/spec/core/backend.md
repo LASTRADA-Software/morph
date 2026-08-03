@@ -539,6 +539,26 @@ disables peer verification and is for local development and tests only (see
 [security.md](../security.md), "Transport security"). A plain `ws://` client
 against a `wss://` server never connects (and vice versa).
 
+**SSL-less Qt builds (`QT_NO_SSL`, including the standard Qt-for-WebAssembly
+configuration).** `qt_websocket_backend.hpp`/`.cpp` guard every
+`QSslConfiguration` use behind `#ifndef QT_NO_SSL`: the `tls` constructor
+parameter and the `_tls` member do not exist at all when Qt itself was
+configured without SSL (that type isn't provided in that configuration, so
+there's no value to accept or ignore — the constructor's arity itself
+changes). `wss://` still works on such a build regardless: in a WASM/browser
+deployment the browser terminates TLS before Qt's `QWebSocket` ever sees the
+connection, so the only thing genuinely unavailable is configuring TLS from
+C++ (client certificates, pinning). `qt_tls.hpp`'s helpers
+(`tlsVerifyingConfig`/`tlsPinnedConfig`/`tlsInsecureNoVerify`) are a separate,
+opt-in header that still requires SSL support to compile — nothing calls it
+unless it asks for TLS configuration explicitly, so this is unaffected by
+`QT_NO_SSL` in practice. Verified by a `try_compile()` guard
+(`tests/qt/CMakeLists.txt`) that forces `QT_NO_SSL` against this project's
+normal SSL-enabled Qt: Qt's own `<QSslConfiguration>` header self-guards on
+the identical macro regardless of how Qt was actually built, so this
+reliably reproduces (and catches a regression of) the same failure an
+actual SSL-less Qt hits, without needing one.
+
 **Destruction.** The destructor sets `_shuttingDown`, stops the reconnect timer,
 disconnects all `QWebSocket` signals (so no slot touches members mid-teardown),
 `abort()`s the socket (TCP RST, no close handshake), then calls `cancelPending`
@@ -974,7 +994,7 @@ thread to marshal onto.
 
 | Method | Notes |
 |---|---|
-| `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. |
+| `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. `tls` is not declared at all when Qt is built with `QT_NO_SSL` (see above). |
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
 | `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
 | `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |
