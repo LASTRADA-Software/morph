@@ -724,12 +724,19 @@ private:
     /// @param env            Decoded request; uses `typeId`, `primary`, `contextKey`, `callId`.
     /// @param reply          Reply sink; always invoked exactly once.
     /// @param cid            Connection scope, or `0` for unscoped.
-    /// @param releaseCurrent Instance to release *after* acquiring the target
-    ///                       (an `attach` re-point), or `ModelId{0}`. Acquire
-    ///                       runs first so a same-key re-attach lands on the
-    ///                       same instance instead of destroying and
-    ///                       recreating it, and so a failing acquire never
-    ///                       touches it.
+    /// @param releaseCurrent Instance to release once the target is
+    ///                       confirmed acquired or confirmed about to be
+    ///                       created (an `attach` re-point), or `ModelId{0}`.
+    ///                       A throwing *construction* (`_registry.create`)
+    ///                       never touches it. Once construction succeeds,
+    ///                       release happens in the same locked section as
+    ///                       the `maxLiveModels` admission check, so a sole
+    ///                       holder's release frees the slot the re-point
+    ///                       itself needs rather than losing it to the cap;
+    ///                       the only remaining post-release failure is the
+    ///                       connection's own scope having closed
+    ///                       concurrently, in which case no further request
+    ///                       on it will run anyway.
     void acquireSharedInstance(const ::morph::wire::Envelope& env, const std::function<void(std::string)>& reply,
                                ConnectionId cid, ::morph::exec::detail::ModelId releaseCurrent) {
         LimitPolicy limits;
@@ -755,10 +762,6 @@ private:
                 return;
             }
         }
-        if (releaseCurrent.v != 0U) {
-            std::scoped_lock const lock{_regMtx};
-            releaseScopedLocked(releaseCurrent, cid);
-        }
         // Directory miss. Construct outside the lock, exactly as the private
         // register path does, then re-check under the insert lock: a concurrent
         // request for the same key may have won the race while we built ours.
@@ -768,7 +771,22 @@ private:
         {
             std::scoped_lock const lock{_regMtx};
             if (attachExistingLocked(dirKey, env, reply, cid)) {
+                if (releaseCurrent.v != 0U) {
+                    releaseScopedLocked(releaseCurrent, cid);
+                }
                 return;
+            }
+            // Confirmed miss: release the old instance now, in the same
+            // locked section as the maxLiveModels admission check, so a sole
+            // holder's release frees exactly the slot this re-point needs
+            // rather than losing it to the cap in between -- the property
+            // the single `attach` wire request exists to provide. The only
+            // way admission can still fail after this is a concurrently
+            // closed connection scope (noteScopeAttachLocked below), which
+            // makes "stranding" moot: no further request on that connection
+            // will ever run anyway.
+            if (releaseCurrent.v != 0U) {
+                releaseScopedLocked(releaseCurrent, cid);
             }
             if (limits.maxLiveModels != 0 && _models.size() >= limits.maxLiveModels) {
                 reply(::morph::wire::encode(::morph::wire::makeErr("too many models", env.callId)));

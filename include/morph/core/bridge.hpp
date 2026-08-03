@@ -290,11 +290,16 @@ public:
             return;
         }
         auto const previous = ::morph::exec::detail::ModelId{binding->currentId.load()};
-        // IBackend::attachModel acquires the replacement instance before
-        // releasing `previous` (see its doc comment), so a throwing acquire
-        // never touches `previous` -- it stays exactly as live, and the
-        // binding (left unchanged below) still correctly points at it. Only a
-        // successful attach updates contextKey/primary/currentId.
+        // IBackend::attachModel's default (local) implementation and
+        // RemoteServer's wire-level attach handling both acquire the
+        // replacement before releasing `previous`, so a throwing acquire
+        // leaves `previous` untouched except in one narrow, harmless case: a
+        // remote re-point whose connection scope closes concurrently with
+        // the attach, where `previous` may already be released by the time
+        // the reply reports failure -- but no further request on this
+        // binding will ever run at that point either, so nothing is actually
+        // lost from the caller's perspective. Unbind first is therefore
+        // unnecessary: publish only on success.
         auto newId = loadBackend()->attachModel(binding->typeId, binding->modelFactory,
                                                 {.contextKey = primary, .primary = primary}, previous);
         binding->contextKey = primary;

@@ -195,6 +195,24 @@ BRIDGE_MODEL_KEY(ShiHydrateModel, ShiHydrateFail, &ShiHydrateFail::id);
 BRIDGE_KEY_FROM(ShiHydrateOk, &ShiHydrateOk::id);
 // NOLINTEND(misc-use-internal-linkage)
 
+// NOLINTBEGIN(misc-use-internal-linkage)
+/// A model whose *construction* can be made to fail on demand -- distinct from
+/// `ShiHydrateModel`, which fails its first *action* after already existing.
+/// Used to prove `acquireSharedInstance`'s directory-miss path never releases
+/// `releaseCurrent` before `_registry.create` has actually succeeded: a
+/// throwing construction must leave the old instance completely untouched.
+struct ShiThrowSecondModel {
+    static inline std::atomic<bool> throwOnConstruct{false};
+    ShiThrowSecondModel() {
+        if (throwOnConstruct.exchange(false)) {
+            throw std::runtime_error("simulated construction failure");
+        }
+    }
+};
+
+BRIDGE_REGISTER_MODEL(ShiThrowSecondModel, "SHI_ThrowSecondModel")
+// NOLINTEND(misc-use-internal-linkage)
+
 namespace {
 
 using morph::bridge::AllowShared;
@@ -664,6 +682,60 @@ TEST_CASE("a shared register is refused once the server is at its model cap", "[
         server->handleInline(morph::wire::encode(morph::wire::makeRegisterShared("SHI_CounterModel", "1"))));
     REQUIRE(again.kind == "ok");
     REQUIRE(again.modelId == firstReply.modelId);
+}
+
+TEST_CASE("a shared handler re-pointing to a new key does not lose its slot to maxLiveModels", "[shared-instances]") {
+    morph::testing::InlineExecutor exec;
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    server->setLimitPolicy({.maxLiveModels = 1});
+
+    Bridge bridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+
+    // Fills the server's one slot.
+    settle(handler.execute(ShiAddTo{.id = 1, .amount = 5}));
+    REQUIRE(handler.primary().value_or(-1) == 1);
+
+    // Re-pointing to a *different* key must release key 1's slot and use it
+    // for key 2 -- the whole point of the single `attach` wire request being
+    // atomic. This must succeed, not strand the handler.
+    settle(handler.execute(ShiAddTo{.id = 2, .amount = 7}));
+    REQUIRE(handler.primary().value_or(-1) == 2);
+    REQUIRE(settle(handler.execute(ShiPeek{})).value == 7);
+}
+
+TEST_CASE("a throwing construction during attach's re-point never releases the old instance",
+          "[shared-instances]") {
+    // Discriminates the fix directly (unlike the maxLiveModels re-point test
+    // above, which happens to pass under both the old and new ordering for
+    // this simple single-threaded case): the old code released
+    // `releaseCurrent` in a standalone step *before* `_registry.create`, so a
+    // throwing construction on a directory miss would already have destroyed
+    // the old instance by the time the exception propagated. The fixed code
+    // only releases after construction has succeeded, so a throwing
+    // construction must leave the old instance completely intact.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+
+    auto firstReply = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_ThrowSecondModel", "A"))));
+    REQUIRE(firstReply.kind == "ok");
+    auto const midA = firstReply.modelId;
+
+    // Force the *next* construction (the re-point's directory-miss path,
+    // building the replacement for key "B") to throw.
+    ShiThrowSecondModel::throwOnConstruct.store(true);
+    auto second = morph::wire::decode(server->handleInline(
+        morph::wire::encode(morph::wire::makeAttach("SHI_ThrowSecondModel", "B", midA))));
+    REQUIRE(second.kind == "err");
+
+    // The instance under "A" must still be exactly the one from the first
+    // attach -- not destroyed and replaced by a fresh one.
+    auto again = morph::wire::decode(
+        server->handleInline(morph::wire::encode(morph::wire::makeAttach("SHI_ThrowSecondModel", "A"))));
+    REQUIRE(again.kind == "ok");
+    REQUIRE(again.modelId == midA);
 }
 
 TEST_CASE("attach and instances are refused by an authorizer that denies", "[shared-instances]") {
