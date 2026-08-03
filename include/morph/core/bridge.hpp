@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <any>
 #include <atomic>
+#include <concepts>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -514,9 +515,31 @@ public:
     ///       switch caller's still-held lock. It is also strand-serialised against
     ///       `execute` on the same model, so it needs no locking of model state.
     ///
+    /// @note Templated on the concrete @p Backend (rather than taking
+    ///       `unique_ptr<IBackend>` directly) so it is an exact match for a
+    ///       `unique_ptr<Concrete>` argument (e.g. `std::make_unique<LocalBackend>(...)`)
+    ///       and is preferred over the `shared_ptr<IBackend>` overload during overload
+    ///       resolution — both would otherwise require an equally-ranked user-defined
+    ///       conversion (unique_ptr<Concrete> -> unique_ptr<IBackend> vs. unique_ptr<Concrete>
+    ///       -> shared_ptr<IBackend>), making every existing call site ambiguous.
+    /// @tparam Backend Concrete backend type; must derive from `IBackend`.
     /// @param newBackend Replacement backend. Ownership is transferred.
-    void switchBackend(std::unique_ptr<::morph::backend::detail::IBackend> newBackend) {
-        auto newShared = std::shared_ptr<::morph::backend::detail::IBackend>(std::move(newBackend));
+    template <typename Backend>
+        requires std::derived_from<Backend, ::morph::backend::detail::IBackend>
+    void switchBackend(std::unique_ptr<Backend> newBackend) {
+        switchBackend(std::shared_ptr<::morph::backend::detail::IBackend>{std::move(newBackend)});
+    }
+
+    /// @brief Atomically replaces the active backend with @p newBackend.
+    ///
+    /// Identical to the `unique_ptr` overload, except the caller keeps shared
+    /// ownership of @p newBackend — the backend can be re-installed later
+    /// (e.g. switching back to a long-lived remote backend after a temporary
+    /// fallback to a local one) without reconstructing it.
+    ///
+    /// @param newBackend Replacement backend, shared with the caller.
+    void switchBackend(std::shared_ptr<::morph::backend::detail::IBackend> newBackend) {
+        auto newShared = std::move(newBackend);
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
         {
             // Both mutexes: this phase reads/writes every live binding's

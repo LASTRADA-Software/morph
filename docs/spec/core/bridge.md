@@ -138,8 +138,24 @@ only the two bridge-touching side effects are skipped when the token has
 expired.
 
 **`switchBackend(newBackend)`** replaces the active backend atomically: the
-switch either fully succeeds or leaves everything exactly as it was. It runs
-in two phases under `_mtx`:
+switch either fully succeeds or leaves everything exactly as it was. It has
+two overloads:
+
+- `switchBackend(shared_ptr<IBackend>)` — the caller keeps its own reference,
+  so the same backend instance can be re-installed later (e.g. switching back
+  to a long-lived remote backend, with its live socket and reconnect state,
+  after a temporary fallback to a local one) instead of reconstructing it.
+- `switchBackend(unique_ptr<Backend>)` — transfers ownership, as before.
+  Templated on the concrete `Backend` type (rather than taking
+  `unique_ptr<IBackend>` directly) so that a call like
+  `switchBackend(std::make_unique<LocalBackend>(...))` is an *exact* match
+  and is preferred over the `shared_ptr<IBackend>` overload; a non-template
+  `unique_ptr<IBackend>` overload would tie with it (both are one
+  equally-ranked user-defined conversion from `unique_ptr<Backend>`), making
+  every existing call site ambiguous. It converts to a `shared_ptr` and
+  delegates to the overload above.
+
+Both run the same two phases under `_mtx`:
 
 - **Phase 1 — stage, do not mutate.** Every live binding is registered on the
   new backend and the resulting `(binding, newId)` pairs are collected into a
@@ -470,7 +486,7 @@ make teardown order-independent.)
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. |
-| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. |
+| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records journal for loggable actions. Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
