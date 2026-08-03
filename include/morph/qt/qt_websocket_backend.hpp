@@ -167,6 +167,8 @@ public:
     /// — see `cancelPending`'s doc comment).
     ///
     /// @param typeId       String type-id of the model to instantiate.
+    /// @param factory      Unused — this backend holds no local model to construct;
+    ///                     the server instantiates the model from `typeId`.
     /// @param contextKey   Stable identity of the new instance; travels in the wire envelope.
     /// @param onRegistered Invoked with the server-assigned `ModelId` on success.
     /// @param onError      Invoked with a diagnostic message on failure or disconnect.
