@@ -1258,7 +1258,7 @@ private:
         }
 
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
-            ::morph::exec::detail::ModelId const mid{env.modelId};
+            ::morph::exec::detail::ModelId const targetMid{env.modelId};
             auto const start = std::chrono::steady_clock::now();
             auto const spanId =
                 ::morph::observe::detail::beginSpan(env.session.requestId, env.modelType, env.actionType);
@@ -1295,7 +1295,7 @@ private:
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeLatencyMs, elapsedMs, tags);
                 {
                     std::scoped_lock const lock{self->_regMtx};
-                    self->_firstActionPending.erase(mid);
+                    self->_firstActionPending.erase(targetMid);
                 }
                 complete(::morph::wire::encode(::morph::wire::makeOk(env.callId, std::move(result))));
             } catch (const std::exception& exc) {
@@ -1314,9 +1314,10 @@ private:
                 ::morph::observe::detail::emitMetric(::morph::observe::Metric::executeErrors, 1.0, tags);
                 {
                     std::scoped_lock const lock{self->_regMtx};
-                    if (auto iter = self->_firstActionPending.find(mid); iter != self->_firstActionPending.end()) {
+                    if (auto iter = self->_firstActionPending.find(targetMid);
+                        iter != self->_firstActionPending.end()) {
                         self->_firstActionPending.erase(iter);
-                        self->_poisoned.insert(mid);
+                        self->_poisoned.insert(targetMid);
                     }
                 }
                 complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
