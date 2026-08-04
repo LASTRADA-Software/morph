@@ -267,3 +267,40 @@ if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
         "--- compiler/linker output ---\n"
         "${MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT}")
 endif()
+
+# The two try_compile() checks above only prove the *registration-suppression*
+# half of the guard (static-init-time link resolution). The other half --
+# that Bridge::executeVia's localOp actually throws std::logic_error at
+# *runtime* under MORPH_CLIENT_ONLY, instead of silently calling
+# Model::execute -- needs the probe to actually run, not just link. try_run()
+# compiles AND executes compile_checks/client_only_runtime_throw.cpp,
+# capturing its exit code (0 = the expected std::logic_error was caught).
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED CACHE)
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE CACHE)
+try_run(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED
+    "${CMAKE_CURRENT_BINARY_DIR}/client_only_runtime_throw_check"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_runtime_throw.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    LINK_LIBRARIES Threads::Threads
+    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT
+    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT
+)
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp failed to compile with "
+        "MORPH_CLIENT_ONLY defined.\n"
+        "--- compiler output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT}")
+endif()
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp did not observe the "
+        "expected std::logic_error from Bridge::executeVia's localOp under "
+        "MORPH_CLIENT_ONLY (exit code ${MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE}).\n"
+        "--- program output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
+endif()
