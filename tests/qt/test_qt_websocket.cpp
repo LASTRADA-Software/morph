@@ -18,6 +18,7 @@
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
@@ -28,6 +29,8 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
 // QCoreApplication is owned by main() (below) and torn down before any global
@@ -761,6 +764,86 @@ TEST_CASE("morph::qt::QtWebSocketServer: maxConnections rejects connections beyo
 
     first.close();
     pumpUntil([&] { return first.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: maxConnections refusal is logged at warn, naming the cap",
+         "[qt][ws][limits][issue30]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServerConfig cfg;
+    cfg.maxConnections = 1;
+    morph::qt::QtWebSocketServer wsServer{*server, 0, std::nullopt, cfg};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    QWebSocket first;
+    first.open(url);
+    pumpUntil([&] { return first.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(first.state() == QAbstractSocket::ConnectedState);
+
+    std::vector<std::pair<morph::log::LogLevel, std::string>> captured;
+    {
+        morph::log::ScopedLoggerOverride guard{
+            [&](morph::log::LogLevel level, std::string_view msg) { captured.emplace_back(level, std::string{msg}); },
+            morph::log::LogLevel::debug};
+
+        QWebSocket second;
+        second.open(url);
+        pumpUntil([&] { return second.state() == QAbstractSocket::UnconnectedState; }, 150);
+        REQUIRE(second.state() == QAbstractSocket::UnconnectedState);
+    }
+
+    bool foundWarning = false;
+    for (auto const& [level, msg] : captured) {
+        if (level == morph::log::LogLevel::warn && msg.find("maxConnections") != std::string::npos) {
+            foundWarning = true;
+            break;
+        }
+    }
+    CHECK(foundWarning);
+
+    first.close();
+    pumpUntil([&] { return first.state() == QAbstractSocket::UnconnectedState; }, 50);
+}
+
+TEST_CASE("morph::qt::QtWebSocketServer: connect/disconnect are logged at info, with the live count",
+         "[qt][ws][issue30]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    std::vector<std::pair<morph::log::LogLevel, std::string>> captured;
+    {
+        morph::log::ScopedLoggerOverride guard{
+            [&](morph::log::LogLevel level, std::string_view msg) { captured.emplace_back(level, std::string{msg}); },
+            morph::log::LogLevel::debug};
+
+        QWebSocket client;
+        client.open(url);
+        pumpUntil([&] { return client.state() == QAbstractSocket::ConnectedState; }, 100);
+        REQUIRE(client.state() == QAbstractSocket::ConnectedState);
+
+        client.close();
+        pumpUntil([&] { return client.state() == QAbstractSocket::UnconnectedState; }, 100);
+    }
+
+    bool foundConnect = false;
+    bool foundDisconnect = false;
+    for (auto const& [level, msg] : captured) {
+        if (level == morph::log::LogLevel::info && msg.find("accepted") != std::string::npos) {
+            foundConnect = true;
+        }
+        if (level == morph::log::LogLevel::info && msg.find("disconnected") != std::string::npos) {
+            foundDisconnect = true;
+        }
+    }
+    CHECK(foundConnect);
+    CHECK(foundDisconnect);
 }
 
 TEST_CASE("morph::qt::QtWebSocketServer: maxMessageBytes rejects an oversized frame before dispatch",

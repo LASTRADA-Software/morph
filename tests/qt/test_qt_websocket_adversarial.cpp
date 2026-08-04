@@ -40,9 +40,12 @@
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
+#include <utility>
+#include <vector>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
 #include <morph/qt/qt_websocket_server.hpp>
@@ -215,6 +218,57 @@ TEST_CASE("Adversarial: duplicate-JSON-key envelope does not crash the server", 
     // branch -- see include/morph/core/remote.hpp). The point here is that it
     // decodes and replies at all, not which branch it takes.
     REQUIRE_NOTHROW(morph::wire::decode(reply.toStdString()));
+
+    hostile.close();
+    pumpUntil([&] { return hostile.state() == QAbstractSocket::UnconnectedState; }, 50);
+    requireServerStillServesHonestClients(url);
+}
+
+TEST_CASE("Adversarial: an undecodable envelope is logged at error, with a truncated payload preview, and does "
+         "not take down the server",
+         "[qt][ws][adversarial][issue30]") {
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    const QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+
+    QWebSocket hostile;
+    hostile.open(url);
+    pumpUntil([&] { return hostile.state() == QAbstractSocket::ConnectedState; }, 100);
+    REQUIRE(hostile.state() == QAbstractSocket::ConnectedState);
+
+    QString reply;
+    bool got = false;
+    auto conn = QObject::connect(&hostile, &QWebSocket::textMessageReceived, [&](const QString& msg) {
+        reply = msg;
+        got = true;
+    });
+
+    std::vector<std::pair<morph::log::LogLevel, std::string>> captured;
+    static const QString kGarbage = QStringLiteral("this is not JSON at all { [ malformed morph_probe_marker");
+    {
+        morph::log::ScopedLoggerOverride guard{
+            [&](morph::log::LogLevel level, std::string_view msg) { captured.emplace_back(level, std::string{msg}); },
+            morph::log::LogLevel::debug};
+        hostile.sendTextMessage(kGarbage);
+        pumpUntil([&] { return got; }, 100);
+    }
+    QObject::disconnect(conn);
+    REQUIRE(got);
+    // Rejected with an err reply -- not silently dropped, and not a crash.
+    auto decodedReply = morph::wire::decode(reply.toStdString());
+    CHECK(decodedReply.kind == "err");
+
+    bool foundLogLine = false;
+    for (auto const& [level, msg] : captured) {
+        if (level == morph::log::LogLevel::error && msg.find("dispatchMessage") != std::string::npos &&
+            msg.find("morph_probe_marker") != std::string::npos) {
+            foundLogLine = true;
+            break;
+        }
+    }
+    CHECK(foundLogLine);
 
     hostile.close();
     pumpUntil([&] { return hostile.state() == QAbstractSocket::UnconnectedState; }, 50);
