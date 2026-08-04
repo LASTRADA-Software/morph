@@ -30,7 +30,7 @@ var searchData=
   ['stop_27',['stop',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45',1,'morph::offline::NetworkMonitor::stop()'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68',1,'morph::offline::SyncWorker::stop()']]],
   ['submitifvalid_28',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
   ['subscribe_29',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
-  ['switchbackend_30',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95',1,'morph::bridge::Bridge']]],
+  ['switchbackend_30',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
   ['syncworker_31',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker']]],
   ['systemclockms_32',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]
 ];

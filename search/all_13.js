@@ -57,7 +57,7 @@ var searchData=
   ['subscribe_54',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
   ['subscriptions_55',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
   ['successful_56',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]],
-  ['switchbackend_57',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#af0892c23b3dfbf5917fd65da908b0e95',1,'morph::bridge::Bridge']]],
+  ['switchbackend_57',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
   ['syncresult_58',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
   ['syncworker_59',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline::SyncWorker'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker::SyncWorker()'],['../index.html#syncworker',1,'SyncWorker']]],
   ['systemclockms_60',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]

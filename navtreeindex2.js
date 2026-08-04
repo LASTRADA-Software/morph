@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a8b0c404513fccf08fe86de00b9c91047":[2,0,0,14,7,0,1],
 "da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#aba5e760a9877355a77ac7915553d0ede":[2,0,0,14,7,0,2],
 "da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#ac5fef6c6ab926415cc9deb19eeaa446b":[2,0,0,14,7,0,4],
 "da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#adb8457d14b2b1bf531c6c070ea667403":[2,0,0,14,7,0,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "functions.html":[2,3,0],
 "functions.html":[2,3,0,0],
 "functions_a.html":[2,3,0,1],
-"functions_b.html":[2,3,0,2],
-"functions_c.html":[2,3,0,3]
+"functions_b.html":[2,3,0,2]
 };

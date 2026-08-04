@@ -173,8 +173,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a9933a611e3467284c356bb0083de6834"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a default session context that <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia</a></span> stamps onto the <span class="tt">ActionCall</span> of every subsequent call.  <br /></td></tr>
 <tr class="memitem:adaccbb7a89e5625b3e6085d8db59bd97" id="r_adaccbb7a89e5625b3e6085d8db59bd97"><td class="memItemLeft"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>&#160;</td><td class="memItemRight"><a class="el" href="#adaccbb7a89e5625b3e6085d8db59bd97">defaultSession</a> () const</td></tr>
 <tr class="memdesc:adaccbb7a89e5625b3e6085d8db59bd97"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed default session. Thread-safe.  <br /></td></tr>
-<tr class="memitem:af0892c23b3dfbf5917fd65da908b0e95" id="r_af0892c23b3dfbf5917fd65da908b0e95"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95">switchBackend</a> (std::unique_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)</td></tr>
-<tr class="memdesc:af0892c23b3dfbf5917fd65da908b0e95"><td class="mdescLeft">&#160;</td><td class="mdescRight">Atomically replaces the active backend with <code class="param">newBackend</code>.  <br /></td></tr>
+<tr class="memitem:a743d9a146b92a58adfd4f993a655a3db" id="r_a743d9a146b92a58adfd4f993a655a3db"><td class="memTemplParams" colspan="2">template&lt;typename Backend&gt; <br />
+requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</td></tr>
+<tr class="memitem:a743d9a146b92a58adfd4f993a655a3db template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db">switchBackend</a> (std::unique_ptr&lt; Backend &gt; newBackend)</td></tr>
+<tr class="memdesc:a743d9a146b92a58adfd4f993a655a3db"><td class="mdescLeft">&#160;</td><td class="mdescRight">Atomically replaces the active backend with <code class="param">newBackend</code>.  <br /></td></tr>
+<tr class="memitem:a583733e2db78c8315b672e0f59a37bbe" id="r_a583733e2db78c8315b672e0f59a37bbe"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a583733e2db78c8315b672e0f59a37bbe">switchBackend</a> (std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)</td></tr>
+<tr class="memdesc:a583733e2db78c8315b672e0f59a37bbe"><td class="mdescLeft">&#160;</td><td class="mdescRight">Atomically replaces the active backend with <code class="param">newBackend</code>.  <br /></td></tr>
 <tr class="memitem:a73ac9d12273ad9a5fbf34f999f796b8c" id="r_a73ac9d12273ad9a5fbf34f999f796b8c"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a73ac9d12273ad9a5fbf34f999f796b8c">deregisterHandler</a> (const std::shared_ptr&lt; detail::HandlerBinding &gt; &amp;binding)</td></tr>
 <tr class="memdesc:a73ac9d12273ad9a5fbf34f999f796b8c"><td class="mdescLeft">&#160;</td><td class="mdescRight">Deregisters <code class="param">binding</code> from the active backend and removes it from tracking.  <br /></td></tr>
 <tr class="memitem:a3e4ee91931517750f483a3bd0a6a0b1f" id="r_a3e4ee91931517750f483a3bd0a6a0b1f"><td class="memTemplParams" colspan="2">template&lt;typename Model, typename Action&gt; </td></tr>
@@ -183,10 +187,10 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Central dispatcher that routes typed actions to an <span class="tt">IBackend</span>. </p>
-<p><span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> owns exactly one active backend at a time. It tracks all registered <span class="tt">HandlerBinding</span> instances and re-registers them automatically when <span class="tt"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span> is called, enabling seamless local ↔ remote transitions.</p>
-<dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> uses a lock-free snapshot of the backend pointer so it does not block <span class="tt"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>. </dd></dl>
+<p><span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> owns exactly one active backend at a time. It tracks all registered <span class="tt">HandlerBinding</span> instances and re-registers them automatically when <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span> is called, enabling seamless local ↔ remote transitions.</p>
+<dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe. <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> uses a lock-free snapshot of the backend pointer so it does not block <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00182">182</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a6a0b4e661e796d6b2a12be4866c2d49d" name="a6a0b4e661e796d6b2a12be4866c2d49d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6a0b4e661e796d6b2a12be4866c2d49d">&#9670;&#160;</a></span>Bridge()</h2>
@@ -220,7 +224,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -251,7 +255,7 @@ Public Member Functions</h2></td></tr>
 <p>Each <span class="tt">.onError(...)</span> callback receives a <span class="tt">BridgeDestroyedError</span>. In-flight server replies that arrive after destruction are no-ops because each <span class="tt">CompletionState::setValue</span>/<span class="tt">setException</span> is idempotent.</p>
 <p>Before cancelling, the active backend's reconnect handler is cleared: the installed handler captures <span class="tt">this</span>, and a co-owned backend that outlives the <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span> could otherwise fire it after destruction and dereference freed memory. Clearing it here (outside <span class="tt">_mtx</span> — <span class="tt">setReconnectHandler</span> only stores a callback and never re-enters the bridge) closes the common case; the handler additionally guards on <span class="tt">_liveness</span> so a reconnect already in flight on the transport thread becomes a no-op too. See docs/spec/concurrency_and_lifetimes.md. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00209">209</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00210">210</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -290,7 +294,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00227">227</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00228">228</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -325,7 +329,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00244">244</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00245">245</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -355,7 +359,7 @@ template&lt;typename Model&gt; </div>
 </div><div class="memdoc">
 
 <p>Creates a shared, initially <b>unattached</b> binding for <span class="tt">Model</span>. </p>
-<p>Unlike <span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">registerHandler</a>&lt;Model&gt;()</span>, this registers nothing on the backend: a shared handler has no instance until a keyed action or an explicit <span class="tt">attach</span> tells it which one it wants. The binding is tracked from the start so <span class="tt"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span> knows about it, but it stays unbound (<span class="tt">currentId == 0</span>) until then.</p>
+<p>Unlike <span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">registerHandler</a>&lt;Model&gt;()</span>, this registers nothing on the backend: a shared handler has no instance until a keyed action or an explicit <span class="tt">attach</span> tells it which one it wants. The binding is tracked from the start so <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span> knows about it, but it stays unbound (<span class="tt">currentId == 0</span>) until then.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>Concrete model type. Must have a registered <span class="tt">ModelTraits</span>. </td></tr>
@@ -364,7 +368,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the new, unattached binding. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00262">262</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00263">263</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -414,7 +418,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00288">288</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -449,7 +453,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -499,7 +503,7 @@ primary == primary" guard in <span class="tt"><a class="el" href="#aa1760de87cd3
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00352">352</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00353">353</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -535,7 +539,7 @@ primary == primary" guard in <span class="tt"><a class="el" href="#aa1760de87cd3
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key string, or an empty string when unattached. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00366">366</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00367">367</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -573,7 +577,7 @@ template&lt;typename Model&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Canonical key strings, in unspecified order. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00375">375</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00376">376</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -626,7 +630,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00391">391</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00392">392</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -666,7 +670,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00409">409</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00410">410</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -696,7 +700,7 @@ template&lt;typename Model&gt; </div>
 <p>Whether any subscription is currently registered on this bridge. </p>
 <p>A single relaxed atomic load, so the overwhelmingly common case — a process with no subscribers at all — pays nothing per result. Without this, every successful action would build a <span class="tt">std::type_index</span>, copy its result into a <span class="tt">std::any</span>, take <span class="tt">_subMtx</span> and walk the (empty) subscription list before its <span class="tt">Completion</span> could resolve: a throughput regression for every existing caller, on the hot path, to serve a feature they are not using. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if at least one subscription exists. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00428">428</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -745,7 +749,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00449">449</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00450">450</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -782,7 +786,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00487">487</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00488">488</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -812,15 +816,18 @@ template&lt;typename Model&gt; </div>
 <p>Returns a copy of the currently installed default session. Thread-safe. </p>
 <dl class="section return"><dt>Returns</dt><dd>Snapshot of the default <span class="tt">Context</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00494">494</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00495">495</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
-<a id="af0892c23b3dfbf5917fd65da908b0e95" name="af0892c23b3dfbf5917fd65da908b0e95"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#af0892c23b3dfbf5917fd65da908b0e95">&#9670;&#160;</a></span>switchBackend()</h2>
+<a id="a743d9a146b92a58adfd4f993a655a3db" name="a743d9a146b92a58adfd4f993a655a3db"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a743d9a146b92a58adfd4f993a655a3db">&#9670;&#160;</a></span>switchBackend() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
+<div class="memtemplate">
+template&lt;typename Backend&gt; <br />
+requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</div>
 <table class="mlabels">
   <tr>
   <td class="mlabels-left">
@@ -828,7 +835,7 @@ template&lt;typename Model&gt; </div>
         <tr>
           <td class="memname">void morph::bridge::Bridge::switchBackend </td>
           <td>(</td>
-          <td class="paramtype">std::unique_ptr&lt;::morph::backend::detail::IBackend &gt;</td>          <td class="paramname"><span class="paramname"><em>newBackend</em></span></td><td>)</td>
+          <td class="paramtype">std::unique_ptr&lt; Backend &gt;</td>          <td class="paramname"><span class="paramname"><em>newBackend</em></span></td><td>)</td>
           <td></td>
         </tr>
       </table>
@@ -841,7 +848,15 @@ template&lt;typename Model&gt; </div>
 
 <p>Atomically replaces the active backend with <code class="param">newBackend</code>. </p>
 <p>All live bindings are re-registered on the new backend and their <span class="tt">currentId</span> values are updated. The old backend is released after the swap. Any in-flight <span class="tt">Completion</span> objects targeting the old backend will fail naturally.</p>
-<dl class="section note"><dt>Note</dt><dd>Lock ordering: <span class="tt">Bridge::_mtx</span> is acquired before <span class="tt">LocalBackend::_regMtx</span>. <span class="tt">notifyBackendChanged()</span> runs under <span class="tt">_mtx</span> but only <b>posts</b> each model's <span class="tt">onBackendChanged()</span> onto that model's strand (see <span class="tt">LocalBackend::notifyBackendChanged</span>); the model body runs later on a pool thread, off <span class="tt">_mtx</span>. So an <span class="tt">onBackendChanged()</span> implementation <b>may</b> re-enter the bridge (<span class="tt"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend</a></span>/<span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">registerHandler</a></span>/<span class="tt"><a class="el" href="#a73ac9d12273ad9a5fbf34f999f796b8c" title="Deregisters binding from the active backend and removes it from tracking.">deregisterHandler</a></span>) — it acquires <span class="tt">_mtx</span> freshly on the strand thread rather than deadlocking on the switch caller's still-held lock. It is also strand-serialised against <span class="tt">execute</span> on the same model, so it needs no locking of model state.</dd></dl>
+<dl class="section note"><dt>Note</dt><dd>Lock ordering: <span class="tt">Bridge::_mtx</span> is acquired before <span class="tt">LocalBackend::_regMtx</span>. <span class="tt">notifyBackendChanged()</span> runs under <span class="tt">_mtx</span> but only <b>posts</b> each model's <span class="tt">onBackendChanged()</span> onto that model's strand (see <span class="tt">LocalBackend::notifyBackendChanged</span>); the model body runs later on a pool thread, off <span class="tt">_mtx</span>. So an <span class="tt">onBackendChanged()</span> implementation <b>may</b> re-enter the bridge (<span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend</a></span>/<span class="tt"><a class="el" href="#a4075023106e7be2251049ca4be569410" title="Creates and registers a new HandlerBinding for Model.">registerHandler</a></span>/<span class="tt"><a class="el" href="#a73ac9d12273ad9a5fbf34f999f796b8c" title="Deregisters binding from the active backend and removes it from tracking.">deregisterHandler</a></span>) — it acquires <span class="tt">_mtx</span> freshly on the strand thread rather than deadlocking on the switch caller's still-held lock. It is also strand-serialised against <span class="tt">execute</span> on the same model, so it needs no locking of model state.</dd>
+<dd>
+Templated on the concrete <code class="param">Backend</code> (rather than taking <span class="tt">unique_ptr&lt;IBackend&gt;</span> directly) so it is an exact match for a <span class="tt">unique_ptr&lt;Concrete&gt;</span> argument (e.g. <span class="tt">std::make_unique&lt;LocalBackend&gt;(...)</span>) and is preferred over the <span class="tt">shared_ptr&lt;IBackend&gt;</span> overload during overload resolution — both would otherwise require an equally-ranked user-defined conversion (unique_ptr&lt;Concrete&gt; -&gt; unique_ptr&lt;IBackend&gt; vs. unique_ptr&lt;Concrete&gt; -&gt; shared_ptr&lt;IBackend&gt;), making every existing call site ambiguous. </dd></dl>
+<dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">Backend</td><td>Concrete backend type; must derive from <span class="tt">IBackend</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">newBackend</td><td>Replacement backend. Ownership is transferred. </td></tr>
@@ -849,7 +864,43 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00518">518</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a583733e2db78c8315b672e0f59a37bbe" name="a583733e2db78c8315b672e0f59a37bbe"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a583733e2db78c8315b672e0f59a37bbe">&#9670;&#160;</a></span>switchBackend() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::bridge::Bridge::switchBackend </td>
+          <td>(</td>
+          <td class="paramtype">std::shared_ptr&lt;::morph::backend::detail::IBackend &gt;</td>          <td class="paramname"><span class="paramname"><em>newBackend</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Atomically replaces the active backend with <code class="param">newBackend</code>. </p>
+<p>Identical to the <span class="tt">unique_ptr</span> overload, except the caller keeps shared ownership of <code class="param">newBackend</code> — the backend can be re-installed later (e.g. switching back to a long-lived remote backend after a temporary fallback to a local one) without reconstructing it.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">newBackend</td><td>Replacement backend, shared with the caller. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00541">541</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -884,7 +935,7 @@ template&lt;typename Model&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00598">598</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00621">621</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -928,7 +979,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </div><div class="memdoc">
 
 <p>Dispatches <code class="param">action</code> against the model identified by <code class="param">binding</code>. </p>
-<p>Uses a lock-free snapshot of the backend and model id so the call does not block <span class="tt"><a class="el" href="#af0892c23b3dfbf5917fd65da908b0e95" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>. If a backend switch happens concurrently, the old backend still exists (its <span class="tt">shared_ptr</span> refcount is &gt; 0) and the call either succeeds or fails with "model not found" — both are safe.</p>
+<p>Uses a lock-free snapshot of the backend and model id so the call does not block <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>. If a backend switch happens concurrently, the old backend still exists (its <span class="tt">shared_ptr</span> refcount is &gt; 0) and the call either succeeds or fails with "model not found" — both are safe.</p>
 <p>On <span class="tt">LocalBackend</span>, the <span class="tt">localOp</span> this method builds first overwrites any declared computed fields from their inputs (<span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#aa016aa6c3ca8641dbd3447046b287430" title="Recomputes every entry of A::computedFields in place on action.">morph::forms::recomputeAll</a></span>, a no-op for actions with no <span class="tt">computedFields</span>), then enforces <span class="tt"><a class="el" href="../../d5/d92/structmorph_1_1model_1_1ActionValidator.html" title="Per-action validator used by BridgeHandler::set&lt;...&gt; to decide whether the in-progress draft is ready...">morph::model::ActionValidator</a>&lt;Action&gt;::ready(action)</span> before calling <span class="tt">Model::execute</span>, mirroring <span class="tt">ActionDispatcher::registerAction</span>'s runner (<span class="tt"><a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a></span>) for the in-process path. A <span class="tt">false</span> result resolves the returned <span class="tt">Completion</span> through <span class="tt">onError</span> with a <span class="tt"><a class="el" href="../../d7/d1a/structmorph_1_1model_1_1ValidationError.html" title="Thrown when a decoded action fails ActionValidator&lt;Action&gt;::ready(...) on a server-side or local exec...">morph::model::ValidationError</a></span> instead of executing the action — see docs/spec/core/registry.md and docs/spec/forms/forms.md.</p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
@@ -948,7 +999,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00648">648</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00671">671</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
