@@ -20,17 +20,24 @@
 #include <morph/forms/choice.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
 #include <vector>
+
+using morph::math::DecimalPlaces;
+using morph::math::Denominator;
+using morph::math::Numerator;
+using morph::math::Rational;
 
 // A minimal application unit system, purely so a nested-aggregate member can
 // carry a Quantity field (see RichSub below) -- exercises the
 // `annotateBasicMemberProperty` Quantity branch one level down, which none of
 // the plain-scalar nested types above (Specimen/Attachment/Provenance)
-// touch. No `relations`: unitAlternatives() is empty either way, and that is
-// not what this file is testing.
-enum class NestedFormUnit : std::uint8_t { scalar, kg };
+// touch. `relations` declares a g<->kg conversion so RichSub's `mass` field
+// also exercises the `unitAlternatives()`-non-empty branch one level down
+// (see the "FieldMeta/Quantity/Choice" test case below).
+enum class NestedFormUnit : std::uint8_t { scalar, kg, g };
 
 template <>
 struct morph::units::UnitTraits<NestedFormUnit> {
@@ -38,10 +45,16 @@ struct morph::units::UnitTraits<NestedFormUnit> {
         switch (unit) {
             case NestedFormUnit::kg:
                 return {.id = "kg", .display = "kg", .defaultDecimals = 3};
+            case NestedFormUnit::g:
+                return {.id = "g", .display = "g", .defaultDecimals = 1};
+            case NestedFormUnit::scalar:
             default:
                 return {.id = "scalar", .display = "", .defaultDecimals = 3};
         }
     }
+
+    static constexpr std::array<morph::units::UnitRelation<NestedFormUnit>, 1> relations{
+        {{NestedFormUnit::g, NestedFormUnit::kg, Rational{Numerator{1}, Denominator{1000}, DecimalPlaces{3}}}}};
 };
 
 // Named namespace (not anonymous): glaze reflection requires the reflected
@@ -112,6 +125,8 @@ struct RichSub {
                                  .label = "Custom Code",
                                  .help = "Help text",
                                  .placeholder = "e.g. 42",
+                                 .i18nKey = "custom.code",
+                                 .widget = "custom-widget",
                                  .readOnly = true,
                                  .hidden = true},
     };
@@ -325,6 +340,8 @@ TEST_CASE(
     CHECK(codeProp["x-placeholder"].get<std::string>() == "e.g. 42");
     CHECK(codeProp["x-readonly"].get<bool>() == true);
     CHECK(codeProp["x-hidden"].get<bool>() == true);
+    CHECK(codeProp["x-i18nKey"].get<std::string>() == "custom.code");
+    CHECK(codeProp["x-widget"].get<std::string>() == "custom-widget");
     // code has no FieldMeta-driven readOnly/hidden peers to compare against in
     // this fixture, so also confirm a field the fieldMetadata list does not
     // name -- mass -- carries none of these keys.
@@ -333,8 +350,15 @@ TEST_CASE(
     CHECK_FALSE(massProp.contains("x-hidden"));
     CHECK_FALSE(massProp.contains("x-placeholder"));
 
-    // Quantity: x-decimalPlaces from the unit's declared decimals.
+    // Quantity: x-decimalPlaces from the unit's declared decimals, plus
+    // x-unitAlternatives from the g<->kg relation declared above.
     CHECK(massProp["x-decimalPlaces"].as<std::uint64_t>() == 3);
+    REQUIRE(massProp.contains("x-unitAlternatives"));
+    auto const& alternatives = massProp["x-unitAlternatives"].get<glz::generic_u64::array_t>();
+    REQUIRE(alternatives.size() == 1);
+    CHECK(alternatives[0]["id"].get<std::string>() == "g");
+    CHECK(alternatives[0]["num"].as<std::int64_t>() == 1);
+    CHECK(alternatives[0]["den"].as<std::int64_t>() == 1000);
 
     // Choice: x-optionsAction/x-optionValue/x-optionLabel.
     auto const& optionProp = def["properties"]["option"];
