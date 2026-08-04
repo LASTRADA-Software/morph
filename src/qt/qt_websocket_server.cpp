@@ -16,18 +16,26 @@
 namespace morph::qt {
 
 QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, quint16 port,
-                                     std::optional<QSslConfiguration> tls, QtWebSocketServerConfig cfg,
-                                     QObject* parent)
+#ifndef QT_NO_SSL
+                                     std::optional<QSslConfiguration> tls,
+#endif
+                                     QtWebSocketServerConfig cfg, QObject* parent)
     : QObject{parent},
       _server{server},
       _requestedPort{port},
       _cfg{cfg},
+#ifndef QT_NO_SSL
       _wsServer{QStringLiteral("morph"),
                 tls.has_value() ? QWebSocketServer::SecureMode : QWebSocketServer::NonSecureMode, this},
+#else
+      _wsServer{QStringLiteral("morph"), QWebSocketServer::NonSecureMode, this},
+#endif
       _housekeepingTimer{this} {
+#ifndef QT_NO_SSL
     if (tls.has_value()) {
         _wsServer.setSslConfiguration(*tls);
     }
+#endif
     connect(&_wsServer, &QWebSocketServer::newConnection, this, &QtWebSocketServer::onNewConnection);
     if (_cfg.idleTimeout.count() > 0) {
         connect(&_housekeepingTimer, &QTimer::timeout, this, &QtWebSocketServer::onHousekeepingTick);
@@ -38,7 +46,13 @@ QtWebSocketServer::QtWebSocketServer(::morph::backend::RemoteServer& server, qui
 QtWebSocketServer::~QtWebSocketServer() { close(); }
 
 bool QtWebSocketServer::listen() {
+#ifndef QT_NO_SSL
     const bool hasTls = _wsServer.secureMode() == QWebSocketServer::SecureMode;
+#else
+    // QWebSocketServer::SecureMode doesn't exist on an SSL-less Qt build, and
+    // the constructor above always constructs in NonSecureMode in that case.
+    const bool hasTls = false;
+#endif
     if (!_cfg.bindAddress.isLoopback() && !hasTls && !_cfg.allowPlaintextExposure) {
         ::morph::log::logError(
             "[qt_websocket_server] listen() refused: bindAddress=" + _cfg.bindAddress.toString().toStdString() +

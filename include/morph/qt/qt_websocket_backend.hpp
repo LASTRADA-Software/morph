@@ -2,7 +2,9 @@
 
 #pragma once
 #include <QEventLoop>
+#ifndef QT_NO_SSL
 #include <QSslConfiguration>
+#endif
 #include <QTimer>
 #include <QUrl>
 #include <QWebSocket>
@@ -52,6 +54,16 @@ struct QtWebSocketBackendConfig {
 /// `qt_tls.hpp`. `tlsInsecureNoVerify()` disables peer verification entirely and is
 /// for local development and tests only — see security.md's "Transport security" section.
 ///
+/// @par SSL-less Qt builds (`QT_NO_SSL`, including the standard Qt-for-WebAssembly build)
+/// The constructor's `tls` parameter (and the `_tls` member) does not exist at all
+/// when Qt itself was configured without SSL — `QSslConfiguration` isn't a type
+/// Qt provides in that configuration, so there is no value to accept or ignore.
+/// `wss://` still works on such a build regardless: in a WASM/browser
+/// deployment the browser terminates TLS before Qt's `QWebSocket` ever sees
+/// the connection, so the only thing genuinely unavailable is the ability to
+/// *configure* TLS from C++ (client certificates, pinning, etc.) — plain
+/// `wss://` and `ws://` both still connect normally.
+///
 /// @par Threading
 /// Must be used from the Qt event loop thread. `execute()` and the internal
 /// message handler are both called on that thread.
@@ -65,13 +77,18 @@ public:
     /// @param serverUrl   `ws://` or `wss://` URL of the remote `RemoteServer`.
     /// @param dispatcher  Action dispatcher (defaults to the process-level singleton).
     /// @param registry    Model registry (defaults to the process-level singleton).
-    /// @param tls         If non-null, enables TLS and applies this configuration.
+    /// @param tls         If non-null, enables TLS and applies this configuration. Not
+    ///                    declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see
+    ///                    the class doc comment's "SSL-less Qt builds" section.
     /// @param cfg         Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
     explicit QtWebSocketBackend(
         QUrl serverUrl,
         ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
         ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
-        std::optional<QSslConfiguration> tls = std::nullopt, Config cfg = Config{});
+#ifndef QT_NO_SSL
+        std::optional<QSslConfiguration> tls = std::nullopt,
+#endif
+        Config cfg = Config{});
 
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
@@ -197,7 +214,9 @@ private:
     void attemptReconnect();
 
     QUrl _serverUrl;
+#ifndef QT_NO_SSL
     std::optional<QSslConfiguration> _tls;
+#endif
     Config _cfg;
     QWebSocket _socket;
     QTimer _reconnectTimer;

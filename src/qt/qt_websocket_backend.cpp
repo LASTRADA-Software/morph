@@ -13,14 +13,21 @@ namespace morph::qt {
 
 QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::ActionDispatcher& /*dispatcher*/,
                                        ::morph::model::detail::ModelRegistryFactory& /*registry*/,
-                                       std::optional<QSslConfiguration> tls, Config cfg)
+#ifndef QT_NO_SSL
+                                       std::optional<QSslConfiguration> tls,
+#endif
+                                       Config cfg)
     : _serverUrl{std::move(serverUrl)},
+#ifndef QT_NO_SSL
       _tls{std::move(tls)},
+#endif
       _cfg{cfg},
       _currentReconnectDelay{cfg.initialReconnectDelay} {
+#ifndef QT_NO_SSL
     if (_tls.has_value()) {
         _socket.setSslConfiguration(*_tls);
     }
+#endif
     _reconnectTimer.setSingleShot(true);
     QObject::connect(&_reconnectTimer, &QTimer::timeout, [this] { attemptReconnect(); });
 
