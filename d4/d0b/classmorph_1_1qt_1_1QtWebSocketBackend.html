@@ -173,9 +173,10 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt">IBackend</span> implementation that communicates with a <span class="tt">RemoteServer</span> over WebSocket. </p>
 <p><span class="tt"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel()</a></span> is synchronous (blocks the calling thread via a nested <span class="tt">QEventLoop</span> until the server replies). <span class="tt"><a class="el" href="#aa00b19a8994d4d4f2ca9b9b7a3e3a70a" title="Sends a deregister message fire-and-forget (does not wait for a reply).">deregisterModel()</a></span> is fire-and-forget (it sends the message without waiting, avoiding a nested event loop during destruction). <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span> is asynchronous: it assigns a call-id, sends the message, and resolves the returned <span class="tt">Completion</span> when the matching reply arrives.</p>
 <dl class="section user"><dt>TLS</dt><dd>Pass a <span class="tt">QSslConfiguration</span> to enable <span class="tt">wss://</span>. Build it with <span class="tt">tlsVerifyingConfig()</span> (CA-verified — the recommended production default) or <span class="tt">tlsPinnedConfig()</span> (pinned-certificate — the correct choice for a self-signed deployment), both in <span class="tt"><a class="el" href="../../dd/d60/qt__tls_8hpp_source.html">qt_tls.hpp</a></span>. <span class="tt">tlsInsecureNoVerify()</span> disables peer verification entirely and is for local development and tests only — see security.md's "Transport security" section.</dd></dl>
+<dl class="section user"><dt>SSL-less Qt builds (<span class="tt">QT_NO_SSL</span>, including the standard Qt-for-WebAssembly build)</dt><dd>The constructor's <span class="tt">tls</span> parameter (and the <span class="tt">_tls</span> member) does not exist at all when Qt itself was configured without SSL — <span class="tt">QSslConfiguration</span> isn't a type Qt provides in that configuration, so there is no value to accept or ignore. <span class="tt">wss://</span> still works on such a build regardless: in a WASM/browser deployment the browser terminates TLS before Qt's <span class="tt">QWebSocket</span> ever sees the connection, so the only thing genuinely unavailable is the ability to <em>configure</em> TLS from C++ (client certificates, pinning, etc.) — plain <span class="tt">wss://</span> and <span class="tt">ws://</span> both still connect normally.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span> and the internal message handler are both called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -191,7 +192,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -244,7 +245,7 @@ Public Member Functions</h2></td></tr>
     <tr><td class="paramname">serverUrl</td><td><span class="tt">ws://</span> or <span class="tt">wss://</span> URL of the remote <span class="tt">RemoteServer</span>. </td></tr>
     <tr><td class="paramname">dispatcher</td><td>Action dispatcher (defaults to the process-level singleton). </td></tr>
     <tr><td class="paramname">registry</td><td>Model registry (defaults to the process-level singleton). </td></tr>
-    <tr><td class="paramname">tls</td><td>If non-null, enables TLS and applies this configuration. </td></tr>
+    <tr><td class="paramname">tls</td><td>If non-null, enables TLS and applies this configuration. Not declared at all on an SSL-less Qt build (<span class="tt">QT_NO_SSL</span>) — see the class doc comment's "SSL-less Qt builds" section. </td></tr>
     <tr><td class="paramname">cfg</td><td>Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff. </td></tr>
   </table>
   </dd>
@@ -649,7 +650,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00170">170</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

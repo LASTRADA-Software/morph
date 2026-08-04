@@ -147,7 +147,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Per-connection resource limits and bind/exposure policy enforced by <span class="tt"><a class="el" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html" title="Qt WebSocket server that bridges incoming connections to a RemoteServer.">QtWebSocketServer</a></span>. </p>
 <p>Declared outside <span class="tt"><a class="el" href="../../d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html" title="Qt WebSocket server that bridges incoming connections to a RemoteServer.">QtWebSocketServer</a></span> so its default member initialisers are fully parsed before any constructor default argument that names <span class="tt">Config{}</span> is evaluated (same rationale as <span class="tt"><a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html" title="Reconnect tuning for QtWebSocketBackend.">morph::qt::QtWebSocketBackendConfig</a></span> and <span class="tt"><a class="el" href="../../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html" title="Configuration for NetworkMonitor.">morph::offline::NetworkMonitorConfig</a></span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00025">25</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af6e06a0286bf9a348a7b62def318b85d" name="af6e06a0286bf9a348a7b62def318b85d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af6e06a0286bf9a348a7b62def318b85d">&#9670;&#160;</a></span>maxConnections</h2>
@@ -164,7 +164,7 @@ Public Attributes</h2></td></tr>
 <p>Max simultaneous live client connections. <span class="tt">0</span> = unbounded (today's behavior). </p>
 <p>A new connection beyond this count is closed immediately in <span class="tt">onNewConnection</span>, before any message exchange and before it is tracked internally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -183,7 +183,7 @@ Public Attributes</h2></td></tr>
 <p>Per-frame size cap enforced before a message reaches <span class="tt">RemoteServer::handle()</span>. </p>
 <p>Defaults to <span class="tt">morph::wire::kMaxEnvelopeBytes</span> (the wire layer's own bound), so an unconfigured server behaves exactly as today: the wire-layer cap is the only one in effect. Set lower to reject oversized frames earlier, before the cost of a pool round-trip and JSON decode. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -202,7 +202,7 @@ Public Attributes</h2></td></tr>
 <p>Per-connection token-bucket rate limit, in messages per second. <span class="tt">0</span> = unbounded. </p>
 <p>The bucket capacity equals <span class="tt"><a class="el" href="#ac3b4213d87c1ab2cc55a38f31b48c37e" title="Per-connection token-bucket rate limit, in messages per second. 0 = unbounded.">messagesPerSecond</a></span> (an immediate one-second burst is allowed right after connecting), refilling continuously at that rate. A frame that arrives with an empty bucket is dropped — not queued, not replied to. See <span class="tt">docs/spec/core/backend.md</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00046">46</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -221,7 +221,7 @@ Public Attributes</h2></td></tr>
 <p>Time allowed for a newly-accepted connection to send its first text frame before it is closed. <span class="tt">0</span> = disabled (today's behavior). </p>
 <p><span class="tt">QWebSocketServer::newConnection()</span> fires only after the WebSocket (and, in <span class="tt">SecureMode</span>, TLS) opening handshake has already completed, so in practice this bounds time-to-first-frame after that point, not the handshake itself — Qt exposes no earlier hook at this layer. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00057">57</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -240,7 +240,7 @@ Public Attributes</h2></td></tr>
 <p>Time a connection may go without sending any frame before it is closed. <span class="tt">0</span> = disabled (today's behavior). </p>
 <p>Checked by a periodic housekeeping sweep (roughly once per second), so the actual close can lag the configured value by up to that sweep interval. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -258,7 +258,7 @@ Public Attributes</h2></td></tr>
 
 <p>Address <span class="tt">listen()</span> binds to. Default <span class="tt">QHostAddress::LocalHost</span> (today's behavior, unchanged). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00066">66</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
@@ -276,7 +276,7 @@ Public Attributes</h2></td></tr>
 
 <p>Deliberate opt-out of the exposure guard: set <span class="tt">true</span> only to knowingly serve plaintext (no TLS) on a non-loopback <span class="tt"><a class="el" href="#a9d7b4c1a0aca4414d4789738389fd0ae" title="Address listen() binds to. Default QHostAddress::LocalHost (today&#39;s behavior, unchanged).">bindAddress</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00070">70</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00072">72</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
