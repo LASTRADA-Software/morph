@@ -139,7 +139,11 @@ Public Attributes</h2></td></tr>
 <tr class="memitem:a3391f30563d9f938b266527937c8c4ed" id="r_a3391f30563d9f938b266527937c8c4ed"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a3391f30563d9f938b266527937c8c4ed">payload</a></td></tr>
 <tr class="memdesc:a3391f30563d9f938b266527937c8c4ed"><td class="mdescLeft">&#160;</td><td class="mdescRight">JSON-encoded request (<span class="tt">ActionTraits&lt;A&gt;::toJson</span>).  <br /></td></tr>
 <tr class="memitem:ada474537fac0bac3b932d4fde686f42e" id="r_ada474537fac0bac3b932d4fde686f42e"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#ada474537fac0bac3b932d4fde686f42e">result</a></td></tr>
-<tr class="memdesc:ada474537fac0bac3b932d4fde686f42e"><td class="mdescLeft">&#160;</td><td class="mdescRight">JSON-encoded result (<span class="tt">ActionTraits&lt;A&gt;::resultToJson</span>), captured after successful execution.  <br /></td></tr>
+<tr class="memdesc:ada474537fac0bac3b932d4fde686f42e"><td class="mdescLeft">&#160;</td><td class="mdescRight">JSON-encoded result (<span class="tt">ActionTraits&lt;A&gt;::resultToJson</span>), captured after successful execution. Empty when <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>.  <br /></td></tr>
+<tr class="memitem:a65b1a905d7736eaf3cb6ae8f112de353" id="r_a65b1a905d7736eaf3cb6ae8f112de353"><td class="memItemLeft">Outcome&#160;</td><td class="memItemRight"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353">outcome</a> = Outcome::Succeeded</td></tr>
+<tr class="memdesc:a65b1a905d7736eaf3cb6ae8f112de353"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether this execution succeeded or was rejected/threw. Defaults to <span class="tt">Succeeded</span> so a pre-existing on-disk entry (written before this field existed) decodes unchanged under the lenient reader — an absent key is indistinguishable from an explicit <span class="tt">Succeeded</span>.  <br /></td></tr>
+<tr class="memitem:a646cb97e461dcd84d20260cecab748a8" id="r_a646cb97e461dcd84d20260cecab748a8"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a646cb97e461dcd84d20260cecab748a8">error</a> {}</td></tr>
+<tr class="memdesc:a646cb97e461dcd84d20260cecab748a8"><td class="mdescLeft">&#160;</td><td class="mdescRight"><span class="tt">std::exception::what()</span> from the exception that rejected the action. Empty unless <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>.  <br /></td></tr>
 <tr class="memitem:a0179dc557393efbb5572f4609b651b30" id="r_a0179dc557393efbb5572f4609b651b30"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a0179dc557393efbb5572f4609b651b30">principal</a></td></tr>
 <tr class="memdesc:a0179dc557393efbb5572f4609b651b30"><td class="mdescLeft">&#160;</td><td class="mdescRight">Auth principal from <span class="tt">morph::session::current()</span>, if any. Empty if unset.  <br /></td></tr>
 <tr class="memitem:ab965e19dcd3a6526e4d17e898bd69a07" id="r_ab965e19dcd3a6526e4d17e898bd69a07"><td class="memItemLeft">int64_t&#160;</td><td class="memItemRight"><a class="el" href="#ab965e19dcd3a6526e4d17e898bd69a07">timestampMs</a> = 0</td></tr>
@@ -153,7 +157,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>One recorded execution of an action against a model instance. </p>
 <p>Produced automatically by <span class="tt">morph::model::detail::IModelHolder::recordIfAttached</span> — application and model code never construct or append these directly. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00030">30</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="af622c4dbb839692d172057ecaec56a2d" name="af622c4dbb839692d172057ecaec56a2d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af622c4dbb839692d172057ecaec56a2d">&#9670;&#160;</a></span>seq</h2>
@@ -169,7 +173,7 @@ Public Attributes</h2></td></tr>
 
 <p>Monotonic order assigned by the sink on <span class="tt">append()</span>. Callers pass <span class="tt">0</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00032">32</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -187,7 +191,7 @@ Public Attributes</h2></td></tr>
 
 <p>String type-id of the model the action ran against (<span class="tt">ModelTraits&lt;M&gt;::typeId()</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00035">35</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00044">44</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -205,7 +209,7 @@ Public Attributes</h2></td></tr>
 
 <p>Stable identity of the model instance (e.g. an account id), stamped from the value passed to <span class="tt">attachActionLog()</span>. Empty if none was set. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -223,7 +227,7 @@ Public Attributes</h2></td></tr>
 
 <p>String type-id of the executed action (<span class="tt">ActionTraits&lt;A&gt;::typeId()</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00051">51</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +245,7 @@ Public Attributes</h2></td></tr>
 
 <p>JSON-encoded request (<span class="tt">ActionTraits&lt;A&gt;::toJson</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00045">45</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -257,9 +261,45 @@ Public Attributes</h2></td></tr>
       </table>
 </div><div class="memdoc">
 
-<p>JSON-encoded result (<span class="tt">ActionTraits&lt;A&gt;::resultToJson</span>), captured after successful execution. </p>
+<p>JSON-encoded result (<span class="tt">ActionTraits&lt;A&gt;::resultToJson</span>), captured after successful execution. Empty when <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00049">49</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00058">58</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a65b1a905d7736eaf3cb6ae8f112de353" name="a65b1a905d7736eaf3cb6ae8f112de353"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a65b1a905d7736eaf3cb6ae8f112de353">&#9670;&#160;</a></span>outcome</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">Outcome morph::journal::LogEntry::outcome = Outcome::Succeeded</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Whether this execution succeeded or was rejected/threw. Defaults to <span class="tt">Succeeded</span> so a pre-existing on-disk entry (written before this field existed) decodes unchanged under the lenient reader — an absent key is indistinguishable from an explicit <span class="tt">Succeeded</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a646cb97e461dcd84d20260cecab748a8" name="a646cb97e461dcd84d20260cecab748a8"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a646cb97e461dcd84d20260cecab748a8">&#9670;&#160;</a></span>error</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::journal::LogEntry::error {}</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p><span class="tt">std::exception::what()</span> from the exception that rejected the action. Empty unless <span class="tt"><a class="el" href="#a65b1a905d7736eaf3cb6ae8f112de353" title="Whether this execution succeeded or was rejected/threw. Defaults to Succeeded so a pre-existing on-di...">outcome</a> == Outcome::Failed</span>. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -277,7 +317,7 @@ Public Attributes</h2></td></tr>
 
 <p>Auth principal from <span class="tt">morph::session::current()</span>, if any. Empty if unset. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -295,7 +335,7 @@ Public Attributes</h2></td></tr>
 
 <p>Wall-clock time of execution, milliseconds since the Unix epoch. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00055">55</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -313,7 +353,7 @@ Public Attributes</h2></td></tr>
 
 <p>Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (from <span class="tt">ActionDispatcher</span>'s runner or <span class="tt">Bridge::executeVia</span>'s local op) never set it. Mirrors <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">morph::offline::QueueItem::idempotencyKey</a></span>'s exact contract: opaque, stored verbatim, stable across restarts for one logical outbox row. See <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html" title="Moves committed-but-unrelayed rows from a model&#39;s own outbox table to a durable IActionLog,...">journal::OutboxRelay</a></span> (<span class="tt"><a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></span>) for how it's used. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00063">63</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00082">82</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -332,7 +372,7 @@ Public Attributes</h2></td></tr>
 <p>Line-format version this entry was written at. </p>
 <p>Defaults to <span class="tt">kLogFormatVersion</span>, so every freshly-constructed entry already carries the current version with no separate stamping step. A legacy line (written before this field existed) has no <span class="tt"><a class="el" href="#a9ca4bf6f47ab3438eebbabde2fb9807a" title="Line-format version this entry was written at.">v</a></span> key; under <span class="tt">fromJson</span>'s lenient decode that is just an absent key, so it decodes with this same default — i.e. legacy data reads as <span class="tt"><a class="el" href="#a9ca4bf6f47ab3438eebbabde2fb9807a" title="Line-format version this entry was written at.">v</a> == 1</span>, which is correct: v1 is today's shape, <span class="tt">kLogFormatVersion</span> merely names it. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00073">73</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
 
 </div>
 </div>

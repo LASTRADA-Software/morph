@@ -33,6 +33,7 @@ var searchData=
   ['orphan_20log_30',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
   ['outboxrelay_31',['OutboxRelay',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html',1,'morph::journal']]],
   ['outboxrelayresult_32',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],
-  ['overflow_33',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
-  ['overview_34',['Overview',['../index.html#overview',1,'']]]
+  ['outcome_33',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
+  ['overflow_34',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
+  ['overview_35',['Overview',['../index.html#overview',1,'']]]
 ];

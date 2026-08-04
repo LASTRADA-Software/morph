@@ -148,242 +148,254 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dda/journal
 <div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">/// state from a durable log and powers `SessionLog::undoLast()` below.</span></div>
 <div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">///</span></div>
 <div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">/// @param modelTypeId String type-id of the model to reconstruct (`ModelTraits&lt;M&gt;::typeId()`).</span></div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`.</span></div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">/// @param registry    Model factory registry; defaults to the process-level singleton.</span></div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// @param dispatcher  Action dispatcher; defaults to the process-level singleton.</span></div>
-<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// @return A freshly created holder with @p entries replayed against it.</span></div>
-<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// @throws std::runtime_error if @p modelTypeId or any entry&#39;s action type is unregistered.</span></div>
-<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="keyword">inline</span> std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt; replay(</div>
-<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span>    std::string_view modelTypeId, <span class="keyword">const</span> std::vector&lt;LogEntry&gt;&amp; entries,</div>
-<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry(),</div>
-<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>    ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
-<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span>    <span class="keyword">auto</span> holder = registry.create(modelTypeId);</div>
-<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>    <span class="comment">// `registry.create` (via `ModelFactory::create`) auto-attaches the process</span></div>
-<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>    <span class="comment">// default action log. Detach it before replaying: reconstruction re-runs the</span></div>
-<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>    <span class="comment">// recorded actions, and without this each replayed dispatch would re-record</span></div>
-<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>    <span class="comment">// into the live sink, corrupting the very audit trail we are reading from.</span></div>
-<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>    holder-&gt;attachActionLog(<span class="keyword">nullptr</span>, {});</div>
-<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>    <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : entries) {</div>
-<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>        dispatcher.dispatch(entry.modelType, entry.actionType, *holder, entry.payload);</div>
-<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>    }</div>
-<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>    <span class="keywordflow">return</span> holder;</div>
-<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>}</div>
-<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span><span class="comment"></span> </div>
-<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span><span class="comment">/// @brief Full-fidelity, in-memory log of one model instance&#39;s executed actions.</span></div>
-<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span><span class="comment">///</span></div>
-<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span><span class="comment">/// Attach directly via `IModelHolder::attachActionLog` — every successfully</span></div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span><span class="comment">/// executed loggable action is appended here in order, regardless of any</span></div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span><span class="comment">/// `ActionLogPolicy::coalesce` setting. This full history is the raw material</span></div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span><span class="comment">/// for `undoLast()`. `checkpoint()` is the one place coalescing actually</span></div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment">/// happens: entries accumulated since the last checkpoint are reduced by</span></div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">/// `(modelType, entityKey, actionType)` — keeping only the latest occurrence</span></div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">/// where the action&#39;s policy says `coalesce == true`, keeping every occurrence</span></div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">/// otherwise — and only that reduced set reaches the durable sink.</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">///</span></div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">/// @par Thread safety</span></div>
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">/// All public methods are thread-safe. A history mutex guards `_all` and the</span></div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">/// watermark; a separate forwarding mutex serializes `checkpoint()` bodies end</span></div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">/// to end so concurrent checkpoints forward to the durable sink in append order</span></div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">/// without blocking ordinary `append()` calls during the sink&#39;s I/O.</span></div>
-<div class="foldopen" id="foldopen00066" data-start="{" data-end="};">
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">   66</a></span><span class="keyword">class </span><a class="code hl_class" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">SessionLog</a> : <span class="keyword">public</span> <a class="code hl_struct" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">IActionLog</a> {</div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">    /// @brief Appends @p entry, assigning a monotonically increasing `seq`.</span></div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">    /// Always full fidelity: this is what `undoLast()` walks back through, so</span></div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">    /// nothing is coalesced or dropped here.</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.</span></div>
-<div class="foldopen" id="foldopen00073" data-start="{" data-end="}">
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">   73</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">append</a>(<a class="code hl_struct" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">seq</a> = ++_nextSeq;</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>        _all.push_back(std::move(entry));</div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>    }</div>
-</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment"></span> </div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment">    /// @brief No-op — `checkpoint()` is this class&#39;s real commit point.</span></div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">   80</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">flush</a>()<span class="keyword"> override </span>{}</div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment"></span> </div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">    /// @brief Returns the full history (or one entity&#39;s slice of it) in append order.</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">    /// @param entityKey If non-empty, restricts the result to that entity&#39;s entries.</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="comment">    /// @return Matching entries, in append order.</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">/// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`. Entries</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">///                    with `outcome == Outcome::Failed` are skipped (see below).</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span><span class="comment">/// @param registry    Model factory registry; defaults to the process-level singleton.</span></div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment">/// @param dispatcher  Action dispatcher; defaults to the process-level singleton.</span></div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">/// @return A freshly created holder with @p entries replayed against it.</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">/// @throws std::runtime_error if @p modelTypeId or any entry&#39;s action type is unregistered.</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="keyword">inline</span> std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt; replay(</div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span>    std::string_view modelTypeId, <span class="keyword">const</span> std::vector&lt;LogEntry&gt;&amp; entries,</div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span>    ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry(),</div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span>    ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno">   39</span>    <span class="keyword">auto</span> holder = registry.create(modelTypeId);</div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>    <span class="comment">// `registry.create` (via `ModelFactory::create`) auto-attaches the process</span></div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>    <span class="comment">// default action log. Detach it before replaying: reconstruction re-runs the</span></div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span>    <span class="comment">// recorded actions, and without this each replayed dispatch would re-record</span></div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span>    <span class="comment">// into the live sink, corrupting the very audit trail we are reading from.</span></div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>    holder-&gt;attachActionLog(<span class="keyword">nullptr</span>, {});</div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>    <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : entries) {</div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span>        <span class="comment">// A Failed entry (see action_log.hpp&#39;s `Outcome`) never mutated model</span></div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>        <span class="comment">// state -- Model::execute threw or the validator rejected it before any</span></div>
+<div class="line"><a id="l00048" name="l00048"></a><span class="lineno">   48</span>        <span class="comment">// state change -- so there is nothing to reconstruct from it. Worse,</span></div>
+<div class="line"><a id="l00049" name="l00049"></a><span class="lineno">   49</span>        <span class="comment">// re-dispatching it would very likely throw the same exception again</span></div>
+<div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>        <span class="comment">// (the same rejected precondition), aborting reconstruction outright.</span></div>
+<div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>        <span class="comment">// Skipping it is exactly &quot;replay only committed facts&quot;, which is what</span></div>
+<div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>        <span class="comment">// this function already promised before Failed entries could appear in</span></div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>        <span class="comment">// the same log stream (issue #23).</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>        <span class="keywordflow">if</span> (entry.outcome == Outcome::Failed) {</div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>            <span class="keywordflow">continue</span>;</div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>        }</div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>        dispatcher.dispatch(entry.modelType, entry.actionType, *holder, entry.payload);</div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>    }</div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>    <span class="keywordflow">return</span> holder;</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>}</div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment"></span> </div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment">/// @brief Full-fidelity, in-memory log of one model instance&#39;s executed actions.</span></div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">///</span></div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">/// Attach directly via `IModelHolder::attachActionLog` — every successfully</span></div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">/// executed loggable action is appended here in order, regardless of any</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">/// `ActionLogPolicy::coalesce` setting. This full history is the raw material</span></div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">/// for `undoLast()`. `checkpoint()` is the one place coalescing actually</span></div>
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment">/// happens: entries accumulated since the last checkpoint are reduced by</span></div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">/// `(modelType, entityKey, actionType)` — keeping only the latest occurrence</span></div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">/// where the action&#39;s policy says `coalesce == true`, keeping every occurrence</span></div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">/// otherwise — and only that reduced set reaches the durable sink.</span></div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">///</span></div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span><span class="comment">/// @par Thread safety</span></div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment">/// All public methods are thread-safe. A history mutex guards `_all` and the</span></div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">/// watermark; a separate forwarding mutex serializes `checkpoint()` bodies end</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">/// to end so concurrent checkpoints forward to the durable sink in append order</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">/// without blocking ordinary `append()` calls during the sink&#39;s I/O.</span></div>
+<div class="foldopen" id="foldopen00078" data-start="{" data-end="};">
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">   78</a></span><span class="keyword">class </span><a class="code hl_class" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">SessionLog</a> : <span class="keyword">public</span> <a class="code hl_struct" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">IActionLog</a> {</div>
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">    /// @brief Appends @p entry, assigning a monotonically increasing `seq`.</span></div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">    /// Always full fidelity: this is what `undoLast()` walks back through, so</span></div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">    /// nothing is coalesced or dropped here.</span></div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="comment">    /// @param entry Entry to append; `seq` is overwritten regardless of the input value.</span></div>
 <div class="foldopen" id="foldopen00085" data-start="{" data-end="}">
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">   85</a></span>    [[nodiscard]] std::vector&lt;LogEntry&gt; <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">entries</a>(std::string_view entityKey = {}) <span class="keyword">const</span> <span class="keyword">override</span> {</div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">   85</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">append</a>(<a class="code hl_struct" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry)<span class="keyword"> override </span>{</div>
 <div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>        <span class="keywordflow">if</span> (entityKey.empty()) {</div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>            <span class="keywordflow">return</span> _all;</div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>        }</div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span>        std::vector&lt;LogEntry&gt; out;</div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span>        <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : _all) {</div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span>            <span class="keywordflow">if</span> (entry.entityKey == entityKey) {</div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span>                out.push_back(entry);</div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span>            }</div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span>        }</div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span>    }</div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>        entry.<a class="code hl_variable" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">seq</a> = ++_nextSeq;</div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span>        _all.push_back(std::move(entry));</div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span>    }</div>
 </div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment"></span> </div>
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment">    /// @brief Drops the most recently appended entry and replays everything that</span></div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">    ///        remains against a fresh model instance, reconstructing the state</span></div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">    ///        the model was in immediately before that entry executed.</span></div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">    /// No inverse/undo operations are needed on the action types themselves —</span></div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="comment">    /// this reuses `replay()` over a shorter prefix of the same log. A no-op</span></div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="comment">    /// (returns a freshly created, un-replayed holder) if the log is empty.</span></div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment">    /// Undo only rewinds this in-memory history; it never moves the checkpoint</span></div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span><span class="comment">    /// watermark, which is keyed by entry `seq` (see `checkpoint()`). Undoing an</span></div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment">    /// entry a prior `checkpoint()` already forwarded does **not** un-forward it:</span></div>
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment">    /// the durable sink is append-only, so that entry stays durable while the</span></div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">    /// reconstructed history diverges from it. A later `checkpoint()` never</span></div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">    /// re-forwards a coalesced-away, already-committed entry. Applications that</span></div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">    /// need to durably reverse a checkpointed action must record a compensating</span></div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">    /// action, not rely on `undoLast()`.</span></div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">    /// @param modelTypeId String type-id of the model to reconstruct.</span></div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="comment">    /// @param registry    Model factory registry; defaults to the process-level singleton.</span></div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">    /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.</span></div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">    /// @return A freshly created holder with the pre-undo state replayed onto it.</span></div>
-<div class="foldopen" id="foldopen00120" data-start="{" data-end="}">
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">  120</a></span>    std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt; <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">undoLast</a>(</div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>        std::string_view modelTypeId,</div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>        ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry(),</div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>        ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>        std::vector&lt;LogEntry&gt; remaining;</div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>        {</div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span>            <span class="keywordflow">if</span> (!_all.empty()) {</div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>                <span class="comment">// The checkpoint watermark is a *seq* threshold, not a raw index</span></div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>                <span class="comment">// into `_all`, so simply dropping the tail entry is all that is</span></div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>                <span class="comment">// needed: `_committedUpToSeq` already names exactly the set of</span></div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>                <span class="comment">// entries a prior `checkpoint()` forwarded, and popping a</span></div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>                <span class="comment">// never-committed tail entry (the only kind whose loss is</span></div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>                <span class="comment">// recoverable) cannot lower it. The watermark is therefore</span></div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>                <span class="comment">// monotonic — undo never rewinds it, and a later `checkpoint()`</span></div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>                <span class="comment">// never re-forwards a coalesced-away, already-committed entry.</span></div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>                <span class="comment">// Undoing an entry that a prior checkpoint already forwarded does</span></div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>                <span class="comment">// not un-forward it from the durable sink (see the class docs and</span></div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>                <span class="comment">// journal.md): the sink is append-only, so that entry stays</span></div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>                <span class="comment">// durable and the reconstructed history simply diverges from it.</span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>                _all.pop_back();</div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>            }</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>            remaining = _all;</div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>        }</div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>        <span class="keywordflow">return</span> replay(modelTypeId, remaining, registry, dispatcher);</div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>    }</div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment"></span> </div>
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">    /// @brief No-op — `checkpoint()` is this class&#39;s real commit point.</span></div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">   92</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">flush</a>()<span class="keyword"> override </span>{}</div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment"></span> </div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">    /// @brief Returns the full history (or one entity&#39;s slice of it) in append order.</span></div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">    /// @param entityKey If non-empty, restricts the result to that entity&#39;s entries.</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">    /// @return Matching entries, in append order.</span></div>
+<div class="foldopen" id="foldopen00097" data-start="{" data-end="}">
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">   97</a></span>    [[nodiscard]] std::vector&lt;LogEntry&gt; <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">entries</a>(std::string_view entityKey = {}) <span class="keyword">const</span> <span class="keyword">override</span> {</div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span>        std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span>        <span class="keywordflow">if</span> (entityKey.empty()) {</div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>            <span class="keywordflow">return</span> _all;</div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>        }</div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>        std::vector&lt;LogEntry&gt; out;</div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>        <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : _all) {</div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>            <span class="keywordflow">if</span> (entry.entityKey == entityKey) {</div>
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span>                out.push_back(entry);</div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>            }</div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>        }</div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>        <span class="keywordflow">return</span> out;</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>    }</div>
 </div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment"></span> </div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">    /// @brief Coalesces entries appended since the last checkpoint and forwards</span></div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment">    ///        the reduced set, in order, to @p durableSink; then flushes it.</span></div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">    /// Advances the checkpoint watermark (the `seq` of the last committed entry)</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">    /// *before* forwarding, so the batch is consumed even if @p durableSink&#39;s</span></div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment">    /// `append()` or `flush()` throws: a checkpoint is a forward-only commit</span></div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">    /// point (at-most-once), not a transaction to retry. A no-op if nothing has</span></div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">    /// been appended since the last checkpoint.</span></div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">    /// @par Concurrency and ordering</span></div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">    /// The whole checkpoint body runs under a dedicated forwarding mutex, so</span></div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">    /// concurrent checkpoints are fully serialized: the batch whose watermark is</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    /// taken first is also forwarded to @p durableSink first, and no two</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    /// checkpoints ever interleave their `append()` calls. This preserves the</span></div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    /// append-order identity the sink relies on. The forwarding mutex is *not*</span></div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// the mutex that guards `append()`, which is held only briefly to select the</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// pending entries and advance the watermark — never across the sink&#39;s I/O —</span></div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// so ordinary `append()` calls keep making progress during a checkpoint.</span></div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    /// @param durableSink Receives only the coalesced entries — never the raw stream.</span></div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    /// @param dispatcher  Supplies each action&#39;s `coalesce` policy; defaults to</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    ///                    the process-level singleton (the same one actions were</span></div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    ///                    registered against via `BRIDGE_REGISTER_ACTION`).</span></div>
-<div class="foldopen" id="foldopen00170" data-start="{" data-end="}">
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">  170</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">checkpoint</a>(<a class="code hl_struct" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">IActionLog</a>&amp; durableSink,</div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>                    ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>        <span class="comment">// `_checkpointMtx` serializes the *entire* checkpoint body across</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>        <span class="comment">// concurrent callers, so {take the pending slice + advance the</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>        <span class="comment">// watermark} and {forward that slice to the sink} happen atomically with</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span>        <span class="comment">// respect to any other checkpoint. Without it, two concurrent</span></div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>        <span class="comment">// checkpoints could each grab a disjoint pending slice under `_mtx`,</span></div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>        <span class="comment">// release `_mtx`, then race on the unlocked forward phase — letting</span></div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>        <span class="comment">// batches reach the durable sink out of append order and breaking the</span></div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>        <span class="comment">// append-order identity the sink relies on. It is deliberately *not*</span></div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>        <span class="comment">// `_mtx`: `_mtx` is held only briefly (slice + watermark), never across</span></div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>        <span class="comment">// the sink&#39;s `append()`/`flush()` I/O, so regular `append()` calls keep</span></div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span>        <span class="comment">// making progress while a checkpoint is forwarding.</span></div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>        std::scoped_lock <span class="keyword">const</span> checkpointLock{_checkpointMtx};</div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>        std::vector&lt;LogEntry&gt; pending;</div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>        uint64_t highestSeq = _committedUpToSeq;</div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>        {</div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>            <span class="comment">// Forward every entry whose seq is strictly past the last committed</span></div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>            <span class="comment">// seq. `seq` is assigned once at append and never reused, so this is</span></div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>            <span class="comment">// stable under coalescing and under `undoLast()` removing tail</span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>            <span class="comment">// entries — unlike a raw index into `_all`, which those mutate.</span></div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>            <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : _all) {</div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span>                <span class="keywordflow">if</span> (entry.seq &gt; _committedUpToSeq) {</div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>                    pending.push_back(entry);</div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>                    highestSeq = std::max(highestSeq, entry.seq);</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>                }</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>            }</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>            <span class="keywordflow">if</span> (pending.empty()) {</div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>                <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span>            }</div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>            _committedUpToSeq = highestSeq;</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>        }</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span>&amp; entry : coalesced(pending, dispatcher)) {</div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>            durableSink.<a class="code hl_function" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">append</a>(std::move(entry));</div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>        }</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>        durableSink.<a class="code hl_function" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">flush</a>();</div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>    }</div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span><span class="comment"></span> </div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment">    /// @brief Drops the most recently appended entry and replays everything that</span></div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">    ///        remains against a fresh model instance, reconstructing the state</span></div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">    ///        the model was in immediately before that entry executed.</span></div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">    /// No inverse/undo operations are needed on the action types themselves —</span></div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment">    /// this reuses `replay()` over a shorter prefix of the same log. A no-op</span></div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="comment">    /// (returns a freshly created, un-replayed holder) if the log is empty.</span></div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">    /// Undo only rewinds this in-memory history; it never moves the checkpoint</span></div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">    /// watermark, which is keyed by entry `seq` (see `checkpoint()`). Undoing an</span></div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment">    /// entry a prior `checkpoint()` already forwarded does **not** un-forward it:</span></div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">    /// the durable sink is append-only, so that entry stays durable while the</span></div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">    /// reconstructed history diverges from it. A later `checkpoint()` never</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">    /// re-forwards a coalesced-away, already-committed entry. Applications that</span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">    /// need to durably reverse a checkpointed action must record a compensating</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">    /// action, not rely on `undoLast()`.</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">    /// @param modelTypeId String type-id of the model to reconstruct.</span></div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">    /// @param registry    Model factory registry; defaults to the process-level singleton.</span></div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">    /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.</span></div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">    /// @return A freshly created holder with the pre-undo state replayed onto it.</span></div>
+<div class="foldopen" id="foldopen00132" data-start="{" data-end="}">
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">  132</a></span>    std::unique_ptr&lt;::morph::model::detail::IModelHolder&gt; <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">undoLast</a>(</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>        std::string_view modelTypeId,</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>        ::morph::model::detail::ModelRegistryFactory&amp; registry = ::morph::model::detail::defaultRegistry(),</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>        ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>        std::vector&lt;LogEntry&gt; remaining;</div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>        {</div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>            <span class="keywordflow">if</span> (!_all.empty()) {</div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>                <span class="comment">// The checkpoint watermark is a *seq* threshold, not a raw index</span></div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>                <span class="comment">// into `_all`, so simply dropping the tail entry is all that is</span></div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>                <span class="comment">// needed: `_committedUpToSeq` already names exactly the set of</span></div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>                <span class="comment">// entries a prior `checkpoint()` forwarded, and popping a</span></div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>                <span class="comment">// never-committed tail entry (the only kind whose loss is</span></div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>                <span class="comment">// recoverable) cannot lower it. The watermark is therefore</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>                <span class="comment">// monotonic — undo never rewinds it, and a later `checkpoint()`</span></div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>                <span class="comment">// never re-forwards a coalesced-away, already-committed entry.</span></div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>                <span class="comment">// Undoing an entry that a prior checkpoint already forwarded does</span></div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>                <span class="comment">// not un-forward it from the durable sink (see the class docs and</span></div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>                <span class="comment">// journal.md): the sink is append-only, so that entry stays</span></div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>                <span class="comment">// durable and the reconstructed history simply diverges from it.</span></div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>                _all.pop_back();</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>            }</div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>            remaining = _all;</div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>        }</div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>        <span class="keywordflow">return</span> replay(modelTypeId, remaining, registry, dispatcher);</div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span>    }</div>
 </div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span> </div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="keyword">private</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="comment">    /// @brief Reduces @p pending by `(modelType, entityKey, actionType)`: the</span></div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="comment">    ///        latest occurrence overwrites earlier ones (in place, preserving</span></div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span><span class="comment">    ///        first-seen position) wherever @p dispatcher says the action</span></div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span><span class="comment">    ///        coalesces; every other entry is kept as-is.</span></div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>    <span class="keyword">static</span> std::vector&lt;LogEntry&gt; coalesced(<span class="keyword">const</span> std::vector&lt;LogEntry&gt;&amp; pending,</div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>                                           ::morph::model::detail::ActionDispatcher&amp; dispatcher) {</div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>        std::vector&lt;LogEntry&gt; out;</div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        std::unordered_map&lt;std::string, std::size_t&gt; lastIndexForKey;</div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>        <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : pending) {</div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span>            <span class="keywordflow">if</span> (!dispatcher.coalesce(entry.modelType, entry.actionType)) {</div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span>                out.push_back(entry);</div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>                <span class="keywordflow">continue</span>;</div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span>            }</div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span>            std::string key = entry.modelType + <span class="charliteral">&#39;\0&#39;</span> + entry.entityKey + <span class="charliteral">&#39;\0&#39;</span> + entry.actionType;</div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span>            <span class="keyword">auto</span> iter = lastIndexForKey.find(key);</div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span>            <span class="keywordflow">if</span> (iter == lastIndexForKey.end()) {</div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>                lastIndexForKey.emplace(std::move(key), out.size());</div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>                out.push_back(entry);</div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>            } <span class="keywordflow">else</span> {</div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>                <span class="comment">// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index from same loop</span></div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>                out[iter-&gt;second] = entry;</div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>            }</div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>        }</div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>        <span class="keywordflow">return</span> out;</div>
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>    }</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span> </div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>    std::mutex _checkpointMtx;</div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>    std::vector&lt;LogEntry&gt; _all;</div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>    uint64_t _committedUpToSeq{0};</div>
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>    uint64_t _nextSeq{0};</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>};</div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment"></span> </div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">    /// @brief Coalesces entries appended since the last checkpoint and forwards</span></div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">    ///        the reduced set, in order, to @p durableSink; then flushes it.</span></div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">    /// Advances the checkpoint watermark (the `seq` of the last committed entry)</span></div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment">    /// *before* forwarding, so the batch is consumed even if @p durableSink&#39;s</span></div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">    /// `append()` or `flush()` throws: a checkpoint is a forward-only commit</span></div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">    /// point (at-most-once), not a transaction to retry. A no-op if nothing has</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">    /// been appended since the last checkpoint.</span></div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">    /// @par Concurrency and ordering</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">    /// The whole checkpoint body runs under a dedicated forwarding mutex, so</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">    /// concurrent checkpoints are fully serialized: the batch whose watermark is</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">    /// taken first is also forwarded to @p durableSink first, and no two</span></div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">    /// checkpoints ever interleave their `append()` calls. This preserves the</span></div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">    /// append-order identity the sink relies on. The forwarding mutex is *not*</span></div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">    /// the mutex that guards `append()`, which is held only briefly to select the</span></div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">    /// pending entries and advance the watermark — never across the sink&#39;s I/O —</span></div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">    /// so ordinary `append()` calls keep making progress during a checkpoint.</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span><span class="comment">    /// @param durableSink Receives only the coalesced entries — never the raw stream.</span></div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span><span class="comment">    /// @param dispatcher  Supplies each action&#39;s `coalesce` policy; defaults to</span></div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment">    ///                    the process-level singleton (the same one actions were</span></div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">    ///                    registered against via `BRIDGE_REGISTER_ACTION`).</span></div>
+<div class="foldopen" id="foldopen00182" data-start="{" data-end="}">
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno"><a class="line" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">  182</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">checkpoint</a>(<a class="code hl_struct" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">IActionLog</a>&amp; durableSink,</div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>                    ::morph::model::detail::ActionDispatcher&amp; dispatcher = ::morph::model::detail::defaultDispatcher()) {</div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span>        <span class="comment">// `_checkpointMtx` serializes the *entire* checkpoint body across</span></div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span>        <span class="comment">// concurrent callers, so {take the pending slice + advance the</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span>        <span class="comment">// watermark} and {forward that slice to the sink} happen atomically with</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span>        <span class="comment">// respect to any other checkpoint. Without it, two concurrent</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span>        <span class="comment">// checkpoints could each grab a disjoint pending slice under `_mtx`,</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span>        <span class="comment">// release `_mtx`, then race on the unlocked forward phase — letting</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span>        <span class="comment">// batches reach the durable sink out of append order and breaking the</span></div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span>        <span class="comment">// append-order identity the sink relies on. It is deliberately *not*</span></div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span>        <span class="comment">// `_mtx`: `_mtx` is held only briefly (slice + watermark), never across</span></div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span>        <span class="comment">// the sink&#39;s `append()`/`flush()` I/O, so regular `append()` calls keep</span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>        <span class="comment">// making progress while a checkpoint is forwarding.</span></div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>        std::scoped_lock <span class="keyword">const</span> checkpointLock{_checkpointMtx};</div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>        std::vector&lt;LogEntry&gt; pending;</div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>        uint64_t highestSeq = _committedUpToSeq;</div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>        {</div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span>            std::scoped_lock <span class="keyword">const</span> lock{_mtx};</div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span>            <span class="comment">// Forward every entry whose seq is strictly past the last committed</span></div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span>            <span class="comment">// seq. `seq` is assigned once at append and never reused, so this is</span></div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>            <span class="comment">// stable under coalescing and under `undoLast()` removing tail</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>            <span class="comment">// entries — unlike a raw index into `_all`, which those mutate.</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span>            <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : _all) {</div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span>                <span class="keywordflow">if</span> (entry.seq &gt; _committedUpToSeq) {</div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span>                    pending.push_back(entry);</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>                    highestSeq = std::max(highestSeq, entry.seq);</div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>                }</div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>            }</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>            <span class="keywordflow">if</span> (pending.empty()) {</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>                <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>            }</div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>            _committedUpToSeq = highestSeq;</div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>        }</div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        <span class="keywordflow">for</span> (<span class="keyword">auto</span>&amp; entry : coalesced(pending, dispatcher)) {</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>            durableSink.<a class="code hl_function" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">append</a>(std::move(entry));</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        }</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>        durableSink.<a class="code hl_function" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">flush</a>();</div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span>    }</div>
 </div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span> </div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>}  <span class="comment">// namespace morph::journal</span></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">morph::journal::SessionLog</a></div><div class="ttdoc">Full-fidelity, in-memory log of one model instance&#39;s executed actions.</div><div class="ttdef"><b>Definition</b> <a href="#l00066">journal.hpp:66</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a1582b1dab2f48f9e3f9f84b54b425d0b"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">morph::journal::SessionLog::entries</a></div><div class="ttdeci">std::vector&lt; LogEntry &gt; entries(std::string_view entityKey={}) const override</div><div class="ttdoc">Returns the full history (or one entity&#39;s slice of it) in append order.</div><div class="ttdef"><b>Definition</b> <a href="#l00085">journal.hpp:85</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a8a0a9e604a71fe05ce39de064e298333"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">morph::journal::SessionLog::undoLast</a></div><div class="ttdeci">std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt; undoLast(std::string_view modelTypeId, ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Drops the most recently appended entry and replays everything that remains against a fresh model inst...</div><div class="ttdef"><b>Definition</b> <a href="#l00120">journal.hpp:120</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a9d1dab7c6941547a60111c39393fcbfa"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">morph::journal::SessionLog::checkpoint</a></div><div class="ttdeci">void checkpoint(IActionLog &amp;durableSink, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Coalesces entries appended since the last checkpoint and forwards the reduced set,...</div><div class="ttdef"><b>Definition</b> <a href="#l00170">journal.hpp:170</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_ad7fb2e3940c88d02d4d0fc0c29434e90"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">morph::journal::SessionLog::append</a></div><div class="ttdeci">void append(LogEntry entry) override</div><div class="ttdoc">Appends entry, assigning a monotonically increasing seq.</div><div class="ttdef"><b>Definition</b> <a href="#l00073">journal.hpp:73</a></div></div>
-<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_aeff64f58add6666d429a581a485c4b65"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">morph::journal::SessionLog::flush</a></div><div class="ttdeci">void flush() override</div><div class="ttdoc">No-op — checkpoint() is this class&#39;s real commit point.</div><div class="ttdef"><b>Definition</b> <a href="#l00080">journal.hpp:80</a></div></div>
-<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00168">action_log.hpp:168</a></div></div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span> </div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="keyword">private</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">    /// @brief Reduces @p pending by `(modelType, entityKey, actionType)`: the</span></div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">    ///        latest occurrence overwrites earlier ones (in place, preserving</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">    ///        first-seen position) wherever @p dispatcher says the action</span></div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">    ///        coalesces; every other entry is kept as-is.</span></div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span>    <span class="keyword">static</span> std::vector&lt;LogEntry&gt; coalesced(<span class="keyword">const</span> std::vector&lt;LogEntry&gt;&amp; pending,</div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span>                                           ::morph::model::detail::ActionDispatcher&amp; dispatcher) {</div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span>        std::vector&lt;LogEntry&gt; out;</div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span>        std::unordered_map&lt;std::string, std::size_t&gt; lastIndexForKey;</div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span>        <span class="keywordflow">for</span> (<span class="keyword">const</span> <span class="keyword">auto</span>&amp; entry : pending) {</div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span>            <span class="keywordflow">if</span> (!dispatcher.coalesce(entry.modelType, entry.actionType)) {</div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span>                out.push_back(entry);</div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span>                <span class="keywordflow">continue</span>;</div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span>            }</div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>            std::string key = entry.modelType + <span class="charliteral">&#39;\0&#39;</span> + entry.entityKey + <span class="charliteral">&#39;\0&#39;</span> + entry.actionType;</div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>            <span class="keyword">auto</span> iter = lastIndexForKey.find(key);</div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span>            <span class="keywordflow">if</span> (iter == lastIndexForKey.end()) {</div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span>                lastIndexForKey.emplace(std::move(key), out.size());</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span>                out.push_back(entry);</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>            } <span class="keywordflow">else</span> {</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>                <span class="comment">// NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — index from same loop</span></div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>                out[iter-&gt;second] = entry;</div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>            }</div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        }</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        <span class="keywordflow">return</span> out;</div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>    }</div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span> </div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>    <span class="keyword">mutable</span> std::mutex _mtx;</div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span>    std::mutex _checkpointMtx;</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>    std::vector&lt;LogEntry&gt; _all;</div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>    uint64_t _committedUpToSeq{0};</div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span>    uint64_t _nextSeq{0};</div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span>};</div>
+</div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span> </div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>}  <span class="comment">// namespace morph::journal</span></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html">morph::journal::SessionLog</a></div><div class="ttdoc">Full-fidelity, in-memory log of one model instance&#39;s executed actions.</div><div class="ttdef"><b>Definition</b> <a href="#l00078">journal.hpp:78</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a1582b1dab2f48f9e3f9f84b54b425d0b"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b">morph::journal::SessionLog::entries</a></div><div class="ttdeci">std::vector&lt; LogEntry &gt; entries(std::string_view entityKey={}) const override</div><div class="ttdoc">Returns the full history (or one entity&#39;s slice of it) in append order.</div><div class="ttdef"><b>Definition</b> <a href="#l00097">journal.hpp:97</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a8a0a9e604a71fe05ce39de064e298333"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333">morph::journal::SessionLog::undoLast</a></div><div class="ttdeci">std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt; undoLast(std::string_view modelTypeId, ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Drops the most recently appended entry and replays everything that remains against a fresh model inst...</div><div class="ttdef"><b>Definition</b> <a href="#l00132">journal.hpp:132</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_a9d1dab7c6941547a60111c39393fcbfa"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa">morph::journal::SessionLog::checkpoint</a></div><div class="ttdeci">void checkpoint(IActionLog &amp;durableSink, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher())</div><div class="ttdoc">Coalesces entries appended since the last checkpoint and forwards the reduced set,...</div><div class="ttdef"><b>Definition</b> <a href="#l00182">journal.hpp:182</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_ad7fb2e3940c88d02d4d0fc0c29434e90"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90">morph::journal::SessionLog::append</a></div><div class="ttdeci">void append(LogEntry entry) override</div><div class="ttdoc">Appends entry, assigning a monotonically increasing seq.</div><div class="ttdef"><b>Definition</b> <a href="#l00085">journal.hpp:85</a></div></div>
+<div class="ttc" id="aclassmorph_1_1journal_1_1SessionLog_html_aeff64f58add6666d429a581a485c4b65"><div class="ttname"><a href="../../da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65">morph::journal::SessionLog::flush</a></div><div class="ttdeci">void flush() override</div><div class="ttdoc">No-op — checkpoint() is this class&#39;s real commit point.</div><div class="ttdef"><b>Definition</b> <a href="#l00092">journal.hpp:92</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html">morph::journal::IActionLog</a></div><div class="ttdoc">Interface for durable storage of executed-action entries.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00203">action_log.hpp:203</a></div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html_a1166c1f704607f315395a209c27e2bf9"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#a1166c1f704607f315395a209c27e2bf9">morph::journal::IActionLog::flush</a></div><div class="ttdeci">virtual void flush()=0</div><div class="ttdoc">Pushes any buffered entries to the durable backend. No-op for sinks with nothing to buffer (e....</div></div>
 <div class="ttc" id="astructmorph_1_1journal_1_1IActionLog_html_ac49e1e4a818057762c752994295549db"><div class="ttname"><a href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog::append</a></div><div class="ttdeci">virtual void append(LogEntry entry)=0</div><div class="ttdoc">Appends entry. Implementations assign entry.seq.</div></div>
-<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">morph::journal::LogEntry</a></div><div class="ttdoc">One recorded execution of an action against a model instance.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00030">action_log.hpp:30</a></div></div>
-<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_af622c4dbb839692d172057ecaec56a2d"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">morph::journal::LogEntry::seq</a></div><div class="ttdeci">uint64_t seq</div><div class="ttdoc">Monotonic order assigned by the sink on append(). Callers pass 0.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00032">action_log.hpp:32</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">morph::journal::LogEntry</a></div><div class="ttdoc">One recorded execution of an action against a model instance.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00039">action_log.hpp:39</a></div></div>
+<div class="ttc" id="astructmorph_1_1journal_1_1LogEntry_html_af622c4dbb839692d172057ecaec56a2d"><div class="ttname"><a href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d">morph::journal::LogEntry::seq</a></div><div class="ttdeci">uint64_t seq</div><div class="ttdoc">Monotonic order assigned by the sink on append(). Callers pass 0.</div><div class="ttdef"><b>Definition</b> <a href="../../da/d78/action__log_8hpp_source.html#l00041">action_log.hpp:41</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
