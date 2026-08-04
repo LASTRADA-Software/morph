@@ -215,8 +215,12 @@ public:
     /// client bridge dispatch path (`ActionExecuteRegistry::registerAction`,
     /// `bridge.hpp`) already performs. If a `journal::IActionLog` is attached to
     /// @p holder (via `IModelHolder::attachActionLog`) and `Action` is loggable
-    /// (the default), the executed action is recorded automatically after it
-    /// succeeds.
+    /// (the default), the executed action is recorded automatically -- on a
+    /// successful `Model::execute` with `outcome = Outcome::Succeeded` and the
+    /// JSON result, and equally on a thrown `std::exception` (a validation
+    /// failure, a rejected write) with `outcome = Outcome::Failed` and
+    /// `error = what()`, `result` empty. Either way the exception (if any)
+    /// propagates unchanged after the entry is recorded.
     /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
@@ -254,24 +258,52 @@ public:
                 throw ValidationError{ModelTraits<Model>::typeId(), ActionTraits<Action>::typeId()};
             }
             auto& model = holder.template into<Model>();
-            auto result = model.execute(action);
-            auto resultJson = ActionTraits<Action>::resultToJson(result);
-            if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
-                if (holder.hasActionLog()) {
-                    // entityKey/principal/timestampMs are filled in by recordIfAttached.
-                    holder.recordIfAttached(::morph::journal::LogEntry{
-                        .seq = 0,
-                        .modelType = std::string{ModelTraits<Model>::typeId()},
-                        .entityKey = {},
-                        .actionType = std::string{ActionTraits<Action>::typeId()},
-                        .payload = std::string{payloadJson},
-                        .result = resultJson,
-                        .principal = {},
-                        .timestampMs = 0,
-                    });
+            // Both the success and failure paths below record a journal entry
+            // (when a log is attached and Action is loggable) so a rejected or
+            // throwing execution -- a validation failure, a lost connection, a
+            // rejected write -- still leaves an audit trail, not silence. The
+            // exception is rethrown unchanged either way; only the outcome
+            // shape differs. See docs/spec/journal/journal.md, "Outcome".
+            try {
+                auto result = model.execute(action);
+                auto resultJson = ActionTraits<Action>::resultToJson(result);
+                if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        // entityKey/principal/timestampMs are filled in by recordIfAttached.
+                        holder.recordIfAttached(::morph::journal::LogEntry{
+                            .seq = 0,
+                            .modelType = std::string{ModelTraits<Model>::typeId()},
+                            .entityKey = {},
+                            .actionType = std::string{ActionTraits<Action>::typeId()},
+                            .payload = std::string{payloadJson},
+                            .result = resultJson,
+                            .outcome = ::morph::journal::Outcome::Succeeded,
+                            .error = {},
+                            .principal = {},
+                            .timestampMs = 0,
+                        });
+                    }
                 }
+                return resultJson;
+            } catch (const std::exception& exc [[maybe_unused]]) {
+                if constexpr (detail::actionLoggable<Action>() == Loggable::Yes) {
+                    if (holder.hasActionLog()) {
+                        holder.recordIfAttached(::morph::journal::LogEntry{
+                            .seq = 0,
+                            .modelType = std::string{ModelTraits<Model>::typeId()},
+                            .entityKey = {},
+                            .actionType = std::string{ActionTraits<Action>::typeId()},
+                            .payload = std::string{payloadJson},
+                            .result = {},
+                            .outcome = ::morph::journal::Outcome::Failed,
+                            .error = exc.what(),
+                            .principal = {},
+                            .timestampMs = 0,
+                        });
+                    }
+                }
+                throw;
             }
-            return resultJson;
         };
         _coalesce[key] = ActionLogPolicy<Action>::coalesce;
     }

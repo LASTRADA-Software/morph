@@ -380,9 +380,16 @@ class ActionDispatcher {
   `computedFields`; runs after precision reconciliation and before the
   validator check, so the validator sees the authoritative computed value),
   enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
-  on `false`, before `Model::execute` runs), executes via
-  `Model::execute(action)`, serialises the result, and records to the attached
-  action log when the action is loggable and a log is attached.
+  on `false`, before `Model::execute` runs), then calls `Model::execute(action)`
+  inside a `try`/`catch (const std::exception&)`: on success it serialises the
+  result and records a `LogEntry` with `outcome = Outcome::Succeeded` (when
+  loggable and a log is attached); on a throw it records `outcome =
+  Outcome::Failed` (`error = exc.what()`, `result` empty) for the same actions
+  and rethrows unchanged, so callers see the same exception as before — the
+  journal entry is a side effect, not a change to error propagation. Mirrors
+  `Bridge::executeVia`'s `localOp` (`bridge.md`) for `LocalBackend`. See
+  [journal.md, "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution)
+  for the full field/replay semantics.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs.
 - `coalesce` returns the `ActionLogPolicy<Action>::coalesce` value for the pair;

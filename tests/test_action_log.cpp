@@ -68,6 +68,11 @@ struct ALGetBalance {};
 struct ALSetNickname {
     std::string name;
 };
+// Throws when overdrawn -- the case issue #23 is about: a rejected action must
+// still leave a journal entry, not silence.
+struct ALWithdraw {
+    int amount = 0;
+};
 
 struct ALModel {
     int balance = 0;
@@ -80,6 +85,13 @@ struct ALModel {
     std::string execute(const ALSetNickname& a) {
         nickname = a.name;
         return nickname;
+    }
+    int execute(const ALWithdraw& a) {
+        if (a.amount > balance) {
+            throw std::runtime_error("insufficient funds");
+        }
+        balance -= a.amount;
+        return balance;
     }
 };
 
@@ -96,6 +108,7 @@ BRIDGE_REGISTER_MODEL(ALModel, "AL_Model")
 BRIDGE_REGISTER_ACTION(ALModel, ALDeposit, "AL_Deposit")
 BRIDGE_REGISTER_ACTION(ALModel, ALGetBalance, "AL_GetBalance", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(ALModel, ALSetNickname, "AL_SetNickname")
+BRIDGE_REGISTER_ACTION(ALModel, ALWithdraw, "AL_Withdraw")
 
 // ── Hand-written ActionTraits, no `loggable` member — mirrors test_dispatch_di.cpp.
 // Exercises actionLoggable<A>()'s "member absent" branch: defaults to Yes without
@@ -261,6 +274,8 @@ TEST_CASE("ActionDispatcher: records loggable actions, skips opted-out ones, tra
     REQUIRE(entries[0].entityKey == "acct-1");
     REQUIRE(entries[0].payload == depositJson);
     REQUIRE(entries[0].result == "10");
+    REQUIRE(entries[0].outcome == morph::journal::Outcome::Succeeded);
+    REQUIRE(entries[0].error.empty());
 }
 
 TEST_CASE("ActionDispatcher: dispatch against a holder with no log attached does not crash", "[action_log][dispatch]") {
@@ -273,6 +288,31 @@ TEST_CASE("ActionDispatcher: dispatch against a holder with no log attached does
     REQUIRE_FALSE(holder->hasActionLog());
     auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3});
     REQUIRE(dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson) == "3");
+}
+
+TEST_CASE("ActionDispatcher: records outcome=Failed with error text when Model::execute throws, still rethrows",
+         "[action_log][dispatch][issue23]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALWithdraw>("AL_Model", "AL_Withdraw");
+
+    auto holder = registry.create("AL_Model");
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "acct-fail");
+
+    auto withdrawJson = morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 50});
+    REQUIRE_THROWS_AS(dispatcher.dispatch("AL_Model", "AL_Withdraw", *holder, withdrawJson), std::runtime_error);
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);  // the rejected attempt is still journaled
+    REQUIRE(entries[0].modelType == "AL_Model");
+    REQUIRE(entries[0].actionType == "AL_Withdraw");
+    REQUIRE(entries[0].entityKey == "acct-fail");
+    REQUIRE(entries[0].payload == withdrawJson);
+    REQUIRE(entries[0].result.empty());
+    REQUIRE(entries[0].outcome == morph::journal::Outcome::Failed);
+    REQUIRE(entries[0].error == "insufficient funds");
 }
 
 TEST_CASE("ActionDispatcher: runner records for hand-written ActionTraits with no loggable member",
@@ -325,6 +365,37 @@ TEST_CASE("Bridge/LocalBackend: local-mode execution records loggable actions, s
     REQUIRE(entries.size() == 1);  // GetBalance opted out
     REQUIRE(entries[0].actionType == "AL_Deposit");
     REQUIRE(entries[0].entityKey == "acct-99");
+}
+
+TEST_CASE("Bridge/LocalBackend: local-mode execution records outcome=Failed when Model::execute throws",
+         "[action_log][bridge][issue23]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto log = std::make_shared<InMemoryActionLog>();
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AL_Model";
+    binding->modelFactory = [log] {
+        auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+        holder->attachActionLog(log, "acct-fail-local");
+        return holder;
+    };
+    morph::bridge::BridgeHandler<ALModel> handler{bridge, &cbExec, binding};
+
+    std::atomic<bool> errored{false};
+    handler.execute(ALWithdraw{.amount = 50})
+        .then([&](int) {})
+        .onError([&](const std::exception_ptr&) { errored.store(true); });
+    REQUIRE(morph::testing::waitUntil([&] { return errored.load(); }));
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);  // the rejected attempt is still journaled
+    REQUIRE(entries[0].actionType == "AL_Withdraw");
+    REQUIRE(entries[0].entityKey == "acct-fail-local");
+    REQUIRE(entries[0].result.empty());
+    REQUIRE(entries[0].outcome == morph::journal::Outcome::Failed);
+    REQUIRE(entries[0].error == "insufficient funds");
 }
 
 TEST_CASE("Bridge/LocalBackend: local-mode execution without an attached log does not crash",
@@ -399,6 +470,30 @@ TEST_CASE("journal::replay: reconstructs state by re-executing entries in order"
 
     auto holder = morph::journal::replay("AL_Model", entries, registry, dispatcher);
     REQUIRE(holder->into<ALModel>().balance == 15);
+}
+
+TEST_CASE("journal::replay: skips Failed entries instead of re-dispatching them", "[action_log][journal][issue23]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+    dispatcher.registerAction<ALModel, ALWithdraw>("AL_Model", "AL_Withdraw");
+
+    auto depositEntry =
+        makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10}));
+    // A Failed entry for an over-large withdrawal: if replay() dispatched this
+    // (instead of skipping it), ALModel::execute would throw the very same
+    // "insufficient funds" again, aborting reconstruction.
+    auto failedWithdraw =
+        makeEntry("AL_Model", "", "AL_Withdraw", morph::model::ActionTraits<ALWithdraw>::toJson(ALWithdraw{.amount = 999}));
+    failedWithdraw.outcome = morph::journal::Outcome::Failed;
+    failedWithdraw.error = "insufficient funds";
+
+    std::vector<LogEntry> entries{depositEntry, failedWithdraw};
+
+    std::unique_ptr<morph::model::detail::IModelHolder> holder;
+    REQUIRE_NOTHROW(holder = morph::journal::replay("AL_Model", entries, registry, dispatcher));
+    REQUIRE(holder->into<ALModel>().balance == 10);  // only the successful deposit was replayed
 }
 
 TEST_CASE("journal::replay: propagates the registry's unknown-model error", "[action_log][journal]") {
