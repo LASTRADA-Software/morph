@@ -283,7 +283,17 @@ try_run(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE MORPH_CLIENT_ONLY_RUNTIME_THROW
     CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
     CXX_STANDARD 23
     COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
-    LINK_LIBRARIES Threads::Threads
+    # CMAKE_THREAD_LIBS_INIT (a raw linker-flag string set by the outer
+    # project's find_package(Threads REQUIRED) at CMakeLists.txt:102, e.g.
+    # "-lpthread" on Linux, empty on platforms needing nothing extra) rather
+    # than the Threads::Threads *target*: unlike Qt6::Core/Network/WebSockets
+    # (an exported find_package(Qt6) target, used the same way by the
+    # MORPH_QT_NO_SSL_GUARD_COMPILES check above), the CMake-bundled
+    # FindThreads module's imported target does not reliably resolve inside
+    # try_run()'s isolated scratch project on every platform -- confirmed by
+    # a real CI failure on Windows/MSVC ("Target ... links to: Threads::Threads
+    # ... but the target was not found").
+    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
     COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT
     RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT
 )
