@@ -181,6 +181,61 @@ TEST_CASE("morph::bridge::Bridge::switchBackend  -  multiple live handlers all r
     REQUIRE(res2.load() == 20);
 }
 
+TEST_CASE("morph::bridge::Bridge::switchBackend(shared_ptr)  -  caller-owned instance can be re-installed",
+          "[bridge][switch][shared_ptr]") {
+    morph::exec::ThreadPoolExecutor poolInitial{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(poolInitial)};
+    morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
+
+    morph::exec::ThreadPoolExecutor poolA{2};
+    morph::exec::ThreadPoolExecutor poolB{2};
+    auto backendA = std::make_shared<morph::backend::LocalBackend>(poolA);
+    auto backendB = std::make_shared<morph::backend::LocalBackend>(poolB);
+
+    // Switch to a caller-owned shared_ptr backend -- the crux of the API this
+    // overload adds: the caller keeps its own reference (use_count > 1) rather
+    // than transferring ownership away, as the unique_ptr overload requires.
+    bridge.switchBackend(backendA);
+    REQUIRE(backendA.use_count() > 1);
+
+    // Switch away to a second backend, then back to the *same* backendA
+    // instance -- this is exactly what a unique_ptr signature cannot express,
+    // since the first switchBackend call would have consumed it.
+    bridge.switchBackend(backendB);
+    REQUIRE_NOTHROW(bridge.switchBackend(backendA));
+
+    std::atomic<int> res{-1};
+    handler.execute(CountAction{9})
+        .then([&](int val) { res.store(val); })
+        .onError([](const std::exception_ptr&) {});
+    for (int i = 0; i < 50 && res.load() == -1; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(res.load() == 9);
+}
+
+TEST_CASE("morph::bridge::Bridge::switchBackend(unique_ptr) still transfers ownership (delegates to shared_ptr "
+          "overload)",
+          "[bridge][switch][shared_ptr]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<CountModel> handler{bridge, &cbExec};
+
+    morph::exec::ThreadPoolExecutor pool2{2};
+    REQUIRE_NOTHROW(bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2)));
+
+    std::atomic<int> res{-1};
+    handler.execute(CountAction{3})
+        .then([&](int val) { res.store(val); })
+        .onError([](const std::exception_ptr&) {});
+    for (int i = 0; i < 50 && res.load() == -1; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(res.load() == 3);
+}
+
 // ── Deep onBackendChanged count verification ──────────────────────────────────
 
 TEST_CASE(
