@@ -56,6 +56,30 @@ option(MORPH_REQUIRE_VETTED_HMAC
     OFF
 )
 
+# Opt-in linker-footprint guard for a pure client -- one that dispatches every
+# action to a remote peer and never constructs a model locally. Registering a
+# model normally emits two registrars (registerModelOnce, registerActionOnce)
+# whose bodies call the model's constructor and Model::execute -- pulling in
+# implementations (a database driver, a native UI framework, an OS-specific
+# API) a client target may not even have a link path for, and definitely never
+# calls. The third registrar (registerActionExecutorOnce) routes through
+# Bridge::executeVia -> IBackend::execute (fully abstract) and needs only the
+# action's JSON codecs plus Model::execute's *declaration* -- never its body
+# -- so it stays emitted regardless. See docs/spec/core/registry.md,
+# "MORPH_CLIENT_ONLY".
+#
+# On the INTERFACE of the morph target, not per-consumer: the macro changes
+# which registrars a model header emits, so two translation units disagreeing
+# about it would violate ODR. Off by default: the standard build is unaffected.
+#
+# NEVER enable this for a process that hosts models (a server, or any Bridge
+# running LocalBackend) -- it would silently register nothing, failing at
+# runtime with "unknown model type" instead of at compile/link time.
+option(MORPH_CLIENT_ONLY
+    "Suppress the model-owning registrars so a pure remote client need not link model constructor/execute bodies. NEVER enable for a process that hosts models."
+    OFF
+)
+
 # Both Qt consumers (the WebSocket backend and the forms QML renderer) need
 # Qt6 auto-detected on Windows before their find_package(Qt6 ...) calls run.
 if(WIN32 AND (MORPH_BUILD_QT OR MORPH_BUILD_FORMS_QML))
@@ -116,6 +140,9 @@ if(NOT WIN32 AND NOT EMSCRIPTEN)
 endif()
 if(MORPH_REQUIRE_VETTED_HMAC)
     target_compile_definitions(morph INTERFACE MORPH_REQUIRE_VETTED_HMAC)
+endif()
+if(MORPH_CLIENT_ONLY)
+    target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)
 endif()
 
 set_target_properties(morph PROPERTIES

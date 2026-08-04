@@ -109,16 +109,32 @@ with; actions with no validator are unaffected (`ready()` defaults to
 `true`). No JSON is involved on this path, so there is no declared-precision
 reconciliation step here (that only applies to decoded wire payloads); the
 `Quantity` fields carry whatever precision the caller constructed them with.
-`Model::execute(*action)` itself is wrapped in a `try`/`catch
-(const std::exception&)`: on success it records a journal `LogEntry` with
-`outcome = Outcome::Succeeded` for loggable actions; on a throw it records
-`outcome = Outcome::Failed` (`error = exc.what()`, `result` empty) for the
-same actions and rethrows unchanged, so the exception still resolves the
-`Completion` through `onError` exactly as before — the journal entry is a
-side effect of the attempt, not a change to error propagation. Mirrors
-`ActionDispatcher::registerAction`'s runner (`registry.md`) for remote
-topologies. See [journal.md, "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution)
-for the full field/replay semantics. The typed result is unwrapped from `std::shared_ptr<void>`
+**`localOp` is compiled — and so needs `Model::execute`'s definition to
+link — every time `executeVia<Model, Action>` is instantiated, regardless of
+which backend ends up installed at runtime.** Only `LocalBackend::execute`
+ever actually calls `call.localOp`; every remote backend ignores it entirely.
+But the closure itself is still compiled into the instantiation, so a build
+that only ever installs a remote backend still forces the linker to resolve
+`Model::execute` — see `registry.md`, "`MORPH_CLIENT_ONLY`". When
+`MORPH_CLIENT_ONLY` is defined, `localOp`'s body is replaced with a
+`std::logic_error` throw instead of the block described below, so nothing in
+the compiled program references `Model::execute`'s definition. Reaching that
+throw at runtime means `LocalBackend` was used in a build that promised never
+to — a configuration error, not a normal failure mode.
+
+Otherwise (the default, non-`MORPH_CLIENT_ONLY` build), `Model::execute(*action)`
+itself is wrapped in a `try`/`catch (const std::exception&)`: on success it
+records a journal `LogEntry` with `outcome = Outcome::Succeeded` for loggable
+actions; on a throw it records `outcome = Outcome::Failed` (`error =
+exc.what()`, `result` empty) for the same actions and rethrows unchanged, so
+the exception still resolves the `Completion` through `onError` exactly as
+before — the journal entry is a side effect of the attempt, not a change to
+error propagation. Mirrors `ActionDispatcher::registerAction`'s runner
+(`registry.md`) for remote topologies. See [journal.md,
+"Outcome"](../journal/journal.md#logentry--one-recorded-action-execution) for
+the full field/replay semantics.
+
+The typed result is unwrapped from `std::shared_ptr<void>`
 into the final `Completion<R>` inside a `try`/`catch`: moving the result out of
 the opaque `shared_ptr<void>` can throw (a throwing move/copy on `R`, or a bad
 cast), and if that exception escaped the `.then` callback it would be swallowed

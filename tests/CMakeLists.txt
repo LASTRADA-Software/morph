@@ -212,3 +212,105 @@ if(NOT MORPH_VETTED_HMAC_GUARD_DEFAULT_WORKS_UNGATED)
         "without MORPH_REQUIRE_VETTED_HMAC defined (regression: the default "
         "hmacSha256 argument must keep working when the option is off).")
 endif()
+
+# ── MORPH_CLIENT_ONLY guard check ────────────────────────────────────────────
+# Configure-time proof that MORPH_CLIENT_ONLY actually suppresses the two
+# model-owning registrars (registerModelOnce, registerActionOnce) -- see
+# docs/spec/core/registry.md, "MORPH_CLIENT_ONLY". Reuses
+# MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS (morph + glaze include dirs; see that
+# guard's own comments above for why try_compile needs them forwarded this
+# way rather than via LINK_LIBRARIES).
+#
+# compile_checks/client_only_no_model_link.cpp declares (never defines)
+# ClientOnlyModel's constructor and execute(). Two probes, in opposite
+# directions, prove the guard does something real rather than the probe being
+# vacuously satisfied either way:
+#   - WITH MORPH_CLIENT_ONLY defined: must LINK (the model-owning registrars
+#     are macroed away, so nothing in the program ever references either
+#     undefined symbol).
+#   - WITHOUT it (today's default): must FAIL TO LINK (the registrars' lambda
+#     bodies do reference them, and the linker cannot resolve either symbol).
+unset(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE CACHE)
+try_compile(MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT
+)
+if(NOT MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_no_model_link.cpp failed to link with "
+        "MORPH_CLIENT_ONLY defined, even though ClientOnlyModel's constructor "
+        "and execute() are never called anywhere in that program (the "
+        "model-owning registrars must be fully suppressed).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_GUARD_SUPPRESSES_LINKAGE_OUTPUT}")
+endif()
+
+unset(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE CACHE)
+try_compile(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE
+    SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_no_model_link.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    OUTPUT_VARIABLE MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT
+)
+if(MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_no_model_link.cpp linked successfully "
+        "WITHOUT MORPH_CLIENT_ONLY defined (expected a link failure -- the "
+        "probe's undefined constructor/execute() should be referenced by "
+        "the default (non-client-only) registrars; if it links anyway, this "
+        "probe is not actually proving anything about the guard).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_GUARD_DEFAULT_NEEDS_LINKAGE_OUTPUT}")
+endif()
+
+# The two try_compile() checks above only prove the *registration-suppression*
+# half of the guard (static-init-time link resolution). The other half --
+# that Bridge::executeVia's localOp actually throws std::logic_error at
+# *runtime* under MORPH_CLIENT_ONLY, instead of silently calling
+# Model::execute -- needs the probe to actually run, not just link. try_run()
+# compiles AND executes compile_checks/client_only_runtime_throw.cpp,
+# capturing its exit code (0 = the expected std::logic_error was caught).
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED CACHE)
+unset(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE CACHE)
+try_run(MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED
+    "${CMAKE_CURRENT_BINARY_DIR}/client_only_runtime_throw_check"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_runtime_throw.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    # CMAKE_THREAD_LIBS_INIT (a raw linker-flag string set by the outer
+    # project's find_package(Threads REQUIRED) at CMakeLists.txt:102, e.g.
+    # "-lpthread" on Linux, empty on platforms needing nothing extra) rather
+    # than the Threads::Threads *target*: unlike Qt6::Core/Network/WebSockets
+    # (an exported find_package(Qt6) target, used the same way by the
+    # MORPH_QT_NO_SSL_GUARD_COMPILES check above), the CMake-bundled
+    # FindThreads module's imported target does not reliably resolve inside
+    # try_run()'s isolated scratch project on every platform -- confirmed by
+    # a real CI failure on Windows/MSVC ("Target ... links to: Threads::Threads
+    # ... but the target was not found").
+    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
+    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT
+    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT
+)
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILED)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp failed to compile with "
+        "MORPH_CLIENT_ONLY defined.\n"
+        "--- compiler output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_COMPILE_OUTPUT}")
+endif()
+if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
+    message(FATAL_ERROR
+        "MORPH_CLIENT_ONLY guard check failed: "
+        "compile_checks/client_only_runtime_throw.cpp did not observe the "
+        "expected std::logic_error from Bridge::executeVia's localOp under "
+        "MORPH_CLIENT_ONLY (exit code ${MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE}).\n"
+        "--- program output ---\n"
+        "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
+endif()

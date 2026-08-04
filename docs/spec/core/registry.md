@@ -26,6 +26,7 @@ without knowing their concrete types.
   - [ModelRegistryFactory](#modelregistryfactory)
   - [ActionExecuteRegistry](#actionexecuteregistry)
 - [Registration macros](#registration-macros)
+- [`MORPH_CLIENT_ONLY` — suppressing model-owning registrars](#morph_client_only--suppressing-model-owning-registrars)
   - [BRIDGE_REGISTER_MODEL](#bridge_register_model)
   - [BRIDGE_REGISTER_ACTION](#bridge_register_action)
   - [BRIDGE_REGISTER_VALIDATOR](#bridge_register_validator)
@@ -500,8 +501,10 @@ BRIDGE_REGISTER_MODEL(AccountModel, "Account")
 
 Expands to:
 - `template <> struct morph::model::ModelTraits<M> { static constexpr std::string_view typeId() noexcept { return NAME; } };`
-- A `[[maybe_unused]] const bool` in an anonymous namespace (internal linkage,
-  no explicit `static`) that calls `detail::registerModelOnce<M>(NAME)`.
+- Unless `MORPH_CLIENT_ONLY` is defined: a `[[maybe_unused]] const bool` in an
+  anonymous namespace (internal linkage, no explicit `static`) that calls
+  `detail::registerModelOnce<M>(NAME)`. See
+  [`MORPH_CLIENT_ONLY`](#morph_client_only--suppressing-model-owning-registrars).
 
 ### `BRIDGE_REGISTER_ACTION(M, A, NAME, ...)`
 
@@ -524,11 +527,14 @@ Expands to:
   forward-compatibility convention `wire::decode` uses (see wire.md,
   "Action-evolution policy") — so an older-compiled action struct silently
   ignores an additive field a newer peer sent.
-- A `[[maybe_unused]] const bool` in an anonymous namespace calling
+- Unless `MORPH_CLIENT_ONLY` is defined: a `[[maybe_unused]] const bool` in an
+  anonymous namespace calling
   `detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
   (the model-id argument is the model's registered `typeId()`, not a raw string).
+  See [`MORPH_CLIENT_ONLY`](#morph_client_only--suppressing-model-owning-registrars).
 - A `[[maybe_unused]] const bool` in an anonymous namespace calling
-  `detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`.
+  `detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME)`
+  — always emitted, `MORPH_CLIENT_ONLY` or not.
 
 **Hard requirement:** Every translation unit invoking `BRIDGE_REGISTER_ACTION`
 must include `<morph/bridge.hpp>` (directly or transitively) because
@@ -546,6 +552,84 @@ BRIDGE_REGISTER_VALIDATOR(FormAction, [](const FormAction& a) {
 ```
 
 Expands to `template <> struct morph::model::ActionValidator<A> { static bool ready(const A& action) { return (FN)(action); } };`.
+
+## `MORPH_CLIENT_ONLY` — suppressing model-owning registrars
+
+A pure client — one that dispatches every action to a remote peer and never
+constructs a model locally — has no use for two of the three registrars
+`BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` normally emit:
+
+- `registerModelOnce<M>` stores a factory (`[] { return ModelFactory::create<M>(); }`)
+  in the process-level `ModelRegistryFactory`, used by `LocalBackend`/`RemoteServer`
+  to construct a live instance.
+- `registerActionOnce<M, A>` stores a runner in the process-level
+  `ActionDispatcher` that calls `Model::execute(...)` directly on a live
+  holder — the server-side dispatch path `RemoteServer` uses.
+
+Both are ordinary functions the compiler must fully compile into the stored
+closure regardless of whether that closure is ever *invoked* at runtime —
+so even a build that never constructs a model locally still forces the
+linker to resolve the model's constructor and `execute()` bodies, pulling in
+whatever those depend on (a database driver, a native UI framework, an
+OS-specific API) — dependencies a client target may have no link path for at
+all (a browser/WASM build in particular), and will never call regardless.
+
+Defining `MORPH_CLIENT_ONLY` (via the CMake option of the same name, which
+adds it to the `morph` target's `INTERFACE` compile definitions) suppresses
+both. `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION` still specialise
+`ModelTraits<M>`/`ActionTraits<A>` (type-ids, JSON codecs) exactly as before —
+only the two registrar bodies above disappear.
+
+**The third registrar needed the same treatment, contrary to first
+appearances.** `registerActionExecutorOnce<M, A>` routes through
+`BridgeHandler<Model>::execute<Action>()` → `Bridge::executeVia<Model, Action>`
+— and `executeVia` unconditionally constructs an `ActionCall::localOp` closure
+that calls `Model::execute(...)` directly, *regardless of which backend ends
+up installed at runtime* (only `LocalBackend::execute` ever actually invokes
+`call.localOp`; every remote backend ignores it). That closure is compiled
+into `executeVia`'s instantiation the moment any code calls
+`BridgeHandler<Model>::execute<Action>()` — which the type-erased
+`ActionExecuteRegistry` executor `registerActionExecutorOnce` installs
+*also* does, internally, to serve `executeJson`. So merely suppressing the
+first two registrars is not sufficient to make a client-only build link if it
+uses `BridgeHandler::execute<Action>()` (the typed API) or `executeJson` (the
+type-erased API) at all — both routes reach the same `model.execute(...)`
+call inside `executeVia`.
+
+`Bridge::executeVia`'s `localOp` closure is therefore itself gated on
+`MORPH_CLIENT_ONLY` (`bridge.hpp`): under the macro, the closure throws
+`std::logic_error` instead of calling `Model::execute`, so nothing in the
+compiled program ever references its definition. This is *not* a
+per-registration-site choice like the two macros above — it lives inside
+`executeVia` itself, compiled once per `(Model, Action)` instantiation,
+consistently for the whole link (exactly the "carried on the interface, not
+per-consumer" requirement below).
+
+**Confirmed empirically** (see `tests/compile_checks/client_only_no_model_link.cpp`
+and the `try_compile()` probes in `tests/CMakeLists.txt`): a model whose
+constructor and `execute()` are declared but never defined anywhere in the
+link succeeds when built with `MORPH_CLIENT_ONLY` defined, and fails to link
+(both symbols genuinely referenced) when built without it.
+
+**Must be carried on the `morph` target's `INTERFACE`, never per-consumer.**
+The macro changes which registrars a model header emits; two translation
+units disagreeing about it — one linking `registerModelOnce`'s closure, the
+other not — would be an ODR violation (the closures wouldn't even have the
+same instantiated members). The `MORPH_CLIENT_ONLY` CMake option sets it via
+`target_compile_definitions(morph INTERFACE MORPH_CLIENT_ONLY)`, so every
+consumer of the `morph::morph` target sees the identical definition.
+
+**Must never be defined for a process that hosts models.** A server, or any
+`Bridge` running `LocalBackend`, would silently register nothing:
+`ModelRegistryFactory::create`/`ActionDispatcher::dispatch` would fail at
+*runtime* with `"unknown model type"` — far from the actual cause — rather
+than failing to compile or link. `Bridge::executeVia`'s `localOp` closure
+throwing `std::logic_error` if ever reached is a second line of defence for
+exactly this mistake: a `MORPH_CLIENT_ONLY` build that somehow still ends up
+running `LocalBackend` gets a clear, immediate diagnostic instead of a
+"model not found" red herring.
+
+Off by default: the standard build (and every existing consumer) is unaffected.
 
 ## API reference
 
