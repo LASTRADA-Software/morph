@@ -216,7 +216,7 @@ output of `glz::write_json_schema<A>()` to add seven annotation groups:
 
 | Annotation | Scope | Contents |
 |---|---|---|
-| `required` | Top-level | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. |
+| `required` | Top-level, and every nested-aggregate object schema (see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)) | Array of field names that are **not** `std::optional<...>` and not listed in `A::optionalFields`. |
 | `x-order` | Every property | The member's declaration index (0‑based), so a renderer lays fields out in declaration order regardless of JSON key ordering. |
 | `x-decimalPlaces` | `Quantity` properties | The field's declared precision (`Quantity<U, Dec>::declaredDecimals`). |
 | `x-unitAlternatives` | `Quantity` properties | Convertible display/entry units derived from `UnitTraits::relations`, each with `{id, display, decimals, num, den}` — `id`/`display`/`decimals` come from the alternative unit's `UnitMeta`, and `num`/`den` are the exact alternative-to-canonical ratio. Omitted entirely when the field's unit declares no convertible units. |
@@ -518,9 +518,15 @@ must resolve the `$ref` to see both:
   same unit type share one `$def` and therefore one `ExtUnits`.
 - **`x-order`, `x-decimalPlaces`, `x-unitAlternatives`, `x-optionsAction` /
   `x-optionValue` / `x-optionLabel` / `x-optionsDependsOn` are siblings of the
-  `$ref` on the property** — `mergeSchemaExtras` patches
-  `dom["properties"][name]`, which is the property node holding the `$ref`,
-  never the referenced `$def`.
+  `$ref` on *this* property** — `mergeSchemaExtras` patches
+  `dom["properties"][name]`, which is the property node holding the `$ref`.
+  This is still true for a `Quantity`/`Choice` property's own `$def` (the
+  `quantity_kg_per_m3`-style def shown above never gets `x-order`/`required`/
+  title — only `ExtUnits` and glaze's own `type`/bounds/`description` live
+  there). It is **not** true for a *nested-aggregate* member's `$def`: see
+  [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)
+  below — that `$def` **does** get `required`/`x-order`/title/etc. patched
+  directly into it, the same as any other object schema.
 
 The **"Where"** column below names the node each key is written to. A renderer
 resolves the `$ref` into `$defs`, then merges: per-property `x-*` keys (from the
@@ -530,7 +536,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 
 | Key | Where | JSON type | Meaning / renderer obligation |
 |---|---|---|---|
-| `required` | top-level (object) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
+| `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
 | `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path retags each submitted `Quantity` to this precision before storing it (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
@@ -908,9 +914,9 @@ so it never satisfies `EmptyCapableField` in the first place. (This differs from
 the `required`-array derivation in `mergeSchemaExtras`, which checks
 `isStdOptional` **explicitly** — see [Required-ness rule](#required-ness-rule).)
 The predicate is `noexcept` and `constexpr`, and it inspects only the action's
-**own top-level members** — the same flat-actions-only scope as schema
-generation ([Scope: flat actions only](#scope-flat-actions-only)); it does not
-recurse into nested aggregates.
+**own top-level members**; unlike `schemaJson<A>()`'s schema generation (see
+[Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)),
+it does **not** recurse into a nested aggregate member's own fields.
 
 ## Cross-field rules — the `x-rules` vocabulary
 
@@ -1257,19 +1263,87 @@ for the exhaustive tables and design rationale.
 
 ## Failure modes
 
-### Scope: flat actions only
+### Nested aggregates (recursive, cycle-guarded)
 
-Annotation and `required`-derivation operate **exclusively on the action's
-top-level members**. `mergeSchemaExtras` reflects `A`'s members with
-`forEachNamedMember(probe, …)` and patches `dom["properties"][name]` for each —
-it never descends into member types. A member that is itself an aggregate is
-emitted by glaze into `$defs` and referenced by `$ref`; the generator does not
-recurse into that definition, so its sub-members receive **none** of the `x-*`
-annotations and are **not** part of any synthesised `required` array (the nested
-`$def` gets no `required` at all). Actions meant to drive a generated form must
-therefore be **flat**: every field the renderer should understand has to be a
-direct member of the action type. Nesting is not a documented form-generation
-path.
+A member whose type is itself a reflectable aggregate — a plain nested
+struct, or `std::vector<Sub>` (a repeated aggregate) — gets its **own**
+members annotated too: `x-order`, `title`/`FieldMeta`, `required`, and the
+`Quantity`/`Choice`/widget/ranged-bounds rules the top level already applies.
+Unlike the top level, this recurses to **whatever depth the type graph
+actually has** — a nested aggregate's own nested-aggregate member is
+annotated in turn, and so on — rather than stopping after one level. This
+closes the gap a flat-only generator has for domains that are naturally
+nested (a measurement with a repeated specimen sub-record, a document with a
+nested address, a category tree), including domains nested more than one
+level deep (an address with a nested geo-coordinate sub-record, say).
+
+Two schema shapes exist for a nested aggregate, and both are recursed into:
+
+- **Deduplicated (`$ref`/`$defs`)** — glaze shares one `$defs` entry, `$ref`'d
+  from every property, when the nested type is used **two or more times**
+  anywhere in the schema. The shared `$defs` entry is annotated once; every
+  property that `$ref`s it sees the same annotations.
+- **Inlined** — glaze writes the object schema directly into the property
+  itself (no `$ref`/`$defs` at all) when the nested type is used **exactly
+  once**. The property node itself is annotated in place.
+
+`mergeSchemaExtras` resolves whichever form applies (`annotateNestedAggregateRef`,
+`forms.hpp`) and hands the resolved node to the same per-member annotation
+logic the top level uses (`annotateBasicMemberProperty`), applied against the
+nested type's own reflection. Each recursive step passes along the **ancestor
+chain** — the action type `A`, followed by every nested-aggregate type
+visited since, in order, ending with the type currently being annotated — as
+a variadic template parameter pack, so a deeper call can tell whether a
+member's type is already somewhere on that chain.
+
+**Cyclic nested aggregates are a compile error, not infinite recursion.** A
+member whose type (or, for a `std::vector<Sub>` member, `Sub` itself) matches
+any type already on the ancestor chain — the action type, the
+nested-aggregate type currently being annotated, or anything annotated in
+between (a self-referential type such as `struct Node { std::vector<Node>
+children; };`, or a mutual reference between two distinct types) — trips a
+`static_assert` at the point that specific recursive instantiation would
+occur, instead of recursing forever. This only rejects genuine cycles: a
+"diamond" — the same type reused from two unrelated places in the schema,
+e.g. an `Address` nested under both a `Company` and a `Person` member of the
+same action — is not a cycle (neither `Address` nor any of its members is its
+own ancestor) and recurses normally into both. Restructure a domain type
+that trips this (e.g. flatten the self-reference, or represent the recursive
+edge as an opaque id instead of a nested value) if you need one; there is no
+runtime opt-out. The `static_assert` only fires where the offending type is
+actually reached as a nested-aggregate member of some `schemaJson<A>()` (or
+`mergeSchemaExtras<A>()`) instantiation — a self-referential type that is
+never nested under an action this way compiles and works fine on its own.
+
+Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
+only** regardless of nesting depth: a nested aggregate declaring any of those
+has no effect on the generated schema. This keeps the generator focused on
+what a nested-aggregate schema actually needs (per-field annotations) rather
+than becoming a general recursive-descent schema compiler that also
+re-derives layout/rules/computed-field semantics at every level.
+
+**Purely additive, with one source-compatibility exception.** An action with
+no nested-aggregate member has nothing here to trigger on, so its generated
+schema is byte-for-byte unchanged. A pre-existing action that *does* have a
+nested-aggregate member sees its schema gain annotations it previously
+lacked — the whole point of this feature — with no change to any of its flat
+top-level members. The one exception: an action with a self- or
+mutually-referential nested-aggregate member (see the cycle-guard paragraph
+above) now fails to *compile*, where it previously compiled (recursion used
+to stop before reaching the cycle). No such action exists in this repo today.
+
+Every nested-aggregate type in the chain must be **default-constructible**,
+exactly like the top-level action type (see below): the recursion builds its
+own probe instance purely to enumerate its members via reflection.
+
+### Scope: flat actions only (form layout, computed fields, and rules)
+
+`formLayout`/`fieldSpans` ([Layout & grouping](#layout--grouping)) and
+`formRules` ([Cross-field rules](#cross-field-rules--the-x-rules-vocabulary)) are read only
+from the top-level action type — they are not consulted on a nested
+aggregate, no matter how deep `mergeSchemaExtras` otherwise recurses (see
+[Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)
+above). Computed fields (`computedFields`) are likewise top-level only.
 
 The action type must also be **default-constructible**: `mergeSchemaExtras`
 builds a probe instance (`A probe{}`) purely to enumerate member names and types
