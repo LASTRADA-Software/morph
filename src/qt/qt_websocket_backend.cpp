@@ -149,6 +149,32 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
     throw std::runtime_error("register failed: " + reply.message);
 }
 
+bool QtWebSocketBackend::registerModelAsync(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+    std::string_view contextKey, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+    std::function<void(const std::string&)> onError) {
+    if (!_cfg.asyncRegistrationEnabled) {
+        // Opt-in only (see QtWebSocketBackendConfig::asyncRegistrationEnabled):
+        // returning false here makes Bridge::registerHandler() fall back to
+        // the synchronous registerModel(), preserving every existing
+        // embedder's behavior unless it explicitly asks for the async path.
+        return false;
+    }
+    if (!_connected) {
+        onError("disconnected");
+        return true;
+    }
+    uint64_t const callId = ++_nextCallId;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        _pendingRegistrations[callId] = PendingRegistration{std::move(onRegistered), std::move(onError)};
+    }
+    auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
+    env.callId = callId;
+    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    return true;
+}
+
 ::morph::wire::ProtocolNegotiationResult QtWebSocketBackend::negotiateProtocolVersion() {
     std::string replyJson;
     try {
@@ -262,14 +288,29 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
 }
 
 void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
-    std::unordered_map<uint64_t, PendingExecute> drained;
+    std::unordered_map<uint64_t, PendingExecute> drainedExecutes;
+    std::unordered_map<uint64_t, PendingRegistration> drainedRegistrations;
     {
         std::scoped_lock lock{_pendingMtx};
-        drained.swap(_pending);
+        drainedExecutes.swap(_pending);
+        drainedRegistrations.swap(_pendingRegistrations);
     }
-    for (auto& [_, pending] : drained) {
+    for (auto& [_, pending] : drainedExecutes) {
         if (pending.state) {
             pending.state->setException(exc);
+        }
+    }
+    std::string message = "disconnected";
+    try {
+        std::rethrow_exception(exc);
+    } catch (const std::exception& concrete) {
+        message = concrete.what();
+    } catch (...) {
+        // Non-std::exception thrown in: keep the "disconnected" fallback above.
+    }
+    for (auto& [_, pending] : drainedRegistrations) {
+        if (pending.onError) {
+            pending.onError(message);
         }
     }
 }
@@ -325,30 +366,59 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
         return;
     }
 
-    // Async execute replies carry a non-zero callId; sync replies (register /
-    // deregister) carry callId == 0 and resume the parked nested event loop.
+    // Async execute replies and async registerModelAsync replies both carry a
+    // non-zero callId (the two share one counter/namespace, but land in
+    // separate maps below since their reply shapes differ); sync replies
+    // (registerModel/deregister/etc's sendSync calls) carry callId == 0 and
+    // resume the parked nested event loop.
     if (env.callId != 0U) {
-        PendingExecute pending;
+        PendingExecute execPending;
+        bool foundExecute = false;
         {
             std::scoped_lock lock{_pendingMtx};
             auto iter = _pending.find(env.callId);
-            if (iter == _pending.end()) {
-                return;
+            if (iter != _pending.end()) {
+                execPending = std::move(iter->second);
+                _pending.erase(iter);
+                foundExecute = true;
             }
-            pending = std::move(iter->second);
-            _pending.erase(iter);
         }
-        if (env.kind == "ok") {
-            try {
-                pending.state->setValue(pending.deserialize(env.body));
-            } catch (...) {
-                pending.state->setException(std::current_exception());
+        if (foundExecute) {
+            if (env.kind == "ok") {
+                try {
+                    execPending.state->setValue(execPending.deserialize(env.body));
+                } catch (...) {
+                    execPending.state->setException(std::current_exception());
+                }
+            } else if (env.message == "timeout") {
+                execPending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
+            } else {
+                execPending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
             }
-        } else if (env.message == "timeout") {
-            pending.state->setException(std::make_exception_ptr(::morph::backend::TimeoutError{}));
-        } else {
-            pending.state->setException(std::make_exception_ptr(std::runtime_error(env.message)));
+            return;
         }
+
+        PendingRegistration regPending;
+        bool foundRegistration = false;
+        {
+            std::scoped_lock lock{_pendingMtx};
+            auto iter = _pendingRegistrations.find(env.callId);
+            if (iter != _pendingRegistrations.end()) {
+                regPending = std::move(iter->second);
+                _pendingRegistrations.erase(iter);
+                foundRegistration = true;
+            }
+        }
+        if (foundRegistration) {
+            if (env.kind == "ok") {
+                regPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
+            } else {
+                regPending.onError(env.message);
+            }
+        }
+        // Neither map matched: an already-resolved or already-cancelled
+        // callId's late reply, dropped silently -- same as before this
+        // feature for an execute reply.
         return;
     }
 

@@ -229,10 +229,7 @@ public:
         auto binding = std::make_shared<detail::HandlerBinding>();
         binding->typeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         binding->modelFactory = [] { return ::morph::model::detail::ModelFactory::create<Model>(); };
-        std::scoped_lock const lock{_mtx};
-        binding->currentId.store(
-            loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
-        _handlers.push_back(binding);
+        registerHandlerImpl(binding);
         return binding;
     }
 
@@ -242,12 +239,7 @@ public:
     /// dependencies that the type-erasing default factory cannot carry, or when
     /// `binding->contextKey` needs to be set before registration (see `HandlerBinding::contextKey`).
     /// @param binding Pre-constructed binding. Its `typeId` and `modelFactory` must be set.
-    void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) {
-        std::scoped_lock const lock{_mtx};
-        binding->currentId.store(
-            loadBackend()->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
-        _handlers.push_back(binding);
-    }
+    void registerHandler(const std::shared_ptr<detail::HandlerBinding>& binding) { registerHandlerImpl(binding); }
 
     /// @brief Creates a shared, initially **unattached** binding for `Model`.
     ///
@@ -882,6 +874,67 @@ private:
     std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
         std::scoped_lock const lock{_backendMtx};
         return _backend;
+    }
+
+    /// @brief Shared body of both `registerHandler()` overloads: prefers the
+    ///        backend's `registerModelAsync` path (see `IBackend::registerModelAsync`'s
+    ///        doc comment for why — avoiding a nested-event-loop block that
+    ///        aborts a WASM main thread) and falls back to the synchronous
+    ///        `registerModelWithContext` when the backend offers no async path.
+    ///
+    /// @p binding is added to `_handlers` *before* the backend call — not
+    /// after, as the synchronous fallback below does internally — so a
+    /// concurrently-running `switchBackend()`/reconnect can already see and
+    /// re-register it even while this registration is still in flight (see
+    /// the async branch's comment for why that race is harmless). This also
+    /// means the backend call must not run under `_mtx`: a backend that (unlike
+    /// every backend documented here) invoked `onRegistered`/`onError`
+    /// synchronously from inside `registerModelAsync` would otherwise
+    /// self-deadlock re-acquiring `_mtx` in the callback below.
+    /// @param binding Binding to register; its `typeId`/`modelFactory`/`contextKey` must be set.
+    void registerHandlerImpl(const std::shared_ptr<detail::HandlerBinding>& binding) {
+        auto backend = loadBackend();
+        {
+            std::scoped_lock const lock{_mtx};
+            _handlers.push_back(binding);
+        }
+
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
+        std::weak_ptr<const void> const weakLiveness{_liveness};
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        bool const started = backend->registerModelAsync(
+            binding->typeId, binding->modelFactory, binding->contextKey,
+            [this, weakBackend, weakLiveness, weakBinding](::morph::exec::detail::ModelId newId) {
+                auto aliveToken = weakLiveness.lock();
+                if (!aliveToken) {
+                    return;  // The Bridge is gone; do not touch `this`.
+                }
+                auto strongBinding = weakBinding.lock();
+                if (!strongBinding) {
+                    return;  // The BridgeHandler (and its binding) is gone.
+                }
+                std::scoped_lock const lock{_mtx};
+                auto pinned = weakBackend.lock();
+                if (!pinned || pinned != loadBackend()) {
+                    // A switchBackend() already moved past this registration
+                    // (see this backend's own doc comment on the class) and
+                    // its own re-registration loop already gave `binding` a
+                    // fresh id on the *new* backend -- applying this stale
+                    // one now would overwrite that with a dangling id from a
+                    // backend nothing uses any more.
+                    return;
+                }
+                strongBinding->currentId.store(newId.v);
+            },
+            [typeId = binding->typeId](const std::string& message) {
+                ::morph::log::logError("[registerHandler] async registration of '" + typeId +
+                                       "' failed: " + message);
+            });
+
+        if (!started) {
+            binding->currentId.store(
+                backend->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
+        }
     }
 
     std::shared_ptr<::morph::backend::detail::IBackend> exchangeBackend(

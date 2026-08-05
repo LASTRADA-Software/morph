@@ -28,6 +28,7 @@ and react to backend changes.
 - [The dispatch struct — `ActionCall`](#the-dispatch-struct--actioncall)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
 - [Connect/disconnect notifications](#connectdisconnect-notifications)
+- [Asynchronous registration — `registerModelAsync`](#asynchronous-registration--registermodelasync)
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
@@ -70,6 +71,7 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 |---|---|
 | `registerModel(typeId, factory)` | Registers a new model instance, returns its opaque `ModelId`. |
 | `registerModelWithContext(typeId, factory, contextKey)` | Same as `registerModel`, additionally passes a stable identity (e.g. account id). Default implementation drops `contextKey` and forwards to `registerModel` — correct for `LocalBackend` where the factory closure already captures identity. `SimulatedRemoteBackend` overrides to carry `contextKey` across the wire. |
+| `registerModelAsync(typeId, factory, contextKey, onRegistered, onError)` | Optional non-blocking counterpart to `registerModelWithContext`. Returns `false` by default (no async path); `Bridge::registerHandler()` prefers this when it returns `true` and falls back to the synchronous call otherwise. See [Asynchronous registration](#asynchronous-registration--registermodelasync). |
 | `deregisterModel(mid)` | Removes the model identified by `mid`. |
 | `execute(mid, call, cbExec)` | Dispatches `call` against the model identified by `mid`. Returns a `Completion<std::shared_ptr<void>>`. |
 | `notifyBackendChanged()` | Called by `Bridge::switchBackend()` after all handlers are re-registered. |
@@ -113,6 +115,56 @@ its `connected`/`disconnected` `QWebSocket` signal slots invoke
 `_connectHandler`/`_disconnectHandler` (if installed) at the same points
 they already invoke `_reconnectHandler`/schedule a reconnect — see that
 section below.
+
+## Asynchronous registration — `registerModelAsync`
+
+`registerModel`/`registerModelWithContext` are synchronous: a backend whose
+registration requires a round-trip can only implement that by blocking the
+calling thread until the reply arrives — `QtWebSocketBackend` does this via a
+nested `QEventLoop` in `sendSync`. On a WASM main thread, Qt refuses to spin a
+nested loop at all (`WaitForMoreEvents is not supported on the main thread
+without asyncify`), so that blocking call aborts the page — the very first
+`registerModel` a WASM client makes.
+
+`IBackend::registerModelAsync(typeId, factory, contextKey, onRegistered,
+onError)` is the optional non-blocking counterpart. A backend that offers one
+sends the request and returns `true` immediately, then invokes exactly one of
+`onRegistered(ModelId)` / `onError(message)` once the reply arrives, on the
+backend's own thread — unless the backend is destroyed first, in which case
+neither fires. The default implementation returns `false` without calling
+either callback.
+
+`Bridge::registerHandler()` (both overloads — the default-factory template and
+the pre-built-binding overload) prefers this path: it adds the binding to
+`_handlers` and calls `registerModelAsync` *before* acquiring `Bridge::_mtx`
+for the callback (a synchronous callback invocation would otherwise
+self-deadlock re-acquiring the lock). If it returns `false`, `registerHandler`
+falls back to the synchronous `registerModelWithContext`, exactly as before
+this feature existed. If it returns `true`, the binding is returned **unbound**
+(`currentId == 0`) — `executeVia` fails fast with "handler not bound" for any
+call made before `onRegistered` fires, so a caller using the async path must
+wait for registration (e.g. gate its UI on it) rather than fire an action
+immediately after constructing the handler.
+
+**Staleness guard.** The success callback captures a `weak_ptr<IBackend>`
+pinned to the backend the request was issued against, plus the Bridge's
+`liveness()` token (the same pattern `installReconnectHandler` uses). Before
+applying the received `ModelId`, it checks the liveness token (skip if the
+Bridge is gone) and compares the pinned backend against `loadBackend()` (skip
+if a `switchBackend()` already moved past this registration — that call's own
+re-registration loop already gave the binding a fresh id on the new backend,
+which a stale reply must not overwrite).
+
+**Scope.** Only the plain (non-shared) registration path uses this — a
+`BridgeHandler`'s initial construction. `registerModelShared`/`attachModel`
+(shared/keyed handlers) and the re-registration `switchBackend()`/the
+reconnect handler perform after a backend swap remain synchronous; giving
+those an async path too is a larger change to `Bridge`'s locking model, left
+for a future issue if it proves necessary.
+
+`QtWebSocketBackend` is the one backend that currently overrides this, gated
+by `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false` — see
+its own section below).
 
 ## Error types
 
@@ -543,6 +595,11 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
   unblocks and reports failure instead of freezing the Qt thread forever; when
   the parked loop returns with an empty `_pendingReply`, `sendSync` throws
   `"disconnected"`. See concurrency_and_lifetimes.md.
+
+  **`registerModelAsync` is the non-blocking alternative**, opt-in via
+  `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false`, so
+  every existing embedder keeps `registerModel`'s synchronous behavior
+  unchanged). See [Asynchronous registration](#asynchronous-registration--registermodelasync).
 - `deregisterModel` — **fire-and-forget**, not synchronous: if `_connected`, it
   sends a `deregister` envelope and returns immediately without waiting for the
   ack; if disconnected, it does nothing. This deliberately avoids a nested
@@ -560,16 +617,22 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
 
 **Reply framing / callId multiplexing.** `onTextMessage` decodes each incoming
 frame and routes it by `callId`:
-- A **non-zero `callId`** is an async `execute` reply. The backend pops the
-  matching `PendingExecute` from `_pending`; `ok` → `deserialize(body)` into the
-  completion's value (deserialisation exceptions become the completion's error),
-  any other kind → `std::runtime_error(message)` into the completion's error. A
-  reply whose `callId` is **not** in `_pending` (e.g. a late reply for an
+- A **non-zero `callId`** is checked against `_pending` first (an async
+  `execute` reply): the backend pops the matching `PendingExecute`; `ok` →
+  `deserialize(body)` into the completion's value (deserialisation exceptions
+  become the completion's error), any other kind → `std::runtime_error(message)`
+  into the completion's error. If not found there, `_pendingRegistrations` is
+  checked next (an async `registerModelAsync` reply — same `callId`
+  counter/namespace as `execute`, separate map because the reply shape differs):
+  `ok` → `onRegistered(ModelId{modelId})`, any other kind → `onError(message)`.
+  A `callId` matching **neither** map (e.g. a late reply for an
   already-cancelled call) is dropped silently.
-- A **`callId == 0`** frame is a synchronous control reply (`register`); it is
-  stored in `_pendingReply` and quits the parked nested `QEventLoop`. A frame
-  that fails to decode is also routed to the parked sync waiter (as the raw
-  string) so the blocked `sendSync` unblocks with an error rather than hanging.
+- A **`callId == 0`** frame is a synchronous control reply (`register` when
+  `asyncRegistrationEnabled` is `false`, or `attach`/`assign`/`instances`/
+  `deregister`); it is stored in `_pendingReply` and quits the parked nested
+  `QEventLoop`. A frame that fails to decode is also routed to the parked sync
+  waiter (as the raw string) so the blocked `sendSync` unblocks with an error
+  rather than hanging.
 
 Because `execute` replies are matched on `callId`, concurrent in-flight execute
 calls are supported; `RemoteServer`/`QtWebSocketServer` echo the request `callId`
@@ -1102,12 +1165,14 @@ thread to marshal onto.
 | `initialReconnectDelay` | `std::chrono::milliseconds` | `500 ms` |
 | `maxReconnectDelay` | `std::chrono::milliseconds` | `30 s` |
 | `backoffMultiplier` | `double` | `2.0` |
+| `asyncRegistrationEnabled` | `bool` | `false` — opts in to `registerModelAsync` (see [Asynchronous registration](#asynchronous-registration--registermodelasync)); `false` keeps every embedder on `registerModel`'s synchronous behavior. |
 
 ### `QtWebSocketBackend` (namespace `morph::qt`)
 
 | Method | Notes |
 |---|---|
 | `QtWebSocketBackend(serverUrl, dispatcher = defaultDispatcher(), registry = defaultRegistry(), tls = nullopt, cfg = Config{})` | Opens the socket to `serverUrl` in the constructor. `dispatcher`/`registry` params are accepted but unused (models live on the server). `tls` non-null → `wss://`. `tls` is not declared at all when Qt is built with `QT_NO_SSL` (see above). |
+| `registerModelAsync(typeId, factory, contextKey, onRegistered, onError)` | Returns `false` immediately unless `cfg.asyncRegistrationEnabled` is `true`. Otherwise: assigns a fresh `callId` (the same counter `execute` uses), records the callbacks in `_pendingRegistrations[callId]`, sends `register` with that `callId`, and returns `true`. `onRegistered`/`onError` fire later from `onTextMessage` (or from `cancelPending` on a disconnect) — never synchronously from this call. |
 | `waitForConnected(timeoutMs = 5000)` | Pumps the Qt loop until connected or timeout; returns `_connected`. |
 | `negotiateProtocolVersion()` | Opt-in: sends `hello` synchronously (same nested-`QEventLoop` path as `registerModel`), classifies the reply via `wire::interpretHelloReply`. Throws on an explicit version rejection or a `sendSync` failure. |
 | `registerModel(typeId, factory)` | Synchronous via nested `QEventLoop`; `factory` ignored. Throws on `err` reply. |

@@ -32,6 +32,7 @@ add_executable(morph_tests
     test_dispatch_di.cpp
     test_handler_binding.cpp
     test_switch_backend.cpp
+    test_async_registration.cpp
     test_network_monitor.cpp
     test_offline_queue.cpp
     test_file_offline_queue.cpp
