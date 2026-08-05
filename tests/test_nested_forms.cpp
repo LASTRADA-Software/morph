@@ -138,11 +138,70 @@ struct RichRecord {
     RichSub rich;
 };
 
+// A nested aggregate whose FieldMeta entry sets only .field/.label -- the
+// mirror of RichSub's "code" above: fieldMeta is found, but every optional
+// attribute (help/placeholder/readOnly/hidden/i18nKey) is left at its default,
+// so each of their "found but set" branches must resolve false one level down.
+struct PlainMetaSub {
+    std::int64_t code = 0;
+
+    static constexpr std::array fieldMetadata{
+        morph::forms::FieldMeta{.field = "code", .label = "Plain Code"},
+    };
+};
+
+struct PlainMetaRecord {
+    PlainMetaSub plain;
+};
+
+// A nested aggregate declaring a non-`std::optional`-typed member optional via
+// `optionalFields` -- exercises `declaredOptional<Sub>` one level down
+// (Specimen/DeepSpecimen above only ever exercise the std::optional path).
+struct DeclaredOptionalSub {
+    std::string label;
+
+    static constexpr std::array<std::string_view, 1> optionalFields{"label"};
+};
+
+struct DeclaredOptionalRecord {
+    DeclaredOptionalSub sub;
+};
+
+}  // namespace nestedforms
+
+// A unit with no declared relations, so `unitAlternatives()` is empty --
+// exercises the "no unit alternatives" branch of `annotateBasicMemberProperty`
+// one level down (RichSub's `mass` above only ever exercises the non-empty
+// case).
+enum class BareFormUnit : std::uint8_t { scalar };
+
+template <>
+struct morph::units::UnitTraits<BareFormUnit> {
+    static constexpr morph::units::UnitMeta meta(BareFormUnit) noexcept {
+        return {.id = "scalar", .display = "", .defaultDecimals = 2};
+    }
+
+    static constexpr std::array<morph::units::UnitRelation<BareFormUnit>, 0> relations{};
+};
+
+namespace nestedforms {
+
+struct BareQuantitySub {
+    morph::units::Quantity<BareFormUnit::scalar> amount{};
+};
+
+struct BareQuantityRecord {
+    BareQuantitySub bare;
+};
+
 }  // namespace nestedforms
 
 using nestedforms::Attachment;
+using nestedforms::BareQuantityRecord;
+using nestedforms::DeclaredOptionalRecord;
 using nestedforms::DeepRecord;
 using nestedforms::DeepSpecimen;
+using nestedforms::PlainMetaRecord;
 using nestedforms::Provenance;
 using nestedforms::Record;
 using nestedforms::RichRecord;
@@ -390,4 +449,94 @@ TEST_CASE("Forms::SchemaJson::NestedAggregate: re-annotating a shared $defs entr
     auto const& def = resolveNestedSchema(dom, dom["properties"]["reference"]);
     CHECK(def["properties"]["massDry"]["x-order"].as<std::uint64_t>() == 0);
     REQUIRE(def.contains("required"));
+}
+
+// ── FieldMeta found but no optional attributes set ──────────────────────────
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: a FieldMeta entry with no optional attributes leaves them all unset",
+    "[forms][nested][issue25]") {
+    auto const schema = morph::forms::schemaJson<PlainMetaRecord>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    REQUIRE(dom["properties"].contains("plain"));
+    auto const& def = resolveNestedSchema(dom, dom["properties"]["plain"]);
+    auto const& codeProp = def["properties"]["code"];
+    CHECK(codeProp["title"].get<std::string>() == "Plain Code");
+    CHECK_FALSE(codeProp.contains("description"));
+    CHECK_FALSE(codeProp.contains("x-placeholder"));
+    CHECK_FALSE(codeProp.contains("x-readonly"));
+    CHECK_FALSE(codeProp.contains("x-hidden"));
+    CHECK_FALSE(codeProp.contains("x-i18nKey"));
+}
+
+// ── Quantity member with no unit alternatives ───────────────────────────────
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: a nested Quantity member with no unit alternatives omits "
+    "x-unitAlternatives",
+    "[forms][nested][issue25]") {
+    auto const schema = morph::forms::schemaJson<BareQuantityRecord>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    REQUIRE(dom["properties"].contains("bare"));
+    auto const& def = resolveNestedSchema(dom, dom["properties"]["bare"]);
+    auto const& amountProp = def["properties"]["amount"];
+    CHECK(amountProp.contains("x-decimalPlaces"));
+    CHECK_FALSE(amountProp.contains("x-unitAlternatives"));
+}
+
+// ── declaredOptional applies one level down too ─────────────────────────────
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: optionalFields marks a non-std::optional nested member as not required",
+    "[forms][nested][issue25]") {
+    auto const schema = morph::forms::schemaJson<DeclaredOptionalRecord>();
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+
+    REQUIRE(dom["properties"].contains("sub"));
+    auto const& def = resolveNestedSchema(dom, dom["properties"]["sub"]);
+    REQUIRE(def.contains("required"));
+    auto const requiredNames = requiredNamesOf(def);
+    CHECK(std::find(requiredNames.begin(), requiredNames.end(), "label") == requiredNames.end());
+}
+
+// ── annotateNestedAggregateRef's defensive fallbacks (issue #25) ───────────
+//
+// These call the detail function directly with hand-built DOM fragments,
+// rather than through schemaJson<A>(), because glaze itself never actually
+// produces the malformed shapes these branches guard against -- see the
+// function's own doc comment ("left untouched rather than guessed at").
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a non-string $ref untouched",
+         "[forms][nested][issue25]") {
+    glz::generic_u64 dom{};
+    glz::generic_u64 property{};
+    property["$ref"] = std::uint64_t{42};  // malformed: $ref present but not a string
+    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    CHECK_FALSE(property.contains("required"));
+}
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a $ref outside #/$defs/ untouched",
+         "[forms][nested][issue25]") {
+    glz::generic_u64 dom{};
+    glz::generic_u64 property{};
+    property["$ref"] = std::string{"#/other/Specimen"};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    CHECK_FALSE(dom.contains("$defs"));
+}
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a schema with neither $ref nor "
+    "properties untouched",
+    "[forms][nested][issue25]") {
+    glz::generic_u64 dom{};
+    glz::generic_u64 property{};
+    property["type"] = std::string{"string"};  // glaze emitted something other than an object schema
+    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    CHECK_FALSE(property.contains("required"));
+    CHECK(property["type"].get<std::string>() == "string");
 }
