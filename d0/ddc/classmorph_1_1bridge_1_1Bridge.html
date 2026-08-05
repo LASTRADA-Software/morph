@@ -173,6 +173,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a9933a611e3467284c356bb0083de6834"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a default session context that <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia</a></span> stamps onto the <span class="tt">ActionCall</span> of every subsequent call.  <br /></td></tr>
 <tr class="memitem:adaccbb7a89e5625b3e6085d8db59bd97" id="r_adaccbb7a89e5625b3e6085d8db59bd97"><td class="memItemLeft"><a class="el" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a>&#160;</td><td class="memItemRight"><a class="el" href="#adaccbb7a89e5625b3e6085d8db59bd97">defaultSession</a> () const</td></tr>
 <tr class="memdesc:adaccbb7a89e5625b3e6085d8db59bd97"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed default session. Thread-safe.  <br /></td></tr>
+<tr class="memitem:aaa5a8eb690678014ee8403bfcdca07df" id="r_aaa5a8eb690678014ee8403bfcdca07df"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aaa5a8eb690678014ee8403bfcdca07df">setPrincipal</a> (<a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a> principal)</td></tr>
+<tr class="memdesc:aaa5a8eb690678014ee8403bfcdca07df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the verified <span class="tt">Principal</span> for this <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>. Thread-safe.  <br /></td></tr>
+<tr class="memitem:a6316aa3aa3f91f1e09449f42e68ca0ac" id="r_a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="memItemLeft"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6316aa3aa3f91f1e09449f42e68ca0ac">currentPrincipal</a> () const</td></tr>
+<tr class="memdesc:a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed <span class="tt">Principal</span>. Thread-safe.  <br /></td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db" id="r_a743d9a146b92a58adfd4f993a655a3db"><td class="memTemplParams" colspan="2">template&lt;typename Backend&gt; <br />
 requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db">switchBackend</a> (std::unique_ptr&lt; Backend &gt; newBackend)</td></tr>
@@ -820,6 +824,71 @@ template&lt;typename Model&gt; </div>
 
 </div>
 </div>
+<a id="aaa5a8eb690678014ee8403bfcdca07df" name="aaa5a8eb690678014ee8403bfcdca07df"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aaa5a8eb690678014ee8403bfcdca07df">&#9670;&#160;</a></span>setPrincipal()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::bridge::Bridge::setPrincipal </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a></td>          <td class="paramname"><span class="paramname"><em>principal</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs the verified <span class="tt">Principal</span> for this <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>. Thread-safe. </p>
+<p>Typically called once right after a successful login dispatch, from data the server actually returned (see <span class="tt"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html" title="The signed-in user&#39;s verified identity, readable outside a dispatch.">session::Principal</a></span>'s doc comment on the trust model). Distinct from <span class="tt"><a class="el" href="#a9933a611e3467284c356bb0083de6834" title="Installs a default session context that executeVia stamps onto the ActionCall of every subsequent cal...">setDefaultSession</a></span>: that installs the per-call <span class="tt">Context</span> forwarded with every dispatch; this installs the longer-lived identity UI code reads <em>outside</em> a dispatch via <span class="tt"><a class="el" href="#a6316aa3aa3f91f1e09449f42e68ca0ac" title="Returns a copy of the currently installed Principal. Thread-safe.">currentPrincipal()</a></span> to shape itself. Guarded by its own mutex (<span class="tt">_principalMtx</span>, not <span class="tt">_sessionMtx</span>) since it is read far more frequently, by UI code, than the per-call session snapshot. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">principal</td><td>Verified identity to install. Pass a default-constructed <span class="tt">Principal{}</span> (or call this from a sign-out handler) to clear it. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00513">513</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a6316aa3aa3f91f1e09449f42e68ca0ac" name="a6316aa3aa3f91f1e09449f42e68ca0ac"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6316aa3aa3f91f1e09449f42e68ca0ac">&#9670;&#160;</a></span>currentPrincipal()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a> morph::bridge::Bridge::currentPrincipal </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns a copy of the currently installed <span class="tt">Principal</span>. Thread-safe. </p>
+<p>Default-constructed (empty <span class="tt">id</span>, no <span class="tt">roles</span>) if <span class="tt"><a class="el" href="#aaa5a8eb690678014ee8403bfcdca07df" title="Installs the verified Principal for this Bridge. Thread-safe.">setPrincipal</a></span> was never called or the application signed out by clearing it. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of the installed <span class="tt">Principal</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00523">523</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a743d9a146b92a58adfd4f993a655a3db" name="a743d9a146b92a58adfd4f993a655a3db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a743d9a146b92a58adfd4f993a655a3db">&#9670;&#160;</a></span>switchBackend() <span class="overload">[1/2]</span></h2>
 
@@ -864,7 +933,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00529">529</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00557">557</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -900,7 +969,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00541">541</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00569">569</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -935,7 +1004,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00621">621</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00649">649</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -999,7 +1068,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00671">671</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00699">699</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

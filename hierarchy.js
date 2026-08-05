@@ -103,6 +103,7 @@ var hierarchy =
       [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ],
       [ "morph::session::SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", null ]
     ] ],
+    [ "morph::session::Principal", "d0/d26/structmorph_1_1session_1_1Principal.html", null ],
     [ "morph::session::SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", null ],
     [ "morph::session::TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", null ],
     [ "morph::session::TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", null ],

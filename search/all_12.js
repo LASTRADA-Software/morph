@@ -42,7 +42,7 @@ var searchData=
   ['result_39',['result',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e',1,'morph::journal::LogEntry']]],
   ['retrydelay_40',['retryDelay',['../d0/d03/structmorph_1_1offline_1_1ReconnectCoordinatorConfig.html#a05af269a1ab61cf5205eadf00a14102c',1,'morph::offline::ReconnectCoordinatorConfig']]],
   ['rhs_41',['rhs',['../d1/d59/structmorph_1_1forms_1_1Greater.html#a3e146d7b5db8aa56a064517f3370adf4',1,'morph::forms::Greater::rhs'],['../d1/df3/structmorph_1_1forms_1_1GreaterOrEqual.html#a089e039c0615fccd8d9607857b0b3a61',1,'morph::forms::GreaterOrEqual::rhs'],['../dd/da0/structmorph_1_1forms_1_1Less.html#aa0e1361ec7235397534e9121097c2c29',1,'morph::forms::Less::rhs'],['../d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html#a6171e62ba9b89a9bd05d88be115d2efc',1,'morph::forms::LessOrEqual::rhs']]],
-  ['roles_42',['roles',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ab5babcea61c0929008503e675bb9a90c',1,'morph::session::SessionToken']]],
+  ['roles_42',['roles',['../d0/d26/structmorph_1_1session_1_1Principal.html#a593aec2dfea0ee6d4c842e48053272cc',1,'morph::session::Principal::roles'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#ab5babcea61c0929008503e675bb9a90c',1,'morph::session::SessionToken::roles']]],
   ['rotate_43',['rotate',['../d0/d2e/classmorph_1_1journal_1_1FileActionLog.html#a8bf8b47e8ea1b01f4b30e5eea819b5bb',1,'morph::journal::FileActionLog']]],
   ['rowfield_44',['rowField',['../d9/dea/structmorph_1_1views_1_1BindEntry.html#a05cc81586265d3aec9b74942adfa4115',1,'morph::views::BindEntry']]],
   ['rulekey_45',['ruleKey',['../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc',1,'morph::forms::i18n']]],

@@ -11,12 +11,13 @@ var searchData=
   ['primary_8',['primary',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#aee97fe75f078c0c2c894a145c1f09f7e',1,'morph::wire::Envelope::primary'],['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a9b5b501777040b73d91d80815a824cd0',1,'morph::bridge::BridgeHandler::primary()']]],
   ['primarykey_9',['PrimaryKey',['../d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html',1,'morph::model']]],
   ['primarykeyof_10',['PrimaryKeyOf',['../d1/dd8/model__key_8hpp.html#a39a27a75b9820ce981a956b97243437d',1,'morph::model']]],
-  ['principal_11',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
-  ['probefunction_12',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
-  ['probeinterval_13',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
-  ['propagation_14',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_15',['Wire protocol',['../index.html#wire-protocol',1,'']]],
-  ['protocolrange_16',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
-  ['protocolversion_17',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
-  ['publishresult_18',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['principal_11',['Principal',['../d0/d26/structmorph_1_1session_1_1Principal.html',1,'morph::session']]],
+  ['principal_12',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
+  ['probefunction_13',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
+  ['probeinterval_14',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
+  ['propagation_15',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['protocol_16',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['protocolrange_17',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['protocolversion_18',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
+  ['publishresult_19',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];

@@ -1,7 +1,7 @@
 var searchData=
 [
   ['i18nkey_0',['i18nKey',['../df/db5/structmorph_1_1forms_1_1FieldMeta.html#a439425020eb5ba5760502a3522eb560b',1,'morph::forms::FieldMeta']]],
-  ['id_1',['id',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84',1,'morph::offline::QueueItem::id'],['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0',1,'morph::units::UnitMeta::id']]],
+  ['id_1',['id',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a2a14f744ed7ff3f42104b17239932e84',1,'morph::offline::QueueItem::id'],['../d0/d26/structmorph_1_1session_1_1Principal.html#ad406fb528bf29d330bd636f748aa10de',1,'morph::session::Principal::id'],['../d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0',1,'morph::units::UnitMeta::id']]],
   ['idempotencykey_2',['idempotencyKey',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24',1,'morph::journal::LogEntry::idempotencyKey'],['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c',1,'morph::offline::QueueItem::idempotencyKey']]],
   ['idletimeout_3',['idleTimeout',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#a155d5ef7c944cfa8689929275d7d400f',1,'morph::qt::QtWebSocketServerConfig']]],
   ['inflight_4',['inFlight',['../d1/d59/structmorph_1_1backend_1_1HealthStatus.html#a93c558cd9bffeee954218ca64cb66345',1,'morph::backend::HealthStatus']]],
