@@ -289,6 +289,61 @@ TEST_CASE("Bridge::registerHandler: an async reply arriving after ~Bridge() is a
     CHECK(binding->currentId.load() == 0U);
 }
 
+TEST_CASE("Bridge::registerHandler: an async reply arriving after the binding itself is dropped is a safe no-op",
+         "[bridge][registration][issue26]") {
+    // Distinct from the ~Bridge() case above: here the Bridge and backend are
+    // both still alive, but the caller's own shared_ptr<HandlerBinding> --
+    // the only strong owner, since Bridge tracks handlers via weak_ptr -- is
+    // gone by the time the async reply arrives.
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    {
+        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        binding->typeId = "AR_Model";
+        binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
+        bridge.registerHandler(binding);
+        REQUIRE(rawBackend->pendingCount() == 1);
+    }  // binding drops out of scope; Bridge held only a weak_ptr to it.
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+}
+
+TEST_CASE(
+    "Bridge::registerHandler: a stale async reply from a backend that is still alive but no longer current is "
+    "ignored",
+    "[bridge][registration][issue26]") {
+    // Distinct from the switchBackend() test above: there, the old backend is
+    // destroyed by the time the stale reply arrives (weakBackend.lock() fails
+    // outright). Here the caller keeps the old backend alive via the
+    // shared_ptr switchBackend() overload, so weakBackend.lock() still
+    // succeeds -- the guard must instead catch it via the `!= loadBackend()`
+    // comparison.
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto asyncBackendA = std::make_shared<AsyncRegisterBackend>();
+    auto shimA = std::make_shared<AsyncBackendShim>(asyncBackendA);
+    bridge.switchBackend(shimA);  // shared_ptr overload: the test keeps shimA alive below.
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_Model";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
+    bridge.registerHandler(binding);
+    REQUIRE(asyncBackendA->pendingCount() == 1);
+
+    morph::exec::ThreadPoolExecutor pool2{2};
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
+    auto const idAfterSwitch = binding->currentId.load();
+    CHECK(idAfterSwitch != 0U);
+
+    // shimA (and asyncBackendA) are still alive here via the test's own
+    // shared_ptrs, unlike the destroyed-backend test above.
+    asyncBackendA->completeNext();
+    CHECK(binding->currentId.load() == idAfterSwitch);
+}
+
 TEST_CASE("Bridge::registerHandler: falls back to the synchronous path for a backend with no async support",
          "[bridge][registration][issue26]") {
     // LocalBackend does not override registerModelAsync, so the default
