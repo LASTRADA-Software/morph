@@ -909,8 +909,8 @@ the `required`-array derivation in `mergeSchemaExtras`, which checks
 `isStdOptional` **explicitly** — see [Required-ness rule](#required-ness-rule).)
 The predicate is `noexcept` and `constexpr`, and it inspects only the action's
 **own top-level members**; unlike `schemaJson<A>()`'s schema generation (see
-[Nested aggregates (one level)](#nested-aggregates-one-level)), it does **not**
-recurse into a nested aggregate member's own fields.
+[Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)),
+it does **not** recurse into a nested aggregate member's own fields.
 
 ## Cross-field rules — the `x-rules` vocabulary
 
@@ -1257,16 +1257,19 @@ for the exhaustive tables and design rationale.
 
 ## Failure modes
 
-### Nested aggregates (one level)
+### Nested aggregates (recursive, cycle-guarded)
 
 A member whose type is itself a reflectable aggregate — a plain nested
 struct, or `std::vector<Sub>` (a repeated aggregate) — gets its **own**
-members annotated too, one level down: `x-order`, `title`/`FieldMeta`,
-`required`, and the `Quantity`/`Choice`/widget/ranged-bounds rules the top
-level already applies. This closes the gap a flat-only generator has for
-domains that are naturally nested (a measurement with a repeated specimen
-sub-record, a document with a nested address) — previously such a member's
-sub-fields were silently unannotated and absent from the generated form.
+members annotated too: `x-order`, `title`/`FieldMeta`, `required`, and the
+`Quantity`/`Choice`/widget/ranged-bounds rules the top level already applies.
+Unlike the top level, this recurses to **whatever depth the type graph
+actually has** — a nested aggregate's own nested-aggregate member is
+annotated in turn, and so on — rather than stopping after one level. This
+closes the gap a flat-only generator has for domains that are naturally
+nested (a measurement with a repeated specimen sub-record, a document with a
+nested address, a category tree), including domains nested more than one
+level deep (an address with a nested geo-coordinate sub-record, say).
 
 Two schema shapes exist for a nested aggregate, and both are recursed into:
 
@@ -1281,17 +1284,33 @@ Two schema shapes exist for a nested aggregate, and both are recursed into:
 `mergeSchemaExtras` resolves whichever form applies (`annotateNestedAggregateRef`,
 `forms.hpp`) and hands the resolved node to the same per-member annotation
 logic the top level uses (`annotateBasicMemberProperty`), applied against the
-nested type's own reflection.
+nested type's own reflection. Each recursive step passes along the chain of
+nested-aggregate types already being annotated on the current path — starting
+with the action type `A` itself — as a variadic template parameter pack, so a
+deeper call can tell whether it is about to revisit a type already on that
+path.
 
-**Depth is capped at exactly one level.** If the nested type itself has a
-member that is itself an aggregate, that member's own sub-members are left
-exactly as glaze emitted them — unannotated, matching this generator's
-original flat-only behaviour for anything past one level. Computed fields,
-`formLayout`/`fieldSpans`, and `formRules` also remain **top-level only**: a
-nested aggregate declaring any of those has no effect on the generated
-schema. Both limits keep generated forms comprehensible and keep the
-generator itself simple, rather than becoming a general recursive-descent
-schema compiler.
+**Cyclic nested aggregates are a compile error, not infinite recursion.** A
+member whose type — or, for `std::vector<Sub>`, `Sub` — equals the action
+type or any nested-aggregate type already on the current ancestor chain
+(a self-referential type such as `struct Node { std::vector<Node>
+children; };`, or a mutual reference between two distinct types) trips a
+`static_assert` at the point that specific recursive instantiation would
+occur, instead of recursing forever. This only rejects genuine cycles: a
+"diamond" — the same type reused from two unrelated places in the schema,
+e.g. an `Address` nested under both a `Company` and a `Person` member of the
+same action — is not a cycle (neither `Address` nor any of its members is its
+own ancestor) and recurses normally into both. Restructure a domain type
+that trips this (e.g. flatten the self-reference, or represent the recursive
+edge as an opaque id instead of a nested value) if you need one; there is no
+runtime opt-out.
+
+Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
+only** regardless of nesting depth: a nested aggregate declaring any of those
+has no effect on the generated schema. This keeps the generator focused on
+what a nested-aggregate schema actually needs (per-field annotations) rather
+than becoming a general recursive-descent schema compiler that also
+re-derives layout/rules/computed-field semantics at every level.
 
 **Purely additive.** An action with no nested-aggregate member has nothing
 here to trigger on, so its generated schema is byte-for-byte unchanged. A
@@ -1299,17 +1318,17 @@ pre-existing action that *does* have a nested-aggregate member sees its
 schema gain annotations it previously lacked — the whole point of this
 feature — with no change to any of its flat top-level members.
 
-The nested type must be **default-constructible**, exactly like the
-top-level action type (see below): the recursion builds its own probe
-instance purely to enumerate its members via reflection.
+Every nested-aggregate type in the chain must be **default-constructible**,
+exactly like the top-level action type (see below): the recursion builds its
+own probe instance purely to enumerate its members via reflection.
 
 ### Scope: flat actions only (form layout, computed fields, and rules)
 
 `formLayout`/`fieldSpans` ([Layout & grouping](#layout--grouping)) and
 `formRules` ([Cross-field rules](#cross-field-rules-x-rules)) are read only
 from the top-level action type — they are not consulted on a nested
-aggregate, even at the one level `mergeSchemaExtras` does otherwise recurse
-into (see [Nested aggregates (one level)](#nested-aggregates-one-level)
+aggregate, no matter how deep `mergeSchemaExtras` otherwise recurses (see
+[Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded)
 above). Computed fields (`computedFields`) are likewise top-level only.
 
 The action type must also be **default-constructible**: `mergeSchemaExtras`
