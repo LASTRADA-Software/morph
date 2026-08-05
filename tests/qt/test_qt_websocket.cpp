@@ -324,6 +324,169 @@ TEST_CASE("morph::qt::QtWebSocketBackend connecting to closed port fails to conn
     REQUIRE_FALSE(backendPtr->waitForConnected(200));
 }
 
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: setConnectHandler fires on the first connect (unlike setReconnectHandler)",
+    "[qt][ws][issue29]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+
+    std::atomic<int> connectCount{0};
+    std::atomic<int> reconnectCount{0};
+    backend.setConnectHandler([&] { connectCount.fetch_add(1); });
+    backend.setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+
+    REQUIRE(backend.waitForConnected());
+    pumpUntil([&] { return connectCount.load() >= 1; });
+    CHECK(connectCount.load() == 1);
+    CHECK(reconnectCount.load() == 0);  // must not fire on the first connect
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: setDisconnectHandler fires when the socket drops, before reconnect",
+         "[qt][ws][issue29]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    std::atomic<bool> disconnected{false};
+    // Reconnect disabled: isolates the disconnect notification from any
+    // automatic reconnect attempt racing the assertions below.
+    std::unique_ptr<morph::qt::QtWebSocketBackend> backendPtr;
+    {
+        morph::qt::QtWebSocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+
+        QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+        backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+            url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
+            morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
+        REQUIRE(backendPtr->waitForConnected());
+
+        backendPtr->setDisconnectHandler([&] { disconnected.store(true); });
+        CHECK_FALSE(disconnected.load());
+
+        // wsServer goes out of scope here -- the client socket drops, while
+        // backendPtr (declared in the outer scope) survives to observe it.
+    }
+    pumpUntil([&] { return disconnected.load(); });
+    CHECK(disconnected.load());
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: setDisconnectHandler fires strictly before any reconnect activity",
+    "[qt][ws][issue29]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    quint16 port = 0;
+    std::unique_ptr<morph::qt::QtWebSocketBackend> backendPtr;
+    std::atomic<int> reconnectCount{0};
+    std::atomic<bool> disconnectSawNoReconnectYet{false};
+    std::atomic<bool> disconnectFired{false};
+    {
+        morph::qt::QtWebSocketServer wsServer{*server, 0};
+        REQUIRE(wsServer.listen());
+        port = wsServer.port();
+
+        backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+            QUrl{QString("ws://127.0.0.1:%1").arg(port)}, morph::model::detail::defaultDispatcher(),
+            morph::model::detail::defaultRegistry(), std::nullopt,
+            morph::qt::QtWebSocketBackend::Config{.initialReconnectDelay = std::chrono::milliseconds{10}});
+        REQUIRE(backendPtr->waitForConnected());
+
+        backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+        backendPtr->setDisconnectHandler([&] {
+            // The doc-comment-claimed ordering: disconnect must observe zero
+            // reconnect activity, since scheduleReconnect() -- let alone a
+            // completed reconnect -- has not run yet at this point.
+            disconnectSawNoReconnectYet.store(reconnectCount.load() == 0);
+            disconnectFired.store(true);
+        });
+
+        // wsServer goes out of scope here -- the client socket drops.
+    }
+    pumpUntil([&] { return disconnectFired.load(); });
+    CHECK(disconnectFired.load());
+    CHECK(disconnectSawNoReconnectYet.load());
+
+    // Bring a fresh server up on the same port so the backend's own automatic
+    // reconnect (Config::reconnectEnabled defaults to true) succeeds, proving
+    // the reconnect handler does eventually fire (just strictly after disconnect).
+    morph::qt::QtWebSocketServer wsServer{*server, port};
+    REQUIRE(wsServer.listen());
+    // waitForConnected pumps the event loop until the automatic reconnect lands.
+    REQUIRE(backendPtr->waitForConnected(2000));
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: passing nullptr to setConnectHandler/setDisconnectHandler/setReconnectHandler "
+    "clears them",
+    "[qt][ws][issue29]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+    quint16 const port = wsServer.port();
+
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        QUrl{QString("ws://127.0.0.1:%1").arg(port)}, morph::model::detail::defaultDispatcher(),
+        morph::model::detail::defaultRegistry(), std::nullopt,
+        morph::qt::QtWebSocketBackend::Config{.initialReconnectDelay = std::chrono::milliseconds{10}});
+    REQUIRE(backendPtr->waitForConnected());
+
+    std::atomic<int> connectCount{0};
+    std::atomic<int> disconnectCount{0};
+    std::atomic<int> reconnectCount{0};
+    backendPtr->setConnectHandler([&] { connectCount.fetch_add(1); });
+    backendPtr->setDisconnectHandler([&] { disconnectCount.fetch_add(1); });
+    backendPtr->setReconnectHandler([&] { reconnectCount.fetch_add(1); });
+
+    // First cycle: drop the connection (fires disconnect), then have the
+    // backend auto-reconnect to a fresh server on the same port (fires
+    // reconnect, which itself fires connect too).
+    wsServer.close();
+    pumpUntil([&] { return disconnectCount.load() >= 1; });
+    REQUIRE(disconnectCount.load() == 1);
+
+    morph::qt::QtWebSocketServer wsServer2{*server, port};
+    REQUIRE(wsServer2.listen());
+    REQUIRE(backendPtr->waitForConnected(2000));
+    pumpUntil([&] { return reconnectCount.load() >= 1; });
+    // The initial connect fired before setConnectHandler was installed above,
+    // so only the reconnect's connect signal is observed here.
+    REQUIRE(connectCount.load() == 1);
+    REQUIRE(reconnectCount.load() == 1);
+
+    // Clear all three handlers, then force a second disconnect/reconnect cycle.
+    backendPtr->setConnectHandler(nullptr);
+    backendPtr->setDisconnectHandler(nullptr);
+    backendPtr->setReconnectHandler(nullptr);
+
+    int const connectCountBefore = connectCount.load();
+    int const disconnectCountBefore = disconnectCount.load();
+    int const reconnectCountBefore = reconnectCount.load();
+
+    wsServer2.close();
+    pumpUntil([] { return false; }, 10);  // give the drop time to reach the client
+
+    morph::qt::QtWebSocketServer wsServer3{*server, port};
+    REQUIRE(wsServer3.listen());
+    REQUIRE(backendPtr->waitForConnected(2000));
+    pumpUntil([] { return false; }, 10);  // settle: nothing more should fire
+
+    CHECK(connectCount.load() == connectCountBefore);
+    CHECK(disconnectCount.load() == disconnectCountBefore);
+    CHECK(reconnectCount.load() == reconnectCountBefore);
+}
+
 TEST_CASE("morph::qt::QtWebSocketBackend reconnects to a fresh server on the same port", "[qt][ws][lifecycle]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};

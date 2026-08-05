@@ -27,6 +27,7 @@ and react to backend changes.
 
 - [The dispatch struct — `ActionCall`](#the-dispatch-struct--actioncall)
 - [The abstract interface — `IBackend`](#the-abstract-interface--ibackend)
+- [Connect/disconnect notifications](#connectdisconnect-notifications)
 - [Error types](#error-types)
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
@@ -73,7 +74,45 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | `execute(mid, call, cbExec)` | Dispatches `call` against the model identified by `mid`. Returns a `Completion<std::shared_ptr<void>>`. |
 | `notifyBackendChanged()` | Called by `Bridge::switchBackend()` after all handlers are re-registered. |
 | `cancelPending(exc)` | Resolves every still-pending completion with `exc`. Called on the outgoing backend during `switchBackend()` and in `Bridge`'s destructor. After this call, any later `setValue`/`setException` on those states is a no-op. |
-| `setReconnectHandler(handler)` | Installs a callback invoked when the backend reconnects to its peer. Used by backends with transport (e.g. `QtWebSocketBackend`). Default implementation is a no-op. |
+| `setReconnectHandler(handler)` | Installs a callback invoked when the backend reconnects to its peer. Fires only on the *second and later* connects, never the first — used by `Bridge` to re-register handlers after a drop. Used by backends with transport (e.g. `QtWebSocketBackend`). Default implementation is a no-op. |
+| `setConnectHandler(handler)` | Installs a callback invoked on every successful connect, including the first — the complementary hook `setReconnectHandler` deliberately skips (see [Connect/disconnect notifications](#connectdisconnect-notifications)). Default implementation is a no-op. |
+| `setDisconnectHandler(handler)` | Installs a callback invoked whenever the transport drops, before any reconnect is scheduled. Default implementation is a no-op. |
+
+## Connect/disconnect notifications
+
+`setReconnectHandler` exists so `Bridge` can re-register every live
+`HandlerBinding` after a transport drop and re-establish; it deliberately
+fires only on the *second and later* connects — on the first connect there
+is nothing yet to re-register. That leaves two gaps a UI reflecting live
+connection state needs closed:
+
+- **First connect.** `waitForConnected()` (where a concrete backend offers
+  one, e.g. `QtWebSocketBackend`) answers this, but it blocks the calling
+  thread. On a browser/WASM target that hangs the page outright; even on
+  desktop it means blocking startup on a network round-trip.
+- **Disconnect.** There was no hook at all: a client learned the socket
+  dropped only indirectly, when a later action failed.
+
+`setConnectHandler`/`setDisconnectHandler` close both, on `IBackend` itself
+(not only on `QtWebSocketBackend`) with the same no-op-default pattern
+`setReconnectHandler` already established — a UI observing connection state
+shouldn't have to downcast to a concrete backend type to do it, and a
+backend with no meaningful connection state (`LocalBackend`) simply never
+invokes either. `setConnectHandler`'s callback fires on *every* successful
+connect, first included; `setDisconnectHandler`'s fires whenever the
+transport drops, **before** any reconnect is scheduled, so an observer sees
+the disconnected state even when a retry follows immediately (an instant
+successful reconnect must not look, from the UI's perspective, like nothing
+happened). Both are invoked on the backend's own thread, and `nullptr`
+clears either — matching `setReconnectHandler`'s existing contract exactly.
+Purely additive: `setReconnectHandler` keeps its current semantics, and
+every existing embedder is unaffected.
+
+`QtWebSocketBackend` is currently the only backend that overrides either:
+its `connected`/`disconnected` `QWebSocket` signal slots invoke
+`_connectHandler`/`_disconnectHandler` (if installed) at the same points
+they already invoke `_reconnectHandler`/schedule a reconnect — see that
+section below.
 
 ## Error types
 
@@ -119,7 +158,7 @@ Four exception types are thrown into in-flight `Completion`s:
   Delivery is asynchronous and serialised against that model's `execute` tasks;
   it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
   bridge cannot deadlock.
-- `setReconnectHandler` — no-op (no transport to reconnect).
+- `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
 
 Each model instance gets its own strand so actions are serialised per-model
 without a global lock on the pool.
@@ -548,24 +587,30 @@ in the reply (see wire.md).
 
 The state machine:
 - On **`connected`**: sets `_connected`, resets the backoff delay to
-  `initialReconnectDelay`, quits any parked sync loop. It fires the
-  `_reconnectHandler` **only on subsequent connects** (`_everConnected` was
-  already true) — never on the first connect, because initial handler
-  registration is driven by the `BridgeHandler` constructors, not the reconnect
-  path.
-- On **`disconnected`**: clears `_connected` and immediately calls
-  `cancelPending(DisconnectedError{})`, resolving every in-flight execute with
-  `DisconnectedError`. If not shutting down, `reconnectEnabled`, and the socket
-  had *ever* connected, it schedules a reconnect with the current backoff delay,
-  then multiplies the delay by `backoffMultiplier` (capped at
-  `maxReconnectDelay`) for the next attempt. A connection that never succeeded
-  the first time is **not** retried.
+  `initialReconnectDelay`, quits any parked sync loop. Fires `_connectHandler`
+  (if installed) unconditionally — every successful connect, first included.
+  It then fires the `_reconnectHandler` **only on subsequent connects**
+  (`_everConnected` was already true) — never on the first connect, because
+  initial handler registration is driven by the `BridgeHandler` constructors,
+  not the reconnect path. See [Connect/disconnect notifications](#connectdisconnect-notifications).
+- On **`disconnected`**: clears `_connected`, then fires `_disconnectHandler`
+  (if installed) — **before** the reconnect scheduling below, so an observer
+  sees the disconnected state even when a retry follows immediately. Then
+  immediately calls `cancelPending(DisconnectedError{})`, resolving every
+  in-flight execute with `DisconnectedError`. If not shutting down,
+  `reconnectEnabled`, and the socket had *ever* connected, it schedules a
+  reconnect with the current backoff delay, then multiplies the delay by
+  `backoffMultiplier` (capped at `maxReconnectDelay`) for the next attempt. A
+  connection that never succeeded the first time is **not** retried.
 - `attemptReconnect` re-opens the socket; if it fails, `QWebSocket` fires
   `disconnected` again and the cycle repeats with the grown backoff.
 
 `Bridge` installs a `_reconnectHandler` (via `setReconnectHandler`) that
 re-registers every live `HandlerBinding` so model ids stay valid after the
 server assigns fresh ones on the new connection (cross-ref bridge.md).
+`setConnectHandler`/`setDisconnectHandler` are independent of that — an
+application installs them directly on the backend (not through `Bridge`) to
+drive its own connection-state UI.
 
 **`waitForConnected(timeoutMs = 5000)`** pumps the Qt event loop until the socket
 connects or the timeout elapses; returns the current `_connected` flag. Intended
@@ -993,7 +1038,9 @@ thread to marshal onto.
 | `execute` | `virtual Completion<shared_ptr<void>> execute(ModelId, ActionCall, IExecutor*)` | Pure virtual. |
 | `notifyBackendChanged` | `virtual void notifyBackendChanged()` | Pure virtual. |
 | `cancelPending` | `virtual void cancelPending(const exception_ptr&)` | Pure virtual. |
-| `setReconnectHandler` | `virtual void setReconnectHandler(const function<void()>&)` | Default: no-op. |
+| `setReconnectHandler` | `virtual void setReconnectHandler(const function<void()>&)` | Default: no-op. Fires only on the second and later connects. |
+| `setConnectHandler` | `virtual void setConnectHandler(const function<void()>&)` | Default: no-op. Fires on every successful connect, first included. |
+| `setDisconnectHandler` | `virtual void setDisconnectHandler(const function<void()>&)` | Default: no-op. Fires whenever the transport drops, before any reconnect is scheduled. |
 
 ### Error types
 
@@ -1069,6 +1116,8 @@ thread to marshal onto.
 | `notifyBackendChanged()` | No-op. |
 | `cancelPending(exc)` | Drains `_pending` under `_pendingMtx`, delivers `exc` to each state. |
 | `setReconnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every *subsequent* connect. `nullptr` clears. |
+| `setConnectHandler(handler)` | Stores the handler; invoked on the Qt thread after every successful connect, first included. `nullptr` clears. |
+| `setDisconnectHandler(handler)` | Stores the handler; invoked on the Qt thread whenever the socket drops, before reconnect scheduling. `nullptr` clears. |
 
 ### `QtWebSocketServerConfig` (namespace `morph::qt`)
 
@@ -1147,6 +1196,8 @@ not a behavior change to the existing loopback-only default.
 | `SimulatedRemoteBackend` factory ignored | Model construction delegated to `RemoteServer`'s `ModelRegistryFactory` | The factory closure lives on the client side; the server owns the actual instances. |
 | `cancelPending` snapshots | Weak-ptr snapshot under lock, then resolves outside | Avoids holding the lock while delivering exceptions to each state, preventing deadlock if a callback re-enters the backend. |
 | `setReconnectHandler` | Default no-op | Only backends with a transport layer (e.g. `QtWebSocketBackend`) need to react to reconnects. `LocalBackend` and `SimulatedRemoteBackend` never invoke it. |
+| `setConnectHandler`/`setDisconnectHandler` on `IBackend`, not only `QtWebSocketBackend` | Same no-op-default pattern as `setReconnectHandler` | Connection state is a property of any transport-backed backend; a UI observing it shouldn't have to downcast to a concrete backend type. A purely local backend has no meaningful connection state, so the base-class hook is simply inert for it — no behavior change, matching the existing `setReconnectHandler` precedent exactly. |
+| `setDisconnectHandler` fires before reconnect scheduling | Ordering choice, not incidental | An instant successful reconnect must not look, from an observer's perspective, like nothing happened — the disconnected state must be visible even when the very next thing that happens is a fresh `connected`. |
 | Strand-per-model | `StrandExecutor` serialises actions per `ModelId` | Actions against the same model run sequentially; different models can run in parallel. No global lock on the pool. |
 | Overwrite `session.principal` on remote execute | `authenticate()` result replaces the client claim before dispatch | The client-asserted `Context::principal` is untrusted; a verifying authorizer makes the token-derived identity authoritative so `session::current()->principal` inside a model is trustworthy. Non-verifying authorizers return `nullopt` and change nothing. |
 | Opaque model ids | Monotonic counter run through a keyed 4-round Feistel permutation (`detail::OpaqueIdGenerator`), key drawn from `std::random_device` at construction | Guarantees uniqueness (Feistel networks are bijections for any round function) while making ids unguessable without the key; self-contained, no external crypto dependency — same posture as the reference HMAC-SHA256 in `session_auth.hpp`. |
