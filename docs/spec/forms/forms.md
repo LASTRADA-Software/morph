@@ -1284,17 +1284,18 @@ Two schema shapes exist for a nested aggregate, and both are recursed into:
 `mergeSchemaExtras` resolves whichever form applies (`annotateNestedAggregateRef`,
 `forms.hpp`) and hands the resolved node to the same per-member annotation
 logic the top level uses (`annotateBasicMemberProperty`), applied against the
-nested type's own reflection. Each recursive step passes along the chain of
-nested-aggregate types already being annotated on the current path — starting
-with the action type `A` itself — as a variadic template parameter pack, so a
-deeper call can tell whether it is about to revisit a type already on that
-path.
+nested type's own reflection. Each recursive step passes along the **ancestor
+chain** — the action type `A`, followed by every nested-aggregate type
+visited since, in order, ending with the type currently being annotated — as
+a variadic template parameter pack, so a deeper call can tell whether a
+member's type is already somewhere on that chain.
 
 **Cyclic nested aggregates are a compile error, not infinite recursion.** A
-member whose type — or, for `std::vector<Sub>`, `Sub` — equals the action
-type or any nested-aggregate type already on the current ancestor chain
-(a self-referential type such as `struct Node { std::vector<Node>
-children; };`, or a mutual reference between two distinct types) trips a
+member whose type (or, for a `std::vector<Sub>` member, `Sub` itself) matches
+any type already on the ancestor chain — the action type, the
+nested-aggregate type currently being annotated, or anything annotated in
+between (a self-referential type such as `struct Node { std::vector<Node>
+children; };`, or a mutual reference between two distinct types) — trips a
 `static_assert` at the point that specific recursive instantiation would
 occur, instead of recursing forever. This only rejects genuine cycles: a
 "diamond" — the same type reused from two unrelated places in the schema,
@@ -1303,7 +1304,10 @@ same action — is not a cycle (neither `Address` nor any of its members is its
 own ancestor) and recurses normally into both. Restructure a domain type
 that trips this (e.g. flatten the self-reference, or represent the recursive
 edge as an opaque id instead of a nested value) if you need one; there is no
-runtime opt-out.
+runtime opt-out. The `static_assert` only fires where the offending type is
+actually reached as a nested-aggregate member of some `schemaJson<A>()` (or
+`mergeSchemaExtras<A>()`) instantiation — a self-referential type that is
+never nested under an action this way compiles and works fine on its own.
 
 Computed fields, `formLayout`/`fieldSpans`, and `formRules` remain **top-level
 only** regardless of nesting depth: a nested aggregate declaring any of those
