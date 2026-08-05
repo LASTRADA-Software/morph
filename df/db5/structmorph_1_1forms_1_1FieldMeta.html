@@ -160,7 +160,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms.md, "Field metadata"). </p>
 <p>An action opts in with a <span class="tt">static constexpr std::array&lt;<a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms....">FieldMeta</a>, N&gt;</span> (or, for the <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe</a>&lt;&gt;()</span> sugar, a <span class="tt">static const</span> array defined out-of-line — see <span class="tt"><a class="el" href="../../d4/d11/forms_8hpp.html#a3b81894e5b0752e560c4d21726af2731" title="Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.">describe()</a></span>'s documentation) named <span class="tt">fieldMetadata</span>, mirroring the existing <span class="tt">optionalFields</span> convention. Every member other than <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span> defaults to "not declared": an empty <span class="tt"><a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span>/<span class="tt"><a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span>/ <span class="tt"><a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> means "infer the title, omit the rest"; <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span>/<span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> default to <span class="tt">false</span>. <span class="tt">mergeSchemaExtras</span> looks up the entry (if any) matching each reflected member by wire key and patches the property node; an entry naming a field that does not exist on the action is ignored. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00154">154</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00167">167</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a6054a51698263cc9944bc66a85d21c87" name="a6054a51698263cc9944bc66a85d21c87"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a6054a51698263cc9944bc66a85d21c87">&#9670;&#160;</a></span>withPlaceholder()</h2>
@@ -194,7 +194,7 @@ Public Attributes</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00205">205</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -224,7 +224,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a3634033e187d0c6ce5c3c4239b13f602" title="Displayed but not editable when true; emits x-readonly.">readOnly</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -254,7 +254,7 @@ Public Attributes</h2></td></tr>
 <p>Returns a copy with <span class="tt"><a class="el" href="#a8c44a9d16363c47fb2234e6c87b72d6a" title="Not shown at all when true; emits x-hidden. The field still travels in the payload (see docs/spec/for...">hidden</a></span> set to <span class="tt">true</span>. </p>
 <dl class="section return"><dt>Returns</dt><dd>The updated descriptor. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00208">208</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00221">221</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -273,7 +273,7 @@ Public Attributes</h2></td></tr>
 
 <p>Wire key of the member this entry describes. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00156">156</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -291,7 +291,7 @@ Public Attributes</h2></td></tr>
 
 <p>Display label; empty infers a title-cased name from <span class="tt"><a class="el" href="#abd2b9a17b80041de6f9aaf7eed9f8b0c" title="Wire key of the member this entry describes.">field</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -309,7 +309,7 @@ Public Attributes</h2></td></tr>
 
 <p>Help text; empty omits <span class="tt">description</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00160">160</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00173">173</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +327,7 @@ Public Attributes</h2></td></tr>
 
 <p>In-control placeholder hint; empty omits <span class="tt">x-placeholder</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00175">175</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +346,7 @@ Public Attributes</h2></td></tr>
 <p>Explicit message-key <b>stem</b> override for this field's i18n catalog keys; empty means "derive the stem from the action's
        `ActionTraits&lt;A&gt;::typeId()` and this field's wire key" (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5" title="The fully-derived message key for one field text slot.">morph::forms::i18n::fieldKey</a></span>, <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html" title="Stable, schema-derived message-key vocabulary for renderer i18n.">forms/i18n.hpp</a></span>). A non-empty stem replaces only the <span class="tt">&lt;actionTypeId&gt;.&lt;wireField&gt;</span> portion of the key — the per-slot <span class="tt">.<a class="el" href="#a18113d5200a965d0050ad5f3a591b94a" title="Display label; empty infers a title-cased name from field.">label</a></span> / <span class="tt">.<a class="el" href="#a61b338589ad21fd57f86d3e20fcf990f" title="Help text; empty omits description.">help</a></span> / <span class="tt">.<a class="el" href="#a02bf72763b3d86624f5ab6ab9ac5f1b4" title="In-control placeholder hint; empty omits x-placeholder.">placeholder</a></span> suffix is still appended on top of it (see <span class="tt"><a class="el" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec" title="The explicit override key for one field text slot, when the field declares an x-i18nKey stem override...">morph::forms::i18n::explicitFieldKey</a></span>), so <span class="tt">"myKey"</span> expands to <span class="tt">"myKey.label"</span> / <span class="tt">"myKey.help"</span> / <span class="tt">"myKey.placeholder"</span>, never to a single complete key on its own. Emitted as <span class="tt">x-i18nKey</span> only when non-empty. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -365,7 +365,7 @@ Public Attributes</h2></td></tr>
 <p>Widget-selection override; empty means "use the field type's
        own `widget()`, if any". A non-empty value replaces that type-derived default and is emitted as <span class="tt">x-widget</span> (docs/spec/forms/widget_hints.md). Read structurally by <span class="tt">detail::widgetOverride</span>, not through this type by name — see <span class="tt">detail::HasFieldMetadataWidgets</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00181">181</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -383,7 +383,7 @@ Public Attributes</h2></td></tr>
 
 <p>Displayed but not editable when <span class="tt">true</span>; emits <span class="tt">x-readonly</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00196">196</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -401,7 +401,7 @@ Public Attributes</h2></td></tr>
 
 <p>Not shown at all when <span class="tt">true</span>; emits <span class="tt">x-hidden</span>. The field still travels in the payload (see <span class="tt">docs/spec/forms/forms.md</span>, "Field metadata is not a security control"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00187">187</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
