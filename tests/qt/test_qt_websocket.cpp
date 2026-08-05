@@ -206,6 +206,40 @@ TEST_CASE(
     REQUIRE(result.load() == 99);
 }
 
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: registerModelAsync's pending registration is cancelled when the connection "
+    "drops before a reply arrives",
+    "[qt][ws][issue26]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    REQUIRE(wsServer->listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
+        morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "WsEchoModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); };
+    bridge.registerHandler(binding);
+    CHECK(binding->currentId.load() == 0U);  // reply has not arrived yet
+
+    // Close the server before it can reply: cancelPending() must drain and
+    // fail the pending registration (onError), not leave it dangling forever.
+    wsServer->close();
+    wsServer.reset();
+    pumpUntil([] { return false; }, 20);  // drain the disconnected signal
+
+    CHECK(binding->currentId.load() == 0U);  // onRegistered never fired; still safely unbound
+}
+
 TEST_CASE("morph::qt::QtWebSocketBackend: exception delivered via onError", "[qt][ws]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
