@@ -239,6 +239,19 @@ sending a now-destroyed `ModelId` to the backend.
 `morph::session::Context` that is attached to every `executeVia()` call.
 Thread-safe, separate mutex from `_mtx`.
 
+**`setPrincipal(principal)`** / **`currentPrincipal()`** installs and reads
+back a `morph::session::Principal` — the verified identity + roles, readable
+*outside* a dispatch (unlike `session::current()`, which only exists during
+one), so UI code can gate itself (`bridge.currentPrincipal().hasRole("editor")`)
+instead of attempting an action and catching the refusal. Thread-safe, its own
+mutex (`_principalMtx`, separate from both `_mtx` and the session mutex).
+Scoped to this `Bridge` instance, not a process-wide global — see
+[session.md](../session/session.md#principal--readable-authorization-state-outside-a-dispatch)
+for the full rationale and trust model. Purely a client-side convenience: it
+has no wire representation and does not affect dispatch or `Context` in any
+way — every dispatch is still authorized server-side via `IAuthorizer`
+regardless of what `currentPrincipal()` says.
+
 **Destructor** first **clears the active backend's reconnect handler**
 (`setReconnectHandler(nullptr)`), then cancels every pending completion on that
 backend with `BridgeDestroyedError`. In-flight replies that arrive after
@@ -516,6 +529,8 @@ make teardown order-independent.)
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
+| `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
+| `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
 
 ### `BridgeHandler<Model>`
 

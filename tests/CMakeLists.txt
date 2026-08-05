@@ -20,6 +20,7 @@ add_executable(morph_tests
     test_registry_extra.cpp
     test_registration_qualified_types.cpp
     test_registration_same_line.cpp
+    test_principal.cpp
     test_bridge_local.cpp
     test_bridge_remote.cpp
     test_bridge_execute_json.cpp

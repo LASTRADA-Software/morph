@@ -15,6 +15,7 @@ security.md for the full trust model rather than duplicating it.
 
 - [Context — an open data bag](#context--an-open-data-bag)
 - [How a `Context` originates and flows](#how-a-context-originates-and-flows)
+- [Principal — readable authorization state outside a dispatch](#principal--readable-authorization-state-outside-a-dispatch)
 - [IAuthorizer — gate for action dispatch](#iauthorizer--gate-for-action-dispatch)
 - [The `authenticate` hook — the authoritative principal](#the-authenticate-hook--the-authoritative-principal)
 - [The `authorizeInstance` hook — per-instance ownership](#the-authorizeinstance-hook--per-instance-ownership)
@@ -78,6 +79,57 @@ From the `ActionCall` the session travels backend-specifically:
 The bridge plumbing (`setDefaultSession`/`defaultSession`, the `ActionCall`
 stamp) is specified in [bridge.md](../core/bridge.md); this spec covers only the
 `Context` payload and its server-side handling.
+
+## Principal — readable authorization state outside a dispatch
+
+`Context::principal` only exists **during** a dispatch: `session::current()`
+returns `nullptr` outside one (see [Thread safety](#thread-safety--current-and-scopedcontext)),
+so UI code — a button's enabled state, a menu item's visibility — has no way
+to ask "who is signed in and what may they do?" without attempting the action
+and catching the failure.
+
+`Principal` is the longer-lived counterpart:
+
+```cpp
+struct Principal {
+    std::string id;
+    std::vector<std::string> roles;
+    std::unordered_map<std::string, std::string> claims;
+    [[nodiscard]] bool hasRole(std::string_view role) const;
+};
+```
+
+An application installs it once — typically right after a successful login
+dispatch, from data the server actually returned (e.g. the bank example's
+`AuthResult`) — via `Bridge::setPrincipal(principal)`, and UI code reads it
+back with `Bridge::currentPrincipal()`, outside any dispatch:
+
+```cpp
+deleteButton.setEnabled(bridge.currentPrincipal().hasRole("editor"));
+```
+
+**Scoped to the `Bridge` instance, not a process-wide global.** The Principal
+lives on the specific `Bridge` whose backend it came from — the same object
+that already holds the default `Context` (`setDefaultSession`/`defaultSession`)
+— rather than one ambient value shared by every backend a process happens to
+hold. Guarded by its own mutex (`_principalMtx`, separate from the session
+mutex), since it is expected to be read far more frequently — by UI code on
+every relevant repaint/state check — than the per-call session snapshot.
+
+**Trust: a read-only cache of what the server last said, never a second
+authority.** Populate it only from data the server actually returned, never
+from a client-side guess — otherwise it becomes a client-controlled permission
+set. Roles can change server-side mid-session; a stale `Principal` only
+shapes what the UI *offers*, it never substitutes for server-side
+authorization — every dispatch is still authorized there via `IAuthorizer`
+regardless of what `currentPrincipal()` says client-side.
+
+**Relationship to `Context`.** `Context` is the per-call payload that travels
+with *every* dispatch and is what the server actually authorizes against;
+`Principal` is a client-side, longer-lived snapshot of the outcome of that
+authorization (as told to the client at login), read outside any one call.
+Setting a `Principal` does not affect `Context` or dispatch behavior in any
+way — it is purely a UI-facing convenience with no wire representation.
 
 ## IAuthorizer — gate for action dispatch
 
@@ -324,6 +376,19 @@ if (const auto* ctx = morph::session::current(); ctx != nullptr) {
 | `locale` | `std::string` | BCP-47 locale; empty for default. |
 | `metadata` | `std::unordered_map<std::string, std::string>` | Free-form metadata bag. |
 
+### `Principal`
+
+| Member | Signature | Notes |
+|---|---|---|
+| `id` | `std::string` | Verified identity (e.g. username), as returned by the server. Empty if signed out. |
+| `roles` | `std::vector<std::string>` | Coarse-grained roles the app can gate UI on. |
+| `claims` | `std::unordered_map<std::string, std::string>` | Free-form claims beyond `id`/`roles`. |
+| `hasRole` | `[[nodiscard]] bool hasRole(std::string_view role) const` | `true` if `roles` contains @p role. |
+
+`Bridge::setPrincipal`/`Bridge::currentPrincipal` (`core/bridge.hpp`) install
+and read it; see [Principal](#principal--readable-authorization-state-outside-a-dispatch)
+above and [bridge.md](../core/bridge.md).
+
 ### `IAuthorizer`
 
 | Member | Signature | Notes |
@@ -368,6 +433,7 @@ if (const auto* ctx = morph::session::current(); ctx != nullptr) {
 | Authentication as a separate hook | **`authenticate` distinct from `authorize`, optional with a `nullopt` default; `nullopt` clears the principal** | Separates "is this permitted?" from "who is it?"; authorizers that don't authenticate cost nothing, and the verified principal — not the client's claim — becomes authoritative when one does. A `nullopt` result clears the principal so an unauthenticated claim is never trusted, closing the TOCTOU/authorize-only passthrough. |
 | Singleton authorizer | **Static local in `allowAllAuthorizer()`** | All trivial `RemoteServer` instances share one `AllowAllAuthorizer` allocation rather than each owning one. |
 | Serialisation | **Entire `Context` travels on the wire** | The remote backend's `RemoteServer` sees the same `principal`, `token`, `requestId`, `locale`, and `metadata` the GUI sent; no information is stripped. |
+| `Principal` scope | **Per-`Bridge` instance, not a process-wide global** | A global "current user" is convenient for a single-backend desktop client but wrong in general — an app may hold more than one `Bridge`, and a global would let one backend's identity leak into another's UI gating. Scoping it to the same object that already holds the default `Context` (`setDefaultSession`) keeps one consistent place to look for "this backend's session state," with no new ambient state. |
 
 ## Limitations
 
@@ -388,6 +454,10 @@ if (const auto* ctx = morph::session::current(); ctx != nullptr) {
   authorizer subclass itself.
 - **`current()` is dispatch-thread-only.** It returns `nullptr` off the dispatch
   thread; session data needed across a thread boundary must be captured first.
+  `Bridge::currentPrincipal()` (see [Principal](#principal--readable-authorization-state-outside-a-dispatch))
+  closes this specifically for "who is signed in and what may they do?" — the
+  common case a UI needs — without making the full per-call `Context` readable
+  off-thread.
 
 See [security.md](../security.md) for the complete threat model and hardening
 checklist (TLS, message-size bounds, control-message authorization, secret
