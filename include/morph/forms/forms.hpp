@@ -1566,11 +1566,12 @@ struct IsStdVector<std::vector<T, Alloc>> : std::true_type {
 template <typename T>
 concept ReflectableAggregate = glz::reflectable<T> || glz::glaze_object_t<T>;
 
-/// @brief Applies the same title/`FieldMeta`/`Quantity`/`Choice`/widget/
-///        ranged-bounds annotations `mergeSchemaExtras`'s top-level pass
-///        applies, to one property node. Shared by that top-level pass and
-///        `annotateNestedAggregate` below (the one-level nested-aggregate pass) so
-///        both apply identical per-member rules.
+/// @brief Applies the title/`FieldMeta`/`Quantity`/`Choice`/widget/
+///        ranged-bounds annotations to one property node. Shared by
+///        `mergeSchemaExtras`'s top-level pass and `annotateNestedAggregate`
+///        below (the nested-aggregate recursion, to whatever depth the type
+///        graph has) so both apply identical per-member rules -- this is the
+///        single implementation of those rules; neither caller duplicates it.
 ///
 /// Deliberately excludes computed-field annotations (`x-computed`/
 /// `x-readonly`) and `x-order`: computed fields are not supported inside a
@@ -1805,8 +1806,18 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
     if (propertyOrItems.contains("$ref")) {
         if (auto const* ref = propertyOrItems["$ref"].get_if<std::string>()) {
             if (std::string_view{*ref}.starts_with(kDefsPrefix)) {
-                annotateNestedAggregate<Sub, Ancestors...>(
-                    dom, dom["$defs"][std::string{ref->substr(kDefsPrefix.size())}]);
+                auto const key = std::string{ref->substr(kDefsPrefix.size())};
+                // Checked, not indexed-and-hope: glz::generic_u64's object
+                // storage reallocates on insert, so indexing a missing key
+                // here would both fabricate a bogus empty $defs entry AND --
+                // now that annotateNestedAggregate recurses -- risk dangling
+                // a `node` reference an enclosing frame still holds into this
+                // same $defs map. Well-formed glaze output never names a
+                // $defs key that doesn't exist, so this only changes behavior
+                // for malformed input, which is left untouched instead.
+                if (dom.contains("$defs") && dom["$defs"].contains(key)) {
+                    annotateNestedAggregate<Sub, Ancestors...>(dom, dom["$defs"][key]);
+                }
             }
         }
         return;
@@ -1874,108 +1885,10 @@ template <typename A>
             property["x-computed"] = computedMeta;
         }
 
-        // Label/help/placeholder/read-only/hidden: an explicit FieldMeta
-        // entry overrides the inferred title and adds the rest; absent, every
-        // field still gets an inferred title and nothing else (Field
-        // metadata is additive/optional per gui_overview.md's versioning
-        // stance — a renderer that ignores these keys shows the raw wire key
-        // as the caption, no helper/placeholder text, every field editable
-        // and visible, exactly as before this feature).
-        const FieldMeta* fieldMeta = findFieldMeta<A>(name);
-        std::string_view const declaredLabel = fieldMeta != nullptr ? fieldMeta->label : std::string_view{};
-        property["title"] = declaredLabel.empty() ? inferTitle(name) : std::string{declaredLabel};
-        if (fieldMeta != nullptr) {
-            if (!fieldMeta->help.empty()) {
-                property["description"] = std::string{fieldMeta->help};
-            }
-            if (!fieldMeta->placeholder.empty()) {
-                property["x-placeholder"] = std::string{fieldMeta->placeholder};
-            }
-            if (fieldMeta->readOnly) {
-                property["x-readonly"] = true;
-            }
-            if (fieldMeta->hidden) {
-                property["x-hidden"] = true;
-            }
-            if (!fieldMeta->i18nKey.empty()) {
-                property["x-i18nKey"] = std::string{fieldMeta->i18nKey};
-            }
-        }
-
-        if constexpr (units::isQuantity<Member>) {
-            // The field's *declared* precision: the unit default unless the
-            // field's type overrides it (Quantity<Unit::m3, 4>).
-            property["x-decimalPlaces"] = std::uint64_t{Member::declaredDecimals};
-
-            // Convertible display/entry units with their exact ratios.
-            auto const alternatives = Member::unitAlternatives();
-            if (!alternatives.empty()) {
-                glz::generic_u64::array_t list{};
-                for (auto const& alternative : alternatives) {
-                    auto const meta =
-                        units::UnitTraits<std::remove_const_t<decltype(Member::unit)>>::meta(alternative.unit);
-                    glz::generic_u64 entry{};
-                    entry["id"] = std::string{meta.id};
-                    entry["display"] = std::string{meta.display};
-                    entry["decimals"] = std::uint64_t{meta.defaultDecimals};
-                    entry["num"] = alternative.num;
-                    entry["den"] = alternative.den;
-                    list.emplace_back(std::move(entry));
-                }
-                property["x-unitAlternatives"] = list;
-            }
-        }
-        if constexpr (isChoice<Member>) {
-            // Which action serves the options, and which result-row fields
-            // carry the submitted value / display label.
-            property["x-optionsAction"] = std::string{Member::optionsAction()};
-            property["x-optionValue"] = std::string{Member::valueField()};
-            property["x-optionLabel"] = std::string{Member::labelField()};
-
-            // Sibling fields whose current values parameterise the options
-            // action (cascading picklists). Omitted entirely for an
-            // independent Choice, so the emitted schema is byte-for-byte
-            // unchanged from before this key existed.
-            if constexpr (!Member::optionsDependsOn().empty()) {
-                glz::generic_u64::array_t dependsOn{};
-                for (auto const& parentName : Member::optionsDependsOn()) {
-                    dependsOn.emplace_back(std::string{parentName});
-                }
-                property["x-optionsDependsOn"] = dependsOn;
-            }
-        }
-
-        // Widget hint: the field type's own widget() (e.g. Multiline,
-        // Ranged), overridden — if present — by a fieldMetadata-shaped entry
-        // naming this field. The override always wins over the type-derived
-        // default.
-        std::string_view widgetHint{};
-        if constexpr (DeclaresWidget<Member>) {
-            widgetHint = Member::widget();
-        }
-        if constexpr (HasFieldMetadataWidgets<A>) {
-            if (auto const overrideWidget = widgetOverride<A>(name); !overrideWidget.empty()) {
-                widgetHint = overrideWidget;
-            }
-        }
-        if (!widgetHint.empty()) {
-            property["x-widget"] = std::string{widgetHint};
-        }
-        if constexpr (DeclaresRangedBounds<Member>) {
-            // The slider's control track: a UI hint, not a validation bound
-            // (glaze's own minimum/maximum, when present, stay authoritative
-            // for validation regardless of what x-widget ends up here).
-            using Bound = std::remove_cvref_t<decltype(Member::min())>;
-            if constexpr (std::floating_point<Bound>) {
-                property["x-min"] = static_cast<double>(Member::min());
-                property["x-max"] = static_cast<double>(Member::max());
-                property["x-step"] = static_cast<double>(Member::step());
-            } else {
-                property["x-min"] = static_cast<std::int64_t>(Member::min());
-                property["x-max"] = static_cast<std::int64_t>(Member::max());
-                property["x-step"] = static_cast<std::int64_t>(Member::step());
-            }
-        }
+        // Label/title/FieldMeta/Quantity/Choice/widget/ranged-bounds: shared
+        // with the nested-aggregate recursion's per-member pass so both apply
+        // identical rules (see annotateBasicMemberProperty's doc comment).
+        annotateBasicMemberProperty<A, Member>(property, name);
 
         // Nested aggregates (recursive, cycle-guarded -- docs/spec/forms/forms.md,
         // "Nested aggregates (recursive, cycle-guarded)"): a member whose type
