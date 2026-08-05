@@ -570,3 +570,28 @@ TEST_CASE(
     CHECK_FALSE(property.contains("required"));
     CHECK(property["type"].get<std::string>() == "string");
 }
+
+// ── Self-referential nested-aggregate type, standalone ─────────────────────
+
+TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggregate type round-trips fine on its own",
+         "[forms][nested][issue25]") {
+    // TreeNode is never passed to morph::forms::schemaJson<A>() in this file
+    // -- see its doc comment. This only proves the type itself, and ordinary
+    // glaze JSON round-tripping over it, are completely unaffected by
+    // forms.hpp's cycle-guard static_assert, which fires only when a type
+    // like this is actually nested under some schemaJson<A>() instantiation.
+    TreeNode root{};
+    root.name = "root";
+    TreeNode child{};
+    child.name = "child";
+    root.children.push_back(child);
+
+    std::string const json = glz::write_json(root).value_or(std::string{});
+    REQUIRE_FALSE(json.empty());
+
+    TreeNode decoded{};
+    REQUIRE_FALSE(glz::read_json(decoded, json));
+    CHECK(decoded.name == "root");
+    REQUIRE(decoded.children.size() == 1);
+    CHECK(decoded.children[0].name == "child");
+}
