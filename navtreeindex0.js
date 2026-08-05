@@ -195,9 +195,11 @@ var NAVTREEINDEX0 =
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a5b0bba2d347ea69930d4166c541528fd":[2,0,0,15,2,5],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084":[2,0,0,15,2,9],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f":[2,0,0,15,2,3],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784":[2,0,0,15,2,16],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0":[2,0,0,15,2,12],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a":[2,0,0,15,2,10],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aaeeb1552d6d0d5601f9457d5bd3494cf":[2,0,0,15,2,13],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ab67ef0cfd83f0e7fd5c5a857e94215bf":[2,0,0,15,2,15],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c":[2,0,0,15,2,0],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad1a2a95d9fa055d297e3176ab981348b":[2,0,0,15,2,4],
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad3e402f437433e89a65dbe1ef056da84":[2,0,0,15,2,2],
@@ -247,7 +249,5 @@ var NAVTREEINDEX0 =
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a73dbbbc8a19d6df1e2d1a8c7353fdb1a":[2,0,0,2,6,4],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a7a5bff8cb318d46f4347cc5211b92e81":[2,0,0,2,6,0],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a99f2c685f538d7cbdbdc8f762c9cca47":[2,0,0,2,6,8],
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9c30776adb059a937a151eceeccc5875":[2,0,0,2,6,7],
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9ea8ed30f49ff089f677e09210ffc486":[2,0,0,2,6,13],
-"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa3de29a47fe56d091889756e7e1faadd":[2,0,0,2,6,14]
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9c30776adb059a937a151eceeccc5875":[2,0,0,2,6,7]
 };

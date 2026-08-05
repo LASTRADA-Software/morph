@@ -168,6 +168,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aaeeb1552d6d0d5601f9457d5bd3494cf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Resolves every pending execute call's <span class="tt">Completion</span> with <code class="param">exc</code>.  <br /></td></tr>
 <tr class="memitem:a286541f7d30275b6004f8a5dcd999b7f" id="r_a286541f7d30275b6004f8a5dcd999b7f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a286541f7d30275b6004f8a5dcd999b7f">setReconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
 <tr class="memdesc:a286541f7d30275b6004f8a5dcd999b7f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the handler <span class="tt">Bridge</span> uses to re-register handlers after a reconnect.  <br /></td></tr>
+<tr class="memitem:ab67ef0cfd83f0e7fd5c5a857e94215bf" id="r_ab67ef0cfd83f0e7fd5c5a857e94215bf"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ab67ef0cfd83f0e7fd5c5a857e94215bf">setConnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
+<tr class="memdesc:ab67ef0cfd83f0e7fd5c5a857e94215bf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a handler invoked on every successful connect, including the first.  <br /></td></tr>
+<tr class="memitem:a741e68faad6ca0388f2d6c3740a3c784" id="r_a741e68faad6ca0388f2d6c3740a3c784"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a741e68faad6ca0388f2d6c3740a3c784">setDisconnectHandler</a> (const std::function&lt; void()&gt; &amp;handler) override</td></tr>
+<tr class="memdesc:a741e68faad6ca0388f2d6c3740a3c784"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs a handler invoked whenever the socket drops.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IBackend</span> implementation that communicates with a <span class="tt">RemoteServer</span> over WebSocket. </p>
@@ -715,6 +719,72 @@ Public Member Functions</h2></td></tr>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">handler</td><td>Callable invoked on the Qt thread after every successful reconnect. Pass <span class="tt">nullptr</span> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="ab67ef0cfd83f0e7fd5c5a857e94215bf" name="ab67ef0cfd83f0e7fd5c5a857e94215bf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ab67ef0cfd83f0e7fd5c5a857e94215bf">&#9670;&#160;</a></span>setConnectHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::setConnectHandler </td>
+          <td>(</td>
+          <td class="paramtype">const std::function&lt; void()&gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs a handler invoked on every successful connect, including the first. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable invoked on the Qt thread after every successful connect (first and subsequent). Pass <span class="tt">nullptr</span> to clear. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+</div>
+</div>
+<a id="a741e68faad6ca0388f2d6c3740a3c784" name="a741e68faad6ca0388f2d6c3740a3c784"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a741e68faad6ca0388f2d6c3740a3c784">&#9670;&#160;</a></span>setDisconnectHandler()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::qt::QtWebSocketBackend::setDisconnectHandler </td>
+          <td>(</td>
+          <td class="paramtype">const std::function&lt; void()&gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>handler</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs a handler invoked whenever the socket drops. </p>
+<p>Fires before reconnect scheduling, so an observer sees the disconnected state even when a retry follows immediately. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">handler</td><td>Callable invoked on the Qt thread whenever the connection drops. Pass <span class="tt">nullptr</span> to clear. </td></tr>
   </table>
   </dd>
 </dl>

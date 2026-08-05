@@ -14,5 +14,7 @@ var classmorph_1_1qt_1_1QtWebSocketBackend =
     [ "execute", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74", null ],
     [ "notifyBackendChanged", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0", null ],
     [ "cancelPending", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aaeeb1552d6d0d5601f9457d5bd3494cf", null ],
-    [ "setReconnectHandler", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a286541f7d30275b6004f8a5dcd999b7f", null ]
+    [ "setReconnectHandler", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a286541f7d30275b6004f8a5dcd999b7f", null ],
+    [ "setConnectHandler", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ab67ef0cfd83f0e7fd5c5a857e94215bf", null ],
+    [ "setDisconnectHandler", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784", null ]
 ];

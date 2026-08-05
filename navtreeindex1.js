@@ -1,5 +1,7 @@
 var NAVTREEINDEX1 =
 {
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a9ea8ed30f49ff089f677e09210ffc486":[2,0,0,2,6,13],
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#aa3de29a47fe56d091889756e7e1faadd":[2,0,0,2,6,14],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818":[2,0,0,2,6,5],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ad6812db7373f28d3f34df893d2f1fb20":[2,0,0,2,6,9],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#adfa3bd5a86b06e05a374be4433bcad0d":[2,0,0,2,6,6],
@@ -247,7 +249,5 @@ var NAVTREEINDEX1 =
 "da/d37/structmorph_1_1wire_1_1ProtocolRange.html#a6190fe5bcb853346f49dc971ad241e25":[2,0,0,20,2,1],
 "da/d37/structmorph_1_1wire_1_1ProtocolRange.html#adfa4a6388f9041899122c1ee4dae90f6":[2,0,0,20,2,0],
 "da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html":[2,0,0,14,7,0],
-"da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a0fdab8abff2392967b5da3565f3eea76":[2,0,0,14,7,0,5],
-"da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a5a256ea38f2a9cb7adef0aaf8bc17cf1":[2,0,0,14,7,0,6],
-"da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a82801c7aca391405f55114206d4956ab":[2,0,0,14,7,0,3]
+"da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a0fdab8abff2392967b5da3565f3eea76":[2,0,0,14,7,0,5]
 };
