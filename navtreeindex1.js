@@ -1,5 +1,7 @@
 var NAVTREEINDEX1 =
 {
+"d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#aee4ba6011ddc2be1f5da9b9861108ea2":[2,0,0,12,3,0],
+"d4/dc1/classmorph_1_1backend_1_1RemoteServer.html":[2,0,0,2,6],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a3125da15823891abf6a3bf4fc6355bb3":[2,0,0,2,6,2],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a5cff8e36190c13564e05bb05fb35bcbe":[2,0,0,2,6,12],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a66af4191998e07b569e5800c10c68315":[2,0,0,2,6,11],
@@ -247,7 +249,5 @@ var NAVTREEINDEX1 =
 "da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa6d381d9d51f4aa69e33411b0f162edb":[2,0,0,10,0,2],
 "da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa749623abe11b8ef07f2738716eda722":[2,0,0,10,0,0],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html":[2,0,0,8,8],
-"da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b":[2,0,0,8,8,2],
-"da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333":[2,0,0,8,8,3],
-"da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa":[2,0,0,8,8,4]
+"da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b":[2,0,0,8,8,2]
 };

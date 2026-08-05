@@ -6,5 +6,6 @@ var searchData=
   ['activatelocal_3',['activateLocal',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#aba5e760a9877355a77ac7915553d0ede',1,'morph::offline::ReconnectCoordinator::Deps']]],
   ['activateprimary_4',['activatePrimary',['../da/d4f/structmorph_1_1offline_1_1ReconnectCoordinator_1_1Deps.html#a8b0c404513fccf08fe86de00b9c91047',1,'morph::offline::ReconnectCoordinator::Deps']]],
   ['allowplaintextexposure_5',['allowPlaintextExposure',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#aeb30cc5b19543d22feef392669c98834',1,'morph::qt::QtWebSocketServerConfig']]],
-  ['attempts_6',['attempts',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f',1,'morph::offline::QueueItem']]]
+  ['asyncregistrationenabled_6',['asyncRegistrationEnabled',['../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a6c56987caa7c301720c589d6de8ec7ac',1,'morph::qt::QtWebSocketBackendConfig']]],
+  ['attempts_7',['attempts',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f',1,'morph::offline::QueueItem']]]
 ];

@@ -1,5 +1,7 @@
 var NAVTREEINDEX2 =
 {
+"da/d23/classmorph_1_1journal_1_1SessionLog.html#a8a0a9e604a71fe05ce39de064e298333":[2,0,0,8,8,3],
+"da/d23/classmorph_1_1journal_1_1SessionLog.html#a9d1dab7c6941547a60111c39393fcbfa":[2,0,0,8,8,4],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html#ad7fb2e3940c88d02d4d0fc0c29434e90":[2,0,0,8,8,0],
 "da/d23/classmorph_1_1journal_1_1SessionLog.html#aeff64f58add6666d429a581a485c4b65":[2,0,0,8,8,1],
 "da/d37/structmorph_1_1wire_1_1ProtocolRange.html":[2,0,0,20,2],
@@ -247,7 +249,5 @@ var NAVTREEINDEX2 =
 "dir_24b31c4691f70f951d289a2995ea210c.html":[3,0,0,6],
 "dir_35b3bca066aaffca78277ff0c24c75fe.html":[3,0,0,4,0],
 "dir_3fb6632a00b78236ce9a517b905728c7.html":[3,0,0,9],
-"dir_5b797ed37428e5712e0ca1b2a2557ee8.html":[3,0,0,7],
-"dir_94b209676680ba6e0fc855344bbac0af.html":[3,0,0,8],
-"dir_9c0da41caaffffc8847239098d349f93.html":[3,0,0,1]
+"dir_5b797ed37428e5712e0ca1b2a2557ee8.html":[3,0,0,7]
 };
