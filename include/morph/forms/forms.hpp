@@ -1558,7 +1558,7 @@ struct IsStdVector<std::vector<T, Alloc>> : std::true_type {
 
 /// @brief Concept: `T` is glaze-reflectable as a JSON object -- the same test
 ///        that decides whether glaze emits a member into `$defs`/`$ref`
-///        rather than inline. Shared by the one-level nested-aggregate
+///        rather than inline. Shared by the cycle-guarded nested-aggregate
 ///        recursion below and `reconcileDeclaredPrecision` elsewhere.
 template <typename T>
 concept ReflectableAggregate = glz::reflectable<T> || glz::glaze_object_t<T>;
@@ -1658,10 +1658,85 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
     }
 }
 
-/// @brief One level of recursion (see `docs/spec/forms/forms.md`, "Nested
-///        aggregates (one level)"): annotates @p node -- the object-schema
-///        DOM node for a nested-aggregate member -- applying `required` and
-///        `annotateBasicMemberProperty`'s rules to its own properties.
+// annotateNestedAggregate, annotateNestedAggregateRef, and
+// recurseIntoNestedAggregateIfAny are mutually recursive (each nested
+// aggregate found while annotating one may itself contain another), so all
+// three need forward declarations before any of their bodies can reference
+// the others.
+template <typename Sub, typename... Ancestors>
+void annotateNestedAggregate(glz::generic_u64& dom, glz::generic_u64& node);
+
+template <typename Sub, typename... Ancestors>
+void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propertyOrItems);
+
+template <typename Member, typename... Ancestors>
+void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& property);
+
+/// @brief Recurses into @p property's own object schema if @p Member (or, for
+///        `std::vector<Sub>`, its element type) is itself a
+///        `ReflectableAggregate` -- the single decision point shared by
+///        `mergeSchemaExtras`'s top-level loop and `annotateNestedAggregate`'s
+///        own loop, so the cycle guard below has exactly one implementation.
+///
+/// @p Ancestors is the chain of nested-aggregate types already being
+/// annotated on the current path, **including** the type that declares this
+/// member (the caller appends its own `Sub`/`A` before calling this). If the
+/// type to recurse into matches any entry already on that chain, recursing
+/// further would eventually re-enter this same instantiation and try to do
+/// so again -- forever. Rather than let that happen, a `static_assert` (whose
+/// condition depends on @p Member and @p Ancestors, so it only fires for the
+/// specific cyclic instantiation, not every use of this generator) rejects it
+/// at compile time instead: a self-referential nested-aggregate type (e.g.
+/// `struct Node { std::vector<Node> children; };`), or a mutual reference
+/// between two distinct types, fails to build with a clear message rather
+/// than exhausting the compiler's template-instantiation depth. This only
+/// rejects genuine cycles -- the same type reused from two unrelated places
+/// in the schema (a "diamond") is not on either path's ancestor chain and
+/// recurses normally into both. See `docs/spec/forms/forms.md`, "Nested
+/// aggregates (recursive, cycle-guarded)".
+/// @tparam Member    The static type of the member `annotateBasicMemberProperty`
+///                    was just applied to.
+/// @tparam Ancestors The ancestor chain so far, ending with the type that
+///                    declares this member.
+/// @param dom      The whole schema DOM (so a `$ref`'s `$defs` entry can be found).
+/// @param property The property node for this member (or, for `std::vector<Sub>`,
+///                  the property whose `"items"` node is the one to check).
+template <typename Member, typename... Ancestors>
+void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& property) {
+    if constexpr (ReflectableAggregate<Member>) {
+        if constexpr ((std::same_as<Member, Ancestors> || ...)) {
+            static_assert(!(std::same_as<Member, Ancestors> || ...),
+                          "morph::forms: cyclic nested-aggregate schema -- this member's type already "
+                          "appears in its own chain of enclosing nested-aggregate types (a self- or "
+                          "mutually-referential type). Recursion depth is otherwise unbounded, but cycles "
+                          "are not supported: restructure the domain type (flatten the self-reference, or "
+                          "represent the recursive edge as an opaque id instead of a nested value).");
+        } else {
+            annotateNestedAggregateRef<Member, Ancestors...>(dom, property);
+        }
+    } else if constexpr (IsStdVector<Member>::value &&
+                         ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
+        using ItemType = typename IsStdVector<Member>::ValueType;
+        if constexpr ((std::same_as<ItemType, Ancestors> || ...)) {
+            static_assert(!(std::same_as<ItemType, Ancestors> || ...),
+                          "morph::forms: cyclic nested-aggregate schema -- this std::vector<Sub> member's "
+                          "element type already appears in its own chain of enclosing nested-aggregate "
+                          "types (a self- or mutually-referential type). Recursion depth is otherwise "
+                          "unbounded, but cycles are not supported: restructure the domain type (flatten "
+                          "the self-reference, or represent the recursive edge as an opaque id instead of "
+                          "a nested value).");
+        } else if (property.contains("items")) {
+            annotateNestedAggregateRef<ItemType, Ancestors...>(dom, property["items"]);
+        }
+    }
+}
+
+/// @brief Annotates @p node -- the object-schema DOM node for a
+///        nested-aggregate member -- applying `required` and
+///        `annotateBasicMemberProperty`'s rules to its own properties, then
+///        recursing into any of *its* members that are themselves nested
+///        aggregates (see `recurseIntoNestedAggregateIfAny`), to whatever
+///        depth the type graph actually has.
 ///
 /// @p node is @e which DOM node depends on how many places in the whole
 /// schema reference `Sub`: glaze **inlines** the object schema directly into
@@ -1672,18 +1747,19 @@ void annotateBasicMemberProperty(glz::generic_u64& property, std::string_view na
 /// {...}}` shape this function needs, so one implementation handles both --
 /// see the call site in `mergeSchemaExtras` for how @p node is resolved.
 ///
-/// Deliberately does **not** recurse again: if `Sub` itself has a member that
-/// is itself an aggregate, that member is left exactly as glaze emitted it --
-/// unannotated, matching today's behaviour beyond one level. This bounds the
-/// generator to one level of nesting, as `docs/spec/forms/forms.md` documents.
-/// Computed fields, `formLayout`/`fieldSpans`, and `formRules` also stay
-/// top-level-only; a nested `Sub` declaring any of those has no effect here.
+/// Computed fields, `formLayout`/`fieldSpans`, and `formRules` stay
+/// top-level-only regardless of depth; a nested `Sub` declaring any of those
+/// has no effect here.
 ///
-/// @tparam Sub  Nested aggregate type (default-constructible, glaze-reflectable
-///              -- the same requirements the top-level action type already has).
+/// @tparam Sub       Nested aggregate type (default-constructible, glaze-reflectable
+///                    -- the same requirements the top-level action type already has).
+/// @tparam Ancestors The ancestor chain so far, ending with `Sub` itself, passed
+///                    through to `recurseIntoNestedAggregateIfAny` for each of
+///                    `Sub`'s own members (see that function's doc comment).
+/// @param dom  The whole schema DOM (so a deeper `$ref`'s `$defs` entry can be found).
 /// @param node The object-schema DOM node to annotate in place (see above).
-template <typename Sub>
-void annotateNestedAggregate(glz::generic_u64& node) {
+template <typename Sub, typename... Ancestors>
+void annotateNestedAggregate(glz::generic_u64& dom, glz::generic_u64& node) {
     Sub probe{};
     glz::generic_u64::array_t requiredNames{};
     forEachNamedMember(probe, [&]<std::size_t I>(std::string_view name, const auto& member) {
@@ -1694,6 +1770,7 @@ void annotateNestedAggregate(glz::generic_u64& node) {
         auto& property = node["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
         annotateBasicMemberProperty<Sub, Member>(property, name);
+        recurseIntoNestedAggregateIfAny<Member, Ancestors..., Sub>(dom, property);
     });
     // Idempotent if two members (or two actions sharing this schema call)
     // resolve to the same $defs entry: re-deriving the identical required
@@ -1703,7 +1780,7 @@ void annotateNestedAggregate(glz::generic_u64& node) {
 
 /// @brief Resolves the object-schema DOM node for a nested-aggregate member,
 ///        given the property (or array `items`) node glaze wrote for it, and
-///        annotates it via `annotateNestedAggregate<Sub>`.
+///        annotates it via `annotateNestedAggregate<Sub, Ancestors...>`.
 ///
 /// Handles both forms `Sub` can take in the schema (see
 /// `annotateNestedAggregate`'s doc comment): a `$ref` into `$defs` (`Sub` used
@@ -1713,22 +1790,25 @@ void annotateNestedAggregate(glz::generic_u64& node) {
 /// object schema for a type this function's caller already confirmed is a
 /// `ReflectableAggregate` -- is left untouched rather than guessed at.
 /// @tparam Sub          Nested aggregate type, as `annotateNestedAggregate` requires.
+/// @tparam Ancestors    The ancestor chain so far (excluding `Sub`), forwarded
+///                       to `annotateNestedAggregate` unchanged.
 /// @param dom           The whole schema DOM (so a `$ref`'s `$defs` entry can be found).
 /// @param propertyOrItems The property node itself (single nested member) or its
 ///                        array `items` node (`std::vector<Sub>` member).
-template <typename Sub>
+template <typename Sub, typename... Ancestors>
 void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propertyOrItems) {
     constexpr std::string_view kDefsPrefix = "#/$defs/";
     if (propertyOrItems.contains("$ref")) {
         if (auto const* ref = propertyOrItems["$ref"].get_if<std::string>()) {
             if (std::string_view{*ref}.starts_with(kDefsPrefix)) {
-                annotateNestedAggregate<Sub>(dom["$defs"][std::string{ref->substr(kDefsPrefix.size())}]);
+                annotateNestedAggregate<Sub, Ancestors...>(
+                    dom, dom["$defs"][std::string{ref->substr(kDefsPrefix.size())}]);
             }
         }
         return;
     }
     if (propertyOrItems.contains("properties")) {
-        annotateNestedAggregate<Sub>(propertyOrItems);
+        annotateNestedAggregate<Sub, Ancestors...>(dom, propertyOrItems);
     }
 }
 
@@ -1893,26 +1973,19 @@ template <typename A>
             }
         }
 
-        // Nested aggregates (one level -- docs/spec/forms/forms.md, "Nested
-        // aggregates (one level)"): a member whose type is itself a
-        // reflectable aggregate gets an object schema from glaze -- either
-        // inlined directly into this property (the type is used exactly once
-        // in the whole schema) or shared via `$defs`/`$ref` (used 2+ times);
-        // `annotateNestedAggregateRef` resolves whichever form it is. Recurse
-        // one level so that object schema's own members get `x-order`/
-        // `required`/title/Quantity/Choice/widget annotations too, instead of
-        // being silently unannotated. Purely additive: an action with no
-        // nested aggregate member has nothing here to trigger on, so its
-        // schema is byte-for-byte unchanged.
-        if constexpr (ReflectableAggregate<Member>) {
-            annotateNestedAggregateRef<Member>(dom, property);
-        } else if constexpr (IsStdVector<Member>::value &&
-                             ReflectableAggregate<typename IsStdVector<Member>::ValueType>) {
-            using ItemType = typename IsStdVector<Member>::ValueType;
-            if (property.contains("items")) {
-                annotateNestedAggregateRef<ItemType>(dom, property["items"]);
-            }
-        }
+        // Nested aggregates (recursive, cycle-guarded -- docs/spec/forms/forms.md,
+        // "Nested aggregates (recursive, cycle-guarded)"): a member whose type
+        // is itself a reflectable aggregate gets an object schema from glaze --
+        // either inlined directly into this property (the type is used exactly
+        // once in the whole schema) or shared via `$defs`/`$ref` (used 2+
+        // times). `recurseIntoNestedAggregateIfAny` resolves whichever form it
+        // is and recurses so that object schema's own members get
+        // `x-order`/`required`/title/Quantity/Choice/widget annotations too,
+        // however deep the type graph goes (guarding against cycles at compile
+        // time -- see that function's doc comment). Purely additive: an action
+        // with no nested aggregate member has nothing here to trigger on, so
+        // its schema is byte-for-byte unchanged.
+        recurseIntoNestedAggregateIfAny<Member, A>(dom, property);
     });
     // Always assign — an explicit empty array beats leaving whatever the
     // schema writer may have emitted (or omitted) for `required`.
