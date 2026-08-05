@@ -68,15 +68,18 @@
 /// `morph::time::Timestamp` members need no extension keys: their schema
 /// carries the standard `"format": "date-time"` annotation.
 ///
-/// **Nested aggregates (one level).** A member whose type is itself a
-/// reflectable aggregate — a plain nested struct, or `std::vector<Sub>` — gets
-/// its own members annotated too, one level down: `x-order`, title/`FieldMeta`,
-/// `required`, and the `Quantity`/`Choice`/widget/ranged-bounds rules above,
-/// applied against the nested type's own reflection. Recursion stops after
-/// this one level (a nested aggregate's own nested-aggregate members are left
-/// unannotated), and computed fields/`formLayout`/`fieldSpans`/`formRules`
-/// remain top-level-only. See docs/spec/forms/forms.md, "Nested aggregates
-/// (one level)", and `detail::annotateNestedAggregateRef`.
+/// **Nested aggregates (recursive, cycle-guarded).** A member whose type is
+/// itself a reflectable aggregate — a plain nested struct, or
+/// `std::vector<Sub>` — gets its own members annotated too: `x-order`,
+/// title/`FieldMeta`, `required`, and the `Quantity`/`Choice`/widget/
+/// ranged-bounds rules above, applied against the nested type's own
+/// reflection. Unlike the top level, this recurses to whatever depth the
+/// type graph actually has, stopping only at a genuine cycle (a self- or
+/// mutually-referential nested-aggregate type), which is a compile-time
+/// `static_assert` rather than infinite recursion. Computed fields/
+/// `formLayout`/`fieldSpans`/`formRules` remain top-level-only regardless of
+/// depth. See docs/spec/forms/forms.md, "Nested aggregates (recursive,
+/// cycle-guarded)", and `detail::annotateNestedAggregateRef`.
 ///
 /// @par Declaring optional fields
 /// Required is the default. An action opts individual fields out with a
@@ -1753,9 +1756,10 @@ void recurseIntoNestedAggregateIfAny(glz::generic_u64& dom, glz::generic_u64& pr
 ///
 /// @tparam Sub       Nested aggregate type (default-constructible, glaze-reflectable
 ///                    -- the same requirements the top-level action type already has).
-/// @tparam Ancestors The ancestor chain so far, ending with `Sub` itself, passed
-///                    through to `recurseIntoNestedAggregateIfAny` for each of
-///                    `Sub`'s own members (see that function's doc comment).
+/// @tparam Ancestors The ancestor chain so far (excluding `Sub`); `Sub` is
+///                    appended before recursing into each of `Sub`'s own
+///                    members via `recurseIntoNestedAggregateIfAny` (see
+///                    that function's doc comment).
 /// @param dom  The whole schema DOM (so a deeper `$ref`'s `$defs` entry can be found).
 /// @param node The object-schema DOM node to annotate in place (see above).
 template <typename Sub, typename... Ancestors>
