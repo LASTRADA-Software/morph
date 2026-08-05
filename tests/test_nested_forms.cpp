@@ -1,16 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Coverage for issue #25: form generation recurses one level into a
-// nested-aggregate member's object schema -- a directly-nested struct member
-// or a `std::vector<Sub>` repeated aggregate -- applying the same
+// Coverage for issue #25: form generation recurses into a nested-aggregate
+// member's object schema -- a directly-nested struct member or a
+// `std::vector<Sub>` repeated aggregate -- applying the same
 // title/x-order/required/widget rules the top level already applies, instead
 // of leaving it entirely unannotated. Two distinct schema shapes exist for a
 // nested aggregate (see forms.hpp's `annotateNestedAggregateRef`): glaze
 // *inlines* the object schema directly into the property when the nested
 // type is used exactly once in the whole schema, and *deduplicates* it via a
 // shared `$defs` entry (referenced by `$ref`) when it is used two or more
-// times. Both are exercised below. Recursion stops after one level (see
-// docs/spec/forms/forms.md, "Nested aggregates (one level)").
+// times. Both are exercised below. Recursion continues to whatever depth the
+// type graph actually has, stopping only at a genuine cycle -- a compile-time
+// `static_assert`, not something this runtime test suite can exercise
+// directly (see docs/spec/forms/forms.md, "Nested aggregates (recursive,
+// cycle-guarded)").
 
 #include <algorithm>
 #include <array>
@@ -72,15 +75,33 @@ struct Attachment {
     std::int64_t sizeBytes = 0;
 };
 
-struct Provenance {
-    std::string collectedBy;
+struct Origin {
+    std::string country;
 };
 
-// A nested aggregate whose own member is itself a nested aggregate -- the
-// depth-limit case: `provenance`'s own sub-members must stay unannotated.
+// Three levels deep: DeepSpecimen -> Provenance -> Origin. Provenance's own
+// member (origin) is itself a nested aggregate too -- proving recursion
+// continues past one level.
+struct Provenance {
+    std::string collectedBy;
+    Origin origin;
+};
+
 struct DeepSpecimen {
     double massDry = 0.0;
     Provenance provenance;
+};
+
+// A self-referential nested-aggregate type (a tree node). Never passed to
+// morph::forms::schemaJson<A>() anywhere in this file -- neither as the
+// top-level action type itself nor nested inside another action's member --
+// either use would trip forms.hpp's cycle-guard static_assert (see
+// docs/spec/forms/forms.md, "Nested aggregates (recursive, cycle-guarded)").
+// This only proves the type itself, and ordinary glaze JSON round-tripping
+// over it, are completely unaffected by that guard.
+struct TreeNode {
+    std::string name;
+    std::vector<TreeNode> children;
 };
 
 // Specimen and Attachment are each used from two places below, so glaze
@@ -201,6 +222,7 @@ using nestedforms::BareQuantityRecord;
 using nestedforms::DeclaredOptionalRecord;
 using nestedforms::DeepRecord;
 using nestedforms::DeepSpecimen;
+using nestedforms::Origin;
 using nestedforms::PlainMetaRecord;
 using nestedforms::Provenance;
 using nestedforms::Record;
@@ -208,6 +230,7 @@ using nestedforms::RichRecord;
 using nestedforms::SingleUseRecord;
 using nestedforms::SingleUseVectorRecord;
 using nestedforms::Specimen;
+using nestedforms::TreeNode;
 
 namespace {
 
@@ -345,35 +368,42 @@ TEST_CASE(
     REQUIRE(def.contains("required"));
 }
 
-// ── Depth limit: exactly one level ──────────────────────────────────────────
+// ── Recursion continues past one level (no depth cap) ───────────────────────
 
-TEST_CASE("Forms::SchemaJson::NestedAggregate: recursion stops after one level (depth cap)",
+TEST_CASE("Forms::SchemaJson::NestedAggregate: recursion continues past one level to whatever depth exists",
          "[forms][nested][issue25]") {
     auto const schema = morph::forms::schemaJson<DeepRecord>();
     glz::generic_u64 dom{};
     REQUIRE_FALSE(glz::read_json(dom, schema));
 
     REQUIRE(dom["properties"].contains("sample"));
-    auto const& outerDef = resolveNestedSchema(dom, dom["properties"]["sample"]);
+    auto const& level1Def = resolveNestedSchema(dom, dom["properties"]["sample"]);
 
-    // Level 1 (DeepSpecimen's own members) IS annotated.
-    CHECK(outerDef["properties"]["massDry"].contains("x-order"));
-    CHECK(outerDef["properties"]["massDry"].contains("title"));
-    REQUIRE(outerDef.contains("required"));
+    // Level 1 (DeepSpecimen's own members) is annotated.
+    CHECK(level1Def["properties"]["massDry"].contains("x-order"));
+    CHECK(level1Def["properties"]["massDry"].contains("title"));
+    REQUIRE(level1Def.contains("required"));
 
-    // Level 2 (Provenance, nested inside DeepSpecimen) is NOT annotated: its
-    // object schema has no "required" key and its own properties carry no
-    // x-order/title -- exactly today's pre-existing behaviour for anything
-    // deeper than one level. "provenance" itself (a level-1 member) DOES get
-    // an x-order/title on its own property node, same as any other member;
-    // only its *inner* properties are left untouched.
-    REQUIRE(outerDef["properties"].contains("provenance"));
-    CHECK(outerDef["properties"]["provenance"].contains("x-order"));
-    CHECK(outerDef["properties"]["provenance"].contains("title"));
-    auto const& innerDef = resolveNestedSchema(dom, outerDef["properties"]["provenance"]);
-    CHECK_FALSE(innerDef.contains("required"));
-    CHECK_FALSE(innerDef["properties"]["collectedBy"].contains("x-order"));
-    CHECK_FALSE(innerDef["properties"]["collectedBy"].contains("title"));
+    // Level 2 (Provenance, nested inside DeepSpecimen) is now annotated too --
+    // both its own property node (x-order/title, same as any level-1 member)
+    // and, unlike the old one-level cap, its own "required" array.
+    REQUIRE(level1Def["properties"].contains("provenance"));
+    CHECK(level1Def["properties"]["provenance"].contains("x-order"));
+    CHECK(level1Def["properties"]["provenance"].contains("title"));
+    auto const& level2Def = resolveNestedSchema(dom, level1Def["properties"]["provenance"]);
+    REQUIRE(level2Def.contains("required"));
+    CHECK(level2Def["properties"]["collectedBy"].contains("x-order"));
+    CHECK(level2Def["properties"]["collectedBy"].contains("title"));
+
+    // Level 3 (Origin, nested inside Provenance) is annotated too -- proving
+    // recursion does not stop at two levels either.
+    REQUIRE(level2Def["properties"].contains("origin"));
+    CHECK(level2Def["properties"]["origin"].contains("x-order"));
+    CHECK(level2Def["properties"]["origin"].contains("title"));
+    auto const& level3Def = resolveNestedSchema(dom, level2Def["properties"]["origin"]);
+    REQUIRE(level3Def.contains("required"));
+    CHECK(level3Def["properties"]["country"].contains("x-order"));
+    CHECK(level3Def["properties"]["country"].contains("title"));
 }
 
 // ── FieldMeta/Quantity/Choice rules apply one level down too ────────────────
