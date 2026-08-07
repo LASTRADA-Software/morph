@@ -384,8 +384,9 @@ state; the log is emitted only when the state itself is finally destroyed with a
   is the executor on which every callback is posted.
 - [`logger.md`](logger.md) — `morph::log::logError`, the error-handling sink
   used by orphan detection when an error is abandoned.
-- [`backend.md`](backend.md) — `morph::backend::LimitPolicy::executeTimeout`,
-  the *server-side* counterpart to
+- [`backend.md`](backend.md) — backends resolve the pending `Completion` when a
+  response arrives; also `morph::backend::LimitPolicy::executeTimeout`, the
+  *server-side* counterpart to
   [the client-side execute deadline](#client-side-execute-deadline), and
   `TimeoutError` / `ClientTimeoutError`.
 - [`error_handling.md`](../error_handling.md) — the framework-wide error-propagation
@@ -393,5 +394,3 @@ state; the log is emitted only when the state itself is finally destroyed with a
   alongside the executor and backend error paths.
 - [`bridge.md`](bridge.md) — `BridgeHandler<M>` produces `Completion<T>` from
   `execute()` and posts callbacks on the GUI executor.
-- [`backend.md`](backend.md) — backends resolve the pending `Completion` when a
-  response arrives.

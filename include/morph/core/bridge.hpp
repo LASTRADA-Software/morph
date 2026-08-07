@@ -700,6 +700,11 @@ public:
     /// later, is silently discarded exactly like any other late write to an
     /// already-resolved `CompletionState`.
     ///
+    /// The clock starts inside `executeVia()`, immediately before the backend's
+    /// own `execute()` is dispatched, so @p deadline covers the whole round trip
+    /// — serialisation, transport, server-side work, and the reply's journey
+    /// back — not just the time spent waiting after dispatch.
+    ///
     /// Disabled (`std::chrono::milliseconds{0}`, the default) reproduces
     /// today's exact behavior: a dropped frame or a hung server leaves the
     /// `Completion` pending forever, same as before this method existed.

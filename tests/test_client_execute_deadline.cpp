@@ -6,7 +6,6 @@
 // QtWebSocketServerConfig::messagesPerSecond, or a genuinely hung server,
 // no longer blocks the calling Completion forever.
 
-#include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <memory>
@@ -44,7 +43,6 @@ public:
                                                             morph::backend::detail::ActionCall,
                                                             morph::exec::IExecutor* cbExec) override {
         auto state = std::make_shared<morph::async::detail::CompletionState<std::shared_ptr<void>>>();
-        ++liveCompletions;
         return morph::async::Completion<std::shared_ptr<void>>{state, cbExec};
         // `state` is intentionally dropped here with no setValue/setException
         // ever called -- the Completion this returns never settles on its
@@ -55,8 +53,6 @@ public:
     // here, which is exactly the "something eventually settles it" behaviour
     // these tests must not rely on.
     void cancelPending(const std::exception_ptr&) override {}
-
-    std::atomic<int> liveCompletions{0};
 };
 
 // A backend that holds every state it hands out and only settles it when the
@@ -166,12 +162,13 @@ TEST_CASE("Bridge::setExecuteDeadline fires ClientTimeoutError when no reply arr
 TEST_CASE("A deadline that is cancelled by a real, on-time reply does not also fire",
           "[core][bridge][client-deadline]") {
     // Uses the ordinary in-process LocalBackend, which always replies quickly.
-    // Exercises the disarm path (the `.then`/`.onError` cancel-before-settle
-    // lines) and pins the happy path: enabling a deadline must not perturb a
-    // call that replies in time. What a *missing* disarm would look like from
-    // the outside is covered by the next test instead -- because
-    // CompletionState is first-result-wins, a deadline that fires after an
-    // on-time reply is a no-op, so it cannot be observed here.
+    // Pins the happy path: enabling a deadline must not perturb a call that
+    // replies in time. It runs *through* the disarm path but cannot detect its
+    // absence -- because CompletionState is first-result-wins, a stray timer
+    // firing after an on-time reply is a silent no-op at the value level, so
+    // deleting the disarm entirely would leave this case green. The disarm's
+    // actual, observable effect is *lifetime*, and that is what the next test
+    // ("An on-time reply releases the deadline's scheduler entry") covers.
     morph::exec::ThreadPoolExecutor workerPool{2};
     morph::exec::MainThreadExecutor guiExec;
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
@@ -194,6 +191,34 @@ TEST_CASE("A deadline that is cancelled by a real, on-time reply does not also f
     // entries without firing them and joins its thread unconditionally, so a
     // leaked entry costs nothing at teardown. Noted rather than asserted --
     // there is no public handle to observe it through.
+}
+
+TEST_CASE("An on-time reply releases the deadline's scheduler entry (and the state it pins)",
+          "[core][bridge][client-deadline]") {
+    // What the disarm actually buys: TimeoutScheduler::cancel() erases the
+    // pending entry and with it the std::function that captures a
+    // shared_ptr<CompletionState<R>>. Without the disarm that entry -- and the
+    // completed state it keeps alive -- would be pinned for the full deadline.
+    morph::exec::ThreadPoolExecutor workerPool{2};
+    morph::exec::MainThreadExecutor guiExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    bridge.setExecuteDeadline(std::chrono::milliseconds{5000});  // long enough that only
+    morph::bridge::BridgeHandler<DeadlineModel> handler{bridge, &guiExec};  // an actual cancel frees it
+
+    int result = -1;
+    std::weak_ptr<void> stateWatch;
+    {
+        auto completion = handler.execute(DeadlineCount{.x = 7});
+        stateWatch = completion.state();  // Completion<T>::state(), completion.hpp:208
+        completion.then([&result](int r) { result = r; });
+    }
+    for (int i = 0; i < 50 && result == -1; ++i) {
+        guiExec.runFor(std::chrono::milliseconds{10});
+    }
+    REQUIRE(result == 7);
+    guiExec.runFor(std::chrono::milliseconds{100});
+    // Without the disarm, the timer entry still owns the state for 5 s.
+    CHECK(stateWatch.expired());
 }
 
 TEST_CASE("A real reply that arrives after the deadline already fired is silently discarded",
