@@ -258,6 +258,19 @@ envelopes. The constructor does the same with the (typically empty) initial
 session. See [session.md](../session/session.md#how-a-context-originates-and-flows)
 and [backend.md](backend.md#session-propagation-to-control-envelopes).
 
+**`setExecuteDeadline(deadline)`** / **`executeDeadline()`** installs an
+opt-in, client-side wall-clock bound on how long any subsequent `executeVia()`
+waits for a reply. Defaults to `std::chrono::milliseconds{0}` (disabled — the
+pre-existing behavior, and no extra thread). When enabled, each dispatch races
+the real reply against a `morph::async::detail::TimeoutScheduler` timer that
+resolves the pending `Completion` with `morph::backend::ClientTimeoutError`;
+whichever settles first wins, and the loser is discarded by
+`CompletionState`'s first-result-wins rule. The on-time reply path disarms the
+timer as the first statement of its completion callback. Thread-safe, its own
+mutex (`_executeDeadlineMtx`). Full semantics — including how
+`ClientTimeoutError` differs from the server-reported `TimeoutError` — in
+[completion.md](completion.md#client-side-execute-deadline).
+
 **`setPrincipal(principal)`** / **`currentPrincipal()`** installs and reads
 back a `morph::session::Principal` — the verified identity + roles, readable
 *outside* a dispatch (unlike `session::current()`, which only exists during
@@ -576,9 +589,11 @@ make teardown order-independent.)
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, and the `pendingCalls()` decrement) are gated on the `_liveness` token, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, the `pendingCalls()` decrement, and the execute-deadline disarm) are gated on the `_liveness` token, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. Arms the client-side execute deadline when one is installed (see `setExecuteDeadline`); the fast-fail "handler not bound" path returns before that and arms nothing. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
+| `setExecuteDeadline` | `void setExecuteDeadline(std::chrono::milliseconds)` | Opt-in client-side execute deadline; `0` (the default) disables it. Lazily creates the backing `TimeoutScheduler` thread on first enable. |
+| `executeDeadline` | `std::chrono::milliseconds executeDeadline() const` | Returns the installed deadline; `0` when disabled. |
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
 | `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` dispatches not yet resolved. Relaxed atomic load; see the `Bridge` section above. |

@@ -17,6 +17,7 @@ than vanishing (see [Failure modes](#failure-modes)).
 - [Move-only handle — `Completion<T>`](#move-only-handle--completiont)
 - [Thread safety](#thread-safety)
 - [Failure modes](#failure-modes)
+- [Client-side execute deadline](#client-side-execute-deadline)
 - [Empty state](#empty-state)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -220,6 +221,70 @@ throw — they are silent by construction.
   `value` — since `attachThen`'s fire-now path reads `*value` directly, not
   from the (already-emptied) handler vector.
 
+## Client-side execute deadline
+
+Nothing in `Completion<T>` itself imposes a time limit: a state that no producer
+ever settles simply stays pending forever, and its handle's callbacks never
+fire. For an in-process `LocalBackend` that is unreachable, but across a wire a
+request can genuinely disappear — a frame silently discarded by
+`QtWebSocketServerConfig::messagesPerSecond`'s rate limiter, a connection that
+dropped between send and reply, or a server that hangs. In every one of those
+cases *no reply of any kind* comes back, so no layer below the caller has
+anything to resolve the `Completion` with.
+
+`Bridge::setExecuteDeadline(std::chrono::milliseconds)` closes that hole.
+
+**Opt-in, default disabled.** The deadline defaults to
+`std::chrono::milliseconds{0}`, which means "no deadline" and reproduces the
+pre-existing behavior exactly — a `Bridge` that never calls the setter behaves
+as it always did, and spawns no extra thread. The current value is readable via
+`Bridge::executeDeadline()`.
+
+**Mechanics.** Every `executeVia()` call made while a non-zero deadline is
+installed arms a timer on a `Bridge`-owned
+`morph::async::detail::TimeoutScheduler` (a single background thread, created
+lazily on the first call that enables a deadline and torn down with the
+`Bridge`; the same class `RemoteServer` uses for its server-side
+`LimitPolicy::executeTimeout`). The timer's callback captures only the typed
+`CompletionState` — never the `Bridge` — and resolves it with
+`morph::backend::ClientTimeoutError`. The real reply and the timer therefore
+race, and **whichever settles the state first wins**, because `setValue` /
+`setException` are no-ops once the state is `ready` (see
+[Failure modes](#failure-modes) and the *first-result-wins* row in
+[Design decisions](#design-decisions)). A real reply that arrives after the
+deadline already fired is silently discarded — it is an ordinary late write to
+an already-resolved state, not an error condition. Conversely, a reply that
+arrives first disarms the timer as the *first* statement of the completion
+callback, before any `onResult` / `publishResult` fan-out work, so a slow
+subscriber cannot open a window for the timer to fire against a result already
+in hand.
+
+The deadline is armed only for real dispatches. `executeVia()`'s fast-fail path
+for an unbound handler resolves its `Completion` synchronously before the timer
+block is reached, so no timer is created for it.
+
+The disarm is guarded on the same `Bridge` liveness token the rest of the
+completion callback uses: the callback can in principle run after `~Bridge()`
+(the backend may be co-owned and outlive the `Bridge`). Skipping the disarm in
+that case is harmless — `~TimeoutScheduler` drops still-pending entries without
+firing them.
+
+**`ClientTimeoutError` vs. `TimeoutError`.** Both live in `morph::backend` and
+both derive from `std::runtime_error`, but they report different facts:
+
+| Type | Raised by | Means |
+|---|---|---|
+| `TimeoutError` | The **server**, as an explicit `err "timeout"` reply when `LimitPolicy::executeTimeout` elapses | The request *was* received and the action *is* running (morph never interrupts an in-flight `Model::execute`); the server chose to stop making the caller wait. |
+| `ClientTimeoutError` | The **client**, when `Bridge::setExecuteDeadline`'s duration elapses | Nothing came back at all. Whether the server ever received the request, is still processing it, or replied over a connection that had already dropped is **unknown**. |
+
+The practical consequence for callers: `TimeoutError` confirms the action is
+in flight server-side, so a blind retry risks a duplicate. `ClientTimeoutError`
+confirms nothing, so a retry must be idempotent (or reconciled) either way.
+
+A deadline bounds the *caller's wait*, never the work. It does not cancel the
+request — see [Limitations](#limitations), "No cancellation". The server-side
+counterpart is documented in [`backend.md`](backend.md) under `LimitPolicy`.
+
 ## Empty state
 
 A default-constructed `Completion` has a null `_state` pointer. `then()` and
@@ -283,6 +348,10 @@ future/promise or a monadic async type. Its scope is narrow by design:
   promise/awaiter machinery. Consumption is callback-only.
 - **No cancellation.** There is no handle to cancel an outstanding operation;
   once started, it runs to completion (or is abandoned).
+  `Bridge::setExecuteDeadline` (see
+  [Client-side execute deadline](#client-side-execute-deadline)) is not an
+  exception to this: it bounds how long the *caller* waits by resolving the
+  state early, and does nothing to the work still in flight underneath.
 - **Single consumer handle, but multiple handlers per outcome.** The
   `Completion<T>` handle itself is move-only — only one owner at a time — but
   each state's `onOk`/`onErr` are vectors, so repeated `then()`/`onError()`
@@ -315,6 +384,10 @@ state; the log is emitted only when the state itself is finally destroyed with a
   is the executor on which every callback is posted.
 - [`logger.md`](logger.md) — `morph::log::logError`, the error-handling sink
   used by orphan detection when an error is abandoned.
+- [`backend.md`](backend.md) — `morph::backend::LimitPolicy::executeTimeout`,
+  the *server-side* counterpart to
+  [the client-side execute deadline](#client-side-execute-deadline), and
+  `TimeoutError` / `ClientTimeoutError`.
 - [`error_handling.md`](../error_handling.md) — the framework-wide error-propagation
   story; the orphan-logging contract detailed in this file is summarised there
   alongside the executor and backend error paths.

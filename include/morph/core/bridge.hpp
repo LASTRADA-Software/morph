@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <any>
 #include <atomic>
+#include <chrono>
 #include <concepts>
 #include <functional>
 #include <memory>
@@ -24,6 +25,7 @@
 #include "completion.hpp"
 #include "model_key.hpp"
 #include "registry.hpp"
+#include "timeout_scheduler.hpp"
 
 namespace morph::bridge {
 
@@ -688,6 +690,43 @@ public:
         }
     }
 
+    /// @brief Sets (or disables) the client-side execute deadline.
+    ///
+    /// Every `executeVia()` call after this point races the real reply against
+    /// @p deadline; whichever settles first wins (`CompletionState::setValue`/
+    /// `setException` are idempotent — see `completion.hpp`). If @p deadline
+    /// elapses first, the pending `Completion` fails with
+    /// `::morph::backend::ClientTimeoutError`; the real reply, if it arrives
+    /// later, is silently discarded exactly like any other late write to an
+    /// already-resolved `CompletionState`.
+    ///
+    /// Disabled (`std::chrono::milliseconds{0}`, the default) reproduces
+    /// today's exact behavior: a dropped frame or a hung server leaves the
+    /// `Completion` pending forever, same as before this method existed.
+    ///
+    /// The backing `TimeoutScheduler` (and its one background thread) is
+    /// created lazily on the first call that enables a deadline, so a `Bridge`
+    /// that never opts in spawns no extra thread. Once created it lives until
+    /// `~Bridge()`; setting the deadline back to `0` stops new calls from
+    /// arming it but does not tear the thread down. Thread-safe.
+    ///
+    /// @param deadline Maximum time to wait for any reply. `0` disables the
+    ///                 deadline.
+    void setExecuteDeadline(std::chrono::milliseconds deadline) {
+        std::scoped_lock const lock{_executeDeadlineMtx};
+        _executeDeadline = deadline;
+        if (_executeDeadline.count() > 0 && !_timeoutScheduler) {
+            _timeoutScheduler = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+        }
+    }
+
+    /// @brief Returns the currently installed client-side execute deadline.
+    /// @return The deadline; `std::chrono::milliseconds{0}` when disabled.
+    [[nodiscard]] std::chrono::milliseconds executeDeadline() const {
+        std::scoped_lock const lock{_executeDeadlineMtx};
+        return _executeDeadline;
+    }
+
     /// @brief Returns a copy of the currently installed default session. Thread-safe.
     /// @return Snapshot of the default `Context`.
     [[nodiscard]] ::morph::session::Context defaultSession() const {
@@ -946,6 +985,22 @@ public:
         // each of which decrements exactly once (setValue/setException are
         // first-result-wins, so only one of the two ever actually fires).
         _pendingCalls.fetch_add(1, std::memory_order_relaxed);
+        // Arm the client-side deadline (setExecuteDeadline) only for real
+        // dispatches -- the fast-failed "handler not bound" completion above is
+        // already resolved and needs no timer. Reading the deadline and arming
+        // it happen under one lock so a concurrent setExecuteDeadline() cannot
+        // interleave between the two.
+        std::optional<::morph::async::detail::TimeoutScheduler::Handle> deadlineHandle;
+        {
+            std::scoped_lock const lock{_executeDeadlineMtx};
+            if (_executeDeadline.count() > 0 && _timeoutScheduler) {
+                // The callback captures `typedState` alone -- never `this` -- so
+                // it stays safe to fire even while ~Bridge() is running.
+                deadlineHandle = _timeoutScheduler->schedule(_executeDeadline, [typedState] {
+                    typedState->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
+                });
+            }
+        }
         ::morph::backend::detail::ActionCall call;
         call.modelTypeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         call.actionTypeId = std::string{::morph::model::ActionTraits<Action>::typeId()};
@@ -1051,8 +1106,22 @@ public:
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
-            .then([typedState, onResult = std::move(onResult), this, raw,
+            .then([typedState, onResult = std::move(onResult), this, raw, deadlineHandle,
                    alive = liveness()](const std::shared_ptr<void>& vAny) {
+                // Disarm the client-side deadline first, before any of the
+                // forwarding work below: a slow onResult/publishResult callback
+                // must not give the timer a window to fire concurrently and
+                // resolve this completion with ClientTimeoutError while the real
+                // result is already in hand. Guarded on the same liveness token
+                // the rest of this lambda uses -- `_timeoutScheduler` and
+                // `_executeDeadlineMtx` are Bridge members, and this callback can
+                // in principle run after ~Bridge(). Leaving the entry armed in
+                // that case is harmless: ~TimeoutScheduler drops pending entries
+                // without firing them.
+                if (deadlineHandle && !alive.expired()) {
+                    std::scoped_lock const lock{_executeDeadlineMtx};
+                    _timeoutScheduler->cancel(*deadlineHandle);
+                }
                 // Guard the value-forwarding: if R's move/copy throws (or the cast
                 // is somehow wrong), route the exception to the typed completion's
                 // error sink instead of letting it escape the callback executor —
@@ -1106,12 +1175,19 @@ public:
                     typedState->setException(std::current_exception());
                 }
             })
-            .onError([typedState, this, alive = liveness()](const std::exception_ptr& err) {
+            .onError([typedState, this, deadlineHandle, alive = liveness()](const std::exception_ptr& err) {
                 // The other of the two mutually-exclusive resolution paths --
                 // see the .then continuation above. Same liveness guard: this
                 // touches `this` and must not run once the Bridge might be gone.
+                // Same disarm-first reasoning as the success branch above: a
+                // real error reply settles the completion, so the deadline
+                // must not also fire.
                 if (!alive.expired()) {
                     this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
+                    if (deadlineHandle) {
+                        std::scoped_lock const lock{_executeDeadlineMtx};
+                        _timeoutScheduler->cancel(*deadlineHandle);
+                    }
                 }
                 typedState->setException(err);
             });
@@ -1325,6 +1401,16 @@ private:
     ::morph::session::Context _defaultSession;
     mutable std::mutex _principalMtx;
     ::morph::session::Principal _principal;
+    // Client-side execute deadline (see setExecuteDeadline). Both the duration
+    // and the lazily-created scheduler live under one mutex, so a concurrent
+    // setExecuteDeadline() can never let executeVia() observe a non-zero
+    // deadline before the scheduler backing it exists. Declared ahead of
+    // `_liveness` (the last member, and therefore the first destroyed) so the
+    // liveness token an in-flight completion callback checks before touching
+    // these has already expired by the time they are torn down.
+    mutable std::mutex _executeDeadlineMtx;
+    std::chrono::milliseconds _executeDeadline{0};
+    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
     // Instance subscriptions. Held against the binding rather than a fixed
     // instance id so a re-pointed handler keeps its subscriptions; matched at
     // publish time by comparing the binding's current instance.

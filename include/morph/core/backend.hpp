@@ -459,6 +459,22 @@ struct TimeoutError : std::runtime_error {
     TimeoutError() : std::runtime_error{"execute timed out on the server"} {}
 };
 
+/// @brief Thrown to a pending `Completion` when `Bridge::setExecuteDeadline`'s
+///        duration elapses before any reply arrives — a frame silently
+///        dropped by `QtWebSocketServerConfig::messagesPerSecond`, or a
+///        genuinely hung server, either way.
+///
+/// Distinct from `TimeoutError`: that type means the *server* explicitly
+/// replied that it hit `LimitPolicy::executeTimeout` while the action was
+/// still running. `ClientTimeoutError` means the client gave up waiting —
+/// no reply of any kind arrived, so whether the server ever received the
+/// request, is still processing it, or replied to a connection that had
+/// already dropped is unknown. See `docs/spec/core/completion.md`.
+struct ClientTimeoutError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
+    ClientTimeoutError() : std::runtime_error{"execute timed out waiting for any reply"} {}
+};
+
 /// @brief In-process backend that executes model actions on a thread pool strand.
 ///
 /// Each model instance gets its own strand so actions are serialised per-model
