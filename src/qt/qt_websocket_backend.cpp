@@ -211,6 +211,71 @@ void QtWebSocketBackend::flushQueuedRegistrations() {
     }
 }
 
+bool QtWebSocketBackend::registerModelSharedAsync(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+    ::morph::backend::detail::InstanceIdentity identity,
+    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+    std::function<void(const std::string&)> onError) {
+    if (!_cfg.asyncRegistrationEnabled) {
+        return false;
+    }
+    if (identity.primary.empty()) {
+        // Degrades to the private (non-shared) path, exactly like the
+        // synchronous registerModelShared below -- and that path already
+        // has an async form: this class's own registerModelAsync.
+        return registerModelAsync(typeId, nullptr, identity.contextKey, std::move(onRegistered), std::move(onError));
+    }
+    if (!_connected) {
+        onError("disconnected");
+        return true;
+    }
+    uint64_t const callId = ++_nextCallId;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        _pendingRegistrations[callId] =
+            PendingRegistration{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
+    }
+    auto env =
+        ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
+    env.callId = callId;
+    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    return true;
+}
+
+bool QtWebSocketBackend::attachModelAsync(
+    const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
+    ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current,
+    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+    std::function<void(const std::string&)> onError) {
+    if (!_cfg.asyncRegistrationEnabled) {
+        return false;
+    }
+    if (identity.primary.empty()) {
+        // Mirrors the synchronous attachModel's empty-primary branch: release
+        // the current instance (fire-and-forget, as deregisterModel already
+        // is) and degrade to a private async registration.
+        if (current.v != 0U) {
+            deregisterModel(current);
+        }
+        return registerModelAsync(typeId, nullptr, identity.contextKey, std::move(onRegistered), std::move(onError));
+    }
+    if (!_connected) {
+        onError("disconnected");
+        return true;
+    }
+    uint64_t const callId = ++_nextCallId;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        _pendingRegistrations[callId] =
+            PendingRegistration{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
+    }
+    auto env =
+        ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey});
+    env.callId = callId;
+    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    return true;
+}
+
 ::morph::wire::ProtocolNegotiationResult QtWebSocketBackend::negotiateProtocolVersion() {
     std::string replyJson;
     try {

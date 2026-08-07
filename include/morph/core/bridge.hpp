@@ -358,6 +358,91 @@ public:
         binding->currentId.store(newId.v);
     }
 
+    /// @brief Async counterpart to `attachHandler`: prefers the backend's
+    ///        `attachModelAsync` when available, invoking @p onDone once
+    ///        attached (or failed) instead of blocking.
+    ///
+    /// Falls back to the synchronous `attachHandler` body (and calls @p onDone
+    /// immediately, from this thread) when the backend offers no async
+    /// path — so a caller that always goes through this method behaves
+    /// identically to calling `attachHandler` directly, on every backend
+    /// that has not opted in to `attachModelAsync`.
+    ///
+    /// @par Locking
+    /// `_attachMtx` is held around the guard check, the async branch's
+    /// *dispatch*, and the synchronous branch's own state mutation — matching
+    /// `attachHandler`'s existing lock scope — but is **released before
+    /// @p onDone is ever invoked**, on every path. That is not a nicety: what
+    /// `execute()` does from inside @p onDone is dispatch the action, and a
+    /// result-keyed dispatch promotes its binding through
+    /// `assignHandlerPrimary`, which takes `_attachMtx` itself. Invoking
+    /// @p onDone under the lock therefore self-deadlocks the moment the
+    /// completion is delivered on the calling thread — which is exactly what
+    /// the synchronous fallback below does, and what an inline executor does
+    /// for every callback. This is `registerHandlerImpl`'s existing rule ("the
+    /// backend call must not run under `_mtx`") applied to `_attachMtx`.
+    ///
+    /// The completion callbacks below likewise do not take `_attachMtx`: per
+    /// `IBackend::attachModelAsync`'s contract they run once the reply
+    /// arrives, i.e. after this frame has returned and released it.
+    ///
+    /// @tparam Model Concrete model type.
+    /// @param binding Shared binding, as returned by `registerSharedHandler<Model>()`.
+    /// @param primary Canonical string encoding of the primary key to attach to.
+    /// @param onDone  Invoked with `nullptr` on success, or a non-null
+    ///                `exception_ptr` on failure — always exactly once,
+    ///                synchronously if the fallback path is taken.
+    template <typename Model>
+    void attachHandlerAsync(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary,
+                            const std::function<void(std::exception_ptr)>& onDone) {
+        std::unique_lock lock{_attachMtx};
+        if (binding->primary == primary && binding->currentId.load() != 0U) {
+            lock.unlock();
+            onDone(nullptr);
+            return;
+        }
+        auto const previous = ::morph::exec::detail::ModelId{binding->currentId.load()};
+        auto backend = loadBackend();
+        auto primaryCopy = primary;
+        std::weak_ptr<const void> const weakLiveness{_liveness};
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        bool const started = backend->attachModelAsync(
+            binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
+            [weakLiveness, weakBinding, primaryCopy, onDone](::morph::exec::detail::ModelId newId) {
+                auto aliveToken = weakLiveness.lock();
+                if (!aliveToken) {
+                    return;  // The Bridge is gone; publishing this id would be pointless.
+                }
+                auto strongBinding = weakBinding.lock();
+                if (!strongBinding) {
+                    return;  // The BridgeHandler (and its binding) is gone.
+                }
+                strongBinding->contextKey = primaryCopy;
+                strongBinding->primary = primaryCopy;
+                strongBinding->currentId.store(newId.v);
+                onDone(nullptr);
+            },
+            [onDone](const std::string& message) { onDone(std::make_exception_ptr(std::runtime_error(message))); });
+        if (started) {
+            return;
+        }
+        // No async path on this backend: run the identical synchronous attach
+        // `attachHandler` would have run, under the same lock, then report the
+        // outcome only once the lock is gone (see @par Locking above).
+        std::exception_ptr failure;
+        try {
+            auto newId = backend->attachModel(binding->typeId, binding->modelFactory,
+                                              {.contextKey = primary, .primary = primary}, previous);
+            binding->contextKey = primary;
+            binding->primary = std::move(primary);
+            binding->currentId.store(newId.v);
+        } catch (...) {
+            failure = std::current_exception();
+        }
+        lock.unlock();
+        onDone(failure);
+    }
+
     /// @brief Gives @p binding an anonymous instance if it does not have one yet.
     ///
     /// Used before a result-keyed action: such an action generates the key it
@@ -373,6 +458,56 @@ public:
         auto newId = loadBackend()->registerModelShared(binding->typeId, binding->modelFactory,
                                                         {.contextKey = binding->contextKey, .primary = {}});
         binding->currentId.store(newId.v);
+    }
+
+    /// @brief Async counterpart to `ensureBound`. See `attachHandlerAsync`'s
+    ///        doc comment for the fallback and locking contract.
+    /// @param binding Shared binding to bind.
+    /// @param onDone  Invoked exactly once: `nullptr` on success, or a
+    ///                non-null `exception_ptr` on failure.
+    void ensureBoundAsync(const std::shared_ptr<detail::HandlerBinding>& binding,
+                          const std::function<void(std::exception_ptr)>& onDone) {
+        std::unique_lock lock{_attachMtx};
+        if (binding->currentId.load() != 0U) {
+            lock.unlock();
+            onDone(nullptr);
+            return;
+        }
+        auto backend = loadBackend();
+        std::weak_ptr<const void> const weakLiveness{_liveness};
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        bool const started = backend->registerModelSharedAsync(
+            binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
+            [weakLiveness, weakBinding, onDone](::morph::exec::detail::ModelId newId) {
+                auto aliveToken = weakLiveness.lock();
+                if (!aliveToken) {
+                    return;  // The Bridge is gone; publishing this id would be pointless.
+                }
+                auto strongBinding = weakBinding.lock();
+                if (!strongBinding) {
+                    return;  // The BridgeHandler (and its binding) is gone.
+                }
+                strongBinding->currentId.store(newId.v);
+                onDone(nullptr);
+            },
+            [onDone](const std::string& message) { onDone(std::make_exception_ptr(std::runtime_error(message))); });
+        if (started) {
+            return;
+        }
+        // No async path on this backend: run the identical synchronous
+        // registration `ensureBound` would have run, under the same lock, then
+        // report the outcome only once the lock is gone (see
+        // `attachHandlerAsync`'s "@par Locking").
+        std::exception_ptr failure;
+        try {
+            auto newId = backend->registerModelShared(binding->typeId, binding->modelFactory,
+                                                      {.contextKey = binding->contextKey, .primary = {}});
+            binding->currentId.store(newId.v);
+        } catch (...) {
+            failure = std::current_exception();
+        }
+        lock.unlock();
+        onDone(failure);
     }
 
     /// @brief Files @p binding's current instance under @p primary, in place.
@@ -1543,6 +1678,16 @@ public:
     template <typename Action>
     ::morph::async::Completion<typename ::morph::model::ActionTraits<Action>::Result> execute(Action action) {
         using R = ::morph::model::ActionTraits<Action>::Result;
+        // Three mutually exclusive routes, chained rather than sequential: an
+        // action is payload-keyed or result-keyed or neither (`PayloadKeyed`
+        // and `ResultKeyed` differ only in `fromResult`, so no action can
+        // satisfy both), and an unkeyed action — or any action at all on a
+        // `NoSharing` handler — always lands in the final `else`. Chaining the
+        // `if constexpr`s (rather than leaving the payload-keyed branch to
+        // fall through to that `else`, as it did while the attach step was
+        // synchronous) is what lets the keyed branches own their dispatch: the
+        // attach now completes asynchronously, so the dispatch it precedes has
+        // to happen from inside its completion callback, not on this stack.
         if constexpr (kShared && ::morph::model::detail::PayloadKeyed<Action>) {
             // The action names its instance: attach (or re-point) before
             // dispatching, so the call lands on the instance it asked for. A
@@ -1550,13 +1695,31 @@ public:
             // transport error, unauthorized) must surface through the
             // returned Completion's onError, exactly like every other
             // dispatch failure — not as a synchronous throw out of execute().
-            try {
-                _bridge.template attachHandler<Model>(_binding, ::morph::model::ActionKeyTraits<Action>::key(action));
-            } catch (...) {
-                return failedCompletion<R>(std::current_exception());
-            }
-        }
-        if constexpr (kShared && ::morph::model::detail::ResultKeyed<Action>) {
+            //
+            // The attach goes through Bridge::attachHandlerAsync, which uses
+            // the backend's `attachModelAsync` when it has one and otherwise
+            // runs the identical synchronous attach inline and calls back
+            // before returning — so a backend that has not opted in behaves
+            // exactly as it did before this path existed.
+            auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
+            ::morph::async::Completion<R> pending{state, _guiExec};
+            auto* const bridgePtr = &_bridge;
+            auto binding = _binding;
+            auto key = ::morph::model::ActionKeyTraits<Action>::key(action);
+            auto sharedAction = std::make_shared<Action>(std::move(action));
+            bridgePtr->template attachHandlerAsync<Model>(
+                binding, std::move(key),
+                [bridgePtr, binding, sharedAction, state, guiExec = _guiExec](std::exception_ptr err) {
+                    if (err) {
+                        state->setException(err);
+                        return;
+                    }
+                    bridgePtr->template executeVia<Model, Action>(binding, std::move(*sharedAction), guiExec)
+                        .then([state](R value) { state->setValue(std::move(value)); })
+                        .onError([state](std::exception_ptr exc) { state->setException(exc); });
+                });
+            return pending;
+        } else if constexpr (kShared && ::morph::model::detail::ResultKeyed<Action>) {
             // The action *creates* the instance and its result carries the
             // generated key, exactly as a database insert returns its primary
             // key. Adopt it before any user callback observes the result, so a
@@ -1566,18 +1729,30 @@ public:
             // exists. Give the handler an anonymous instance to run on, then
             // promote *that* instance once the reply names it — re-pointing to a
             // fresh one instead would strand whatever the create just did.
-            try {
-                _bridge.ensureBound(_binding);
-            } catch (...) {
-                return failedCompletion<R>(std::current_exception());
-            }
+            // Same async/fallback contract as the payload-keyed branch above,
+            // via Bridge::ensureBoundAsync.
+            auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
+            ::morph::async::Completion<R> pending{state, _guiExec};
             auto* const bridgePtr = &_bridge;
             auto binding = _binding;
-            return _bridge.template executeVia<Model, Action>(
-                _binding, std::move(action), _guiExec, [bridgePtr, binding](const R& result) {
-                    bridgePtr->template assignHandlerPrimary<Model>(
-                        binding, ::morph::model::ActionKeyTraits<Action>::template keyOfResult<R>(result));
+            auto sharedAction = std::make_shared<Action>(std::move(action));
+            bridgePtr->ensureBoundAsync(
+                binding, [bridgePtr, binding, sharedAction, state, guiExec = _guiExec](std::exception_ptr err) {
+                    if (err) {
+                        state->setException(err);
+                        return;
+                    }
+                    bridgePtr
+                        ->template executeVia<Model, Action>(
+                            binding, std::move(*sharedAction), guiExec,
+                            [bridgePtr, binding](const R& result) {
+                                bridgePtr->template assignHandlerPrimary<Model>(
+                                    binding, ::morph::model::ActionKeyTraits<Action>::template keyOfResult<R>(result));
+                            })
+                        .then([state](R value) { state->setValue(std::move(value)); })
+                        .onError([state](std::exception_ptr exc) { state->setException(exc); });
                 });
+            return pending;
         } else {
             return _bridge.template executeVia<Model, Action>(_binding, std::move(action), _guiExec);
         }
@@ -1755,23 +1930,6 @@ public:
     [[nodiscard]] const std::shared_ptr<detail::HandlerBinding>& binding() const { return _binding; }
 
 private:
-    /// @brief Builds an already-failed `Completion<R>`, resolved via `.onError(...)`.
-    ///
-    /// Used to turn a synchronous exception from the attach/promote step of
-    /// `execute()` into the same asynchronous failure shape every other
-    /// dispatch error takes, instead of letting it escape `execute()` as a
-    /// thrown exception.
-    /// @tparam R Result type of the action that failed to attach/promote.
-    /// @param exc Exception to deliver through `.onError(...)`.
-    /// @return A `Completion<R>` already resolved with @p exc.
-    template <typename R>
-    ::morph::async::Completion<R> failedCompletion(std::exception_ptr exc) {
-        auto state = std::make_shared<::morph::async::detail::CompletionState<R>>();
-        ::morph::async::Completion<R> comp{state, _guiExec};
-        state->setException(std::move(exc));
-        return comp;
-    }
-
     Bridge& _bridge;
     std::weak_ptr<const void> _bridgeAlive;  // expires when _bridge is destroyed
     ::morph::exec::IExecutor* _guiExec;

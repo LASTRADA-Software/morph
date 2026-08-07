@@ -186,11 +186,10 @@ re-registration loop already gave the binding a fresh id on the new backend,
 which a stale reply must not overwrite).
 
 **Scope.** Only the plain (non-shared) registration path uses this — a
-`BridgeHandler`'s initial construction. `registerModelShared`/`attachModel`
-(shared/keyed handlers) and the re-registration `switchBackend()`/the
-reconnect handler perform after a backend swap remain synchronous; giving
-those an async path too is a larger change to `Bridge`'s locking model, left
-for a future issue if it proves necessary.
+`BridgeHandler`'s initial construction. The re-registration `switchBackend()`
+and the reconnect handler perform after a backend swap remains synchronous;
+giving that an async path too is a larger change to `Bridge`'s locking model,
+left for a future issue if it proves necessary.
 
 `QtWebSocketBackend` is the one backend that currently overrides this, gated
 by `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false` — see
@@ -208,6 +207,39 @@ socket is torn down (destroyed, or disconnects) before ever connecting, the
 queue is drained by `cancelPending`, which still invokes each queued request's
 `onError` exactly once, exactly like an in-flight (already-sent) registration
 would. See `QtWebSocketBackend`'s own section below.
+
+### Shared/keyed registration — `registerModelSharedAsync` / `attachModelAsync`
+
+`registerModelShared` and `attachModel` have the same problem for the same
+reason, reached by a different route: a keyed screen's first payload-keyed
+`execute()` attaches, and on a wire backend that attach blocks in `sendSync`,
+which aborts a WASM main thread. Both therefore have an optional non-blocking
+counterpart with `registerModelAsync`'s exact shape and contract —
+`false` by default, `true` plus exactly one later callback when a backend opts
+in:
+
+| Virtual | Synchronous counterpart | Preferred by |
+|---|---|---|
+| `registerModelSharedAsync(typeId, factory, identity, onRegistered, onError)` | `registerModelShared` | `Bridge::ensureBoundAsync` |
+| `attachModelAsync(typeId, factory, identity, current, onRegistered, onError)` | `attachModel` | `Bridge::attachHandlerAsync` |
+
+`QtWebSocketBackend` implements both behind the same
+`asyncRegistrationEnabled` flag, reusing the same `callId`-keyed pending map
+(reply routing is verb-agnostic — a `register`, a shared `register`, and an
+`attach` all reply the same way). An empty `identity.primary` degrades to
+`registerModelAsync`, mirroring the synchronous methods' degrade-to-private
+behaviour.
+
+Unlike the synchronous `attachModel`'s default implementation,
+`attachModelAsync` does **not** release `current` itself: an overriding backend
+is behind a wire protocol whose single `attach` request re-points server-side,
+leaving nothing to deregister — the same division of responsibility
+`QtWebSocketBackend::attachModel` already follows for a non-empty primary.
+
+`BridgeHandler::execute()`'s public signature and contract are unchanged; see
+[shared_instances.md](shared_instances.md), "Async register-or-attach and
+attach", for the caller-visible story and the `_attachMtx` locking rule these
+two `Bridge` methods must obey.
 
 ## Error types
 

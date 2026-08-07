@@ -532,6 +532,17 @@ slow remote round-trip on one handler's attach never blocks another
 handler's construction, destruction, or a `switchBackend()` call on the same
 `Bridge`).
 
+`attachHandlerAsync`/`ensureBoundAsync` — the non-blocking counterparts
+`BridgeHandler::execute()` routes its keyed dispatches through — take
+`_attachMtx` over the same scope their synchronous twins do, but **release it
+before invoking their `onDone` callback**, on every path including the
+synchronous fallback. That is a hard requirement, not a style choice:
+`onDone` is where the action itself is dispatched, and a result-keyed dispatch
+promotes its binding via `assignHandlerPrimary`, which re-takes `_attachMtx`.
+It is the same rule `registerHandlerImpl` already follows for `_mtx`. See
+[shared_instances.md](shared_instances.md), "Async register-or-attach and
+attach".
+
 `subscribe`/`unsubscribe` mutate the bridge's subscription registry under
 `_subMtx`. Callbacks never run under that mutex: `publishResult` snapshots the
 matching sinks under the lock and invokes them outside it, marshalled to the

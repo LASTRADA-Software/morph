@@ -11,6 +11,7 @@
 - [The instance directory](#the-instance-directory)
 - [Enumerating live instances](#enumerating-live-instances)
 - [Wire protocol changes](#wire-protocol-changes)
+- [Async register-or-attach and attach](#async-register-or-attach-and-attach)
 - [Ownership and authorization](#ownership-and-authorization)
 - [Lifetime and the A7 connection-scope change](#lifetime-and-the-a7-connection-scope-change)
 - [API reference](#api-reference)
@@ -271,6 +272,65 @@ its primary so journal entries carry the entity key — but conflating them woul
 silently change behaviour for anyone already setting `contextKey` for journal
 purposes, which the framework's opt-in discipline forbids.
 
+## Async register-or-attach and attach
+
+No wire change: the three requests above are unchanged. What changed is that a
+backend may now answer them *without blocking the caller*, through two opt-in
+`IBackend` virtuals that mirror `registerModelAsync`'s established shape
+(see [backend.md](backend.md), "Asynchronous registration"):
+
+| Virtual | Synchronous counterpart | Preferred by |
+|---|---|---|
+| `registerModelSharedAsync(typeId, factory, identity, onRegistered, onError)` | `registerModelShared` | `Bridge::ensureBoundAsync` |
+| `attachModelAsync(typeId, factory, identity, current, onRegistered, onError)` | `attachModel` | `Bridge::attachHandlerAsync` |
+
+Both default to returning `false` without calling either callback; a backend
+that opts in sends the request, returns `true` immediately, and later invokes
+exactly one of `onRegistered(ModelId)` / `onError(message)` on its own thread.
+`QtWebSocketBackend` implements both, gated behind the *same*
+`QtWebSocketBackendConfig::asyncRegistrationEnabled` flag `registerModelAsync`
+already uses — there is no second knob. Their replies route through the
+existing `callId`-keyed pending-registration map, which is verb-agnostic:
+`register` (shared or not) and `attach` all reply `ok` with a `modelId`, or
+`err`. An empty `identity.primary` degrades to the private async path
+(`registerModelAsync`), mirroring the synchronous methods' own
+degrade-to-private behaviour rather than inventing new semantics.
+
+**Why this exists.** `registerModelShared`/`attachModel` are synchronous, so on
+a wire backend they block in a nested `QEventLoop`, which a WASM main thread
+cannot spin at all. Before this, the *first* payload-keyed action a WASM client
+executed — the very shape a keyed screen is built on — aborted the page. See
+`examples/LADDER.md`, "Framework prerequisites" #1, for the rung-3 (`polls`)
+scenario that motivated closing this.
+
+**What callers see.** Nothing, by design. `BridgeHandler::execute()`'s
+signature and its documented contract are unchanged, including the promise that
+a payload- or result-keyed action's attach/promote step never throws out of the
+call but resolves the returned `Completion`'s `.onError(...)` instead. Only
+*how* that promise is kept changed: `execute()` now routes its keyed dispatch
+through `Bridge::attachHandlerAsync` / `Bridge::ensureBoundAsync`, which use the
+async virtuals when the backend has them and otherwise run the identical
+synchronous attach inline and call back before returning. A backend that has not
+opted in behaves byte-for-byte as it did before. The one observable difference on
+a backend that *has* opted in is that the dispatch happens after the attach's
+reply arrives rather than on the calling stack — which is the point.
+
+**`attach()` stays synchronous.** The standalone `handler.attach(key)` is a
+`void` call with no `Completion` to route a failure through, so it still throws
+and still blocks. That is deliberate, and its own doc comment already named the
+escape hatch: *a caller that wants the failure delivered asynchronously should
+attach via a payload-keyed action's `execute()` instead.* This section is what
+makes that escape hatch real. Giving `attach()` itself an async form would mean
+changing its return type, which is a separate, breaking decision.
+
+**Locking.** `Bridge::attachHandlerAsync`/`ensureBoundAsync` hold `_attachMtx`
+across the guard check, the async dispatch, and the synchronous fallback's own
+state mutation — but never across the `onDone` callback. This is load-bearing,
+not stylistic: what `execute()` does from inside `onDone` is dispatch the
+action, and a result-keyed dispatch promotes its binding through
+`assignHandlerPrimary`, which takes `_attachMtx` itself. It is the same rule
+`registerHandlerImpl` already follows for `_mtx`.
+
 ## Ownership and authorization
 
 `RemoteServer` records an `ownerPrincipal` for each instance at register time
@@ -341,9 +401,11 @@ strictly reduces pressure on it.
 | `BRIDGE_KEY_FROM(A, &A::field)` | macro | Declares that a further action `A` also carries the key. |
 | `BRIDGE_MODEL_KEY_FROM_RESULT(M, A, &R::field)` | macro | As `BRIDGE_MODEL_KEY`, but the key comes from `A`'s *result*. |
 | `BRIDGE_KEY_FROM_RESULT(A, &R::field)` | macro | A further creating action whose result establishes the key. |
-| `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. |
+| `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. Synchronous and throwing, by design — see [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
+| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its attach (payload-keyed) or bind-and-promote (result-keyed) step takes the backend's async path when one exists, so the call no longer blocks on a round-trip — visible only as *not aborting a WASM main thread*. See [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
+| `IBackend::registerModelSharedAsync` / `attachModelAsync` | `bool` | Opt-in non-blocking counterparts to `registerModelShared`/`attachModel`; `false` by default, and callers then fall back to the synchronous method unchanged. |
 
 ## Design decisions
 

@@ -28,6 +28,7 @@
 #include <string_view>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "test_support.hpp"
@@ -40,6 +41,42 @@ struct ARCount {
 
 struct ARModel {
     int execute(const ARCount& a) { return a.x; }
+};
+
+// --- Keyed/shared coverage: the same deferred-reply idea applied to
+// --- registerModelSharedAsync/attachModelAsync (the register-or-attach and
+// --- attach counterparts of registerModelAsync).
+
+/// Names the instance it wants in the action payload -> payload-keyed, so
+/// executing it attaches the handler first (Bridge::attachHandlerAsync).
+struct ARTouch {
+    std::int64_t id = 0;
+    int amount = 0;
+};
+
+/// Result of the creating action below; its `id` establishes the key.
+struct ARKeyedCreated {
+    std::int64_t id = 0;
+    int value = 0;
+};
+
+/// Creates the entity, so its key can only come back in the reply ->
+/// result-keyed, and executing it binds the handler first
+/// (Bridge::ensureBoundAsync) and promotes it once the reply names the key.
+struct ARKeyedCreate {
+    int initial = 0;
+};
+
+struct ARKeyedModel {
+    int value = 0;
+    int execute(const ARTouch& act) {
+        value += act.amount;
+        return value;
+    }
+    ARKeyedCreated execute(const ARKeyedCreate& act) {
+        value = act.initial;
+        return {.id = 4242, .value = value};
+    }
 };
 
 }  // namespace
@@ -57,6 +94,38 @@ template <>
 struct morph::model::ModelTraits<ARModel> {
     static constexpr std::string_view typeId() { return "AR_Model"; }
 };
+
+template <>
+struct morph::model::ActionTraits<ARTouch> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "AR_Touch"; }
+    static std::string toJson(const ARTouch& act) {
+        return R"({"id":)" + std::to_string(act.id) + R"(,"amount":)" + std::to_string(act.amount) + "}";
+    }
+    static ARTouch fromJson(std::string_view /*json*/) { return {}; }
+    static std::string resultToJson(const int& res) { return std::to_string(res); }
+    static int resultFromJson(std::string_view text) { return std::stoi(std::string{text}); }
+};
+template <>
+struct morph::model::ActionTraits<ARKeyedCreate> {
+    using Result = ARKeyedCreated;
+    static constexpr std::string_view typeId() { return "AR_KeyedCreate"; }
+    static std::string toJson(const ARKeyedCreate& act) {
+        return R"({"initial":)" + std::to_string(act.initial) + "}";
+    }
+    static ARKeyedCreate fromJson(std::string_view /*json*/) { return {}; }
+    static std::string resultToJson(const ARKeyedCreated& res) {
+        return R"({"id":)" + std::to_string(res.id) + R"(,"value":)" + std::to_string(res.value) + "}";
+    }
+    static ARKeyedCreated resultFromJson(std::string_view /*json*/) { return {}; }
+};
+template <>
+struct morph::model::ModelTraits<ARKeyedModel> {
+    static constexpr std::string_view typeId() { return "AR_KeyedModel"; }
+};
+
+BRIDGE_MODEL_KEY(ARKeyedModel, ARTouch, &ARTouch::id);
+BRIDGE_KEY_FROM_RESULT(ARKeyedCreate, &ARKeyedCreated::id);
 
 // ── Issue #67: assignHandlerPrimary prefers IBackend::assignPrimaryAsync ────
 //
@@ -136,6 +205,49 @@ public:
         return true;
     }
 
+    // The shared/keyed counterparts, deferred exactly the same way: the reply
+    // lands in the same queue completeNext()/failNext() drain, so a keyed
+    // attach is observably non-blocking for the same reason a plain
+    // registration is.
+    bool registerModelSharedAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                                  morph::backend::detail::InstanceIdentity /*identity*/,
+                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) override {
+        std::scoped_lock const lock{_pendingMtx};
+        _pending.push_back(Pending{.typeId = typeId,
+                                   .factory = std::move(factory),
+                                   .onRegistered = std::move(onRegistered),
+                                   .onError = std::move(onError)});
+        return true;
+    }
+
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                          morph::backend::detail::InstanceIdentity /*identity*/,
+                          morph::exec::detail::ModelId /*current*/,
+                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> onError) override {
+        std::scoped_lock const lock{_pendingMtx};
+        _pending.push_back(Pending{.typeId = typeId,
+                                   .factory = std::move(factory),
+                                   .onRegistered = std::move(onRegistered),
+                                   .onError = std::move(onError)});
+        return true;
+    }
+
+    void assignPrimary(morph::exec::detail::ModelId mid, const std::string& /*typeId*/,
+                       std::string_view primary) override {
+        std::scoped_lock const lock{_regMtx};
+        _assigned.emplace_back(mid.v, std::string{primary});
+    }
+
+    /// The (modelId, primary) pairs assignPrimary was asked to file, in order.
+    [[nodiscard]] std::vector<std::pair<uint64_t, std::string>> assignments() const {
+        std::scoped_lock const lock{_regMtx};
+        return _assigned;
+    }
+
     // Test hooks: settle the oldest still-pending async registration.
     void completeNext() {
         Pending pending;
@@ -175,6 +287,7 @@ private:
 
     mutable std::mutex _regMtx;
     std::unordered_map<uint64_t, std::unique_ptr<morph::model::detail::IModelHolder>> _models;
+    std::vector<std::pair<uint64_t, std::string>> _assigned;
     uint64_t _nextId{100};
 };
 
@@ -896,5 +1009,204 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
         // returned above), every waiter -- whichever check caught it -- must
         // see success: nothing here ever fails registration.
         REQUIRE(resolvedTrue.load() == kWaitersPerTrial);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shared/keyed registration: registerModelSharedAsync + attachModelAsync.
+//
+// Same opt-in/fallback contract as registerModelAsync above, reached through
+// Bridge::attachHandlerAsync (payload-keyed actions) and
+// Bridge::ensureBoundAsync (result-keyed ones), both of which BridgeHandler's
+// execute() now routes its keyed dispatches through. execute()'s own contract
+// is unchanged: the attach/promote step never throws out of the call, it
+// resolves the returned Completion.
+// ---------------------------------------------------------------------------
+
+using morph::bridge::AllowShared;
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("Bridge prefers attachModelAsync over the synchronous attachModel when the backend offers it",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    // An AllowShared handler registers nothing at construction -- it acquires
+    // an instance only when a keyed action names one.
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+    REQUIRE(rawBackend->pendingCount() == 0);
+
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    auto pending = handler.execute(ARTouch{.id = 42, .amount = 5});
+    pending.then([&](int val) { result.store(val); }).onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    // The attach was dispatched but has not replied: execute() returned a
+    // still-pending Completion rather than blocking in a nested wait, which is
+    // the entire point on a WASM main thread.
+    REQUIRE(rawBackend->pendingCount() == 1);
+    CHECK(result.load() == -1);
+    CHECK_FALSE(failed.load());
+
+    rawBackend->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    CHECK(result.load() == 5);
+    CHECK_FALSE(failed.load());
+    CHECK(handler.primary().value_or(-1) == 42);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("A backend with no async attach path falls back to the synchronous attachModel unchanged",
+          "[bridge][registration][shared-instances][issue26]") {
+    // LocalBackend overrides neither attachModelAsync nor
+    // registerModelSharedAsync, so IBackend's defaults (returning false) apply
+    // and the keyed execute() runs the identical synchronous attach it always
+    // has -- bound before the dispatch, on this thread.
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    handler.execute(ARTouch{.id = 7, .amount = 3})
+        .then([&](int val) { result.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1 || failed.load(); }));
+    CHECK_FALSE(failed.load());
+    CHECK(result.load() == 3);
+    CHECK(handler.primary().value_or(-1) == 7);
+
+    // A second keyed action on the same key is the idempotent-attach path, and
+    // lands on the same instance (3 + 4), proving the fallback kept the
+    // binding, not just the first reply.
+    std::atomic<int> second{-1};
+    handler.execute(ARTouch{.id = 7, .amount = 4})
+        .then([&](int val) { second.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+    REQUIRE(morph::testing::waitUntil([&] { return second.load() != -1 || failed.load(); }));
+    CHECK_FALSE(failed.load());
+    CHECK(second.load() == 7);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE(
+    "attachModelAsync's onError path surfaces through the returned Completion's onError, matching the synchronous "
+    "path's documented contract",
+    "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    // execute() itself must not throw, whatever the attach does -- the failure
+    // is a Completion outcome, not a synchronous exception.
+    std::optional<morph::async::Completion<int>> pending;
+    REQUIRE_NOTHROW(pending.emplace(handler.execute(ARTouch{.id = 99, .amount = 1})));
+
+    std::string message;
+    std::atomic<bool> succeeded{false};
+    pending->then([&](int) { succeeded.store(true); }).onError([&](const std::exception_ptr& err) {
+        try {
+            std::rethrow_exception(err);
+        } catch (const std::exception& exc) {
+            message = exc.what();
+        }
+    });
+
+    REQUIRE(rawBackend->pendingCount() == 1);
+    REQUIRE_NOTHROW(rawBackend->failNext("attach refused"));
+
+    REQUIRE(morph::testing::waitUntil([&] { return !message.empty(); }));
+    CHECK(message == "attach refused");
+    CHECK_FALSE(succeeded.load());
+    // The failed attach left the handler unattached, exactly as the
+    // synchronous path's throwing attach does.
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("ensureBoundAsync mirrors the same three cases for a result-keyed (creating) action",
+          "[bridge][registration][shared-instances][issue26]") {
+    SECTION("prefers registerModelSharedAsync when the backend offers it") {
+        SyncExec cbExec;
+        auto backend = std::make_unique<AsyncRegisterBackend>();
+        auto* rawBackend = backend.get();
+        morph::bridge::Bridge bridge{std::move(backend)};
+        morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+        REQUIRE(rawBackend->pendingCount() == 0);
+
+        std::atomic<int> value{-1};
+        std::atomic<bool> failed{false};
+        auto pending = handler.execute(ARKeyedCreate{.initial = 11});
+        pending.then([&](ARKeyedCreated res) { value.store(res.value); }).onError([&](const std::exception_ptr&) {
+            failed.store(true);
+        });
+
+        // Bound asynchronously: still nothing resolved, nothing blocked.
+        REQUIRE(rawBackend->pendingCount() == 1);
+        CHECK(value.load() == -1);
+
+        rawBackend->completeNext();
+        REQUIRE(morph::testing::waitUntil([&] { return value.load() != -1; }));
+        CHECK(value.load() == 11);
+        CHECK_FALSE(failed.load());
+        // The result-sourced key was adopted in place before the caller's
+        // .then() saw the result.
+        CHECK(handler.primary().value_or(-1) == 4242);
+        auto const assigned = rawBackend->assignments();
+        REQUIRE(assigned.size() == 1);
+        CHECK(assigned.front().second == "4242");
+    }
+
+    SECTION("falls back to the synchronous registerModelShared when it does not") {
+        morph::exec::ThreadPoolExecutor pool{2};
+        SyncExec cbExec;
+        morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+        morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+        std::atomic<int> value{-1};
+        std::atomic<bool> failed{false};
+        handler.execute(ARKeyedCreate{.initial = 23})
+            .then([&](ARKeyedCreated res) { value.store(res.value); })
+            .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+        REQUIRE(morph::testing::waitUntil([&] { return value.load() != -1 || failed.load(); }));
+        CHECK_FALSE(failed.load());
+        CHECK(value.load() == 23);
+        CHECK(handler.primary().value_or(-1) == 4242);
+    }
+
+    SECTION("surfaces registerModelSharedAsync's onError through the returned Completion") {
+        SyncExec cbExec;
+        auto backend = std::make_unique<AsyncRegisterBackend>();
+        auto* rawBackend = backend.get();
+        morph::bridge::Bridge bridge{std::move(backend)};
+        morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+        std::optional<morph::async::Completion<ARKeyedCreated>> pending;
+        REQUIRE_NOTHROW(pending.emplace(handler.execute(ARKeyedCreate{.initial = 5})));
+
+        std::string message;
+        std::atomic<bool> succeeded{false};
+        pending->then([&](ARKeyedCreated) { succeeded.store(true); }).onError([&](const std::exception_ptr& err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                message = exc.what();
+            }
+        });
+
+        REQUIRE(rawBackend->pendingCount() == 1);
+        REQUIRE_NOTHROW(rawBackend->failNext("no capacity"));
+
+        REQUIRE(morph::testing::waitUntil([&] { return !message.empty(); }));
+        CHECK(message == "no capacity");
+        CHECK_FALSE(succeeded.load());
+        CHECK_FALSE(handler.primary().has_value());
     }
 }
