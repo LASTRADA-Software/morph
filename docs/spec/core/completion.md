@@ -240,12 +240,33 @@ pre-existing behavior exactly — a `Bridge` that never calls the setter behaves
 as it always did, and spawns no extra thread. The current value is readable via
 `Bridge::executeDeadline()`.
 
+**Single-threaded WebAssembly.** `TimeoutScheduler` has a second build,
+selected by `#if defined(__EMSCRIPTEN__) && !defined(__EMSCRIPTEN_PTHREADS__)`,
+that uses the browser's own `setTimeout` (`emscripten_async_call`) instead of a
+thread and fires its callbacks on the main thread — the same thread the Qt
+event loop and every `QtExecutor`-posted completion callback already run on.
+This is not a degradation switch: deadlines still fire, with the same
+first-result-wins race and the same `ClientTimeoutError`. It exists because a
+`wasm_singlethread` Qt build (what `.github/workflows/wasm-ladder.yml` installs
+and what `cmake/morph_add_rung.cmake` builds against, with no `-pthread`) links
+Emscripten's non-pthread `pthread_create` stub, so constructing a `std::thread`
+throws `std::system_error` at runtime — which would have made
+`setExecuteDeadline` unusable from a browser tab, and with it
+`examples/common/gui/event_poller.hpp`, whose constructor calls it
+unconditionally. Two behavioural differences, both documented in
+`timeout_scheduler.hpp`'s own `@file` comment: callbacks are never concurrent
+with the caller, and `cancel()` releases the callback immediately but leaves the
+underlying browser timer to elapse harmlessly rather than clearing it. **This
+build has never been compiled or run in this repository** — no Emscripten
+toolchain is available here; its only verification is the `ladder-wasm` CI
+compile gate.
+
 **Mechanics.** Every `executeVia()` call made while a non-zero deadline is
 installed arms a timer on a `Bridge`-owned
-`morph::async::detail::TimeoutScheduler` (a single background thread, created
-lazily on the first call that enables a deadline and torn down with the
-`Bridge`; the same class `RemoteServer` uses for its server-side
-`LimitPolicy::executeTimeout`). The timer's callback captures only the typed
+`morph::async::detail::TimeoutScheduler` (a single background thread — or, in a
+single-threaded WASM build, a browser timer; see above — created lazily on the
+first call that enables a deadline and torn down with the `Bridge`; the same
+class `RemoteServer` uses for its server-side `LimitPolicy::executeTimeout`). The timer's callback captures only the typed
 `CompletionState` — never the `Bridge` — and resolves it with
 `morph::backend::ClientTimeoutError`. The real reply and the timer therefore
 race, and **whichever settles the state first wins**, because `setValue` /
