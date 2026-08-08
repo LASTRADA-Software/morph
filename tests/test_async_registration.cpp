@@ -291,6 +291,56 @@ private:
     uint64_t _nextId{100};
 };
 
+// Completes its async attach/bind callbacks *inline* -- synchronously, from
+// inside attachModelAsync/registerModelSharedAsync itself, before the dispatch
+// call returns. This is legal (nothing in IBackend forbids it) and it is what
+// QtWebSocketBackend already does on its !_connected error branch, so
+// Bridge::attachHandlerAsync/ensureBoundAsync must survive it: at that moment
+// the Bridge is still holding _attachMtx around the dispatch, and anything the
+// callback does that re-enters the Bridge under that lock -- publishing the
+// binding's primary, or a result-keyed dispatch's assignHandlerPrimary --
+// self-deadlocks unless the outcome is deferred out of the dispatch frame.
+class InlineCompletingBackend : public AsyncRegisterBackend {
+public:
+    /// @param failInline When set, both methods report this message via onError
+    ///        inline instead of succeeding.
+    explicit InlineCompletingBackend(std::optional<std::string> failInline = std::nullopt)
+        : _failInline{std::move(failInline)} {}
+
+    bool registerModelSharedAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                                  morph::backend::detail::InstanceIdentity /*identity*/,
+                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) override {
+        completeInline(typeId, std::move(factory), onRegistered, onError);
+        return true;
+    }
+
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                          morph::backend::detail::InstanceIdentity /*identity*/,
+                          morph::exec::detail::ModelId /*current*/,
+                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> onError) override {
+        completeInline(typeId, std::move(factory), onRegistered, onError);
+        return true;
+    }
+
+private:
+    void completeInline(const std::string& typeId,
+                        std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                        const std::function<void(morph::exec::detail::ModelId)>& onRegistered,
+                        const std::function<void(const std::string&)>& onError) {
+        if (_failInline) {
+            onError(*_failInline);
+            return;
+        }
+        onRegistered(registerModel(typeId, std::move(factory)));
+    }
+
+    std::optional<std::string> _failInline;
+};
+
 // Shim so a Bridge (which takes ownership of a unique_ptr) can hold a backend
 // the test also keeps a shared_ptr to -- making it co-owned / able to outlive
 // the Bridge (see test_bridge_lifetime.cpp's identical BackendShim). Also lets
@@ -1126,6 +1176,91 @@ TEST_CASE(
     CHECK_FALSE(succeeded.load());
     // The failed attach left the handler unattached, exactly as the
     // synchronous path's throwing attach does.
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("A backend that completes attachModelAsync inline does not deadlock and resolves normally",
+          "[bridge][registration][shared-instances][issue26]") {
+    // Regression guard for the inline-completion hole: attachHandlerAsync
+    // dispatches under _attachMtx, and its success callback re-acquires that
+    // lock to publish contextKey/primary. A callback that fires inline would
+    // therefore re-enter a mutex this very frame holds. The dispatch frame must
+    // park such an outcome and apply it after the lock is released instead.
+    SyncExec cbExec;
+    auto backend = std::make_unique<InlineCompletingBackend>();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    // If the frame deadlocked, execute() never returns and this test hangs.
+    handler.execute(ARTouch{.id = 8, .amount = 6})
+        .then([&](int val) { result.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    CHECK_FALSE(failed.load());
+    CHECK(result.load() == 6);
+    // The inline outcome was published exactly as an out-of-frame one would be:
+    // primary() reads binding->primary under _attachMtx, which is also proof
+    // the lock was released rather than left held by the dispatch frame.
+    CHECK(handler.primary().value_or(-1) == 8);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("A backend that completes registerModelSharedAsync inline still promotes a result-keyed action",
+          "[bridge][registration][shared-instances][issue26]") {
+    // The sharpest form of the same hole: an inline bind runs onDone -- i.e.
+    // the whole dispatch -- inside ensureBoundAsync's frame, and a result-keyed
+    // dispatch's onResult calls assignHandlerPrimary, which takes _attachMtx.
+    SyncExec cbExec;
+    auto backend = std::make_unique<InlineCompletingBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<int> value{-1};
+    std::atomic<bool> failed{false};
+    handler.execute(ARKeyedCreate{.initial = 17})
+        .then([&](ARKeyedCreated res) { value.store(res.value); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    CHECK_FALSE(failed.load());
+    CHECK(value.load() == 17);
+    CHECK(handler.primary().value_or(-1) == 4242);
+    auto const assigned = rawBackend->assignments();
+    REQUIRE(assigned.size() == 1);
+    CHECK(assigned.front().second == "4242");
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("A backend that reports its async attach failure inline surfaces it through onError, exactly once",
+          "[bridge][registration][shared-instances][issue26]") {
+    // QtWebSocketBackend's !_connected branch, in miniature: onError invoked
+    // synchronously from inside attachModelAsync, which then returns true.
+    SyncExec cbExec;
+    auto backend = std::make_unique<InlineCompletingBackend>(std::optional<std::string>{"disconnected"});
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::optional<morph::async::Completion<int>> pending;
+    REQUIRE_NOTHROW(pending.emplace(handler.execute(ARTouch{.id = 3, .amount = 1})));
+
+    std::string message;
+    int errorCount = 0;
+    std::atomic<bool> succeeded{false};
+    pending->then([&](int) { succeeded.store(true); }).onError([&](const std::exception_ptr& err) {
+        ++errorCount;
+        try {
+            std::rethrow_exception(err);
+        } catch (const std::exception& exc) {
+            message = exc.what();
+        }
+    });
+
+    CHECK(message == "disconnected");
+    CHECK(errorCount == 1);
+    CHECK_FALSE(succeeded.load());
     CHECK_FALSE(handler.primary().has_value());
 }
 

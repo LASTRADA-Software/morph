@@ -543,6 +543,23 @@ It is the same rule `registerHandlerImpl` already follows for `_mtx`. See
 [shared_instances.md](shared_instances.md), "Async register-or-attach and
 attach".
 
+The guarantee is unconditional, including for a backend that completes its
+`attachModelAsync`/`registerModelSharedAsync` callback **inline** — from inside
+the dispatch call itself, while the dispatching frame still holds `_attachMtx`
+(`QtWebSocketBackend` does exactly this on its `!_connected` error branch).
+Such a callback does not act: it parks its outcome in a
+`detail::AsyncDispatchHandoff` and returns, and the dispatching frame applies
+the outcome once its own dispatch call has returned — publishing under the lock
+it already holds, then releasing it, then calling `onDone`. A tiny mutex inside
+the handoff makes the window race-free even against a backend that replies from
+another thread while its dispatch call is still on this stack, and keeps
+`onDone` invoked exactly once on every interleaving. Because the inline case can
+never reach the callback body, `attachHandlerAsync`'s out-of-frame success
+callback is free to re-acquire `_attachMtx` for the two `std::string` fields it
+publishes (`HandlerBinding::contextKey`/`primary`, which every other reader
+takes that lock for); `ensureBoundAsync`'s publishes only the atomic
+`currentId` and needs no lock at all.
+
 `subscribe`/`unsubscribe` mutate the bridge's subscription registry under
 `_subMtx`. Callbacks never run under that mutex: `publishResult` snapshots the
 matching sinks under the lock and invokes them outside it, marshalled to the

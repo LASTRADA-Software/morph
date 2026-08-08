@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <concepts>
+#include <exception>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -222,6 +223,93 @@ struct HandlerBinding {
     std::vector<std::pair<std::function<void(bool)>, std::function<void(std::exception_ptr)>>> registrationWaiters;
 };
 
+/// @brief Outcome a backend's inline completion parked for its dispatcher.
+struct ParkedOutcome {
+    /// @brief `true` when the parked outcome is a success.
+    bool succeeded = false;
+    /// @brief Instance id the success callback reported.
+    ::morph::exec::detail::ModelId modelId{};
+    /// @brief Diagnostic the error callback reported; null on success.
+    std::exception_ptr failure;
+};
+
+/// @brief Handoff slot between an async attach/bind dispatch and its callback.
+///
+/// `Bridge::attachHandlerAsync`/`ensureBoundAsync` dispatch to the backend while
+/// holding `_attachMtx`, and both promise to release it before invoking their
+/// `onDone`. A backend whose `attachModelAsync`/`registerModelSharedAsync`
+/// completed its callback *inline* — synchronously, before the dispatch call
+/// returned, as `QtWebSocketBackend` does on its `!_connected` error branch —
+/// would otherwise break that promise from inside the dispatch frame, with the
+/// lock still held.
+///
+/// So instead of acting, such a callback parks its outcome here and returns; the
+/// dispatching frame picks it up after the dispatch call returns, publishes it
+/// under the lock it already holds, releases the lock, and only then reports.
+/// `mtx` makes the handover race-free even for a backend that replies from
+/// another thread *while* its own dispatch call is still on this stack, and the
+/// `fired` flag keeps `onDone` invoked exactly once on every interleaving.
+struct AsyncDispatchHandoff {
+    /// @brief Guards every other field; never held across `onDone` or `_attachMtx`.
+    std::mutex mtx;
+    /// @brief `true` while the backend's dispatch call is still on the caller's stack.
+    bool inFrame = true;
+    /// @brief Set once either callback has claimed the outcome.
+    bool fired = false;
+    /// @brief `true` when the parked outcome is a success, `false` for a failure.
+    bool succeeded = false;
+    /// @brief Instance id the success callback reported.
+    ::morph::exec::detail::ModelId modelId{};
+    /// @brief Diagnostic the error callback reported; null on success.
+    std::exception_ptr failure;
+};
+
+/// @brief Records a backend callback's outcome in @p handoff.
+///
+/// Called first thing by both completion callbacks of an async attach/bind
+/// dispatch.
+///
+/// @param handoff   Handoff slot created by the dispatching frame.
+/// @param succeeded `true` for the success callback, `false` for the error one.
+/// @param modelId   Instance id, for the success callback; ignored otherwise.
+/// @param failure   Diagnostic, for the error callback; null otherwise.
+/// @return `true` if the caller must **not** act — either because the dispatch
+///         call is still on the dispatcher's stack (which owns the outcome from
+///         here on) or because another callback already claimed this dispatch.
+///         `false` if the caller owns the outcome and should deliver it itself.
+inline bool parkIfInFrame(AsyncDispatchHandoff& handoff, bool succeeded, ::morph::exec::detail::ModelId modelId,
+                          std::exception_ptr failure) {
+    std::scoped_lock const guard{handoff.mtx};
+    if (handoff.fired) {
+        // A backend is contractually allowed exactly one callback per dispatch;
+        // swallow a second one rather than reporting twice.
+        return true;
+    }
+    handoff.fired = true;
+    handoff.succeeded = succeeded;
+    handoff.modelId = modelId;
+    handoff.failure = std::move(failure);
+    return handoff.inFrame;
+}
+
+/// @brief Closes the inline window and takes whatever a callback parked.
+///
+/// Called by the dispatching frame immediately after the backend's dispatch call
+/// returns. After this, a callback that has not yet run delivers its own outcome.
+///
+/// @param handoff Handoff slot created by the dispatching frame.
+/// @return The parked outcome if the backend completed inline (or concurrently,
+///         before this frame closed the window); `std::nullopt` if the frame won
+///         the race and the reply, if any, is still to come.
+inline std::optional<ParkedOutcome> claimHandoff(AsyncDispatchHandoff& handoff) {
+    std::scoped_lock const guard{handoff.mtx};
+    handoff.inFrame = false;
+    if (!handoff.fired) {
+        return std::nullopt;
+    }
+    return ParkedOutcome{.succeeded = handoff.succeeded, .modelId = handoff.modelId, .failure = handoff.failure};
+}
+
 }  // namespace detail
 
 /// @brief Central dispatcher that routes typed actions to an `IBackend`.
@@ -372,9 +460,9 @@ public:
     /// `_attachMtx` is held around the guard check, the async branch's
     /// *dispatch*, and the synchronous branch's own state mutation — matching
     /// `attachHandler`'s existing lock scope — but is **released before
-    /// @p onDone is ever invoked**, on every path. That is not a nicety: what
-    /// `execute()` does from inside @p onDone is dispatch the action, and a
-    /// result-keyed dispatch promotes its binding through
+    /// @p onDone is ever invoked**, on every path, unconditionally. That is not
+    /// a nicety: what `execute()` does from inside @p onDone is dispatch the
+    /// action, and a result-keyed dispatch promotes its binding through
     /// `assignHandlerPrimary`, which takes `_attachMtx` itself. Invoking
     /// @p onDone under the lock therefore self-deadlocks the moment the
     /// completion is delivered on the calling thread — which is exactly what
@@ -382,9 +470,35 @@ public:
     /// for every callback. This is `registerHandlerImpl`'s existing rule ("the
     /// backend call must not run under `_mtx`") applied to `_attachMtx`.
     ///
-    /// The completion callbacks below likewise do not take `_attachMtx`: per
-    /// `IBackend::attachModelAsync`'s contract they run once the reply
-    /// arrives, i.e. after this frame has returned and released it.
+    /// The guarantee holds even for a backend that completes its callback
+    /// *inline*, from inside `attachModelAsync` itself, while this frame still
+    /// holds the lock: such a callback parks its outcome in a
+    /// `detail::AsyncDispatchHandoff` and returns without acting, and this frame
+    /// applies it after the dispatch call has returned and the lock is gone.
+    /// See that struct's doc comment.
+    ///
+    /// An out-of-frame success callback re-acquires `_attachMtx` for the two
+    /// `std::string` fields it publishes (`contextKey`/`primary`, which
+    /// `HandlerBinding` documents as readable only under that lock) and drops it
+    /// again before calling @p onDone. That re-acquisition is safe precisely
+    /// because the inline case never reaches it.
+    ///
+    /// @par Known gap
+    /// Two calls for the same key issued before the first one's reply arrives
+    /// are **not** deduplicated: the guard below reads `binding->primary`/
+    /// `currentId`, neither of which is updated until the reply lands, so both
+    /// calls pass it and both dispatch an `attach`. This is a real behaviour
+    /// difference from the synchronous `attachHandler` it replaces, not merely
+    /// something inherent to asynchrony — `attachHandler` held `_attachMtx`
+    /// across the whole blocking round trip, which serialised concurrent
+    /// callers for free. It needs no second thread to hit: two `execute()`
+    /// calls in one event-loop turn are enough. The server answers both with
+    /// the same `ModelId` but counts two attachments, so one attach reference
+    /// leaks; the leak is bounded, not unbounded — the connection scope
+    /// releases every reference it holds when it closes. Closing this properly
+    /// needs in-flight tracking on the binding (coalescing the second caller
+    /// onto the first dispatch's completion); tracked as a follow-up, not fixed
+    /// here. Same gap, same reasoning, on `ensureBoundAsync`.
     ///
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding, as returned by `registerSharedHandler<Model>()`.
@@ -406,9 +520,13 @@ public:
         auto primaryCopy = primary;
         std::weak_ptr<const void> const weakLiveness{_liveness};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
         bool const started = backend->attachModelAsync(
             binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
-            [weakLiveness, weakBinding, primaryCopy, onDone](::morph::exec::detail::ModelId newId) {
+            [this, weakLiveness, weakBinding, primaryCopy, onDone, handoff](::morph::exec::detail::ModelId newId) {
+                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                    return;  // Completed inline: the dispatching frame will finish this.
+                }
                 auto aliveToken = weakLiveness.lock();
                 if (!aliveToken) {
                     return;  // The Bridge is gone; publishing this id would be pointless.
@@ -417,12 +535,37 @@ public:
                 if (!strongBinding) {
                     return;  // The BridgeHandler (and its binding) is gone.
                 }
-                strongBinding->contextKey = primaryCopy;
-                strongBinding->primary = primaryCopy;
-                strongBinding->currentId.store(newId.v);
-                onDone(nullptr);
+                {
+                    // contextKey/primary are plain std::strings that five other
+                    // sites read under `_attachMtx`; publishing them without it
+                    // would be a data race, not just a stale read.
+                    std::scoped_lock const guard{_attachMtx};
+                    strongBinding->contextKey = primaryCopy;
+                    strongBinding->primary = primaryCopy;
+                    strongBinding->currentId.store(newId.v);
+                }
+                onDone(nullptr);  // Outside the lock -- see @par Locking.
             },
-            [onDone](const std::string& message) { onDone(std::make_exception_ptr(std::runtime_error(message))); });
+            [onDone, handoff](const std::string& message) {
+                auto failure = std::make_exception_ptr(std::runtime_error(message));
+                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                    return;
+                }
+                onDone(failure);
+            });
+        if (auto parked = detail::claimHandoff(*handoff)) {
+            // The backend answered on this very stack, with `_attachMtx` still
+            // held. Publish under the lock we already own, then release it and
+            // report -- @p onDone never runs inside the dispatch frame.
+            if (parked->succeeded) {
+                binding->contextKey = primaryCopy;
+                binding->primary = std::move(primaryCopy);
+                binding->currentId.store(parked->modelId.v);
+            }
+            lock.unlock();
+            onDone(parked->failure);
+            return;
+        }
         if (started) {
             return;
         }
@@ -461,7 +604,16 @@ public:
     }
 
     /// @brief Async counterpart to `ensureBound`. See `attachHandlerAsync`'s
-    ///        doc comment for the fallback and locking contract.
+    ///        doc comment for the fallback and locking contract, including the
+    ///        inline-completion handling and the in-flight dedup gap, both of
+    ///        which apply here identically (two result-keyed `execute()` calls
+    ///        on the same still-unbound handler each bind their own anonymous
+    ///        instance; the first is then stranded until the connection scope
+    ///        closes).
+    ///
+    /// The one difference: this method's success callback publishes only
+    /// `currentId`, which is a `std::atomic`, so — unlike `attachHandlerAsync`'s
+    /// — it needs no `_attachMtx` of its own to do it.
     /// @param binding Shared binding to bind.
     /// @param onDone  Invoked exactly once: `nullptr` on success, or a
     ///                non-null `exception_ptr` on failure.
@@ -476,9 +628,13 @@ public:
         auto backend = loadBackend();
         std::weak_ptr<const void> const weakLiveness{_liveness};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
         bool const started = backend->registerModelSharedAsync(
             binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
-            [weakLiveness, weakBinding, onDone](::morph::exec::detail::ModelId newId) {
+            [weakLiveness, weakBinding, onDone, handoff](::morph::exec::detail::ModelId newId) {
+                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                    return;  // Completed inline: the dispatching frame will finish this.
+                }
                 auto aliveToken = weakLiveness.lock();
                 if (!aliveToken) {
                     return;  // The Bridge is gone; publishing this id would be pointless.
@@ -490,7 +646,23 @@ public:
                 strongBinding->currentId.store(newId.v);
                 onDone(nullptr);
             },
-            [onDone](const std::string& message) { onDone(std::make_exception_ptr(std::runtime_error(message))); });
+            [onDone, handoff](const std::string& message) {
+                auto failure = std::make_exception_ptr(std::runtime_error(message));
+                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                    return;
+                }
+                onDone(failure);
+            });
+        if (auto parked = detail::claimHandoff(*handoff)) {
+            // Completed on this stack, under `_attachMtx`: publish here, then
+            // release the lock before reporting (see `attachHandlerAsync`).
+            if (parked->succeeded) {
+                binding->currentId.store(parked->modelId.v);
+            }
+            lock.unlock();
+            onDone(parked->failure);
+            return;
+        }
         if (started) {
             return;
         }
@@ -1705,7 +1877,17 @@ public:
             ::morph::async::Completion<R> pending{state, _guiExec};
             auto* const bridgePtr = &_bridge;
             auto binding = _binding;
-            auto key = ::morph::model::ActionKeyTraits<Action>::key(action);
+            // Key extraction is user code (ActionKeyTraits + keyToString), so it
+            // is inside the same no-throw-out-of-execute() promise the attach
+            // itself makes: a throw here resolves the Completion, it does not
+            // escape.
+            std::string key;
+            try {
+                key = ::morph::model::ActionKeyTraits<Action>::key(action);
+            } catch (...) {
+                state->setException(std::current_exception());
+                return pending;
+            }
             auto sharedAction = std::make_shared<Action>(std::move(action));
             bridgePtr->template attachHandlerAsync<Model>(
                 binding, std::move(key),
