@@ -370,6 +370,22 @@ public:
         return _target->registerModelAsync(typeId, std::move(factory), contextKey, std::move(onRegistered),
                                            std::move(onError));
     }
+    bool registerModelSharedAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                                  morph::backend::detail::InstanceIdentity identity,
+                                  std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) override {
+        return _target->registerModelSharedAsync(typeId, std::move(factory), identity, std::move(onRegistered),
+                                                  std::move(onError));
+    }
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                          morph::backend::detail::InstanceIdentity identity, morph::exec::detail::ModelId current,
+                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> onError) override {
+        return _target->attachModelAsync(typeId, std::move(factory), identity, current, std::move(onRegistered),
+                                         std::move(onError));
+    }
 
 private:
     std::shared_ptr<AsyncRegisterBackend> _target;
@@ -525,6 +541,93 @@ TEST_CASE("Bridge::registerHandler: a stale async reply after switchBackend() do
     // assigned on the new, active backend.
     asyncBackendA->completeNext();
     CHECK(binding->currentId.load() == idAfterSwitch);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE(
+    "Bridge::attachHandlerAsync: a stale async attach reply after switchBackend() does not clobber the new "
+    "binding, and still resolves the caller's Completion",
+    "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto asyncBackendA = std::make_shared<AsyncRegisterBackend>();
+    morph::bridge::Bridge bridge{std::make_unique<AsyncBackendShim>(asyncBackendA)};
+    morph::bridge::BridgeHandler<ARKeyedModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    auto pending = handler.execute(ARTouch{.id = 42, .amount = 5});
+    pending.then([&](int val) { result.store(val); }).onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    // The attach was dispatched but has not replied yet.
+    REQUIRE(asyncBackendA->pendingCount() == 1);
+    CHECK(result.load() == -1);
+    CHECK_FALSE(failed.load());
+
+    // Switch away WHILE the attach on asyncBackendA is still outstanding. The
+    // handler never attached (its primary is still empty), so switchBackend's
+    // re-registration loop leaves it live-but-unbound on the new backend --
+    // matching the `binding->shared && binding->primary.empty()` carry-over
+    // path.
+    auto secondBackend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawSecond = secondBackend.get();
+    bridge.switchBackend(std::move(secondBackend));
+
+    // The original (now-stale) attach reply from asyncBackendA finally
+    // arrives. It must not be published into the binding as if it were a
+    // valid id on the now-active backend -- and, unlike a fire-and-forget
+    // re-registration, this caller's Completion is genuinely waiting on
+    // `onDone`, so the stale reply must still resolve it (with an error)
+    // rather than leaving it hanging forever.
+    asyncBackendA->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1 || failed.load(); }));
+    CHECK(result.load() == -1);
+    CHECK(failed.load());
+    CHECK_FALSE(handler.primary().has_value());
+
+    // The handler is still usable against the now-active backend: a fresh
+    // attach succeeds normally, proving the stale reply left no corruption
+    // behind.
+    std::atomic<int> secondResult{-1};
+    handler.execute(ARTouch{.id = 42, .amount = 9})
+        .then([&](int val) { secondResult.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+    REQUIRE(rawSecond->pendingCount() == 1);
+    rawSecond->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return secondResult.load() != -1; }));
+    CHECK(secondResult.load() == 9);
+    CHECK(handler.primary().value_or(-1) == 42);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE(
+    "Bridge::ensureBoundAsync: a stale async bind reply after switchBackend() does not clobber the new binding, "
+    "and still resolves the caller's Completion",
+    "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto asyncBackendA = std::make_shared<AsyncRegisterBackend>();
+    morph::bridge::Bridge bridge{std::make_unique<AsyncBackendShim>(asyncBackendA)};
+    morph::bridge::BridgeHandler<ARKeyedModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<int> value{-1};
+    std::atomic<bool> failed{false};
+    auto pending = handler.execute(ARKeyedCreate{.initial = 11});
+    pending.then([&](ARKeyedCreated res) { value.store(res.value); }).onError([&](const std::exception_ptr&) {
+        failed.store(true);
+    });
+
+    REQUIRE(asyncBackendA->pendingCount() == 1);
+    CHECK(value.load() == -1);
+    CHECK_FALSE(failed.load());
+
+    auto secondBackend = std::make_unique<AsyncRegisterBackend>();
+    bridge.switchBackend(std::move(secondBackend));
+
+    // The stale bind reply must not publish `currentId` from a backend
+    // nothing uses any more, and must still resolve the waiting Completion.
+    asyncBackendA->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return value.load() != -1 || failed.load(); }));
+    CHECK(value.load() == -1);
+    CHECK(failed.load());
 }
 
 TEST_CASE("Bridge::registerHandler: an async reply arriving after ~Bridge() is a safe no-op",

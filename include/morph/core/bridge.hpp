@@ -518,52 +518,96 @@ public:
         auto const previous = ::morph::exec::detail::ModelId{binding->currentId.load()};
         auto backend = loadBackend();
         auto primaryCopy = primary;
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<const void> const weakLiveness{_liveness};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
-        bool const started = backend->attachModelAsync(
-            binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy}, previous,
-            [this, weakLiveness, weakBinding, primaryCopy, onDone, handoff](::morph::exec::detail::ModelId newId) {
-                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
-                    return;  // Completed inline: the dispatching frame will finish this.
-                }
-                auto aliveToken = weakLiveness.lock();
-                if (!aliveToken) {
-                    return;  // The Bridge is gone; publishing this id would be pointless.
-                }
-                auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
-                }
-                {
-                    // contextKey/primary are plain std::strings that five other
-                    // sites read under `_attachMtx`; publishing them without it
-                    // would be a data race, not just a stale read.
-                    std::scoped_lock const guard{_attachMtx};
-                    strongBinding->contextKey = primaryCopy;
-                    strongBinding->primary = primaryCopy;
-                    strongBinding->currentId.store(newId.v);
-                }
-                onDone(nullptr);  // Outside the lock -- see @par Locking.
-            },
-            [onDone, handoff](const std::string& message) {
-                auto failure = std::make_exception_ptr(std::runtime_error(message));
-                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
-                    return;
-                }
-                onDone(failure);
-            });
+        bool started = false;
+        try {
+            started = backend->attachModelAsync(
+                binding->typeId, binding->modelFactory, {.contextKey = primaryCopy, .primary = primaryCopy},
+                previous,
+                [this, weakBackend, weakLiveness, weakBinding, primaryCopy,
+                 onDone, handoff](::morph::exec::detail::ModelId newId) {
+                    if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                        return;  // Completed inline: the dispatching frame will finish this.
+                    }
+                    auto aliveToken = weakLiveness.lock();
+                    if (!aliveToken) {
+                        return;  // The Bridge is gone; publishing this id would be pointless.
+                    }
+                    auto strongBinding = weakBinding.lock();
+                    if (!strongBinding) {
+                        return;  // The BridgeHandler (and its binding) is gone.
+                    }
+                    std::exception_ptr failure;
+                    {
+                        // contextKey/primary are plain std::strings that five
+                        // other sites read under `_attachMtx`; publishing them
+                        // without it would be a data race, not just a stale
+                        // read.
+                        std::scoped_lock const guard{_attachMtx};
+                        auto pinned = weakBackend.lock();
+                        if (!pinned || pinned != loadBackend()) {
+                            // A switchBackend() already moved past this attach
+                            // (see registerHandlerImpl's identical guard) and
+                            // its own re-registration loop already handled
+                            // `binding` on the *new* backend -- applying this
+                            // stale reply now would overwrite that with a
+                            // dangling id from a backend nothing uses any
+                            // more. Unlike registerHandlerImpl's fire-and-
+                            // forget re-registration, a real execute() call is
+                            // synchronously waiting on `onDone` here, so the
+                            // stale reply must still be reported -- silently
+                            // dropping it would hang that caller forever.
+                            failure = std::make_exception_ptr(std::runtime_error(
+                                "attach reply arrived from a backend switchBackend() already replaced"));
+                        } else {
+                            try {
+                                strongBinding->contextKey = primaryCopy;
+                                strongBinding->primary = primaryCopy;
+                                strongBinding->currentId.store(newId.v);
+                            } catch (...) {
+                                failure = std::current_exception();
+                            }
+                        }
+                    }
+                    onDone(failure);  // Outside the lock -- see @par Locking.
+                },
+                [onDone, handoff](const std::string& message) {
+                    auto failure = std::make_exception_ptr(std::runtime_error(message));
+                    if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                        return;
+                    }
+                    onDone(failure);
+                });
+        } catch (...) {
+            // The backend's own dispatch call can throw synchronously (e.g.
+            // QtWebSocketBackend::attachModelAsync's wire::encode() failing
+            // before send) -- report it like any other failure instead of
+            // letting it escape execute()'s documented never-throws contract.
+            lock.unlock();
+            onDone(std::current_exception());
+            return;
+        }
         if (auto parked = detail::claimHandoff(*handoff)) {
             // The backend answered on this very stack, with `_attachMtx` still
-            // held. Publish under the lock we already own, then release it and
-            // report -- @p onDone never runs inside the dispatch frame.
+            // held -- switchBackend() cannot have run concurrently (it takes
+            // the same lock), so no staleness check is needed here. Publish
+            // under the lock we already own, then release it and report --
+            // @p onDone never runs inside the dispatch frame.
+            std::exception_ptr failure = parked->failure;
             if (parked->succeeded) {
-                binding->contextKey = primaryCopy;
-                binding->primary = std::move(primaryCopy);
-                binding->currentId.store(parked->modelId.v);
+                try {
+                    binding->contextKey = primaryCopy;
+                    binding->primary = std::move(primaryCopy);
+                    binding->currentId.store(parked->modelId.v);
+                } catch (...) {
+                    failure = std::current_exception();
+                }
             }
             lock.unlock();
-            onDone(parked->failure);
+            onDone(failure);
             return;
         }
         if (started) {
@@ -626,33 +670,63 @@ public:
             return;
         }
         auto backend = loadBackend();
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<const void> const weakLiveness{_liveness};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
-        bool const started = backend->registerModelSharedAsync(
-            binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
-            [weakLiveness, weakBinding, onDone, handoff](::morph::exec::detail::ModelId newId) {
-                if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
-                    return;  // Completed inline: the dispatching frame will finish this.
-                }
-                auto aliveToken = weakLiveness.lock();
-                if (!aliveToken) {
-                    return;  // The Bridge is gone; publishing this id would be pointless.
-                }
-                auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
-                }
-                strongBinding->currentId.store(newId.v);
-                onDone(nullptr);
-            },
-            [onDone, handoff](const std::string& message) {
-                auto failure = std::make_exception_ptr(std::runtime_error(message));
-                if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
-                    return;
-                }
-                onDone(failure);
-            });
+        bool started = false;
+        try {
+            started = backend->registerModelSharedAsync(
+                binding->typeId, binding->modelFactory, {.contextKey = binding->contextKey, .primary = {}},
+                [this, weakBackend, weakLiveness, weakBinding, onDone,
+                 handoff](::morph::exec::detail::ModelId newId) {
+                    if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
+                        return;  // Completed inline: the dispatching frame will finish this.
+                    }
+                    auto aliveToken = weakLiveness.lock();
+                    if (!aliveToken) {
+                        return;  // The Bridge is gone; publishing this id would be pointless.
+                    }
+                    auto strongBinding = weakBinding.lock();
+                    if (!strongBinding) {
+                        return;  // The BridgeHandler (and its binding) is gone.
+                    }
+                    std::exception_ptr failure;
+                    {
+                        // Brief `_attachMtx` window purely to serialise this
+                        // check against a concurrent switchBackend() (which
+                        // takes the same lock) -- `currentId` itself is an
+                        // atomic and needs no lock to store.
+                        std::scoped_lock const guard{_attachMtx};
+                        auto pinned = weakBackend.lock();
+                        if (!pinned || pinned != loadBackend()) {
+                            // See attachHandlerAsync's identical guard: a
+                            // stale reply from a backend switchBackend()
+                            // already replaced must still resolve `onDone`
+                            // (a real execute() call is waiting), not be
+                            // silently dropped.
+                            failure = std::make_exception_ptr(std::runtime_error(
+                                "attach reply arrived from a backend switchBackend() already replaced"));
+                        } else {
+                            strongBinding->currentId.store(newId.v);
+                        }
+                    }
+                    onDone(failure);
+                },
+                [onDone, handoff](const std::string& message) {
+                    auto failure = std::make_exception_ptr(std::runtime_error(message));
+                    if (detail::parkIfInFrame(*handoff, false, {}, failure)) {
+                        return;
+                    }
+                    onDone(failure);
+                });
+        } catch (...) {
+            // See attachHandlerAsync's identical guard: the backend's own
+            // dispatch call can throw synchronously before send.
+            lock.unlock();
+            onDone(std::current_exception());
+            return;
+        }
         if (auto parked = detail::claimHandoff(*handoff)) {
             // Completed on this stack, under `_attachMtx`: publish here, then
             // release the lock before reporting (see `attachHandlerAsync`).
@@ -1028,7 +1102,7 @@ public:
         std::scoped_lock const lock{_executeDeadlineMtx};
         _executeDeadline = deadline;
         if (_executeDeadline.count() > 0 && !_timeoutScheduler) {
-            _timeoutScheduler = std::make_unique<::morph::async::detail::TimeoutScheduler>();
+            _timeoutScheduler = std::make_shared<::morph::async::detail::TimeoutScheduler>();
         }
     }
 
@@ -1303,12 +1377,28 @@ public:
         // it happen under one lock so a concurrent setExecuteDeadline() cannot
         // interleave between the two.
         std::optional<::morph::async::detail::TimeoutScheduler::Handle> deadlineHandle;
+        // A private shared_ptr copy, obtained under the same lock as the
+        // schedule() call -- not `this->_timeoutScheduler`, and not gated on
+        // `alive` -- so the two `.then()`/`.onError()` callbacks below can
+        // call `cancel()` on a scheduler that is provably still alive,
+        // regardless of whether ~Bridge() has run or is running concurrently
+        // on another thread. `_executeDeadlineMtx` alone does not establish
+        // that: ~Bridge()'s own body never acquires it, so a plain
+        // `!alive.expired()` check followed by `_timeoutScheduler->cancel()`
+        // a few instructions later is a check-then-use race against
+        // ~Bridge()'s implicit member destruction (which joins
+        // TimeoutScheduler's thread). Holding a shared_ptr for the
+        // callback's own lifetime turns that into a non-issue by
+        // construction: while any copy of it is alive, ~TimeoutScheduler()
+        // cannot run at all.
+        std::shared_ptr<::morph::async::detail::TimeoutScheduler> schedulerRef;
         {
             std::scoped_lock const lock{_executeDeadlineMtx};
             if (_executeDeadline.count() > 0 && _timeoutScheduler) {
+                schedulerRef = _timeoutScheduler;
                 // The callback captures `typedState` alone -- never `this` -- so
                 // it stays safe to fire even while ~Bridge() is running.
-                deadlineHandle = _timeoutScheduler->schedule(_executeDeadline, [typedState] {
+                deadlineHandle = schedulerRef->schedule(_executeDeadline, [typedState] {
                     typedState->setException(std::make_exception_ptr(::morph::backend::ClientTimeoutError{}));
                 });
             }
@@ -1418,21 +1508,32 @@ public:
         }
         auto anyCompletion = backend->execute(::morph::exec::detail::ModelId{raw}, std::move(call), cbExec);
         anyCompletion
-            .then([typedState, onResult = std::move(onResult), this, raw, deadlineHandle,
+            .then([typedState, onResult = std::move(onResult), this, raw, deadlineHandle, schedulerRef,
                    alive = liveness()](const std::shared_ptr<void>& vAny) {
                 // Disarm the client-side deadline first, before any of the
                 // forwarding work below: a slow onResult/publishResult callback
                 // must not give the timer a window to fire concurrently and
                 // resolve this completion with ClientTimeoutError while the real
-                // result is already in hand. Guarded on the same liveness token
-                // the rest of this lambda uses -- `_timeoutScheduler` and
-                // `_executeDeadlineMtx` are Bridge members, and this callback can
-                // in principle run after ~Bridge(). Leaving the entry armed in
-                // that case is harmless: ~TimeoutScheduler drops pending entries
-                // without firing them.
-                if (deadlineHandle && !alive.expired()) {
-                    std::scoped_lock const lock{_executeDeadlineMtx};
-                    _timeoutScheduler->cancel(*deadlineHandle);
+                // result is already in hand. Uses the `schedulerRef` copy
+                // captured above, not `this->_timeoutScheduler` -- see that
+                // capture's own comment for why: this callback can in principle
+                // run after ~Bridge(), and `schedulerRef` (not `alive`) is what
+                // makes `cancel()` safe in that case, by keeping the scheduler
+                // alive for exactly as long as this callback needs it, not by
+                // racing a liveness check against ~Bridge()'s teardown. Leaving
+                // the entry armed if it were never cancelled would be harmless
+                // (~TimeoutScheduler drops pending entries without firing them),
+                // but a thrown cancel() must not prevent the real result from
+                // resolving the completion below either.
+                if (deadlineHandle && schedulerRef) {
+                    try {
+                        schedulerRef->cancel(*deadlineHandle);
+                    } catch (...) {
+                        // Best-effort: a failed cancel leaves the deadline's own
+                        // entry to fire later and find nothing (setValue/
+                        // setException below are idempotent), which is exactly
+                        // what an uncancelled entry already does.
+                    }
                 }
                 // Guard the value-forwarding: if R's move/copy throws (or the cast
                 // is somehow wrong), route the exception to the typed completion's
@@ -1487,19 +1588,27 @@ public:
                     typedState->setException(std::current_exception());
                 }
             })
-            .onError([typedState, this, deadlineHandle, alive = liveness()](const std::exception_ptr& err) {
+            .onError([typedState, this, deadlineHandle, schedulerRef,
+                     alive = liveness()](const std::exception_ptr& err) {
+                // Same disarm-first reasoning (and the same schedulerRef-based
+                // safety, not a liveness-then-use race) as the success branch
+                // above: a real error reply settles the completion, so the
+                // deadline must not also fire.
+                if (deadlineHandle && schedulerRef) {
+                    try {
+                        schedulerRef->cancel(*deadlineHandle);
+                    } catch (...) {
+                        // Best-effort: a failed cancel leaves the deadline's own
+                        // entry to fire later and find nothing (setValue/
+                        // setException below are idempotent), which is exactly
+                        // what an uncancelled entry already does.
+                    }
+                }
                 // The other of the two mutually-exclusive resolution paths --
                 // see the .then continuation above. Same liveness guard: this
                 // touches `this` and must not run once the Bridge might be gone.
-                // Same disarm-first reasoning as the success branch above: a
-                // real error reply settles the completion, so the deadline
-                // must not also fire.
                 if (!alive.expired()) {
                     this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
-                    if (deadlineHandle) {
-                        std::scoped_lock const lock{_executeDeadlineMtx};
-                        _timeoutScheduler->cancel(*deadlineHandle);
-                    }
                 }
                 typedState->setException(err);
             });
@@ -1722,7 +1831,7 @@ private:
     // these has already expired by the time they are torn down.
     mutable std::mutex _executeDeadlineMtx;
     std::chrono::milliseconds _executeDeadline{0};
-    std::unique_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
+    std::shared_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
     // Instance subscriptions. Held against the binding rather than a fixed
     // instance id so a re-pointed handler keeps its subscriptions; matched at
     // publish time by comparing the binding's current instance.

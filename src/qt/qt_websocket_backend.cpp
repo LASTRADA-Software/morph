@@ -190,14 +190,22 @@ void QtWebSocketBackend::sendRegisterAsync(const std::string& typeId, std::strin
                                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
                                            std::function<void(const std::string&)> onError) {
     uint64_t const callId = ++_nextCallId;
+    auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
+    env.callId = callId;
+    env.session = _session;
+    // Encoded before the map insertion below: wire::encode() can throw on
+    // serialization failure, and a throw after inserting would leave this
+    // callId's onRegistered/onError parked in _pendingRegistrations forever,
+    // waiting for a reply to a message that was never sent -- nothing erases
+    // an entry whose send never happened. Encoding first means a throw here
+    // propagates to the caller (Bridge::registerHandlerImpl et al. already
+    // handle it) with nothing to clean up.
+    auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
         _pendingRegistrations[callId] = PendingRegistration{std::move(onRegistered), std::move(onError)};
     }
-    auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
-    env.callId = callId;
-    env.session = _session;
-    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    _socket.sendTextMessage(encoded);
 }
 
 void QtWebSocketBackend::flushQueuedRegistrations() {
@@ -230,15 +238,18 @@ bool QtWebSocketBackend::registerModelSharedAsync(
         return true;
     }
     uint64_t const callId = ++_nextCallId;
+    auto env =
+        ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
+    env.callId = callId;
+    // See registerModelAsync's identical comment: encoded before the map
+    // insertion, so a throwing encode() cannot orphan a pending entry.
+    auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
         _pendingRegistrations[callId] =
             PendingRegistration{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
     }
-    auto env =
-        ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary}, std::string{identity.contextKey});
-    env.callId = callId;
-    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    _socket.sendTextMessage(encoded);
     return true;
 }
 
@@ -264,15 +275,18 @@ bool QtWebSocketBackend::attachModelAsync(
         return true;
     }
     uint64_t const callId = ++_nextCallId;
+    auto env =
+        ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey});
+    env.callId = callId;
+    // See registerModelAsync's identical comment: encoded before the map
+    // insertion, so a throwing encode() cannot orphan a pending entry.
+    auto const encoded = QString::fromStdString(::morph::wire::encode(env));
     {
         std::scoped_lock const lock{_pendingMtx};
         _pendingRegistrations[callId] =
             PendingRegistration{.onRegistered = std::move(onRegistered), .onError = std::move(onError)};
     }
-    auto env =
-        ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey});
-    env.callId = callId;
-    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    _socket.sendTextMessage(encoded);
     return true;
 }
 

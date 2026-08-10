@@ -255,6 +255,15 @@ private:
     /// @brief @p delay as the `int` milliseconds `emscripten_async_call`
     ///        takes, saturating rather than wrapping (a `std::chrono`
     ///        duration can hold far more than an `int` can).
+    ///
+    /// @note This is a real, documented behavioural asymmetry from the
+    /// threaded build, which honours the full `std::chrono::milliseconds`
+    /// range unconditionally: a delay beyond `INT_MAX` ms (~24.85 days) fires
+    /// at ~24.85 days here instead of at its true, much later requested time.
+    /// `emscripten_async_call`'s `int` parameter is a hard platform
+    /// constraint with no larger-range alternative to fall back to, so this
+    /// is accepted rather than worked around. No caller in this codebase
+    /// currently requests a deadline anywhere near that range.
     /// @param delay The requested delay.
     /// @return A non-negative millisecond count that fits in an `int`.
     [[nodiscard]] static int clampMillis(std::chrono::milliseconds delay) noexcept {
