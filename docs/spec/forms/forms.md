@@ -104,6 +104,10 @@ Satisfied by:
   `std::optional<T>` is engaged.
 - `morph::time::Timestamp` — `hasValue()` returns `true` when its `DateTime`
   payload is present.
+- `morph::util::Tagged<T, Tag>` — `hasValue()` always returns `true`: it wraps
+  a *required* protocol scalar, not an optionally-empty one, so it opts into
+  this concept the same way the others do but never gates submission (see
+  [`tagged.md`](../util/tagged.md)).
 - Any user type that exposes `bool hasValue() const noexcept`.
 
 A **non**-empty-capable field (plain `int64_t`, `std::string`, …) is always
