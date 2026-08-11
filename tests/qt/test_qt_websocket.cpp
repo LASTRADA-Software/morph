@@ -254,6 +254,45 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "morph::qt::QtWebSocketBackend: Config-only constructor overload omits the dispatcher/registry pair (issue #55)",
+    "[qt][ws][issue55]") {
+    // The seam under test: a caller who wants to set Config::asyncRegistrationEnabled
+    // (or any other Config field) but has no reason to override the dispatcher/registry
+    // pair must not have to name morph::model::detail::defaultDispatcher()/
+    // defaultRegistry() to get there -- unlike the other constructor overload,
+    // this one takes only the URL and a Config.
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        url, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "WsEchoModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); };
+    bridge.registerHandler(binding);
+    CHECK(binding->currentId.load() == 0U);  // async: still unbound immediately after registerHandler()
+
+    pumpUntil([&] { return binding->currentId.load() != 0U; });
+    REQUIRE(binding->currentId.load() != 0U);
+
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec, binding};
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{7}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 7);
+}
+
+TEST_CASE(
     "morph::qt::QtWebSocketBackend: registerModelAsync's pending registration is cancelled when the connection "
     "drops before a reply arrives",
     "[qt][ws][issue26]") {

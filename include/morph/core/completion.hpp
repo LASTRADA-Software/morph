@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "executor.hpp"
@@ -245,6 +246,83 @@ public:
     /// @brief Returns the underlying shared state (for advanced / internal use).
     /// @return Shared pointer to the completion state, or `nullptr` for empty completions.
     [[nodiscard]] std::shared_ptr<detail::CompletionState<T>> state() const { return _state; }
+
+    /// @brief Producer-side handle paired with a `Completion<T>` by `makeSettleable()`.
+    ///
+    /// `Promise<T>` is the public settling counterpart to `Completion<T>`: it
+    /// exposes exactly `resolve()`/`reject()` against the same shared state a
+    /// paired `Completion<T>` observes via `then()`/`onError()`, without ever
+    /// naming `morph::async::detail::CompletionState<T>`. Intended for test code
+    /// that needs to construct a `Completion<T>` it can settle on demand — e.g.
+    /// standing in for a `Bridge`/`IBackend` round trip — instead of reaching
+    /// into `detail::CompletionState<T>` directly (see docs/spec/core/completion.md,
+    /// "Settleable promise seam").
+    ///
+    /// Move-only, mirroring `Completion<T>`: exactly one producer settles a
+    /// given operation.
+    class Promise {
+    public:
+        /// @brief Move constructor — transfers ownership of the shared state.
+        Promise(Promise&&) noexcept = default;
+        /// @brief Move assignment — transfers ownership of the shared state.
+        /// @return `*this`.
+        Promise& operator=(Promise&&) noexcept = default;
+        Promise(const Promise&) = delete;
+        Promise& operator=(const Promise&) = delete;
+        ~Promise() = default;
+
+        /// @brief Resolves the paired `Completion<T>` with @p val.
+        ///
+        /// No-op if the state is already settled (first result wins — see
+        /// `detail::CompletionState<T>::setValue`), or if this `Promise` was
+        /// moved from (mirrors `Completion<T>::then()`'s null-state no-op).
+        /// Safe to call from any thread.
+        /// @param val Success value delivered to every attached `then()` handler.
+        void resolve(T val) {
+            if (_state != nullptr) {
+                _state->setValue(std::move(val));
+            }
+        }
+
+        /// @brief Rejects the paired `Completion<T>` with @p exc.
+        ///
+        /// No-op if the state is already settled (first result wins — see
+        /// `detail::CompletionState<T>::setException`), or if this `Promise` was
+        /// moved from (mirrors `Completion<T>::onError()`'s null-state no-op).
+        /// Safe to call from any thread.
+        /// @param exc Error delivered to every attached `onError()` handler, or
+        ///            logged as an orphan if none is ever attached.
+        void reject(std::exception_ptr exc) {
+            if (_state != nullptr) {
+                _state->setException(exc);
+            }
+        }
+
+    private:
+        friend class Completion<T>;
+        explicit Promise(std::shared_ptr<detail::CompletionState<T>> state) : _state{std::move(state)} {}
+
+        std::shared_ptr<detail::CompletionState<T>> _state;
+    };
+
+    /// @brief Constructs a `Completion<T>`/`Promise<T>` pair sharing one settleable state.
+    ///
+    /// The public "settleable promise" seam (issue #55): lets a caller — typically
+    /// test code — construct a `Completion<T>` it can resolve or reject on demand,
+    /// without a full `Bridge`/`IBackend` round trip and without reaching into
+    /// `morph::async::detail::CompletionState<T>`. Everything `Completion(state,
+    /// executor)` already provided by hand is available through this factory
+    /// instead: the returned `Completion<T>` is exactly what `then()`/`onError()`
+    /// observe; the returned `Promise` is exactly what settles it.
+    /// @param execPtr Executor callbacks are posted on; `nullptr` for a
+    ///                 write-only completion (see the two-argument constructor).
+    /// @return A `{Completion<T>, Promise}` pair sharing one `CompletionState<T>`.
+    [[nodiscard]] static std::pair<Completion<T>, Promise> makeSettleable(::morph::exec::IExecutor* execPtr) {
+        auto state = std::make_shared<detail::CompletionState<T>>();
+        Completion<T> completion{state, execPtr};
+        Promise promise{state};
+        return {std::move(completion), std::move(promise)};
+    }
 
 private:
     std::shared_ptr<detail::CompletionState<T>> _state;

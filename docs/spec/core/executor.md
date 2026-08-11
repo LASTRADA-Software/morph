@@ -224,6 +224,20 @@ bookkeeping: the next queued task for that key still runs.
 The destructor waits for all in-flight tasks to complete (`_inFlight == 0`)
 before destroying the strand map.
 
+**Testing per-model ordering without naming `StrandExecutor`/`ModelId` (issue #55).**
+`RemoteServer` (see `backend.md`) owns a `StrandExecutor` internally, but every
+task it ever dispatches — the top-level `handle()` post and the internal
+per-model strand dispatch alike — funnels through the single `IExecutor` the
+server was constructed with. A caller that wants a deterministic, hand-stepped
+interleaving harness against `RemoteServer`'s real per-model ordering does not
+need to touch `morph::exec::detail::StrandExecutor` or
+`morph::exec::detail::ModelId` at all: constructing the server against a
+single-step, test-controlled `IExecutor` (see `tests/test_support.hpp`'s
+`morph::testing::StepExecutor`) and driving it one task at a time is enough —
+`RemoteServer`'s own wire replies carry the model id as a plain `uint64_t`
+(`wire::Envelope::modelId`), so a test never needs the `ModelId` vocabulary
+either.
+
 ## Lifetime & ownership
 
 `StrandExecutor` stores a raw pointer to the base `IExecutor` (`_base`, copied

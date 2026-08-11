@@ -15,6 +15,7 @@ than vanishing (see [Failure modes](#failure-modes)).
 - [Shared state — `CompletionState<T>`](#shared-state--completionstatet)
 - [Orphan detection](#orphan-detection)
 - [Move-only handle — `Completion<T>`](#move-only-handle--completiont)
+- [Settleable promise seam — `Completion<T>::Promise`](#settleable-promise-seam--completiontpromise)
 - [Thread safety](#thread-safety)
 - [Failure modes](#failure-modes)
 - [Client-side execute deadline](#client-side-execute-deadline)
@@ -154,6 +155,42 @@ completion
     .then([](int val) { /* ... */ })
     .onError([](std::exception_ptr e) { /* ... */ });
 ```
+
+## Settleable promise seam — `Completion<T>::Promise`
+
+`Completion<T>::makeSettleable(execPtr)` is a static factory returning a
+`std::pair<Completion<T>, Completion<T>::Promise>` that share one freshly
+allocated `CompletionState<T>`. It is the public counterpart to hand-building a
+`Completion<T>` from a `detail::CompletionState<T>` the way `Bridge` and the
+backends do internally (see [Shared state](#shared-state--completionstatet)) —
+useful for test code (or any caller outside the framework's own producer code)
+that needs a `Completion<T>` it can resolve or reject on demand, without a full
+`Bridge`/`IBackend` round trip and without ever naming
+`morph::async::detail::CompletionState<T>` (issue #55).
+
+```cpp
+auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&exec);
+completion.then([](int val) { /* ... */ });
+// ... later, from producer code:
+promise.resolve(42);   // or promise.reject(someExceptionPtr);
+```
+
+`Promise` is move-only, mirroring `Completion<T>`, and exposes exactly two
+methods:
+
+- `resolve(T val)` — calls the shared state's `setValue(std::move(val))`.
+- `reject(std::exception_ptr exc)` — calls the shared state's `setException(exc)`.
+
+Both are no-ops if the state is already settled (first-result-wins, same as
+`CompletionState<T>::setValue`/`setException`) or if this `Promise` was itself
+moved from (mirroring `Completion<T>::then()`/`onError()`'s null-state no-op —
+see [Empty state](#empty-state)). Both are safe to call from any thread, since
+they forward directly to the mutex-guarded `CompletionState<T>` methods.
+
+`Promise` never exposes `CompletionState<T>` in its own interface — its
+constructor is private, reachable only via the `friend`ed `makeSettleable()` —
+so a caller can settle a `Completion<T>` on demand without the `detail::`
+namespace ever appearing in their code.
 
 ## Thread safety
 
@@ -328,6 +365,18 @@ that will never signal.
 | `then(handler)` | `Completion& then(std::function<void(T)>)` | Registers success callback; returns `*this` for chaining. |
 | `onError(handler)` | `Completion& onError(std::function<void(std::exception_ptr)>)` | Registers error callback; returns `*this` for chaining. |
 | `state()` | `shared_ptr<CompletionState<T>> state() const` | Returns the underlying shared state (advanced / internal use). |
+| `makeSettleable(execPtr)` | `static std::pair<Completion<T>, Promise> makeSettleable(IExecutor*)` | Public settleable-promise factory (see [Settleable promise seam](#settleable-promise-seam--completiontpromise)). |
+
+### `Completion<T>::Promise` (namespace `morph::async`)
+
+| Member | Signature | Notes |
+|---|---|---|
+| move ctor | `Promise(Promise&&) noexcept = default` | Transfers state ownership. |
+| move assign | `Promise& operator=(Promise&&) noexcept = default` | Transfers state ownership. |
+| copy ctor | `Promise(Promise const&) = delete` | Move-only handle. |
+| copy assign | `Promise& operator=(Promise const&) = delete` | Move-only handle. |
+| `resolve(val)` | `void resolve(T)` | Settles the paired `Completion<T>` with a value; no-op if already settled or moved-from. |
+| `reject(exc)` | `void reject(std::exception_ptr)` | Settles the paired `Completion<T>` with an error; no-op if already settled or moved-from. |
 
 ### `CompletionState<T>` (namespace `morph::async::detail`)
 
@@ -353,6 +402,7 @@ that will never signal.
 | Value copy on fire-now | **`attachThen` copies `*value`; `setValue` moves it only into the last handler's invocation** | The set-after-attach path copies the value into every handler but the last (moving only into the final call), so no earlier handler observes a moved-from value and the value is still consumed exactly once overall. The attach-after-ready path must copy so `value` stays intact and a repeated `then()` on a settled state can still fire with the result. |
 | Handler fan-out | **`onOk`/`onErr` are `std::vector`s, appended to on each attach** | Fixes issue #59: a second `onError()` (or `then()`) on the same still-pending `Completion` used to silently replace the first handler in a single-slot field. Composing (invoking every attached handler, in order) matches the mental model of an observer list and is what most call sites composing behavior via repeated attach actually expect. |
 | Per-handler exception isolation | **Each composed handler invocation is wrapped in its own `try`/`catch (...)`, logged via `logError` and swallowed** | Fan-out means every attached handler should get its turn regardless of what an earlier one does. Without per-handler isolation, one throwing handler would unwind the whole posted closure and silently skip every handler attached after it — turning a single misbehaving consumer into an outage for unrelated ones sharing the same `Completion`. |
+| Public settleable-promise seam | **`Completion<T>::Promise`, reachable only via `makeSettleable()`** | Fixes issue #55: test code needing a `Completion<T>` it can resolve/reject on demand had no seam except reaching into `morph::async::detail::CompletionState<T>` directly. `Promise`'s constructor is private and `friend`ed only to `Completion<T>`, so `detail::CompletionState<T>` never has to appear in a caller's own code. |
 
 ## Limitations
 
@@ -415,3 +465,6 @@ state; the log is emitted only when the state itself is finally destroyed with a
   alongside the executor and backend error paths.
 - [`bridge.md`](bridge.md) — `BridgeHandler<M>` produces `Completion<T>` from
   `execute()` and posts callbacks on the GUI executor.
+- [Settleable promise seam](#settleable-promise-seam--completiontpromise) —
+  `Completion<T>::makeSettleable()`, the public seam test code uses in place of
+  a `Bridge`/`IBackend` round trip.
