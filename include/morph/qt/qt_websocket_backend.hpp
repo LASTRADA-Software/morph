@@ -102,9 +102,11 @@ public:
     /// @param serverUrl   `ws://` or `wss://` URL of the remote `RemoteServer`.
     /// @param dispatcher  Action dispatcher (defaults to the process-level singleton).
     /// @param registry    Model registry (defaults to the process-level singleton).
+#ifndef QT_NO_SSL
     /// @param tls         If non-null, enables TLS and applies this configuration. Not
     ///                    declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see
     ///                    the class doc comment's "SSL-less Qt builds" section.
+#endif
     /// @param cfg         Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
     explicit QtWebSocketBackend(
         QUrl serverUrl,

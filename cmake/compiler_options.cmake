@@ -15,6 +15,7 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag(-Wno-nrvo MORPH_CLANG_HAS_WNO_NRVO)
 check_cxx_compiler_flag(-Wno-unsafe-buffer-usage-in-libc-call MORPH_CLANG_HAS_WNO_UNSAFE_BUFFER_USAGE_IN_LIBC_CALL)
 check_cxx_compiler_flag(-Wno-c2y-extensions MORPH_CLANG_HAS_WNO_C2Y_EXTENSIONS)
+check_cxx_compiler_flag(-Wno-missing-designated-field-initializers MORPH_CLANG_HAS_WNO_MISSING_DESIGNATED_FIELD_INITIALIZERS)
 
 function(apply_warnings target)
     target_compile_options(${target} PRIVATE
@@ -111,6 +112,14 @@ function(apply_warnings target)
             -Wno-disabled-macro-expansion
             # (c) Stylistic / opinionated noise, not defects.
             -Wno-missing-noreturn
+            # Deliberately-partial designated initialization of DTO/config-
+            # style aggregates (morph::session::Context{.principal = ...}
+            # and its many siblings across the ladder rungs) is this
+            # codebase's normal way to construct one with everything else
+            # left at its member default -- not an oversight this warning
+            # should flag. Probed like the other recent-Clang-only flags
+            # above: not every Clang release has this diagnostic yet.
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_MISSING_DESIGNATED_FIELD_INITIALIZERS}>:-Wno-missing-designated-field-initializers>
             $<$<BOOL:${MORPH_CLANG_HAS_WNO_NRVO}>:-Wno-nrvo>  # not eliding a trivial-type copy on return
             -Wno-shadow-uncaptured-local    # lambda param shadowing an uncaptured local
             -Wno-documentation-unknown-command

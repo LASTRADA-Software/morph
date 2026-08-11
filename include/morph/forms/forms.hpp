@@ -621,8 +621,8 @@ using LiteralString = ::morph::detail::FixedString<N>;
 template <typename T>
 inline constexpr bool isLiteralString = false;
 
-/// @brief `isLiteralString` specialization recognising `LiteralString<N>`.
-/// @tparam N Literal length of the recognised `LiteralString`.
+/// @brief `isLiteralString` specialization recognising `LiteralString<N>`,
+///        where `N` is the recognised literal's length.
 template <std::size_t N>
 inline constexpr bool isLiteralString<LiteralString<N>> = true;
 
