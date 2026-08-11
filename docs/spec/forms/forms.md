@@ -607,18 +607,32 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 - **`include/morph/qt/forms/forms_controller_core.hpp`** ships
   `morph::qt::forms::FormsControllerCore<Model>`, a header-only, model-agnostic
   template (no `Q_OBJECT` — Qt cannot register a class *template* for QML) that
-  owns the `Bridge`/`BridgeHandler<Model>`/`QtExecutor` wiring an app's own
-  `QObject`/`QML_ELEMENT` controller subclass forwards to. It exposes
-  `schemasJson()`, `submitIfValid(actionType, bodyJson, onReply, onError)`, and
-  `fetchOptions(optionsAction, bodyJson, onReply, onError)` — both operations
-  dispatch generically via `BridgeHandler::executeJson`, so an app's
-  controller never hardcodes one action, and `fetchOptions`'s `bodyJson` is a
-  true pass-through (`"{}"` for an independent `Choice`, or
+  owns or composes over the `Bridge`/`BridgeHandler<Model>`/`QtExecutor`
+  wiring an app's own `QObject`/`QML_ELEMENT` controller subclass forwards to.
+  Two constructors decide who owns the `Bridge`:
+  - `FormsControllerCore(schemasJson)` builds and owns a private
+    `ThreadPoolExecutor` + `QtExecutor` + `Bridge` over a `LocalBackend` —
+    the convenient default for a demo or an app with no `Bridge` of its own.
+  - `FormsControllerCore(Bridge& bridge, IExecutor* guiExec, schemasJson)`
+    composes over a caller-supplied `Bridge`/executor instead of building a
+    second, always-local one — the caller decides the deployment mode
+    (`LocalBackend`, `SimulatedRemoteBackend`, `QtWebSocketBackend`, ...), and
+    a later `bridge.switchBackend(...)` on that same `Bridge` is still
+    reachable through this core's handler (the handler re-registers itself
+    automatically, exactly like any other `BridgeHandler`). `bridge` and
+    `guiExec` must outlive the core.
+
+  It exposes `schemasJson()`, `submitIfValid(actionType, bodyJson, onReply,
+  onError)`, and `fetchOptions(optionsAction, bodyJson, onReply, onError)` —
+  both operations dispatch generically via `BridgeHandler::executeJson`, so an
+  app's controller never hardcodes one action, and `fetchOptions`'s `bodyJson`
+  is a true pass-through (`"{}"` for an independent `Choice`, or
   `{parentField: value, ...}` for a dependent one — see [Choice —
   server-sourced picklist](#choice--server-sourced-picklist)) rather than
   always empty; `examples/forms/gui_qml/FormsController.hpp` is the ~20-line
   reference wrapper (naming its own model type, since Qt cannot register the
-  template itself).
+  template itself), still using the owning constructor since the demo has no
+  pre-existing `Bridge` to compose over.
 - **`examples/forms/gui_qml`** is a *consumer* of the shipped module, not its
   home: its own `LabFormsDemo` QML module carries only `Main.qml` and the
   `FormsController` subclass naming `lab::LabModel`; `Main.qml` imports
