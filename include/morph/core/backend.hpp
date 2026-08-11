@@ -389,6 +389,32 @@ struct IBackend {
     /// @param handler Callable invoked on the backend's transport thread whenever
     ///                the connection drops. Pass `nullptr` to clear.
     virtual void setDisconnectHandler(const std::function<void()>& handler) { (void)handler; }
+
+    /// @brief Installs the session `Bridge` stamps onto every control envelope
+    ///        this backend builds (`register`, `registerShared`, `attach`,
+    ///        `assign`, `deregister`).
+    ///
+    /// `Bridge::executeVia` already stamps `Bridge::defaultSession()` onto the
+    /// `ActionCall` passed to `execute()`, so the session reaches `execute`
+    /// envelopes regardless of this hook. Control messages are different: they
+    /// are built directly by the concrete backend (`registerModelWithContext`,
+    /// `registerModelShared`, `attachModel`, `assignPrimary`, `deregisterModel`),
+    /// which has no other way to learn the `Bridge`'s current session. Without
+    /// this hook those envelopes always carried a default-constructed (empty,
+    /// unauthenticated) `session::Context`, so `RemoteServer::authorizeRegister`
+    /// could never see a caller's identity and the owner principal recorded at
+    /// `register` time was always empty — degrading `authorizeInstance`'s
+    /// ownership check to allow-all for every instance a `Bridge` registered.
+    ///
+    /// `Bridge::setDefaultSession()` calls this immediately, and
+    /// `Bridge::switchBackend()` calls it on the new backend before any
+    /// re-registration runs, so every control envelope built afterward carries
+    /// the current session. Default implementation: store-and-ignore, matching
+    /// `setReconnectHandler`'s pattern. `LocalBackend` needs no override — the
+    /// local path never serialises a session onto a wire envelope in the first
+    /// place (see docs/spec/session/session.md).
+    /// @param session Session to stamp onto every subsequently built control envelope.
+    virtual void setSession(::morph::session::Context session) { (void)session; }
 };
 // NOLINTEND(cppcoreguidelines-special-member-functions)
 

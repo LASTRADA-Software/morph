@@ -79,6 +79,7 @@ holds a `unique_ptr<IBackend>` and delegates all model operations to it.
 | `setReconnectHandler(handler)` | Installs a callback invoked when the backend reconnects to its peer. Fires only on the *second and later* connects, never the first — used by `Bridge` to re-register handlers after a drop. Used by backends with transport (e.g. `QtWebSocketBackend`). Default implementation is a no-op. |
 | `setConnectHandler(handler)` | Installs a callback invoked on every successful connect, including the first — the complementary hook `setReconnectHandler` deliberately skips (see [Connect/disconnect notifications](#connectdisconnect-notifications)). Default implementation is a no-op. |
 | `setDisconnectHandler(handler)` | Installs a callback invoked whenever the transport drops, before any reconnect is scheduled. Default implementation is a no-op. |
+| `setSession(session)` | Installs the `session::Context` stamped onto every control envelope (`register`, `registerShared`, `attach`, `assign`, `deregister`) this backend subsequently builds. Pushed by `Bridge::setDefaultSession()` and `Bridge::switchBackend()`. Default implementation is a no-op. See [Session propagation to control envelopes](#session-propagation-to-control-envelopes). |
 
 ## Connect/disconnect notifications
 
@@ -115,6 +116,35 @@ its `connected`/`disconnected` `QWebSocket` signal slots invoke
 `_connectHandler`/`_disconnectHandler` (if installed) at the same points
 they already invoke `_reconnectHandler`/schedule a reconnect — see that
 section below.
+
+## Session propagation to control envelopes
+
+`Bridge::executeVia` stamps `Bridge::defaultSession()` onto the `ActionCall`
+passed to `execute()` (see [bridge.md](bridge.md)), so `execute` envelopes
+always carry the current session. Control messages — `register`,
+`registerShared` (`registerModelShared`), `attach` (`attachModel`), `assign`
+(`assignPrimary`), and `deregister` (`deregisterModel`) — are different: each
+is built directly inside the concrete backend, which has no other route to
+the `Bridge`'s session. Before `IBackend::setSession` existed, every one of
+these envelopes carried a default-constructed (empty, unauthenticated)
+`session::Context` regardless of what `Bridge::setDefaultSession()` held, so
+`RemoteServer::authorizeRegister` could never see a caller's identity and the
+owner principal it records at `register` time was always empty — degrading
+`IAuthorizer::authorizeInstance`'s ownership check to allow-all for every
+instance a `Bridge` registered (see [session.md](../session/session.md)).
+
+`Bridge` calls `IBackend::setSession` in two places: once from its
+constructor (with the just-constructed, typically empty, default session) and
+again every time `setDefaultSession()` installs a new one; `switchBackend()`
+also calls it on the incoming backend, **before** phase 1's
+per-binding re-registration loop runs, so every `register`/`registerShared`
+envelope built while re-registering handlers on the new backend already
+carries the current session. A wire-backed backend that overrides
+`setSession` — `SimulatedRemoteBackend`, `SocketBackend`, `QtWebSocketBackend`
+— stores the session and reads it back into every control envelope's
+`session` field it subsequently builds. `LocalBackend` does not override
+`setSession`: the local path never serialises a `Context` onto a wire
+envelope, so there is nothing to stamp.
 
 ## Asynchronous registration — `registerModelAsync`
 
@@ -224,6 +254,7 @@ Four exception types are thrown into in-flight `Completion`s:
   it never runs under `_regMtx` or `Bridge::_mtx`, so a sink that re-enters the
   bridge cannot deadlock.
 - `setReconnectHandler`/`setConnectHandler`/`setDisconnectHandler` — no-op (no transport to (dis)connect).
+- `setSession` — not overridden (the default no-op stands): the local path never serialises a `Context` onto a wire envelope, so there is nothing to stamp.
 
 Each model instance gets its own strand so actions are serialised per-model
 without a global lock on the pool.
@@ -568,6 +599,10 @@ in-process simulation of remote execution.
   locally.
 - `cancelPending` snapshots and resolves pending completions, same pattern as
   `LocalBackend`.
+- `setSession` stores the session (guarded by its own mutex); every
+  subsequently built `register`/`registerShared`/`attach`/`assign`/`deregister`
+  envelope's `session` field is set from it before the `handleInline` call —
+  see [Session propagation to control envelopes](#session-propagation-to-control-envelopes).
 
 **Connection scope.** The default constructor, `SimulatedRemoteBackend(RemoteServer&)`,
 carries `ConnectionId{0}` — the server's "unscoped" sentinel — on every call it
@@ -714,6 +749,12 @@ server assigns fresh ones on the new connection (cross-ref bridge.md).
 `setConnectHandler`/`setDisconnectHandler` are independent of that — an
 application installs them directly on the backend (not through `Bridge`) to
 drive its own connection-state UI.
+
+**`setSession(session)`** stores the session in `_session` (this backend is
+single-threaded — Qt event loop thread only — so no lock is needed); every
+subsequently built `register`/`registerShared`/`attach`/`assign`/`deregister`
+envelope's `session` field is set from it before sending. See
+[Session propagation to control envelopes](#session-propagation-to-control-envelopes).
 
 **`waitForConnected(timeoutMs = 5000)`** pumps the Qt event loop until the socket
 connects or the timeout elapses; returns the current `_connected` flag. Intended
@@ -939,7 +980,14 @@ peer no longer leaks the model, because `SocketServer` now participates in
 `RemoteServer`'s connection-scope contract exactly as `QtWebSocketServer`
 does — see below); `execute` assigns a monotonic `callId`, is
 fully asynchronous, and supports concurrent in-flight calls matched by
-`callId` exactly like the Qt transport. Reconnect is configured by
+`callId` exactly like the Qt transport. `setSession` stores the session
+under its own mutex (`_sessionMtx`, guarding the one field it protects — this
+backend is driven from multiple threads, unlike the single-threaded Qt
+transport) and every subsequently built `register`/`registerShared`/
+`attach`/`assign`/`deregister` envelope's `session` field is set from it
+before sending — see
+[Session propagation to control envelopes](#session-propagation-to-control-envelopes).
+Reconnect is configured by
 `SocketBackendConfig` (aliased `SocketBackend::Config`), with the same four
 fields and defaults as `QtWebSocketBackendConfig` (`reconnectEnabled`,
 `initialReconnectDelay`, `maxReconnectDelay`, `backoffMultiplier`) plus one new
@@ -1144,6 +1192,7 @@ thread to marshal onto.
 | `setReconnectHandler` | `virtual void setReconnectHandler(const function<void()>&)` | Default: no-op. Fires only on the second and later connects. |
 | `setConnectHandler` | `virtual void setConnectHandler(const function<void()>&)` | Default: no-op. Fires on every successful connect, first included. |
 | `setDisconnectHandler` | `virtual void setDisconnectHandler(const function<void()>&)` | Default: no-op. Fires whenever the transport drops, before any reconnect is scheduled. |
+| `setSession` | `virtual void setSession(session::Context)` | Default: no-op. Stamped onto every control envelope (`register`/`registerShared`/`attach`/`assign`/`deregister`) subsequently built. See [Session propagation to control envelopes](#session-propagation-to-control-envelopes). |
 
 ### Error types
 

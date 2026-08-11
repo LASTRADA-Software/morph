@@ -243,6 +243,11 @@ public:
     explicit Bridge(std::unique_ptr<::morph::backend::detail::IBackend> backend)
         : _backend{std::shared_ptr<::morph::backend::detail::IBackend>(std::move(backend))} {
         installReconnectHandler(_backend);
+        // A null initial backend is tolerated (see installReconnectHandler's own
+        // null check just above) — there is nothing yet to stamp a session onto.
+        if (_backend) {
+            _backend->setSession(_defaultSession);
+        }
     }
 
     /// @brief Cancels every still-pending completion on the active backend.
@@ -668,8 +673,19 @@ public:
     ///
     /// @param session The new default. Pass `{}` to clear.
     void setDefaultSession(::morph::session::Context session) {
-        std::scoped_lock const lock{_sessionMtx};
-        _defaultSession = std::move(session);
+        std::shared_ptr<::morph::backend::detail::IBackend> backend;
+        {
+            std::scoped_lock const lock{_sessionMtx};
+            _defaultSession = session;
+            backend = loadBackend();
+        }
+        // Pushed to the backend outside _sessionMtx: IBackend::setSession's
+        // default implementation just stores a copy, but a concrete override
+        // must not run under this bridge's own lock. Mirrors defaultSession()'s
+        // copy-out-then-release pattern.
+        if (backend) {
+            backend->setSession(std::move(session));
+        }
     }
 
     /// @brief Returns a copy of the currently installed default session. Thread-safe.
@@ -769,6 +785,17 @@ public:
     /// @param newBackend Replacement backend, shared with the caller.
     void switchBackend(std::shared_ptr<::morph::backend::detail::IBackend> newBackend) {
         auto newShared = std::move(newBackend);
+        // Stamp the current default session onto the new backend before phase 1
+        // below builds a single `register`/`registerShared` envelope per live
+        // binding — otherwise every control envelope re-registering handlers on
+        // the new backend would carry a default-constructed (unauthenticated)
+        // session, exactly the #63 gap this hook closes. Read under
+        // `_sessionMtx` alone (a leaf mutex never held while calling into this
+        // backend), mirroring `executeVia`'s copy-then-release pattern.
+        {
+            std::scoped_lock const lock{_sessionMtx};
+            newShared->setSession(_defaultSession);
+        }
         std::shared_ptr<::morph::backend::detail::IBackend> previous;
         {
             // Both mutexes: this phase reads/writes every live binding's

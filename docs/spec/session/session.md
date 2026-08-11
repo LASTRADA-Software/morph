@@ -76,9 +76,28 @@ From the `ActionCall` the session travels backend-specifically:
   authorizer, then (post-`authenticate`) installed via `ScopedContext` around
   dispatch.
 
+**Control envelopes carry the session too.** The above covers `execute`
+envelopes, built once per call by `Bridge::executeVia`. Control envelopes —
+`register`, `registerShared`, `attach`, `assign`, `deregister` — are built
+directly inside the concrete backend (`registerModelWithContext`,
+`registerModelShared`, `attachModel`, `assignPrimary`, `deregisterModel`),
+which has no other route to the `Bridge`'s session. `IBackend::setSession`
+closes this: `Bridge` calls it on construction and on every
+`setDefaultSession()`, and on the incoming backend during `switchBackend()`
+(before any control envelope is built to re-register handlers), so a
+wire-backed backend (`SimulatedRemoteBackend`, `SocketBackend`,
+`QtWebSocketBackend`) always has the current session on hand to stamp onto
+these envelopes too. Without this, `RemoteServer::authorizeRegister` could
+never see a caller's identity and the owner principal recorded at `register`
+time was always empty, degrading `authorizeInstance`'s ownership check to
+allow-all (see [backend.md](../core/backend.md)'s "Session propagation to
+control envelopes"). `LocalBackend` does not override `setSession`: the local
+path never serialises a `Context` onto a wire envelope in the first place.
+
 The bridge plumbing (`setDefaultSession`/`defaultSession`, the `ActionCall`
-stamp) is specified in [bridge.md](../core/bridge.md); this spec covers only the
-`Context` payload and its server-side handling.
+stamp, `IBackend::setSession`) is specified in [bridge.md](../core/bridge.md)
+and [backend.md](../core/backend.md); this spec covers only the `Context`
+payload and its server-side handling.
 
 ## Principal — readable authorization state outside a dispatch
 
