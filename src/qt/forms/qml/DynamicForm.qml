@@ -319,9 +319,11 @@ Frame {
     }
 
     // Evaluates one condition node (`engaged` / `notEngaged` / `equals` / a
-    // comparison kind reused as a boolean). An unrecognised `kind` fails
-    // closed (`false`) -- the renderer defers enforcement to the server
-    // rather than passing an unknown validation condition.
+    // comparison kind reused as a boolean / the compound `and`/`or`/`not`
+    // kinds, which recurse into `conditions`/`condition` to any depth). An
+    // unrecognised `kind` fails closed (`false`) -- the renderer defers
+    // enforcement to the server rather than passing an unknown validation
+    // condition.
     function testCondition(cond) {
         const kind = cond.kind
         const names = cond.fields || []
@@ -346,14 +348,36 @@ Frame {
             if (kind === "less") return lv < rv
             return lv <= rv
         }
+        if (kind === "and") {
+            const nested = cond.conditions || []
+            for (let i = 0; i < nested.length; ++i) {
+                if (!testCondition(nested[i]))
+                    return false
+            }
+            return true
+        }
+        if (kind === "or") {
+            const nested = cond.conditions || []
+            for (let i = 0; i < nested.length; ++i) {
+                if (testCondition(nested[i]))
+                    return true
+            }
+            return false
+        }
+        if (kind === "not")
+            return !testCondition(cond.condition)
         return false
     }
 
     // Evaluates one top-level x-rules entry. Presentation kinds
     // (visibleWhen/readonlyWhen) always return true -- they never gate
     // submission, only presentation (see fieldVisible/fieldReadonly below).
-    // An unrecognised rule kind fails closed: the renderer defers
-    // enforcement to the server rather than passing the rule.
+    // `and`/`or`/`not` are valid directly as a top-level rule (not only
+    // nested inside a `when` clause) -- a single rule carrying a compound
+    // condition tree -- so they delegate to testCondition exactly like the
+    // comparison kinds already do. An unrecognised rule kind fails closed:
+    // the renderer defers enforcement to the server rather than passing the
+    // rule.
     function testRule(rule) {
         const kind = rule.kind
         const names = rule.fields || []
@@ -376,6 +400,8 @@ Frame {
         }
         if (kind === "visibleWhen" || kind === "readonlyWhen")
             return true
+        if (kind === "and" || kind === "or" || kind === "not")
+            return testCondition(rule)
         return false
     }
 

@@ -363,6 +363,179 @@ TEST_CASE("Forms::Rules::SchemaJson::EqualsEmitsRationalValueExactly", "[forms][
 }
 
 // ---------------------------------------------------------------------------
+// Compound conditions: and / or / not, nesting to any depth.
+// ---------------------------------------------------------------------------
+
+struct CFRCompoundForm {
+    CFRMoney promo;
+    CFRMoney discount;
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+
+    // discount required when (promo engaged AND email engaged)
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRCompoundForm::discount,
+        morph::forms::andOf(morph::forms::engaged(&CFRCompoundForm::promo),
+                             morph::forms::engaged(&CFRCompoundForm::email))));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+struct CFROrForm {
+    CFRMoney promo;
+    CFRMoney discount;
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+
+    // discount required when (promo engaged OR email engaged)
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFROrForm::discount,
+        morph::forms::orOf(morph::forms::engaged(&CFROrForm::promo), morph::forms::engaged(&CFROrForm::email))));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+struct CFRNotForm {
+    CFRMoney promo;
+    CFRMoney discount;
+
+    // discount required when promo is NOT engaged.
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::requiredWhen(&CFRNotForm::discount, morph::forms::notOf(morph::forms::engaged(&CFRNotForm::promo))));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+struct CFRNestedForm {
+    CFRMoney promo;
+    CFRMoney discount;
+    std::optional<std::string> email;
+    std::optional<std::string> phone;
+
+    // discount required when NOT(promo engaged) OR (email engaged AND phone engaged)
+    static constexpr auto formRules = morph::forms::ruleList(morph::forms::requiredWhen(
+        &CFRNestedForm::discount,
+        morph::forms::orOf(
+            morph::forms::notOf(morph::forms::engaged(&CFRNestedForm::promo)),
+            morph::forms::andOf(morph::forms::engaged(&CFRNestedForm::email),
+                                morph::forms::engaged(&CFRNestedForm::phone)))));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+// A compound condition usable directly as a top-level rule too (not only
+// nested inside a requiredWhen/visibleWhen/readonlyWhen `when` clause) --
+// "a single rule with a compound condition tree", per the issue.
+struct CFRTopLevelCompoundForm {
+    CFRMoney promo;
+    std::optional<std::string> email;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::andOf(morph::forms::engaged(&CFRTopLevelCompoundForm::promo),
+                            morph::forms::engaged(&CFRTopLevelCompoundForm::email)));
+
+    [[nodiscard]] bool validate() const { return morph::forms::allRulesSatisfied(*this); }
+};
+
+TEST_CASE("Forms::Rules::And::BothMustHold", "[forms][rules][compound]") {
+    CFRCompoundForm form{};
+    CHECK(morph::forms::allRulesSatisfied(form));  // neither engaged -> and() false -> not required
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));  // only promo engaged -> and() still false
+
+    form.email = "a@b.com";
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // both engaged -> and() true -> discount now required
+
+    form.discount = Rational{1, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));
+}
+
+TEST_CASE("Forms::Rules::Or::EitherSuffices", "[forms][rules][compound]") {
+    CFROrForm form{};
+    CHECK(morph::forms::allRulesSatisfied(form));  // neither engaged -> or() false -> not required
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // promo engaged -> or() true -> discount required
+
+    form.discount = Rational{1, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));
+}
+
+TEST_CASE("Forms::Rules::Not::NegatesInnerCondition", "[forms][rules][compound]") {
+    CFRNotForm form{};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // promo unengaged -> not(engaged) true -> discount required
+
+    form.discount = Rational{1, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    form.discount = CFRMoney{};
+    CHECK(morph::forms::allRulesSatisfied(form));  // promo engaged -> not(engaged) false -> not required
+}
+
+TEST_CASE("Forms::Rules::Compound::NestsToAnyDepth", "[forms][rules][compound]") {
+    CFRNestedForm form{};
+    // promo unengaged -> notOf(engaged(promo)) is true -> or() true -> required
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    // promo engaged -> notOf branch false; email/phone both unengaged -> andOf branch false -> or() false
+    CHECK(morph::forms::allRulesSatisfied(form));
+
+    form.email = "a@b.com";
+    form.phone = "555";
+    // promo engaged (notOf branch false) but email AND phone both engaged (andOf branch true) -> or() true
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));
+
+    form.discount = Rational{1, DecimalPlaces{2}};
+    CHECK(morph::forms::allRulesSatisfied(form));
+}
+
+TEST_CASE("Forms::Rules::Compound::UsableDirectlyAsATopLevelRule", "[forms][rules][compound]") {
+    CFRTopLevelCompoundForm form{};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));  // and() false while both unengaged
+
+    form.promo = Rational{5, DecimalPlaces{2}};
+    CHECK_FALSE(morph::forms::allRulesSatisfied(form));
+
+    form.email = "a@b.com";
+    CHECK(morph::forms::allRulesSatisfied(form));  // both engaged -> and() true -> the rule itself holds
+}
+
+TEST_CASE("Forms::Rules::SchemaJson::AndOrNotEmitXRulesAsNestedNodes", "[forms][rules][compound]") {
+    auto const schema = morph::forms::schemaJson<CFRCompoundForm>();
+    CHECK(schema.contains(
+        R"("x-rules":[{"kind":"requiredWhen","fields":["discount"],)"
+        R"("when":{"kind":"and","conditions":[)"
+        R"({"kind":"engaged","fields":["promo"]},)"
+        R"({"kind":"engaged","fields":["email"]}]}}])"));
+
+    auto const orSchema = morph::forms::schemaJson<CFROrForm>();
+    CHECK(orSchema.contains(R"("kind":"or","conditions":[)"));
+
+    auto const notSchema = morph::forms::schemaJson<CFRNotForm>();
+    CHECK(notSchema.contains(R"("when":{"kind":"not","condition":{"kind":"engaged","fields":["promo"]}}}])"));
+}
+
+TEST_CASE("Forms::Rules::And::VariadicAcceptsMoreThanTwoConditions", "[forms][rules][compound]") {
+    struct CFRTriple {
+        CFRMoney a;
+        CFRMoney b;
+        CFRMoney c;
+    };
+    CFRTriple triple{};
+    auto const cond =
+        morph::forms::andOf(morph::forms::engaged(&CFRTriple::a), morph::forms::engaged(&CFRTriple::b),
+                            morph::forms::engaged(&CFRTriple::c));
+    CHECK_FALSE(cond.test(triple));
+    triple.a = Rational{1, DecimalPlaces{2}};
+    triple.b = Rational{1, DecimalPlaces{2}};
+    triple.c = Rational{1, DecimalPlaces{2}};
+    CHECK(cond.test(triple));
+}
+
+// ---------------------------------------------------------------------------
 // Presentation rules: visibleWhen / readonlyWhen (never gate the submit check).
 // ---------------------------------------------------------------------------
 

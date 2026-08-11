@@ -126,4 +126,131 @@ TestCase {
         findChild(form, "field_phone").text = "555"
         compare(form.ready, false)  // both engaged now
     }
+
+    // ------------------------------------------------------------------
+    // Compound conditions: and/or/not, nested inside a requiredWhen `when`
+    // clause (docs/spec/forms/forms.md, "Compound conditions").
+    // ------------------------------------------------------------------
+
+    property var compoundSchema: ({
+        properties: {
+            name: { type: "string", "x-order": 0 },
+            promo: { type: "integer", "x-order": 1 },
+            loyaltyCode: { type: "integer", "x-order": 2 },
+            discount: { type: "integer", "x-order": 3 }
+        },
+        required: ["name"],
+        "x-rules": [
+            { kind: "requiredWhen", fields: ["discount"],
+              when: { kind: "and", conditions: [
+                  { kind: "engaged", fields: ["promo"] },
+                  { kind: "engaged", fields: ["loyaltyCode"] }
+              ]}
+            }
+        ]
+    })
+
+    Component {
+        id: compoundFormComponent
+        DynamicForm {
+            actionType: "CFR_BookRoom"
+            schema: testCase.compoundSchema
+            controller: mockController
+        }
+    }
+
+    function test_and_condition_requires_both_operands_engaged() {
+        var form = createTemporaryObject(compoundFormComponent, testCase)
+        verify(form !== null)
+
+        findChild(form, "field_name").text = "Alice"
+        compare(form.ready, true)  // neither promo nor loyaltyCode engaged -> and() false -> not required
+
+        findChild(form, "field_promo").text = "5"
+        compare(form.ready, true)  // only promo engaged -> and() still false
+
+        findChild(form, "field_loyaltyCode").text = "9"
+        compare(form.ready, false)  // both engaged -> and() true -> discount now required
+
+        findChild(form, "field_discount").text = "2"
+        compare(form.ready, true)
+    }
+
+    property var orSchema: ({
+        properties: {
+            name: { type: "string", "x-order": 0 },
+            promo: { type: "integer", "x-order": 1 },
+            loyaltyCode: { type: "integer", "x-order": 2 },
+            discount: { type: "integer", "x-order": 3 }
+        },
+        required: ["name"],
+        "x-rules": [
+            { kind: "requiredWhen", fields: ["discount"],
+              when: { kind: "or", conditions: [
+                  { kind: "engaged", fields: ["promo"] },
+                  { kind: "engaged", fields: ["loyaltyCode"] }
+              ]}
+            }
+        ]
+    })
+
+    Component {
+        id: orFormComponent
+        DynamicForm {
+            actionType: "CFR_BookRoom"
+            schema: testCase.orSchema
+            controller: mockController
+        }
+    }
+
+    function test_or_condition_requires_either_operand_engaged() {
+        var form = createTemporaryObject(orFormComponent, testCase)
+        verify(form !== null)
+
+        findChild(form, "field_name").text = "Alice"
+        compare(form.ready, true)  // neither engaged -> or() false -> not required
+
+        findChild(form, "field_promo").text = "5"
+        compare(form.ready, false)  // promo engaged -> or() true -> discount now required
+
+        findChild(form, "field_discount").text = "2"
+        compare(form.ready, true)
+    }
+
+    property var notSchema: ({
+        properties: {
+            name: { type: "string", "x-order": 0 },
+            promo: { type: "integer", "x-order": 1 },
+            discount: { type: "integer", "x-order": 2 }
+        },
+        required: ["name"],
+        "x-rules": [
+            { kind: "requiredWhen", fields: ["discount"],
+              when: { kind: "not", condition: { kind: "engaged", fields: ["promo"] } }
+            }
+        ]
+    })
+
+    Component {
+        id: notFormComponent
+        DynamicForm {
+            actionType: "CFR_BookRoom"
+            schema: testCase.notSchema
+            controller: mockController
+        }
+    }
+
+    function test_not_condition_negates_the_inner_condition() {
+        var form = createTemporaryObject(notFormComponent, testCase)
+        verify(form !== null)
+
+        findChild(form, "field_name").text = "Alice"
+        compare(form.ready, false)  // promo unengaged -> not(engaged) true -> discount required, still empty
+
+        findChild(form, "field_discount").text = "2"
+        compare(form.ready, true)
+
+        findChild(form, "field_promo").text = "5"
+        compare(form.ready, true)  // promo engaged -> not(engaged) false -> no longer required
+    }
 }
