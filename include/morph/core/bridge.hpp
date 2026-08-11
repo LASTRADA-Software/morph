@@ -517,6 +517,25 @@ public:
         return _principal;
     }
 
+    /// @brief Returns the number of actions dispatched via `executeVia()` that
+    ///        have not yet resolved.
+    ///
+    /// Incremented once per call, right before the backend dispatch inside
+    /// `executeVia()`; decremented exactly once when the returned `Completion`
+    /// settles on success or on error (including a cancellation error from
+    /// `switchBackend()`/`~Bridge()`/a dropped transport). The synchronous
+    /// "handler not bound" early return — the one case `executeVia()` resolves
+    /// before ever dispatching — is never counted in the first place, so it
+    /// needs no matching decrement; it never nudges this counter either way. A
+    /// client can poll this (or watch it drop to zero) to build a "still
+    /// loading" indicator or gate a feature on quiescence, without
+    /// hand-rolling its own counter around every `execute()` call site. A
+    /// single relaxed atomic load/increment/decrement: cheap enough to read on
+    /// every frame of a UI loading spinner.
+    ///
+    /// @return Count of actions dispatched but not yet resolved.
+    [[nodiscard]] std::size_t pendingCalls() const noexcept { return _pendingCalls.load(std::memory_order_relaxed); }
+
     /// @brief Atomically replaces the active backend with @p newBackend.
     ///
     /// All live bindings are re-registered on the new backend and their
@@ -699,9 +718,17 @@ public:
         auto typedState = std::make_shared<::morph::async::detail::CompletionState<R>>();
         ::morph::async::Completion<R> typed{typedState, cbExec};
         if (raw == 0U) {
+            // Resolved synchronously, before any dispatch -- never counted as
+            // pending, so nothing to decrement here (see pendingCalls()).
             typedState->setException(std::make_exception_ptr(std::runtime_error("handler not bound")));
             return typed;
         }
+        // Counted from here on: every path below either reaches the backend
+        // dispatch or falls through to one of the two mutually-exclusive
+        // resolution continuations attached to anyCompletion further down,
+        // each of which decrements exactly once (setValue/setException are
+        // first-result-wins, so only one of the two ever actually fires).
+        _pendingCalls.fetch_add(1, std::memory_order_relaxed);
         ::morph::backend::detail::ActionCall call;
         call.modelTypeId = std::string{::morph::model::ModelTraits<Model>::typeId()};
         call.actionTypeId = std::string{::morph::model::ActionTraits<Action>::typeId()};
@@ -822,17 +849,25 @@ public:
                 // may be co-owned and outlive this Bridge, or this callback
                 // may already be running when ~Bridge() runs concurrently on
                 // another thread. Check liveness FIRST, before touching
-                // anything that reaches into the bridge -- both `onResult`
-                // (which, for a result-keyed action, calls back into this
-                // bridge via a captured raw pointer to assign the binding's
-                // primary) and hasSubscribers() (which reads `this`) must
-                // never run once the bridge might be gone. The typed result
-                // is still delivered to the caller's own Completion either
-                // way -- only the two bridge-touching side effects are
-                // skipped.
+                // anything that reaches into the bridge -- `onResult` (which,
+                // for a result-keyed action, calls back into this bridge via a
+                // captured raw pointer to assign the binding's primary),
+                // hasSubscribers() (which reads `this`), and the pendingCalls()
+                // decrement below (also a `this`-touching write) must never run
+                // once the bridge might be gone. The typed result is still
+                // delivered to the caller's own Completion either way -- only
+                // the bridge-touching side effects are skipped.
+                bool const bridgeAlive = !alive.expired();
+                if (bridgeAlive) {
+                    // One of the two mutually-exclusive resolution continuations
+                    // for this dispatched call (the other is the .onError
+                    // below), so exactly one of them decrements per call --
+                    // whether the value-forwarding below then succeeds or
+                    // itself throws and routes to setException.
+                    this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
+                }
                 try {
                     auto* const typedResult = static_cast<R*>(vAny.get());
-                    bool const bridgeAlive = !alive.expired();
                     // Runs before the value is moved out and before the caller's
                     // own .then, so a result-sourced primary key is adopted by
                     // the binding before any user code observes the result.
@@ -854,7 +889,15 @@ public:
                     typedState->setException(std::current_exception());
                 }
             })
-            .onError([typedState](const std::exception_ptr& err) { typedState->setException(err); });
+            .onError([typedState, this, alive = liveness()](const std::exception_ptr& err) {
+                // The other of the two mutually-exclusive resolution paths --
+                // see the .then continuation above. Same liveness guard: this
+                // touches `this` and must not run once the Bridge might be gone.
+                if (!alive.expired()) {
+                    this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
+                }
+                typedState->setException(err);
+            });
         return typed;
     }
 
@@ -1021,6 +1064,11 @@ private:
     // Maintained under _subMtx; read relaxed off it. A stale-by-one read is
     // harmless: publishResult re-checks under the lock and finds nothing.
     std::atomic<std::size_t> _subscriptionCount{0};
+    // Count of executeVia() dispatches not yet resolved -- see pendingCalls().
+    // Incremented once per call right before backend dispatch; decremented
+    // exactly once by whichever of the two mutually-exclusive resolution
+    // continuations (success or error) actually fires.
+    std::atomic<std::size_t> _pendingCalls{0};
     // Destroyed with the Bridge; handlers hold weak_ptrs to it (see liveness()).
     std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };

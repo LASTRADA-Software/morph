@@ -257,6 +257,28 @@ has no wire representation and does not affect dispatch or `Context` in any
 way — every dispatch is still authorized server-side via `IAuthorizer`
 regardless of what `currentPrincipal()` says.
 
+**`pendingCalls()`** returns the number of actions dispatched via
+`executeVia()` (and so, transitively, `BridgeHandler::execute()`) that have
+not yet resolved — a client-side quiescence signal for building a "still
+loading" indicator or gating a feature on "has everything settled" without
+hand-rolling a counter around every call site. Backed by a single
+`std::atomic<std::size_t> _pendingCalls`, incremented once per call right
+before the backend dispatch inside `executeVia()` and decremented exactly
+once by whichever of the two mutually-exclusive resolution continuations
+(the `.then`/`.onError` `executeVia()` attaches to the backend's own
+completion) actually fires — success, error, or a client-visible failure
+delivered through either path (e.g. a cancelled/backend-changed/disconnected
+completion, all of which resolve through `.onError`). The synchronous
+"handler not bound" early return in `executeVia()` never increments the
+counter in the first place (it resolves before any dispatch), so it needs no
+matching decrement. Both continuations are additionally guarded by the same
+`liveness()` token every other bridge-touching side effect in `executeVia()`
+uses: a completion resolving after `~Bridge()` skips the decrement (touching
+`this` on a dangling `Bridge` would be a use-after-free) rather than running
+it. A single relaxed atomic load/increment/decrement — cheap enough to poll
+every UI frame. See [Design decisions](#design-decisions) for why the counter
+lives at the `Bridge` layer rather than per-`HandlerBinding` or per-backend.
+
 **Destructor** first **clears the active backend's reconnect handler**
 (`setReconnectHandler(nullptr)`), then cancels every pending completion on that
 backend with `BridgeDestroyedError`. In-flight replies that arrive after
@@ -531,11 +553,12 @@ make teardown order-independent.)
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
 | `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
-| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`) are gated on the `_liveness` token, checked before either runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. |
+| `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, and the `pendingCalls()` decrement) are gated on the `_liveness` token, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. |
 | `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |
+| `pendingCalls` | `[[nodiscard]] size_t pendingCalls() const noexcept` | Count of `executeVia()` dispatches not yet resolved. Relaxed atomic load; see the `Bridge` section above. |
 
 ### `BridgeHandler<Model>`
 
@@ -579,6 +602,7 @@ make teardown order-independent.)
 | Subscription keys | **`string_view` into static storage** | `ActionTraits::typeId()` returns `constexpr` string literals with static duration. The `unordered_map` holds non-owning keys; no allocation, no lifetime issues. |
 | `executeJson` | **Separate registry, not a vtable** | The action type is unknown at the call site. A flat `unordered_map<(modelId, actionId), Executor, PairKeyHash>` lets any translation unit register its actions without central registration or RTTI. |
 | `registerActionExecutorOnce` | **`inline` definition in header** | The function is forward-declared in `registry.hpp` (`morph::model::detail`) but defined `inline` in `bridge.hpp`, after `ActionExecuteRegistry`. `inline` lets that definition be instantiated in every TU that transitively includes `bridge.hpp` without an ODR/link violation. The registration runs from the anonymous-namespace initializer the macro emits. Because the definition lives only in `bridge.hpp`, any TU expanding `BRIDGE_REGISTER_ACTION` must include it (directly or transitively) or the link fails with an unresolved symbol. |
+| `pendingCalls()` counter placement | **One `std::atomic<size_t>` on `Bridge`, not per-`HandlerBinding` or per-backend** | Issue #45 asks for client-side quiescence — "has everything settled" — which is a property of the `Bridge` as a whole (the thing the GUI actually holds one of), not of any single handler or backend. A per-binding counter would force a caller wanting a global "still loading" signal to sum across every live `BridgeHandler`; a per-backend counter (mirroring `LocalBackend::_inFlight`/`RemoteServer`'s `_inFlightExecutes`, both server/backend-side) would miss calls dispatched before a `switchBackend()` mid-flight. Incrementing/decrementing directly in `executeVia()` — the one chokepoint every dispatch path (`execute<Action>`, `executeJson`) funnels through — needs no cooperation from `IBackend` implementations at all. |
 
 ## Limitations
 
