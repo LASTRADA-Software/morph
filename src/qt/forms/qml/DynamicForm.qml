@@ -10,9 +10,19 @@
 //   x-widget         -> control choice (textarea/slider/radio); unknown ids
 //                       and a missing key both fall back to the type default
 //   x-min/x-max/x-step -> slider track bounds + increment (Ranged fields)
+//   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
+//                       an explicit Submit button (enabled only while ready)
+//                       instead -- see "Explicit submit mode" below
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
+//
+// By default, the form calls controller.submitIfValid(...) automatically
+// the instant every field/rule is satisfied (safe for a read-only query
+// action). A schema for a side-effectful action should set the top-level
+// "x-submitMode": "explicit" key: this suppresses that auto-call and instead
+// requires the user to press the rendered Submit button, which is disabled
+// until the form is ready.
 
 pragma ComponentBehavior: Bound
 
@@ -57,6 +67,15 @@ Frame {
     // support (the fallback the spec requires).
     property var rules: schema["x-rules"] || []
     property int rulesRevision: 0
+
+    // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit submit
+    // mode"): opts a side-effectful (non-query) action out of the default
+    // auto-fire-on-validity behavior. When set, revalidate() still recomputes
+    // `ready`/`previewLine` live but never calls submitIfValid() on its own;
+    // an explicit submit Button (added to the layout below), enabled only
+    // while `ready`, is the sole way to fire. Absent (the default) or any
+    // other value keeps today's auto-submit-on-validity behavior unchanged.
+    property bool explicitSubmitMode: schema["x-submitMode"] === "explicit"
 
     // i18n: a host-supplied translation catalog (see I18nCatalog.hpp) and the
     // BCP-47 locale to resolve against. `catalog: null` (the default) means
@@ -674,7 +693,18 @@ Frame {
         ready = ok
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
         rulesRevision++
-        if (ready && form.controller && form.programmaticEdit === 0)
+        // In explicit-submit mode the renderer never fires on its own --
+        // only submit() (wired to the explicit submit Button below) does.
+        if (!form.explicitSubmitMode && ready && form.controller && form.programmaticEdit === 0)
+            form.controller.submitIfValid(form.actionType, form.previewLine)
+    }
+
+    // Explicit submit mode's sole trigger: the submit Button's onClicked
+    // calls this. A no-op unless the form is currently ready -- the button
+    // is also disabled while !ready, so this guard is defense in depth, not
+    // the only gate.
+    function submit() {
+        if (ready && form.controller)
             form.controller.submitIfValid(form.actionType, form.previewLine)
     }
 
@@ -1216,7 +1246,11 @@ Frame {
 
         Label {
             Layout.topMargin: 8
-            text: form.ready ? "✓ executes automatically as you type" : "fill the required (*) fields"
+            text: {
+                if (!form.ready)
+                    return "fill the required (*) fields"
+                return form.explicitSubmitMode ? "✓ ready -- press Submit" : "✓ executes automatically as you type"
+            }
             opacity: 0.6
             font.italic: true
             // A blocked submit is announced, not merely tinted (docs/spec/
@@ -1226,6 +1260,26 @@ Frame {
             Accessible.role: Accessible.StaticText
             Accessible.name: text
             Accessible.description: text
+        }
+
+        // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit
+        // submit mode"): the sole trigger for a side-effectful action's
+        // submission. Enabled only while `ready`, matching the required (*)
+        // asterisk / submit-gate convention documented in this file's header
+        // comment -- a disabled button communicates the same gate the
+        // auto-submit label does for the default mode. Loaded only when the
+        // schema opts in, so a default (auto-submit) schema has no such
+        // control anywhere in the item tree, not merely a hidden one.
+        Loader {
+            active: form.explicitSubmitMode
+            Layout.topMargin: 4
+            sourceComponent: Button {
+                id: submitButton
+                objectName: "submitButton"
+                enabled: form.ready
+                text: "Submit"
+                onClicked: form.submit()
+            }
         }
 
         Label {

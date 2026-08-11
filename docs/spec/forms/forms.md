@@ -576,6 +576,36 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. |
 | ↳ `conditions` | `and` / `or` condition object | array of condition objects | The nested conditions combined by boolean AND / OR, in declaration order; each element is itself a full condition/rule object (any `kind`, including a nested `and`/`or`/`not`) — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `condition` | `not` condition object | condition object | The single nested condition negated by boolean NOT (singular key, since `not` wraps exactly one child). |
+| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of the shipped renderer's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Not emitted by `schemaJson<A>()`; a schema author sets it by hand (or a hand-authored schema fixture/example does), the same way `x-layout`/`x-widget` overrides are authored today. |
+
+### Explicit submit mode — `x-submitMode`
+
+The shipped `DynamicForm.qml` renderer's default behavior is to call
+`controller.submitIfValid(actionType, bodyJson)` the instant every field and
+rule is satisfied — safe for a read-only query action, but unsafe for any
+side-effectful (mutating) action: a mutation would fire on every keystroke
+that happens to leave the form momentarily valid, with no user confirmation.
+
+Setting the top-level `"x-submitMode": "explicit"` schema key opts a form out
+of that default:
+
+- `revalidate()` still recomputes `ready`/`previewLine` live (so `x-rules`,
+  `required`, and every other live-validation affordance are unaffected) but
+  never calls `submitIfValid` on its own.
+- The renderer instead shows an explicit **Submit** button (`objectName:
+  "submitButton"`), enabled only while `ready` — matching the existing
+  `x-order`/required-asterisk convention of gating on the same readiness
+  state the auto-submit label already reflected. Clicking it is the sole
+  trigger; `DynamicForm.submit()` is the function it calls, itself a no-op
+  unless the form is currently ready.
+- The button is loaded (via a `Loader`, `active: explicitSubmitMode`) only
+  when the schema opts in — a default (auto-submit) form has no such control
+  anywhere in its item tree, not merely a hidden one.
+
+Any schema describing a side-effectful action should carry this flag before
+being safely rendered by the shipped renderer; a schema that omits it (every
+existing schema, and any read-only query action) renders exactly as before —
+zero behavior change.
 
 ### Versioning stance
 
