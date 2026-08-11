@@ -1,3 +1,21 @@
+include(CheckCXXCompilerFlag)
+
+# Probed once per configure (CMake caches each check_cxx_compiler_flag() result
+# in CMakeCache.txt keyed by the result variable, regardless of how many
+# targets call apply_warnings()) rather than unconditionally listed below:
+# these three are recent enough additions to Clang's -Weverything set that
+# Emscripten's bundled clang (pinned to an older release than the Linux/
+# Windows Clang this project otherwise builds with — see
+# .github/workflows/wasm-ladder.yml's EMSDK_VERSION) rejects them outright
+# under -Werror with "unknown warning option", turning a *suppression* flag
+# into the very error it exists to silence. A version-number cutoff would be
+# equally correct but more fragile (would need updating every time either
+# toolchain's version changes); probing the actual compiler is the standard,
+# self-maintaining way to make -Weverything portable across Clang releases.
+check_cxx_compiler_flag(-Wno-nrvo MORPH_CLANG_HAS_WNO_NRVO)
+check_cxx_compiler_flag(-Wno-unsafe-buffer-usage-in-libc-call MORPH_CLANG_HAS_WNO_UNSAFE_BUFFER_USAGE_IN_LIBC_CALL)
+check_cxx_compiler_flag(-Wno-c2y-extensions MORPH_CLANG_HAS_WNO_C2Y_EXTENSIONS)
+
 function(apply_warnings target)
     target_compile_options(${target} PRIVATE
         # ── MSVC ──────────────────────────────────────────────────────────────
@@ -74,16 +92,16 @@ function(apply_warnings target)
             -Wno-global-constructors        # non-trivial namespace-scope initializers
             # (c) Stylistic / opinionated noise, not defects.
             -Wno-missing-noreturn
-            -Wno-nrvo                       # not eliding a trivial-type copy on return
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_NRVO}>:-Wno-nrvo>  # not eliding a trivial-type copy on return
             -Wno-shadow-uncaptured-local    # lambda param shadowing an uncaptured local
             -Wno-documentation-unknown-command
             -Wno-unsafe-buffer-usage        # flags all pointer arithmetic; needs a hardened API
-            -Wno-unsafe-buffer-usage-in-libc-call
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_UNSAFE_BUFFER_USAGE_IN_LIBC_CALL}>:-Wno-unsafe-buffer-usage-in-libc-call>
             -Wno-float-equal                # exact == is intentional in the value/rational tests
             # (d) Conflicts with a warning we deliberately keep.
             -Wno-covered-switch-default     # collides with -Wswitch-enum + -Wswitch-default
             # (e) Third-party test macros.
-            -Wno-c2y-extensions             # Catch2 TEST_CASE expands __COUNTER__
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_C2Y_EXTENSIONS}>:-Wno-c2y-extensions>  # Catch2 TEST_CASE expands __COUNTER__
             -Wno-unused-member-function     # Catch2/test-fixture helper members
             -Wno-unneeded-member-function
             # (f) Clang 22 (Homebrew, macOS libc++) added thread-safety-analysis
