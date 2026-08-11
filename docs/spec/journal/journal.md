@@ -81,8 +81,15 @@ the journal gains an entry it previously lacked.
 
 ### `toJson(LogEntry const&) -> std::string`
 
-Encodes a `LogEntry` as JSON via Glaze. Throws `SerializationError` on failure
-(not realistically reachable for a flat struct of strings/integers — see
+Encodes a `LogEntry` as JSON via Glaze, writing with `detail::EscapingWriteOpts`
+so a raw ASCII control byte (0x00-0x1F) in `entityKey`/`payload`/`error`/
+`principal`/`idempotencyKey` round-trips through `fromJson` instead of
+producing invalid JSON — or, when the same string also holds an escaped `\`/`"`,
+silently corrupted JSON (glaze's chunked writer path rewrites the control byte
+as two `0x00` bytes in that case). Mirrors `morph::wire::detail::EscapingWriteOpts`
+(`core/wire.hpp`) exactly; duplicated locally rather than shared so this header
+stays free of a `core/` dependency. Throws `SerializationError` on failure (not
+realistically reachable for a flat struct of strings/integers — see
 `detail::throwOnGlazeError`).
 
 ### `fromJson(std::string_view) -> LogEntry`
@@ -684,7 +691,7 @@ All symbols live in `namespace morph::journal`.
 | `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
 | `Outcome` | `enum class : std::uint8_t` | `Succeeded` (default) or `Failed`. Has a `glz::meta` specialisation so it (de)serialises as the string, not the underlying int. |
 | `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
-| `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON. Throws `SerializationError`. |
+| `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON with `detail::EscapingWriteOpts` (control-byte escaping). Throws `SerializationError`. |
 | `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
 | `detail::throwOnGlazeError` | inline function | `void throwOnGlazeError(const glz::error_ctx&, std::string_view)` — shared error path for `toJson`/`fromJson`. |

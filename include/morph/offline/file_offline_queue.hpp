@@ -56,9 +56,29 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
     }
 }
 
+/// @brief Write options that escape ASCII control bytes as `\\uXXXX` sequences.
+///
+/// glaze 7.4 leaves control bytes (0x00-0x1F) unescaped by default, which
+/// breaks a `FileQueueRecord` carrying one in `payload`/`idempotencyKey` two
+/// ways: RFC 8259 requires those bytes escaped, so the raw byte alone yields
+/// JSON `fromJson`'s `glz::read` throws on for any non-trailing line (a
+/// permanent `FileOfflineQueueError` on every later `open()`, per this file's
+/// torn-trailing-line tolerance); worse, once the same string also contains an
+/// escaped `\` or `"`, glaze's chunked writer path silently rewrites the
+/// control byte as two 0x00 bytes, corrupting the payload before it ever
+/// reaches disk. Mirrors `morph::wire::detail::EscapingWriteOpts` (`core/wire.hpp`)
+/// exactly; duplicated here (rather than shared) so this header stays free of
+/// a `core/` dependency. Escaping is lossless, so any such byte still
+/// round-trips through `fromJson` unchanged.
+struct EscapingWriteOpts : glz::opts {
+    // NOLINTNEXTLINE(readability-identifier-naming) — glaze's option name, matched by name.
+    bool escape_control_characters = true;
+};
+
+/// @brief Encodes @p record as JSON, escaping control bytes in `payload`/`idempotencyKey`.
 inline std::string toJson(const FileQueueRecord& record) {
     std::string out;
-    throwOnGlazeError(glz::write_json(record, out), out);
+    throwOnGlazeError(glz::write<EscapingWriteOpts{}>(record, out), out);
     return out;
 }
 

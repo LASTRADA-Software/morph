@@ -124,7 +124,17 @@ payload)` and `payload` is the base64url claims segment. The claims are a
 | `roles` | Coarse-grained roles an authorization policy can key on. |
 
 The claims are JSON (Glaze); adding application claims is compatible because
-unknown fields are ignored on read.
+unknown fields are ignored on read. `TokenIssuer::issue` writes the claims
+with the same control-byte-escaping option `morph::wire::encode` uses
+(`detail::EscapingWriteOpts`, duplicated locally in `session_auth.hpp` rather
+than shared, to keep this header free of a `core/` dependency): a raw ASCII
+control byte (0x00-0x1F) in `principal`/`roles` — most plausibly one embedded
+in an application-supplied identity string — round-trips through
+`TokenVerifier::verify` instead of producing JSON that either fails to decode
+outright or, when the same string also holds an escaped `\`/`"`, is silently
+corrupted before signing. `issue` throws `TokenIssuanceError` on encode
+failure, though `SessionToken`'s flat shape (strings/integers only) makes that
+not realistically reachable in practice.
 
 #### Expiry is mandatory — `expiresAtMs == 0` is expired, not eternal
 

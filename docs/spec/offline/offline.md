@@ -194,7 +194,12 @@ restarts with **no extra dependency** — it ships in the default `morph` target
 alongside `InMemoryOfflineQueue`. Each mutation (`enqueue`, `markDone`,
 `setAttempts`, `setIdempotencyKey`) appends one JSON line
 (`{"op": "put"|"done", "id", "payload", "idempotencyKey", "attempts"}`) and
-immediately `fflush`+`fsync`s it. On open, the file is replayed
+immediately `fflush`+`fsync`s it. The line is written with
+`detail::EscapingWriteOpts` (mirroring `morph::wire::detail::EscapingWriteOpts`,
+`core/wire.hpp`) so a raw ASCII control byte in `payload`/`idempotencyKey`
+round-trips instead of producing invalid JSON that breaks replay on the next
+open — or, alongside an escaped `\`/`"` in the same string, JSON glaze's
+writer silently corrupts before it ever reaches disk. On open, the file is replayed
 last-write-wins-per-id and rewritten in compacted form — this both bounds file
 growth and heals a torn trailing line left by a crash mid-write, tolerating it
 the same way `FileActionLog` does (a malformed *trailing* line is logged and
