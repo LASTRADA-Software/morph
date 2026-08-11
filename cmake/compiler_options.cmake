@@ -86,6 +86,17 @@ function(apply_warnings target)
             -Wno-c2y-extensions             # Catch2 TEST_CASE expands __COUNTER__
             -Wno-unused-member-function     # Catch2/test-fixture helper members
             -Wno-unneeded-member-function
+            # (f) Clang 22 (Homebrew, macOS libc++) added thread-safety-analysis
+            #     annotations to std::mutex itself, so -Weverything's
+            #     -Wthread-safety-negative now fires on every *plain*,
+            #     unannotated std::mutex use (e.g. core/executor.hpp,
+            #     core/completion.hpp) even though nothing in this codebase
+            #     opts into GUARDED_BY/clang::thread_safety attributes. Until we
+            #     annotate the mutex-guarded members throughout, suppress the
+            #     diagnostic rather than let an unrelated libc++ upgrade break
+            #     every downstream target that transitively includes these
+            #     headers (issue #64).
+            -Wno-thread-safety-negative
         >
         # clang-cl only: driver noise from the MSVC-mode command line.
         $<$<STREQUAL:${CMAKE_CXX_COMPILER_ID},Clang>:$<$<BOOL:${MSVC}>:
