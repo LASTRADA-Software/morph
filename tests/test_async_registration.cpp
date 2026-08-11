@@ -360,3 +360,118 @@ TEST_CASE("Bridge::registerHandler: falls back to the synchronous path for a bac
 
     CHECK(binding->currentId.load() != 0U);
 }
+
+// ── Issue #60: registration-settled seam (whenBound/isBound) ────────────────
+//
+// executeVia() fails fast with "handler not bound" for a binding whose async
+// registration hasn't round-tripped yet. Bridge::whenBound() gives a caller a
+// seam to await that settlement instead of failing fast or polling by hand.
+
+TEST_CASE("Bridge::whenBound: resolves immediately true for an already-bound handler",
+         "[bridge][registration][issue60]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    SyncExec cbExec;
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+    REQUIRE(handler.isBound());
+
+    bool resolvedTrue = false;
+    handler.whenBound().then([&](bool ok) { resolvedTrue = ok; }).onError([](const std::exception_ptr&) {});
+    REQUIRE(resolvedTrue);
+}
+
+TEST_CASE("Bridge::whenBound: resolves false immediately when nothing is in flight and the handler is unbound",
+         "[bridge][registration][issue60]") {
+    // A binding that was never handed to registerHandler at all -- nothing is
+    // registering, so there is nothing to wait for.
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_Model";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARModel>(); };
+    CHECK_FALSE(bridge.isBound(binding));
+
+    morph::testing::InlineExecutor exec;
+    bool sawFalse = false;
+    bool errored = false;
+    bridge.whenBound(binding, &exec)
+        .then([&](bool ok) { sawFalse = !ok; })
+        .onError([&](const std::exception_ptr&) { errored = true; });
+    REQUIRE(sawFalse);
+    REQUIRE_FALSE(errored);
+}
+
+TEST_CASE("BridgeHandler::whenBound: fires once the deferred async registration completes",
+         "[bridge][registration][issue60]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+    // Not bound yet -- the async reply hasn't arrived.
+    CHECK_FALSE(handler.isBound());
+
+    bool resolvedTrue = false;
+    bool errored = false;
+    handler.whenBound().then([&](bool ok) { resolvedTrue = ok; }).onError([&](const std::exception_ptr&) {
+        errored = true;
+    });
+    // whenBound() must not have resolved synchronously -- registration is
+    // still in flight.
+    CHECK_FALSE(resolvedTrue);
+    CHECK_FALSE(errored);
+
+    rawBackend->completeNext();
+    CHECK(resolvedTrue);
+    CHECK_FALSE(errored);
+    CHECK(handler.isBound());
+
+    // Once bound, dispatching immediately (the exact scenario issue #60
+    // describes -- a dispatch issued right after connect) must succeed rather
+    // than fail fast with "handler not bound".
+    std::atomic<int> result{-1};
+    handler.execute(ARCount{.x = 3}).then([&](int v) { result.store(v); }).onError([](const std::exception_ptr&) {});
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1; }));
+    CHECK(result.load() == 3);
+}
+
+TEST_CASE("BridgeHandler::whenBound: delivers the registration failure via onError",
+         "[bridge][registration][issue60]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+    bool resolvedTrue = false;
+    bool errored = false;
+    handler.whenBound().then([&](bool ok) { resolvedTrue = ok; }).onError([&](const std::exception_ptr&) {
+        errored = true;
+    });
+
+    rawBackend->failNext("simulated registration failure");
+    CHECK_FALSE(resolvedTrue);
+    CHECK(errored);
+    CHECK_FALSE(handler.isBound());
+}
+
+TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registration all resolve",
+         "[bridge][registration][issue60]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+    int resolvedCount = 0;
+    handler.whenBound().then([&](bool) { ++resolvedCount; }).onError([](const std::exception_ptr&) {});
+    handler.whenBound().then([&](bool) { ++resolvedCount; }).onError([](const std::exception_ptr&) {});
+    handler.whenBound().then([&](bool) { ++resolvedCount; }).onError([](const std::exception_ptr&) {});
+    CHECK(resolvedCount == 0);
+
+    rawBackend->completeNext();
+    CHECK(resolvedCount == 3);
+}

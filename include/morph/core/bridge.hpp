@@ -53,7 +53,22 @@ public:
     ///        `Bridge`, and resolves with the JSON-encoded result.
     using Executor = std::function<::morph::async::Completion<std::string>(void*, std::string_view)>;
 
-    /// @brief Registers the executor for `(Model, Action)` under the given string ids.
+    /// @brief Registers the executors for `(Model, Action)` under the given string ids.
+    ///
+    /// Populates one `Executor` per `Sharing` policy the framework defines
+    /// (`NoSharing` and `AllowShared` — see `bridge.md`, "Design decisions",
+    /// "`ActionExecuteRegistry::registerAction` is `Sharing`-aware"), keyed by
+    /// `(modelId, actionId, typeid(Sharing))`, rather than a single executor
+    /// that unconditionally assumes `NoSharing`. A handler whose `Sharing` is
+    /// anything else must be dispatched through the *matching* executor: the
+    /// wrong one `static_cast`s `handlerVoid` to the wrong `BridgeHandler<Model,
+    /// Sharing>` instantiation, so `kShared` resolves incorrectly inside it and
+    /// a payload-/result-keyed action's attach-or-promote step silently never
+    /// runs. Both executors' bodies are otherwise byte-for-byte identical
+    /// (built once, from the same generic lambda template, instantiated for
+    /// `NoSharing` and again for `AllowShared` — the only two sharing tags
+    /// `morph::bridge` defines), so this costs one extra closure per
+    /// registered action, not per call.
     /// Defined out-of-line after BridgeHandler to avoid forward reference issues.
     /// @tparam Model  Model type whose handler will execute the action.
     /// @tparam Action Action type to register.
@@ -62,16 +77,19 @@ public:
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId);
 
-    /// @brief Looks up and invokes the executor for `(modelId, actionId)`.
+    /// @brief Looks up and invokes the executor for `(modelId, actionId)`,
+    ///        specialised for the caller's own `Sharing` policy.
+    /// @tparam Sharing `NoSharing` or `AllowShared` — the caller's own sharing policy.
     /// @param modelId  String id of the target model.
     /// @param actionId String id of the action to execute.
-    /// @param handler  Type-erased `BridgeHandler<Model>*` matching `modelId`.
+    /// @param handler  Type-erased `BridgeHandler<Model, Sharing>*` matching `modelId`.
     /// @param bodyJson JSON-encoded action payload.
     /// @return Completion that resolves with the JSON-encoded action result.
-    /// @throws std::runtime_error if no executor was registered for that pair.
+    /// @throws std::runtime_error if no executor was registered for that triple.
+    template <typename Sharing>
     [[nodiscard]] ::morph::async::Completion<std::string> execute(std::string_view modelId, std::string_view actionId,
                                                                   void* handler, std::string_view bodyJson) const {
-        auto iter = _executors.find(Key{std::string{modelId}, std::string{actionId}});
+        auto iter = _executors.find(Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(Sharing)}});
         if (iter == _executors.end()) {
             throw std::runtime_error("unknown action for executeJson: " + std::string{modelId} + "/" +
                                      std::string{actionId});
@@ -84,8 +102,20 @@ public:
     static ActionExecuteRegistry& instance();
 
 private:
-    using Key = std::pair<std::string, std::string>;
-    std::unordered_map<Key, Executor, ::morph::model::detail::PairKeyHash> _executors;
+    struct Key {
+        std::string modelId;
+        std::string actionId;
+        std::type_index sharing;
+        bool operator==(const Key&) const = default;
+    };
+    struct KeyHash {
+        std::size_t operator()(const Key& key) const noexcept {
+            std::size_t const modelHash = ::morph::model::detail::PairKeyHash{}(
+                {key.modelId, key.actionId});
+            return modelHash ^ (key.sharing.hash_code() + 0x9e3779b9U + (modelHash << 6) + (modelHash >> 2));
+        }
+    };
+    std::unordered_map<Key, Executor, KeyHash> _executors;
 };
 
 inline ActionExecuteRegistry& ActionExecuteRegistry::instance() {
@@ -167,6 +197,27 @@ struct HandlerBinding {
 
     /// @brief Current `ModelId` value in the active backend (0 = unbound).
     std::atomic<uint64_t> currentId{0};
+
+    /// @brief Registration-settled seam (see `Bridge::whenBound`).
+    ///
+    /// `registrationInFlight` is `true` from the moment `registerHandlerImpl`
+    /// hands this binding's initial registration to
+    /// `IBackend::registerModelAsync` (and that call returns `true`) until its
+    /// `onRegistered`/`onError` callback resolves — the synchronous fallback
+    /// path never sets it, since that call has already returned bound (or
+    /// thrown) by the time anyone could observe it in flight. `whenBound()`
+    /// checks it to distinguish "an async reply is coming, queue a waiter"
+    /// from "nothing is in flight, resolve false now". `registrationWaiters`
+    /// holds callbacks queued by `whenBound()` while `registrationInFlight` is
+    /// `true`; the resolving callback invokes and clears every one of them
+    /// exactly once, in the same call that clears `registrationInFlight`.
+    /// Guarded by `registrationMtx`, deliberately separate from
+    /// `Bridge::_mtx`/`_attachMtx`: a waiter can be queued or resolved from
+    /// either the registering thread or the backend's reply-delivering
+    /// thread, and must never block on the bridge's own locks.
+    std::mutex registrationMtx;
+    bool registrationInFlight = false;
+    std::vector<std::pair<std::function<void(bool)>, std::function<void(std::exception_ptr)>>> registrationWaiters;
 };
 
 }  // namespace detail
@@ -338,19 +389,91 @@ public:
     /// `bool` return threaded across every `IBackend` implementation and, for
     /// wire backends, a reply field) — tracked as a follow-up, not fixed
     /// here.
+    /// Prefers the backend's `IBackend::assignPrimaryAsync` when it offers
+    /// one — the same "avoid a nested-event-loop block that aborts a WASM
+    /// main thread" rationale `Bridge::registerHandler()` follows for the
+    /// initial bind step (`backend.md`, "Asynchronous registration") applies
+    /// identically here: this method is invoked from inside the result
+    /// `Completion`'s callback chain (`BridgeHandler::execute`'s `onResult`),
+    /// not from the original call stack, so there is no caller left blocked
+    /// waiting on it either way — the async path simply avoids parking the
+    /// Qt event loop for the round trip. `binding->contextKey`/`primary` are
+    /// only published once the (possibly async) reply confirms the call, so
+    /// a caller reading `binding->primary()` never sees a promotion that the
+    /// backend has not actually completed. Falls back to the synchronous
+    /// `assignPrimary` when the backend offers no async path, publishing
+    /// immediately exactly as before this method existed.
+    ///
+    /// `_attachMtx` is released *before* calling `assignPrimaryAsync` — not
+    /// held across it — mirroring `registerHandlerImpl`'s discipline for
+    /// `registerModelAsync`: the success/error callback below re-acquires
+    /// `_attachMtx`, so a backend that ever invoked it synchronously (none
+    /// documented here do, but nothing prevents one from doing so) would
+    /// otherwise self-deadlock re-acquiring a mutex this same call stack
+    /// still held.
     /// @tparam Model Concrete model type.
     /// @param binding Shared binding whose instance is being promoted.
     /// @param primary Canonical string encoding of the key to file it under.
     template <typename Model>
     void assignHandlerPrimary(const std::shared_ptr<detail::HandlerBinding>& binding, std::string primary) {
-        std::scoped_lock const lock{_attachMtx};
-        uint64_t const raw = binding->currentId.load();
-        if (raw == 0U || primary.empty() || !binding->primary.empty()) {
-            return;
+        std::shared_ptr<::morph::backend::detail::IBackend> backend;
+        uint64_t raw = 0;
+        {
+            std::scoped_lock const lock{_attachMtx};
+            raw = binding->currentId.load();
+            if (raw == 0U || primary.empty() || !binding->primary.empty()) {
+                return;
+            }
+            backend = loadBackend();
         }
-        loadBackend()->assignPrimary(::morph::exec::detail::ModelId{raw}, binding->typeId, primary);
-        binding->contextKey = primary;
-        binding->primary = std::move(primary);
+        std::weak_ptr<const void> const weakLiveness{_liveness};
+        std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
+        std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
+        bool const started = backend->assignPrimaryAsync(
+            ::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
+            [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
+                auto aliveToken = weakLiveness.lock();
+                if (!aliveToken) {
+                    return;  // The Bridge is gone; do not touch `this`.
+                }
+                auto strongBinding = weakBinding.lock();
+                if (!strongBinding) {
+                    return;  // The BridgeHandler (and its binding) is gone.
+                }
+                std::scoped_lock const attachLock{_attachMtx};
+                auto pinned = weakBackend.lock();
+                if (!pinned || pinned != loadBackend()) {
+                    // A switchBackend() already moved past this promotion;
+                    // applying a stale reply now would overwrite whatever
+                    // state the new backend's re-registration already
+                    // established -- same reasoning as registerHandlerImpl's
+                    // async callback.
+                    return;
+                }
+                // A binding whose primary is already set (by a concurrent
+                // attach/assign that raced ahead of this async reply, or
+                // simply already promoted) must not be overwritten here.
+                if (!strongBinding->primary.empty()) {
+                    return;
+                }
+                strongBinding->contextKey = primary;
+                strongBinding->primary = primary;
+            },
+            [typeId = binding->typeId](const std::string& message) {
+                ::morph::log::logError("[assignHandlerPrimary] async promotion of '" + typeId +
+                                       "' failed: " + message);
+            });
+        if (!started) {
+            backend->assignPrimary(::morph::exec::detail::ModelId{raw}, binding->typeId, primary);
+            std::scoped_lock const lock{_attachMtx};
+            // Re-check under the lock: a concurrent attach/assign could have
+            // raced ahead while the (now-established-synchronous) backend
+            // call above ran without _attachMtx held.
+            if (binding->primary.empty()) {
+                binding->contextKey = primary;
+                binding->primary = std::move(primary);
+            }
+        }
     }
 
     /// @brief Returns @p binding's current primary key, or empty if unattached.
@@ -359,6 +482,73 @@ public:
     [[nodiscard]] std::string bindingPrimary(const std::shared_ptr<detail::HandlerBinding>& binding) {
         std::scoped_lock const lock{_attachMtx};
         return binding->primary;
+    }
+
+    /// @brief Whether @p binding currently has a live `ModelId`.
+    ///
+    /// A binding constructed via the async registration path (see
+    /// `backend.md`, "Asynchronous registration") starts unbound and becomes
+    /// bound only once `onRegistered` fires — this is the synchronous,
+    /// point-in-time check; `whenBound()` below is the awaitable counterpart.
+    /// @param binding Binding to inspect.
+    /// @return `true` if `currentId != 0`.
+    [[nodiscard]] static bool isBound(const std::shared_ptr<detail::HandlerBinding>& binding) noexcept {
+        return binding->currentId.load() != 0U;
+    }
+
+    /// @brief Resolves once @p binding's initial registration settles.
+    ///
+    /// Closes the gap `executeVia`'s fast-fail leaves for a caller that
+    /// constructs a `BridgeHandler` through the async registration path (see
+    /// `backend.md`, "Asynchronous registration") and wants to dispatch the
+    /// moment registration completes, rather than failing fast with "handler
+    /// not bound" or polling `isBound()` in a loop of its own devising.
+    ///
+    /// - If @p binding is already bound, resolves immediately with `true`.
+    /// - If an async registration is still in flight, resolves with `true`
+    ///   once `onRegistered` fires, or with the registration's error via
+    ///   `.onError(...)` if it fails.
+    /// - If @p binding was never handed an async registration at all (the
+    ///   synchronous fallback path, or a binding still awaiting its very
+    ///   first `registerHandlerImpl` call to even attempt one) and is not yet
+    ///   bound, resolves immediately with `false` — there is nothing in
+    ///   flight to wait for. This can only happen for a `shared` binding that
+    ///   has not yet been given a primary (`ensureBound`/`attachHandler`
+    ///   never ran) or in the narrow window before `registerHandlerImpl`
+    ///   itself has run; ordinary (non-shared) bindings are always either
+    ///   bound or mid-registration by the time a caller can observe them.
+    /// @param binding Binding to wait on.
+    /// @param cbExec  Executor the resolution is delivered on, exactly like
+    ///                every other `Completion`-returning call in this class.
+    /// @return `Completion<bool>` resolving `true` once bound, `false` if
+    ///         nothing is in flight, or an error if registration failed.
+    [[nodiscard]] ::morph::async::Completion<bool> whenBound(const std::shared_ptr<detail::HandlerBinding>& binding,
+                                                              ::morph::exec::IExecutor* cbExec) {
+        auto state = std::make_shared<::morph::async::detail::CompletionState<bool>>();
+        ::morph::async::Completion<bool> comp{state, cbExec};
+        if (isBound(binding)) {
+            state->setValue(true);
+            return comp;
+        }
+        std::scoped_lock const lock{binding->registrationMtx};
+        // Re-check under the lock: registerHandlerImpl's callback may have
+        // resolved (and bound) between the lock-free check above and here.
+        if (isBound(binding)) {
+            state->setValue(true);
+            return comp;
+        }
+        if (!binding->registrationInFlight) {
+            // Nothing to wait for: no async registration was ever started for
+            // this binding (synchronous fallback already ran to completion,
+            // or a shared binding with no primary yet), and it is still
+            // unbound. Resolve false rather than hang forever.
+            state->setValue(false);
+            return comp;
+        }
+        binding->registrationWaiters.emplace_back(
+            [state](bool ok) { state->setValue(ok); },
+            [state](std::exception_ptr err) { state->setException(err); });
+        return comp;
     }
 
     /// @brief Lists the live shared primary keys of `Model` on the active backend.
@@ -899,41 +1089,100 @@ private:
             _handlers.push_back(binding);
         }
 
+        // Set before the backend call, not after: a backend could in
+        // principle invoke onRegistered/onError synchronously (none
+        // documented here do, but whenBound() must still be correct if one
+        // ever did), and a whenBound() call racing in from another thread
+        // must see "in flight" for the whole window the registration could
+        // resolve in, not a window that starts one statement too late.
+        {
+            std::scoped_lock const lock{binding->registrationMtx};
+            binding->registrationInFlight = true;
+        }
+
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<const void> const weakLiveness{_liveness};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         bool const started = backend->registerModelAsync(
             binding->typeId, binding->modelFactory, binding->contextKey,
             [this, weakBackend, weakLiveness, weakBinding](::morph::exec::detail::ModelId newId) {
-                auto aliveToken = weakLiveness.lock();
-                if (!aliveToken) {
-                    return;  // The Bridge is gone; do not touch `this`.
-                }
                 auto strongBinding = weakBinding.lock();
-                if (!strongBinding) {
-                    return;  // The BridgeHandler (and its binding) is gone.
+                auto aliveToken = weakLiveness.lock();
+                bool applied = false;
+                if (aliveToken && strongBinding) {
+                    std::scoped_lock const lock{_mtx};
+                    auto pinned = weakBackend.lock();
+                    if (pinned && pinned == loadBackend()) {
+                        // A switchBackend() already moved past this registration
+                        // (see this backend's own doc comment on the class) and
+                        // its own re-registration loop already gave `binding` a
+                        // fresh id on the *new* backend -- applying this stale
+                        // one now would overwrite that with a dangling id from a
+                        // backend nothing uses any more.
+                        strongBinding->currentId.store(newId.v);
+                        applied = true;
+                    }
                 }
-                std::scoped_lock const lock{_mtx};
-                auto pinned = weakBackend.lock();
-                if (!pinned || pinned != loadBackend()) {
-                    // A switchBackend() already moved past this registration
-                    // (see this backend's own doc comment on the class) and
-                    // its own re-registration loop already gave `binding` a
-                    // fresh id on the *new* backend -- applying this stale
-                    // one now would overwrite that with a dangling id from a
-                    // backend nothing uses any more.
-                    return;
+                // Resolve whenBound() waiters regardless of whether the id was
+                // actually applied above: either way this binding's initial
+                // registration attempt has settled (a stale reply ignored here
+                // means switchBackend's own synchronous re-registration already
+                // bound it), so nothing should still be described as "in
+                // flight". Runs even when the Bridge/binding is gone -- both
+                // weak locks above are only guards on touching `this`/the
+                // binding's other fields, not on this bookkeeping, which reads
+                // no Bridge state.
+                if (strongBinding) {
+                    resolveRegistrationWaiters(*strongBinding, /*ok=*/applied || isBound(strongBinding), nullptr);
                 }
-                strongBinding->currentId.store(newId.v);
             },
-            [typeId = binding->typeId](const std::string& message) {
+            [weakBinding, typeId = binding->typeId](const std::string& message) {
                 ::morph::log::logError("[registerHandler] async registration of '" + typeId +
                                        "' failed: " + message);
+                if (auto strongBinding = weakBinding.lock()) {
+                    resolveRegistrationWaiters(
+                        *strongBinding, /*ok=*/false,
+                        std::make_exception_ptr(std::runtime_error("registration failed: " + message)));
+                }
             });
 
         if (!started) {
             binding->currentId.store(
                 backend->registerModelWithContext(binding->typeId, binding->modelFactory, binding->contextKey).v);
+            // Route through resolveRegistrationWaiters (not a bare flag
+            // clear): a whenBound() call from another thread that already
+            // holds this same binding (the pre-built-binding registerHandler()
+            // overload hands the caller the shared_ptr before this function
+            // is even called) could have raced in during the window above and
+            // queued a waiter while registrationInFlight was still true. That
+            // waiter's Completion must still be settled here, or it hangs
+            // forever -- registrationInFlight was never in flight for a
+            // backend with no async path, but whenBound() cannot tell that
+            // apart from "the reply just hasn't arrived yet" without this.
+            resolveRegistrationWaiters(*binding, /*ok=*/true, nullptr);
+        }
+    }
+
+    /// @brief Clears `registrationInFlight` and settles every queued
+    ///        `whenBound()` waiter exactly once. Shared by both
+    ///        `registerHandlerImpl` callbacks (success and failure).
+    /// @param binding Binding whose registration just settled.
+    /// @param ok      `true` to resolve waiters with `setValue(true)`;
+    ///                `false` with @p err via `setException`.
+    /// @param err     Exception to deliver when `ok` is `false`.
+    static void resolveRegistrationWaiters(detail::HandlerBinding& binding, bool ok, std::exception_ptr err) {
+        std::vector<std::pair<std::function<void(bool)>, std::function<void(std::exception_ptr)>>> waiters;
+        {
+            std::scoped_lock const lock{binding.registrationMtx};
+            binding.registrationInFlight = false;
+            waiters.swap(binding.registrationWaiters);
+        }
+        for (auto& [onOk, onErr] : waiters) {
+            if (ok) {
+                onOk(true);
+            } else {
+                onErr(err);
+            }
         }
     }
 
@@ -1258,8 +1507,13 @@ public:
     /// @throws std::runtime_error if `actionType` was never registered for `Model`.
     [[nodiscard]] ::morph::async::Completion<std::string> executeJson(std::string_view actionType,
                                                                       std::string_view bodyJson) {
-        return ActionExecuteRegistry::instance().execute(std::string{::morph::model::ModelTraits<Model>::typeId()},
-                                                         actionType, this, bodyJson);
+        // Dispatches through the executor registered for this handler's own
+        // Sharing policy (see issue #68 / ActionExecuteRegistry::registerAction's
+        // doc comment): a NoSharing-only executor would static_cast `this`
+        // to the wrong BridgeHandler<Model, Sharing> instantiation for a
+        // shared handler, silently skipping its attach/promote step.
+        return ActionExecuteRegistry::instance().execute<Sharing>(
+            std::string{::morph::model::ModelTraits<Model>::typeId()}, actionType, this, bodyJson);
     }
 
     /// @brief Creates this handler's binding: deferred when shared, immediate otherwise.
@@ -1276,6 +1530,29 @@ public:
     /// @brief The executor used to deliver this handler's `Completion` callbacks.
     /// @return The GUI/callback executor passed at construction.
     [[nodiscard]] ::morph::exec::IExecutor* guiExecutor() const noexcept { return _guiExec; }
+
+    /// @brief Whether this handler currently has a live backend instance.
+    ///
+    /// A handler constructed through the async registration path (see
+    /// `backend.md`, "Asynchronous registration") starts unbound and only
+    /// becomes bound once the deferred `onRegistered` fires; `execute()`
+    /// fails fast with "handler not bound" for any call issued before that.
+    /// This is the synchronous, point-in-time check; `whenBound()` below is
+    /// the awaitable counterpart for a caller that wants to dispatch the
+    /// moment registration settles rather than poll this in a loop.
+    /// @return `true` if the handler is currently bound to a `ModelId`.
+    [[nodiscard]] bool isBound() const noexcept { return Bridge::isBound(_binding); }
+
+    /// @brief Resolves once this handler's initial registration settles.
+    ///
+    /// See `Bridge::whenBound()` for the full semantics: resolves
+    /// immediately with `true` if already bound, waits for the in-flight
+    /// async registration to settle (`true` on success, an error via
+    /// `.onError(...)` on failure) if one is outstanding, or resolves
+    /// immediately with `false` if nothing is in flight and the handler is
+    /// still unbound.
+    /// @return `Completion<bool>` delivered on this handler's GUI executor.
+    [[nodiscard]] ::morph::async::Completion<bool> whenBound() { return _bridge.whenBound(_binding, _guiExec); }
 
     /// @brief Subscribes to results of type @p R produced on the attached instance.
     ///
@@ -1337,58 +1614,69 @@ private:
 
 /// Out-of-line definition of ActionExecuteRegistry::registerAction.
 /// Placed here after BridgeHandler is fully defined so we can safely cast and call its methods.
+///
+/// Builds one executor per `Sharing` policy the framework defines
+/// (`NoSharing`, `AllowShared`) from the same generic-lambda template,
+/// `static_cast`ing `handlerVoid` to the matching `BridgeHandler<Model,
+/// Sharing>*` in each — see issue #68 / bridge.md's design-decision entry for
+/// why a single `NoSharing`-only executor is unsound for a shared handler.
 template <typename Model, typename Action>
 inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std::string_view actionId) {
-    Key const key{std::string{modelId}, std::string{actionId}};
-    _executors[key] = [](void* handlerVoid, std::string_view bodyJson) -> ::morph::async::Completion<std::string> {
-        auto* handler = static_cast<BridgeHandler<Model>*>(handlerVoid);
-        auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
-        try {
-            Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
-            // Retag any Quantity fields to their declared precision so the stored
-            // value matches the schema's advertised `x-decimalPlaces`, rather than
-            // silently keeping whatever runtime `dp` the client sent. No-op for
-            // actions with no Quantity members. See docs/spec/forms.md.
-            ::morph::forms::reconcileDeclaredPrecision(action);
-            // Overwrite any computed fields from their declared inputs -- a
-            // computed field is never trusted from the client, on any path.
-            // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
-            ::morph::forms::recomputeAll(action);
-            // Enforce the action's validator on the request/reply dispatch path,
-            // just as the reactive `set<>` path does via `tryFireImpl`. Without
-            // this, a submitted action that fails its readiness/validity check
-            // (empty required Quantity, out-of-range field, …) would reach the
-            // handler and either produce a silently wrong result or force every
-            // handler to re-check by hand. `ActionValidator<Action>::ready`
-            // auto-detects a `bool validate() const` member and defaults to
-            // `true` for actions with no validator, so this is a no-op for
-            // unvalidated actions and a hard gate for validated ones. An invalid
-            // action resolves the completion through `setException` (a proper
-            // error reply upstream), never a bad execution.
-            if (!::morph::model::ActionValidator<Action>::ready(action)) {
-                throw std::invalid_argument{"action failed validation: " +
-                                            std::string{::morph::model::ActionTraits<Action>::typeId()}};
+    auto makeExecutor = []<typename Sharing>() {
+        return [](void* handlerVoid, std::string_view bodyJson) -> ::morph::async::Completion<std::string> {
+            auto* handler = static_cast<BridgeHandler<Model, Sharing>*>(handlerVoid);
+            auto resultState = std::make_shared<::morph::async::detail::CompletionState<std::string>>();
+            try {
+                Action action = ::morph::model::ActionTraits<Action>::fromJson(bodyJson);
+                // Retag any Quantity fields to their declared precision so the stored
+                // value matches the schema's advertised `x-decimalPlaces`, rather than
+                // silently keeping whatever runtime `dp` the client sent. No-op for
+                // actions with no Quantity members. See docs/spec/forms.md.
+                ::morph::forms::reconcileDeclaredPrecision(action);
+                // Overwrite any computed fields from their declared inputs -- a
+                // computed field is never trusted from the client, on any path.
+                // No-op for actions with no computedFields. See docs/spec/forms/forms.md.
+                ::morph::forms::recomputeAll(action);
+                // Enforce the action's validator on the request/reply dispatch path,
+                // just as the reactive `set<>` path does via `tryFireImpl`. Without
+                // this, a submitted action that fails its readiness/validity check
+                // (empty required Quantity, out-of-range field, …) would reach the
+                // handler and either produce a silently wrong result or force every
+                // handler to re-check by hand. `ActionValidator<Action>::ready`
+                // auto-detects a `bool validate() const` member and defaults to
+                // `true` for actions with no validator, so this is a no-op for
+                // unvalidated actions and a hard gate for validated ones. An invalid
+                // action resolves the completion through `setException` (a proper
+                // error reply upstream), never a bad execution.
+                if (!::morph::model::ActionValidator<Action>::ready(action)) {
+                    throw std::invalid_argument{"action failed validation: " +
+                                                std::string{::morph::model::ActionTraits<Action>::typeId()}};
+                }
+                handler
+                    ->template execute<Action>(std::move(action))
+                    // NOLINTNEXTLINE(performance-unnecessary-value-param) — lambda captures the result by value
+                    .then([resultState](auto result) {
+                        // Guard the JSON forwarding for the same reason as executeVia:
+                        // a throwing resultToJson (or the move it does) must land on
+                        // the error sink, not escape the callback executor and either
+                        // hang the completion or terminate the Qt loop.
+                        try {
+                            resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
+                        } catch (...) {
+                            resultState->setException(std::current_exception());
+                        }
+                    })
+                    .onError([resultState](const std::exception_ptr& err) { resultState->setException(err); });
+            } catch (...) {
+                resultState->setException(std::current_exception());
             }
-            handler
-                ->template execute<Action>(std::move(action))
-                // NOLINTNEXTLINE(performance-unnecessary-value-param) — lambda captures the result by value
-                .then([resultState](auto result) {
-                    // Guard the JSON forwarding for the same reason as executeVia:
-                    // a throwing resultToJson (or the move it does) must land on
-                    // the error sink, not escape the callback executor and either
-                    // hang the completion or terminate the Qt loop.
-                    try {
-                        resultState->setValue(::morph::model::ActionTraits<Action>::resultToJson(result));
-                    } catch (...) {
-                        resultState->setException(std::current_exception());
-                    }
-                })
-                .onError([resultState](const std::exception_ptr& err) { resultState->setException(err); });
-        } catch (...) {
-            resultState->setException(std::current_exception());
-        }
-        return {resultState, handler->guiExecutor()};
+            return {resultState, handler->guiExecutor()};
+        };
     };
+    _executors[Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(NoSharing)}}] =
+        makeExecutor.template operator()<NoSharing>();
+    _executors[Key{std::string{modelId}, std::string{actionId}, std::type_index{typeid(AllowShared)}}] =
+        makeExecutor.template operator()<AllowShared>();
 }
 
 }  // namespace morph::bridge
