@@ -39,14 +39,16 @@ Every public operation that produces a `Rational` restores:
 - `denominator > 0` (strictly positive — never zero, never negative)
 - `gcd(|numerator|, denominator) == 1`
 - canonical zero is `0/1`
-- `1 <= decimalPlaces.value <= kMaxDecimalPlaces`
+- `0 <= decimalPlaces.value <= kMaxDecimalPlaces`
 
 All sign lives in the numerator.
 
 **No default precision.** Every call site states the precision it intends, e.g.
 `Rational{Numerator{1}, Denominator{3}, DecimalPlaces{9}}`. Precision is capped at `kMaxDecimalPlaces`
 (18, the largest `k` for which `10^k` fits in `int64_t`); out-of-range values
-assert in debug and clamp into `[1, kMaxDecimalPlaces]` in release.
+assert in debug and clamp into `[0, kMaxDecimalPlaces]` in release. Zero decimal places is a
+legal, first-class precision — a whole-number value (a zero-decimal currency such as JPY/KRW, or
+a plain integer count) declares `DecimalPlaces{0}` and carries no fractional digit at all.
 
 The struct never throws. Operations that may fail (zero divisor, non-finite
 floating-point input, overflow during decimal scaling) return
@@ -281,7 +283,7 @@ through `setWire`.
 |---|---|---|
 | `numerator` | `int64_t` | Carries the sign of the rational value. |
 | `denominator` | `int64_t` | Strictly positive. Never zero, never negative. |
-| `decimalPlaces` | `DecimalPlaces` | `1 <= value <= kMaxDecimalPlaces`. |
+| `decimalPlaces` | `DecimalPlaces` | `0 <= value <= kMaxDecimalPlaces`. |
 
 ### `Rational` — accessors
 
@@ -344,7 +346,7 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 |---|---|
 | [`quantity_type.md`](quantity_type.md) | `Rational` is the **runtime substrate** for `Quantity`. A `Quantity`'s declared precision and the forms layer's `x-decimalPlaces` schema annotation both resolve, at runtime, to a `Rational`'s `DecimalPlaces` tag — the `dp` value carried on the wire and propagated through arithmetic here is exactly the precision a `Quantity` declares. The overflow envelope and `INT64_MIN` hazards documented above therefore bound `Quantity` too. |
 | [`forms.md`](../forms/forms.md) | The form generator reads `x-decimalPlaces` (and the `Rational` wire shape `{"num","den","dp"}`) to build precision-aware numeric inputs; a form value is a `Rational` under the hood, so its display uses `toDouble`/formatting and its exact value uses the wire codec. |
-| [`security.md`](../security.md) | `setWire` performs the untrusted-wire **clamping** (`den == 0 → 1`, out-of-range `dp` → `[1, 18]`, `INT64_MIN` → `-INT64_MAX`). This is the boundary defence that keeps a hostile payload from reaching the UB-prone negation/overflow sites; see the clamping semantics discussion there. |
+| [`security.md`](../security.md) | `setWire` performs the untrusted-wire **clamping** (`den == 0 → 1`, out-of-range `dp` → `[0, 18]`, `INT64_MIN` → `-INT64_MAX`). This is the boundary defence that keeps a hostile payload from reaching the UB-prone negation/overflow sites; see the clamping semantics discussion there. |
 | [`datetime.md`](datetime.md) | Contrast case for wire-decode policy: the `DateTime` codec is **strict** (rejects malformed input) whereas `Rational::setWire` is **lenient/clamping** (silently repairs it). See [Limitations](#limitations) for why the difference matters. |
 
 ## Limitations
@@ -360,18 +362,16 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
   `dp` → magnitude table.
 - **`setWire` clamps hostile input rather than rejecting it.** `den == 0`
   becomes `1`, an `INT64_MIN` component becomes `-INT64_MAX`, an out-of-range
-  `dp` is pulled into `[1, 18]`. The invariants are always restored, but a
-  *corrupt amount silently becomes a specific wrong number* — e.g. a payload
-  meant to carry `x/0` lands as `x/1`, a completely different value, with no
-  error surfaced. This is deliberate (a `Rational` never propagates UB from the
-  wire) but it trades detectability for robustness. It is the opposite policy
-  from the strict `DateTime` codec, which rejects malformed input outright
-  (cross-ref [`datetime.md`](datetime.md)); a caller that needs "reject, don't
-  guess" semantics for amounts must validate before decode.
-- **`DecimalPlaces` has a floor of 1.** The invariant is `1 <= value <= 18`, so
-  precision **0 is unrepresentable**. This excludes zero-decimal currencies
-  (JPY, KRW) and plain integer counts from being tagged with their true
-  precision — they must borrow `dp = 1` and carry a spurious fractional digit.
+  `dp` is pulled into `[0, 18]` (only the upper bound can ever fire, since `dp`
+  is unsigned and `0` is itself a legal precision). The invariants are always
+  restored, but a *corrupt amount silently becomes a specific wrong number* —
+  e.g. a payload meant to carry `x/0` lands as `x/1`, a completely different
+  value, with no error surfaced. This is deliberate (a `Rational` never
+  propagates UB from the wire) but it trades detectability for robustness. It
+  is the opposite policy from the strict `DateTime` codec, which rejects
+  malformed input outright (cross-ref [`datetime.md`](datetime.md)); a caller
+  that needs "reject, don't guess" semantics for amounts must validate before
+  decode.
 - **`==` and `<=>` ignore precision, so equality is not substitutability.**
   Comparison is purely value-based on the canonical `(numerator, denominator)`
   pair. Two `Rational`s can therefore satisfy `a == b` while

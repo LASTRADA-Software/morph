@@ -719,8 +719,11 @@ readability).
 | `fromDouble` | `static Quantity fromDouble(double raw)` | Tags the leaf at `declaredPrecision()`; **never empty from a finite value** (empty only when `raw` is non-finite / doesn't fit). |
 | `fromOptional` | `static Quantity fromOptional(std::optional<Rational>)` | Empty in → empty out, preserving the declared-precision arg. |
 
-> The declared-decimals template argument `Dec` is constrained to `[1, kMaxDecimalPlaces]` (18).
-> Values outside that range cause a `static_assert` failure at compile time.
+> The declared-decimals template argument `Dec` is constrained to `[0, kMaxDecimalPlaces]` (18).
+> Values outside that range cause a `static_assert` failure at compile time. `Dec == 0` is a
+> legal, first-class declared precision — it is what a zero-decimal currency (JPY, KRW) or a
+> plain integer count declares, and it formats and parses with no fractional digit or decimal
+> point at all (see *How a value prints*).
 
 ### `Quantity<U, Dec>` — access, precision, provenance
 
@@ -730,7 +733,7 @@ readability).
 | `value()` | `const std::optional<Rational>& value() const noexcept` | The payload; pattern-match or `->` it. |
 | `value_or(fallback)` | `Rational value_or(Rational const&) const` | Payload if engaged, else the fallback. |
 | `operator*` | `const Rational& operator*() const` | Unchecked access to the engaged value (UB when empty, like `std::optional`). |
-| `withDecimalPlaces(p)` | `Quantity withDecimalPlaces(DecimalPlaces) const` | Retags actual precision (silently clamped to `[1, kMaxDecimalPlaces]`); no-op on empty. Value unchanged. |
+| `withDecimalPlaces(p)` | `Quantity withDecimalPlaces(DecimalPlaces) const` | Retags actual precision (silently clamped to `[0, kMaxDecimalPlaces]`); no-op on empty. Value unchanged. |
 | `atDeclaredPrecision()` | `Quantity atDeclaredPrecision() const` | Retags actual precision to the declared one; no-op on empty. |
 | `named(label)` | `Quantity named(std::string label) const` | Returns a same-unit quantity marked as the symbol `label`; builds a fresh history node (no-op returning empty on empty, or with tracing off). |
 | `equation()` | `std::vector<std::string> equation() const` | The worked formula as print-ready lines (see *Provenance*). Single-element (the formatted value) when empty or tracing off. |
