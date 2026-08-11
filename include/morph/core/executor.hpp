@@ -162,15 +162,60 @@ public:
                 task = std::move(_q.front());
                 _q.pop();
             }
-            try {
-                task();
-            } catch (const std::exception& exc) {
-                ::morph::log::logError("[main-thread] callback threw: " + std::string{exc.what()});
+            runTask(std::move(task));
+        }
+    }
+
+    /// @brief Dequeues and runs at most one pending task, without blocking.
+    ///
+    /// Never waits for a task to appear: if the queue is empty, returns `false`
+    /// immediately. Otherwise pops exactly one task, runs it, and returns `true`
+    /// whether or not that task threw. Unlike `runFor()`, there is no wall-clock
+    /// wait — this is the single-step primitive for callers (e.g. tests or
+    /// external event loops) that want deterministic, one-task-at-a-time control
+    /// instead of a timed pump.
+    ///
+    /// Must be called from the thread that "owns" this executor.
+    /// @return `true` if a task was dequeued and run, `false` if the queue was empty.
+    bool runOnce() {
+        std::function<void()> task;
+        {
+            std::scoped_lock const lock{_m};
+            if (_q.empty()) {
+                return false;
             }
+            task = std::move(_q.front());
+            _q.pop();
+        }
+        runTask(std::move(task));
+        return true;
+    }
+
+    /// @brief Runs tasks until the queue is empty, with no wall-clock timeout.
+    ///
+    /// Repeatedly calls the same dequeue-and-invoke step as `runOnce()` until the
+    /// queue reports empty, then returns. It does **not** wait for tasks posted
+    /// after draining begins: a task that posts new work while running extends
+    /// the drain (the new task is still queued and gets consumed), but `drain()`
+    /// never blocks waiting for an *externally* posted task the way `runFor()`
+    /// does — it simply stops once the queue is observed empty.
+    ///
+    /// Must be called from the thread that "owns" this executor.
+    void drain() {
+        while (runOnce()) {
+            // Keep consuming until the queue reports empty.
         }
     }
 
 private:
+    void runTask(std::function<void()> task) {
+        try {
+            task();
+        } catch (const std::exception& exc) {
+            ::morph::log::logError("[main-thread] callback threw: " + std::string{exc.what()});
+        }
+    }
+
     std::mutex _m;
     std::condition_variable _cv;
     std::queue<std::function<void()>> _q;

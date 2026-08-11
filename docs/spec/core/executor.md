@@ -96,6 +96,25 @@ prefixed `"[main-thread] callback threw: "`) and execution continues with the
 next task. Note that only `std::exception`-derived exceptions are caught; any
 other thrown type propagates out of `runFor()`.
 
+Two additional step-oriented primitives sit alongside `runFor()` for callers
+that want deterministic, non-blocking control instead of a timed pump:
+
+- **`runOnce()`** dequeues and runs at most one pending task and returns
+  immediately — `true` if a task was found and run (regardless of whether it
+  threw), `false` if the queue was empty. Unlike `runFor()`, it never waits for
+  a task to appear.
+- **`drain()`** repeatedly calls the same dequeue-and-invoke step as `runOnce()`
+  until the queue is observed empty, then returns — with no wall-clock timeout
+  and no wait for externally posted tasks. A task that posts new work while
+  running extends the drain (the new task is still in the queue and gets
+  consumed before `drain()` returns), but `drain()` never blocks waiting on
+  work from another thread the way `runFor()`'s `wait_until` does.
+
+All three share one dequeue-and-invoke step (pop under `_m`, then run outside
+the lock with the same `try`/catch `std::exception` logging), so the exception
+handling and locking discipline described above apply identically to
+`runOnce()` and `drain()`.
+
 ## `QtExecutor`
 
 An `IExecutor` implementation that marshals tasks onto the Qt event loop. Lives
@@ -317,8 +336,10 @@ rather than being hidden).
 
 | Member | Signature | Notes |
 |---|---|---|
-| `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`. |
+| `post` | `void post(std::function<void()> task) override` | Enqueues; notifies waiters. Thread-safe. Not executed until `runFor()`/`runOnce()`/`drain()`. |
 | `runFor` | `void runFor(std::chrono::milliseconds timeout)` | Runs tasks until the `timeout` deadline (blocks for new tasks while time remains; does not return early on an empty queue). Must be called from the owning thread. `std::exception`s logged and skipped; other exception types propagate. |
+| `runOnce` | `bool runOnce()` | Dequeues and runs at most one pending task; returns immediately, never blocks. Returns `true` if a task ran, `false` if the queue was empty. Must be called from the owning thread. |
+| `drain` | `void drain()` | Runs tasks until the queue is empty; no wall-clock timeout, does not wait for externally posted tasks. Must be called from the owning thread. |
 
 ### `QtExecutor : IExecutor` (`morph::qt`)
 
@@ -354,7 +375,8 @@ rather than being hidden).
 | Task signature | `std::function<void()>` | Simple, universal. Every executor accepts the same callable type. No return value, no cancellation. |
 | Exception handling | **Caught and logged, never propagated out of a worker/strand** | A task failure must not crash unrelated tasks *or* vanish. `ThreadPoolExecutor` and `StrandExecutor` catch `(...)` and log via `morph::log::logError`; `MainThreadExecutor` narrows its catch to `std::exception` so a non-standard throw surfaces on the synchronous drain thread. See [Failure modes](#failure-modes). |
 | ThreadPoolExecutor drain-on-dtor | **Drain the queue, then join** | Workers run every already-queued task before exiting, so a `StrandExecutor`'s in-flight lambdas complete and decrement `_inFlight` as long as the pool outlives the strand. There is no public `waitIdle`/graceful-shutdown API; tasks posted after destruction begins may be lost, so the caller must still synchronise teardown order externally. |
-| MainThreadExecutor's `runFor` | **Wall-clock deadline, not a `runOnce()`** | Lets the caller batch-process tasks without spinning. The condition-variable wait avoids busy-waiting. |
+| MainThreadExecutor's `runFor` | **Wall-clock deadline** | Lets the caller batch-process tasks without spinning. The condition-variable wait avoids busy-waiting. |
+| MainThreadExecutor's `runOnce`/`drain` | **Thin wrappers sharing `runFor`'s dequeue-and-invoke step, added alongside it** | `runOnce()` steps exactly one task without blocking; `drain()` loops `runOnce()` until the queue is empty. Neither waits on new tasks from other threads, unlike `runFor()`'s deadline-scoped wait — this gives event-loop integrations and tests deterministic, non-blocking single-step control without replacing `runFor()`'s existing behavior. |
 | ModelId zero | **Reserved — "not bound"** | A natural sentinel for optional/uninitialised model handles. |
 | StrandExecutor in `detail` | **Not a general-purpose utility** | Exists only for the morph model framework's per-model serialisation. The `ModelId` key is specific to model instances. |
 | StrandExecutor destructor | **Waits for in-flight tasks** | Without this, a pool thread running `scheduleNext` can access `_strands` after it has been destroyed (TSan: data race on destructor vs erase). |
