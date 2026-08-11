@@ -36,11 +36,32 @@
 #include <compare>
 #include <cstdint>
 #include <format>
+#include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace morph::time {
+
+struct DateTime;
+
+namespace detail {
+
+/// @brief Process-wide override for `DateTime::now()`, guarded by a mutex.
+///
+/// Mirrors `morph::journal::detail::defaultActionLogState()` — the same
+/// "mutex-guarded function-local static" shape used for the action-log and
+/// logger override seams elsewhere in the codebase. An empty `std::function`
+/// (the default) means "no override installed"; `DateTime::now()` falls back
+/// to `std::chrono::system_clock::now()` in that case. Forward-declared here
+/// (before `DateTime` is a complete type -- a function signature only needs
+/// `DateTime` to be declared, not defined) and defined out-of-line just after
+/// the `DateTime` struct, before `DateTime::now()`'s first caller needs it.
+[[nodiscard]] std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState();
+
+}  // namespace detail
 
 /// @brief A UTC instant with millisecond precision.
 ///
@@ -72,8 +93,31 @@ struct DateTime {
                 second + millisecond} {}
 
     /// @brief The current UTC instant, truncated to milliseconds.
-    /// @return The current UTC date-time.
+    ///
+    /// Consults the process-wide clock override installed via `setNowOverride`/
+    /// `ScopedNowOverride`, if any; otherwise calls
+    /// `std::chrono::system_clock::now()` directly. This is the seam that lets
+    /// registry-constructed (remotely instantiated) models get a deterministic
+    /// "now" in tests without any constructor parameter: production code calls
+    /// `DateTime::now()` exactly as before, and a test installs an override for
+    /// its scope. See `ScopedNowOverride`.
+    ///
+    /// @warning This function is `noexcept`. If an installed override callable
+    /// throws, that exception escapes a `noexcept` function and `std::terminate()`
+    /// is called — an override must not throw. The override also runs while the
+    /// internal mutex is held, so it must not itself call `DateTime::now()` /
+    /// `Timestamp::now()`, `setNowOverride`, or construct a `ScopedNowOverride`:
+    /// the mutex is non-recursive and any of those would self-deadlock (the same
+    /// constraint `morph::log`'s sink callback documents for the same reason).
+    /// @return The current UTC date-time, or the overridden instant if one is installed.
     [[nodiscard]] static DateTime now() noexcept {
+        auto& [mtx, overrideFn] = detail::nowOverrideState();
+        {
+            std::scoped_lock const lock{mtx};
+            if (overrideFn) {
+                return overrideFn();
+            }
+        }
         return DateTime{std::chrono::time_point_cast<std::chrono::milliseconds>(std::chrono::system_clock::now())};
     }
 
@@ -232,6 +276,91 @@ struct DateTime {
     [[nodiscard]] friend constexpr auto operator-(const DateTime& lhs, const DateTime& rhs) noexcept {
         return lhs.value - rhs.value;
     }
+};
+
+namespace detail {
+
+/// @brief Function-local static backing `DateTime::now()`'s override seam.
+///
+/// Defined out-of-line (after `DateTime` is a complete type) since the state
+/// is keyed on `std::function<DateTime()>`.
+inline std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState() {
+    static std::pair<std::mutex, std::function<DateTime()>> state;
+    return state;
+}
+
+}  // namespace detail
+
+/// @brief Installs @p clock as the process-wide override for `DateTime::now()`
+///        (and therefore `Timestamp::now()`, which delegates to it).
+///
+/// Every call to `DateTime::now()` — including inside a registry-constructed
+/// (remotely instantiated) model that has no constructor parameter to receive
+/// an injected clock — consults this override before falling back to
+/// `std::chrono::system_clock::now()`. This is the seam
+/// [datetime.md](../../docs/spec/util/datetime.md) describes for deterministic
+/// testing of time-dependent model behavior: a test fixes "now" once via
+/// `ScopedNowOverride` and every `DateTime::now()`/`Timestamp::now()` call for
+/// its lifetime — direct or from inside a model under test — observes the
+/// fixed instant. Thread-safe.
+///
+/// @warning @p clock must not throw (`DateTime::now()` is `noexcept` and calls
+/// it directly — an exception escaping @p clock terminates the process) and
+/// must not call `DateTime::now()`/`Timestamp::now()`, `setNowOverride`, or
+/// construct a `ScopedNowOverride` itself: `now()` holds a non-recursive mutex
+/// while invoking @p clock, so any of those self-deadlocks.
+/// @param clock Callable returning the instant `DateTime::now()` should report,
+///              or an empty `std::function` to clear the override (restore
+///              real wall-clock time).
+inline void setNowOverride(std::function<DateTime()> clock) {
+    auto& [mtx, slot] = detail::nowOverrideState();
+    std::scoped_lock const lock{mtx};
+    slot = std::move(clock);
+}
+
+/// @brief RAII helper that fixes `DateTime::now()` to a constant instant (or a
+///        custom callable) for its lifetime and restores the previous
+///        override on destruction.
+///
+/// Mirrors `morph::journal::ScopedActionLog` and `morph::log::ScopedLoggerOverride`
+/// — the same scoped-install-then-restore pattern used for the codebase's other
+/// process-wide override seams, so one test's fixed "now" never leaks into the
+/// next.
+///
+/// @code
+/// {
+///     morph::time::ScopedNowOverride guard{someFixedInstant};
+///     // ... DateTime::now()/Timestamp::now(), anywhere, return someFixedInstant ...
+/// }  // previous override (or real wall-clock time) restored here
+/// @endcode
+class ScopedNowOverride {
+public:
+    /// @brief Installs a clock that always returns @p fixedInstant.
+    /// @param fixedInstant The constant instant `DateTime::now()` should report for this scope.
+    explicit ScopedNowOverride(DateTime fixedInstant) : ScopedNowOverride{[fixedInstant] { return fixedInstant; }} {}
+
+    /// @brief Installs an arbitrary clock callable, saving whatever override was there before.
+    ///
+    /// @warning See `setNowOverride`'s warning: @p clock must not throw and must
+    /// not call `DateTime::now()`/`Timestamp::now()` or install another override.
+    /// @param clock Callable returning the instant `DateTime::now()` should report for this scope.
+    explicit ScopedNowOverride(std::function<DateTime()> clock) {
+        auto& [mtx, slot] = detail::nowOverrideState();
+        std::scoped_lock const lock{mtx};
+        _previous = std::move(slot);
+        slot = std::move(clock);
+    }
+
+    /// @brief Restores the saved override (or "no override", if none was installed before).
+    ~ScopedNowOverride() { setNowOverride(std::move(_previous)); }
+
+    ScopedNowOverride(const ScopedNowOverride&) = delete;
+    ScopedNowOverride& operator=(const ScopedNowOverride&) = delete;
+    ScopedNowOverride(ScopedNowOverride&&) = delete;
+    ScopedNowOverride& operator=(ScopedNowOverride&&) = delete;
+
+private:
+    std::function<DateTime()> _previous;
 };
 
 /// @brief An optionally-empty timestamp field.

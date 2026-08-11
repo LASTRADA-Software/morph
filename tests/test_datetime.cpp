@@ -214,6 +214,56 @@ TEST_CASE("Timestamp::EmptyStateAndWire", "[datetime][forms]") {
     CHECK_FALSE(restored.at.hasValue());
 }
 
+TEST_CASE("DateTime::NowOverride::FixedInstant", "[datetime]") {
+    auto const fixed = sample();
+    CHECK(DateTime::now() != fixed);  // sanity: real "now" is not the fixed sample
+
+    {
+        morph::time::ScopedNowOverride const guard{fixed};
+        CHECK(DateTime::now() == fixed);
+        CHECK(DateTime::now() == fixed);  // stable across repeated calls within the scope
+        CHECK(Timestamp::now().hasValue());
+        CHECK(*Timestamp::now() == fixed);  // Timestamp::now() delegates to DateTime::now()
+    }
+    // Restored after the guard's scope ends.
+    CHECK(DateTime::now() != fixed);
+}
+
+TEST_CASE("DateTime::NowOverride::CustomCallable", "[datetime]") {
+    int calls = 0;
+    auto const base = sample();
+    morph::time::ScopedNowOverride const guard{[&calls, base]() -> DateTime {
+        ++calls;
+        return base + std::chrono::seconds{calls};
+    }};
+    CHECK(DateTime::now() == base + std::chrono::seconds{1});
+    CHECK(DateTime::now() == base + std::chrono::seconds{2});
+    CHECK(calls == 2);
+}
+
+TEST_CASE("DateTime::NowOverride::NestedScopesRestoreInOrder", "[datetime]") {
+    auto const outer = sample();
+    auto const inner = sample() + std::chrono::hours{1};
+
+    morph::time::ScopedNowOverride const outerGuard{outer};
+    CHECK(DateTime::now() == outer);
+    {
+        morph::time::ScopedNowOverride const innerGuard{inner};
+        CHECK(DateTime::now() == inner);
+    }
+    // Inner guard's destruction restores the outer override, not real time.
+    CHECK(DateTime::now() == outer);
+}
+
+TEST_CASE("DateTime::NowOverride::SetAndClearDirectly", "[datetime]") {
+    auto const fixed = sample();
+    morph::time::setNowOverride([fixed] { return fixed; });
+    CHECK(DateTime::now() == fixed);
+
+    morph::time::setNowOverride(nullptr);
+    CHECK(DateTime::now() != fixed);
+}
+
 TEST_CASE("Timestamp::Difference", "[datetime][forms]") {
     auto const earlier = Timestamp{sample()};
     auto const later = Timestamp{sample() + std::chrono::minutes{5}};

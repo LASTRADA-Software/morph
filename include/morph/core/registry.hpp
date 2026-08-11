@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #pragma once
+#include <cassert>
 #include <concepts>
 #include <cstdint>
 #include <functional>
@@ -9,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 
@@ -346,9 +348,59 @@ private:
 class ModelRegistryFactory {
 public:
     /// @brief Registers a default-construction factory for `Model` under @p modelId.
+    ///
+    /// Equivalent to `registerModel<Model>(modelId, [] { return
+    /// ModelFactory::create<Model>(); })` — the plain default-construction path
+    /// every `BRIDGE_REGISTER_MODEL` invocation uses.
+    /// @param modelId String id to register the factory under.
     template <typename Model>
     void registerModel(std::string_view modelId) {
         _factories.insert_or_assign(std::string{modelId}, [] { return ModelFactory::create<Model>(); });
+    }
+
+    /// @brief Registers a custom construction hook for `Model` under @p modelId.
+    ///
+    /// The per-instance dependency-injection seam for registry-constructed
+    /// (`Socket`-mode / `RemoteServer`) models — the equivalent of
+    /// `Bridge::HandlerBinding::modelFactory` for the client-side `Local`-mode
+    /// path. @p factory runs once per incoming `"register"` message (and once
+    /// per fresh shared-instance creation) and may capture arbitrary
+    /// per-instance dependencies (an injectable clock, a secondary log handle,
+    /// a feature flag) that `Model`'s default constructor cannot reach — this
+    /// is also the seam a model whose only constructor takes arguments (i.e.
+    /// is not default-constructible at all) needs in order to be registered
+    /// for remote/socket instantiation in the first place.
+    ///
+    /// @p factory returns an owning pointer to a freshly built holder (e.g.
+    /// `std::make_unique<ModelHolder<Model>>(...)`), not a bare `Model` — the
+    /// caller controls construction end-to-end, including passing
+    /// constructor arguments `ModelHolder`'s forwarding constructor accepts.
+    /// This overload does **not** auto-attach the process-wide default action
+    /// log the way the default-construction overload does: a caller supplying
+    /// its own factory is assumed to attach whatever log/identity it needs
+    /// (via `IModelHolder::attachActionLog`) inside the closure, or to rely on
+    /// `RemoteServer`'s `LogProvider` doing so afterward, exactly as the
+    /// default path allows.
+    ///
+    /// @tparam Model   Concrete model type. Used only to assert (debug builds)
+    ///                 that @p factory's returned holder actually reports
+    ///                 `typeid(Model)` — @p factory is otherwise free to build
+    ///                 the holder however it likes, so nothing *prevents* a
+    ///                 mismatched `Model`/@p factory pairing at compile time.
+    /// @tparam Factory Callable returning an owning pointer convertible to
+    ///                 `std::unique_ptr<IModelHolder>`; deduced from @p factory.
+    /// @param modelId  String id to register the factory under.
+    /// @param factory  Callable that constructs and returns a fresh holder.
+    template <typename Model, typename Factory>
+        requires std::invocable<Factory> &&
+                 std::convertible_to<std::invoke_result_t<Factory>, std::unique_ptr<IModelHolder>>
+    void registerModel(std::string_view modelId, Factory factory) {
+        _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
+            std::unique_ptr<IModelHolder> holder{factory()};
+            assert(!holder || holder->type() == std::type_index(typeid(Model))
+                   && "registerModel<Model>(modelId, factory): factory returned a holder for a different type");
+            return holder;
+        });
     }
 
     /// @brief Creates a new model holder for the type registered under @p modelId.
