@@ -54,6 +54,14 @@ function(apply_warnings target)
         $<$<CXX_COMPILER_ID:GNU>:
             -Wall
             -Wextra
+            # GCC's -Wextra implies -Wmissing-field-initializers, which (unlike
+            # Clang's narrower -Wmissing-designated-field-initializers, already
+            # suppressed above for the identical reason) fires on every field a
+            # designated initializer leaves unset -- flagging the same
+            # deliberately-partial DTO/config-style construction
+            # (morph::session::Context{.principal = ...} and its many
+            # siblings) as a defect, one diagnostic per omitted field.
+            -Wno-missing-field-initializers
             -Wpedantic
             -Wshadow
             -Wnon-virtual-dtor
