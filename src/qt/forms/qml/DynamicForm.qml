@@ -10,6 +10,8 @@
 //   x-widget         -> control choice (textarea/slider/radio); unknown ids
 //                       and a missing key both fall back to the type default
 //   x-min/x-max/x-step -> slider track bounds + increment (Ranged fields)
+//   type: "array"    -> comma-separated-with-validation control; encodes to
+//                       a genuine JSON array literal, e.g. "a, b" -> ["a","b"]
 //   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
 //                       an explicit Submit button (enabled only while ready)
 //                       instead -- see "Explicit submit mode" below
@@ -211,6 +213,15 @@ Frame {
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
                     isInteger: types.indexOf("integer") !== -1,
+                    // "array" (glaze's std::vector<T> schema shape: {"type":
+                    // "array", "items": {...}}) -- a comma-separated-with-
+                    // validation control, not the plain text field's
+                    // fall-through (which would wrap the typed text as a
+                    // JSON *string*, not an array). Scoped to array-of-string
+                    // today; any other item type still renders this control
+                    // but each entry is encoded as a JSON string, same as an
+                    // array of strings, rather than silently misencoding.
+                    isArray: types.indexOf("array") !== -1,
                     required: required.indexOf(name) !== -1,
                     minimum: p.minimum,
                     maximum: p.maximum,
@@ -611,6 +622,23 @@ Frame {
         return (scaled.neg ? "-" : "") + padded.slice(0, -to.decimals) + "." + padded.slice(-to.decimals)
     }
 
+    // Encodes an "array"-typed field's comma-separated entry text as a
+    // genuine JSON array literal of strings -- e.g. "red, green, blue" ->
+    // ["red","green","blue"] -- never the JSON *string* the generic
+    // fallback (`JSON.stringify(text)`) would have produced. Splits on
+    // comma, trims surrounding whitespace off each entry, and drops empty
+    // entries (so "red,, green," -> ["red","green"], not ["red","","green",""]).
+    // An entry list that is blank or entirely empty after trimming (","," ,")
+    // returns "[]" -- a genuinely empty array is still a valid array
+    // literal, distinct from the field itself being unengaged (handled by
+    // fieldJsonLiteral's blank-text check before this is ever called).
+    function arrayJsonLiteral(text) {
+        const items = text.split(",")
+            .map(function (item) { return item.trim() })
+            .filter(function (item) { return item !== "" })
+        return JSON.stringify(items)
+    }
+
     // Encodes one field's current input text as the JSON literal morph
     // expects on the wire, applying the same per-kind syntax and bounds
     // checks as submission. Returns null when the field is blank or its
@@ -621,6 +649,9 @@ Frame {
         const text = (opt(fieldValues[f.name], "")).trim()
         if (text === "")
             return null
+        if (f.isArray) {
+            return arrayJsonLiteral(text)
+        }
         if (f.isChoice) {
             return text  // already a JSON literal (see the ComboBox's onActivated)
         }
@@ -1005,10 +1036,11 @@ Frame {
 
                 TextField {
                     id: entry
-                    objectName: "field_" + fieldColumn.modelData.name
+                    objectName: fieldColumn.modelData.isArray ? "" : "field_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null
                              && !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                              && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
+                             && !fieldColumn.modelData.isArray
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
                     placeholderText: fieldColumn.modelData.placeholder !== ""
@@ -1036,6 +1068,37 @@ Frame {
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
                                              + fieldColumn.modelData.description
+                }
+
+                // "array" (glaze's std::vector<T> schema shape) — a
+                // comma-separated-with-validation control: the typed text is
+                // split on comma, each entry trimmed, and encoded as a
+                // genuine JSON array literal by fieldJsonLiteral/
+                // arrayJsonLiteral, never wrapped as a JSON *string* the way
+                // the plain TextField's fallback would. Reuses the plain
+                // TextField's field_ objectName -- the two are mutually
+                // exclusive per field (isArray), so exactly one claims it.
+                TextField {
+                    id: arrayEntry
+                    objectName: fieldColumn.modelData.isArray ? "field_" + fieldColumn.modelData.name : ""
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isArray
+                    Layout.fillWidth: true
+                    readOnly: fieldColumn.modelData.readOnly
+                    placeholderText: fieldColumn.modelData.placeholder !== ""
+                                     ? fieldColumn.modelData.placeholder
+                                     : "comma-separated (e.g. red, green, blue)"
+                    onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    // Re-seed from the retained value whenever this delegate
+                    // is (re)created — see the plain TextField's comment
+                    // above for why (tab-switch destroys/rebuilds delegates).
+                    Component.onCompleted: form.withoutAutoSubmit(function() {
+                        arrayEntry.text = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                    })
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
+                                             + " Comma-separated list."
                 }
 
                 // x-widget: "textarea" (a Multiline field) — same wire string

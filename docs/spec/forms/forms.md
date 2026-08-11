@@ -607,6 +607,36 @@ being safely rendered by the shipped renderer; a schema that omits it (every
 existing schema, and any read-only query action) renders exactly as before —
 zero behavior change.
 
+### Array fields — `type: "array"`
+
+glaze emits `{"type": "array", "items": {...}}` for a `std::vector<T>`
+member, standard JSON-Schema vocabulary rather than an `x-*` extension. The
+shipped `DynamicForm.qml` renderer gives it a dedicated
+comma-separated-with-validation `TextField` control (`objectName: "field_" +
+name`, exactly like a scalar field's control — the two are mutually
+exclusive per field, so exactly one claims that name) instead of falling
+through to the plain-text control, whose fallback (`JSON.stringify(text)`)
+would wrap the typed text as a JSON *string*, not an array — a body the
+server's schema validation always rejects.
+
+Typed text is split on comma, each entry trimmed of surrounding whitespace,
+and empty entries dropped: `"red, green, blue"` → `["red","green","blue"]`,
+`"  red ,, green ,"` → `["red","green"]`. A field with today's scope —
+array-of-string — is fully supported; an `items` type other than `"string"`
+still renders this control and still encodes each comma-separated entry as a
+JSON string (not, e.g., a JSON number), so a `std::vector<int>` field is
+usable but not yet type-checked per element the way a scalar `Quantity`/
+integer field is. The submitted literal for a **fully-blank** array field
+follows the same blank-means-unengaged convention as every other field
+(`fieldJsonLiteral` returns `null` for empty/whitespace-only text), so an
+optional, untouched array field is omitted from the request body entirely
+rather than submitted as `[]`. Once the field holds *any* non-whitespace
+text, though — including a comma-only entry like `" , , "`, which is not
+blank by that check even though every individual entry is dropped — it
+encodes to a genuine empty array `[]`, not `null`; a `required` array field
+is satisfied by engagement (non-blank text), not by having at least one
+surviving entry.
+
 ### Versioning stance
 
 The emitted schema is **unversioned**. There is no `$id`, `$schema` version
@@ -629,7 +659,10 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
   resolution/dual-read, the exact rational digit arithmetic, the unit
   selector, the required-field submit gate, the options-fetch, layout/
   grouping into sections/tabs, the widget-hint controls — textarea, slider,
-  radio group — and the localisation dual-read), `DateTimePicker.qml` (manual
+  radio group — the comma-separated-with-validation `"array"`-typed field
+  control (see [Array fields](#array-fields--type-array)), the explicit
+  submit mode (see [Explicit submit mode](#explicit-submit-mode--x-submitmode)),
+  and the localisation dual-read), `DateTimePicker.qml` (manual
   ISO-8601 entry plus a calendar/time popup), `SlotRegistry.qml` (below), and
   `I18nCatalog.hpp`/`.cpp` (a `QObject`/`QML_ELEMENT` in-memory
   `TranslationProvider` realization — see
