@@ -44,6 +44,11 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
         if (_connectHandler) {
             _connectHandler();
         }
+        // Send every registerModelAsync request that arrived before this
+        // connect (the first connect included) -- see issue #54. Runs before
+        // the reconnect handler below so a caller that gates UI on
+        // onRegistered sees it fire promptly on first connect too.
+        flushQueuedRegistrations();
         // Fire the reconnect handler only on subsequent connects, never on the
         // first one — initial registration is handled by the BridgeHandler ctors.
         if (isReconnect && _reconnectHandler) {
@@ -161,9 +166,27 @@ bool QtWebSocketBackend::registerModelAsync(
         return false;
     }
     if (!_connected) {
-        onError("disconnected");
+        // Queue rather than fail: this is exactly the ordering a
+        // single-threaded WASM client must use, since it can never block
+        // waiting for the connection to settle (see issue #54). The queued
+        // request is sent -- with a call-id assigned then, not now -- the
+        // moment `connected` fires next (first connect included), from
+        // flushQueuedRegistrations(). No call-id is assigned yet; if the
+        // backend is torn down (or the socket disconnects) before that
+        // happens, cancelPending() drains this queue too and still invokes
+        // onError exactly once.
+        std::scoped_lock const lock{_pendingMtx};
+        _queuedRegistrations.push_back(
+            QueuedRegistration{typeId, std::string{contextKey}, std::move(onRegistered), std::move(onError)});
         return true;
     }
+    sendRegisterAsync(typeId, contextKey, std::move(onRegistered), std::move(onError));
+    return true;
+}
+
+void QtWebSocketBackend::sendRegisterAsync(const std::string& typeId, std::string_view contextKey,
+                                           std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                           std::function<void(const std::string&)> onError) {
     uint64_t const callId = ++_nextCallId;
     {
         std::scoped_lock const lock{_pendingMtx};
@@ -172,7 +195,17 @@ bool QtWebSocketBackend::registerModelAsync(
     auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
     env.callId = callId;
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
-    return true;
+}
+
+void QtWebSocketBackend::flushQueuedRegistrations() {
+    std::vector<QueuedRegistration> queued;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        queued.swap(_queuedRegistrations);
+    }
+    for (auto& entry : queued) {
+        sendRegisterAsync(entry.typeId, entry.contextKey, std::move(entry.onRegistered), std::move(entry.onError));
+    }
 }
 
 ::morph::wire::ProtocolNegotiationResult QtWebSocketBackend::negotiateProtocolVersion() {
@@ -237,6 +270,32 @@ void QtWebSocketBackend::assignPrimary(::morph::exec::detail::ModelId mid, const
         sendSync(::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v))), "assign");
 }
 
+bool QtWebSocketBackend::assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                                            std::string_view primary,
+                                            std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                            std::function<void(const std::string&)> onError) {
+    if (primary.empty() || mid.v == 0U) {
+        // Same no-op contract as the synchronous assignPrimary: nothing to
+        // promote. Resolve onRegistered as a no-op success, echoing mid back,
+        // rather than treating it as a failure.
+        onRegistered(mid);
+        return true;
+    }
+    if (!_connected) {
+        onError("disconnected");
+        return true;
+    }
+    uint64_t const callId = ++_nextCallId;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        _pendingAssigns[callId] = PendingAssign{std::move(onRegistered), std::move(onError)};
+    }
+    auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
+    env.callId = callId;
+    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
+    return true;
+}
+
 std::vector<std::string> QtWebSocketBackend::listInstances(const std::string& typeId) {
     auto reply = ::morph::wire::decode(sendSync(::morph::wire::encode(::morph::wire::makeInstances(typeId))));
     if (reply.kind != "ok") {
@@ -253,9 +312,24 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     // Fire-and-forget — avoids a nested QEventLoop during destructor which can
     // trigger Qt asserts. The server does no connection-scoped cleanup, so an
     // undelivered deregister leaves the model registered there indefinitely.
-    if (_connected) {
-        _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(::morph::wire::makeDeregister(mid.v))));
+    if (!_connected) {
+        return;
     }
+    // A real, non-zero callId (issue #65): callId == 0 is the wire's
+    // "parked sendSync waiter" sentinel, and this request's reply -- though
+    // nobody waits on it -- would otherwise be indistinguishable from one a
+    // synchronous register/attach/assign/instances call is genuinely parked
+    // on. Tracked in _pendingDeregisters purely so onTextMessage can
+    // recognise and drop it explicitly instead of routing it to whichever
+    // sendSync loop happens to be parked when it arrives.
+    uint64_t const callId = ++_nextCallId;
+    {
+        std::scoped_lock const lock{_pendingMtx};
+        _pendingDeregisters.insert(callId);
+    }
+    auto env = ::morph::wire::makeDeregister(mid.v);
+    env.callId = callId;
+    _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
 }
 
 ::morph::async::Completion<std::shared_ptr<void>> QtWebSocketBackend::execute(
@@ -290,10 +364,17 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
 void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
     std::unordered_map<uint64_t, PendingExecute> drainedExecutes;
     std::unordered_map<uint64_t, PendingRegistration> drainedRegistrations;
+    std::vector<QueuedRegistration> drainedQueue;
+    std::unordered_map<uint64_t, PendingAssign> drainedAssigns;
     {
         std::scoped_lock lock{_pendingMtx};
         drainedExecutes.swap(_pending);
         drainedRegistrations.swap(_pendingRegistrations);
+        drainedQueue.swap(_queuedRegistrations);
+        drainedAssigns.swap(_pendingAssigns);
+        // _pendingDeregisters tracks fire-and-forget requests nobody awaits --
+        // just drop the bookkeeping, there is no callback to invoke.
+        _pendingDeregisters.clear();
     }
     for (auto& [_, pending] : drainedExecutes) {
         if (pending.state) {
@@ -309,6 +390,22 @@ void QtWebSocketBackend::cancelPending(const std::exception_ptr& exc) {
         // Non-std::exception thrown in: keep the "disconnected" fallback above.
     }
     for (auto& [_, pending] : drainedRegistrations) {
+        if (pending.onError) {
+            pending.onError(message);
+        }
+    }
+    // A registerModelAsync request queued while the socket had never yet
+    // connected (issue #54) never got a call-id, so it cannot be found in
+    // _pendingRegistrations above -- drain it here instead, on the same
+    // cancelPending path that already handles a connection that goes away
+    // (or never comes up) before a queued reply, so its onError still fires
+    // exactly once rather than leaving the caller waiting forever.
+    for (auto& entry : drainedQueue) {
+        if (entry.onError) {
+            entry.onError(message);
+        }
+    }
+    for (auto& [_, pending] : drainedAssigns) {
         if (pending.onError) {
             pending.onError(message);
         }
@@ -415,10 +512,45 @@ void QtWebSocketBackend::onTextMessage(const QString& message) {
             } else {
                 regPending.onError(env.message);
             }
+            return;
         }
-        // Neither map matched: an already-resolved or already-cancelled
-        // callId's late reply, dropped silently -- same as before this
-        // feature for an execute reply.
+
+        PendingAssign assignPending;
+        bool foundAssign = false;
+        {
+            std::scoped_lock lock{_pendingMtx};
+            auto iter = _pendingAssigns.find(env.callId);
+            if (iter != _pendingAssigns.end()) {
+                assignPending = std::move(iter->second);
+                _pendingAssigns.erase(iter);
+                foundAssign = true;
+            }
+        }
+        if (foundAssign) {
+            if (env.kind == "ok") {
+                assignPending.onRegistered(::morph::exec::detail::ModelId{env.modelId});
+            } else {
+                assignPending.onError(env.message);
+            }
+            return;
+        }
+
+        {
+            // A fire-and-forget deregister's reply (see issue #65): assigned a
+            // real callId purely so it lands here instead of falling through
+            // to the callId==0 branch below and being handed to whichever
+            // sendSync waiter happens to be parked. Nobody observes the
+            // reply either way -- ok or err, drop it.
+            std::scoped_lock lock{_pendingMtx};
+            auto iter = _pendingDeregisters.find(env.callId);
+            if (iter != _pendingDeregisters.end()) {
+                _pendingDeregisters.erase(iter);
+                return;
+            }
+        }
+        // No map matched: an already-resolved or already-cancelled callId's
+        // late reply, dropped silently -- same as before this feature for an
+        // execute reply.
         return;
     }
 
