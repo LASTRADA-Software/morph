@@ -83,26 +83,33 @@ those `err` messages.
 ## Orphan logging and single-shot callbacks
 
 `CompletionState<T>` (see `completion.hpp`) protects a value slot, an
-`std::exception_ptr error` slot, two callback slots (`onOk` / `onErr`), and an
-`onErrAttached` flag, all under one mutex. The `cbExec` pointer is *not* mutex-
-guarded: it is set once in the `Completion` constructor, before any concurrency,
-and read unlocked thereafter (as `callback != nullptr && cbExec != nullptr`
-outside the critical section).
+`std::exception_ptr error` slot, two callback lists (`onOk` / `onErr`, each a
+`std::vector`), and an `onErrAttached` flag, all under one mutex. The `cbExec`
+pointer is *not* mutex-guarded: it is set once in the `Completion` constructor,
+before any concurrency, and read unlocked thereafter (as
+`callback != nullptr && cbExec != nullptr` outside the critical section).
 
-**Single-shot, last-writer-wins.** `then()` and `onError()` each register at
-most one handler:
+**Single-shot result, composing callbacks.** The *result* (value or error) is
+single-shot — `setValue`/`setException` are no-ops once `ready`. But `then()`
+and `onError()` each **compose**: every handler attached while the state is not
+yet ready is kept and fires, in attachment order, when the result lands. This
+was fixed under issue #59 — `onOk`/`onErr` used to be single fields, so a
+second `onError()` on the same still-pending `Completion` silently discarded
+the first handler (and, because `onErrAttached` was still set from that second
+call, suppressed the orphan logger too — losing the error entirely, not just
+misdelivering it).
 
 | Situation | Behavior |
 |---|---|
-| `then` registered before ready | Stored in `onOk`, fired when `setValue` lands |
-| `then` on an already-value state | Fired immediately (posted to `cbExec`) |
+| `then` registered before ready | Appended to `onOk`; every stored handler fires, in order, when `setValue` lands |
+| `then` on an already-value state | Fired immediately (posted to `cbExec`), for that one handler only |
 | `then` on an already-**error** state | Silent no-op — no success value exists |
-| `onError` registered before ready | Stored in `onErr`, fired when `setException` lands |
-| `onError` on an already-**error** state | Fired immediately (posted to `cbExec`) |
+| `onError` registered before ready | Appended to `onErr`; every stored handler fires, in order, when `setException` lands |
+| `onError` on an already-**error** state | Fired immediately (posted to `cbExec`), for that one handler only |
 | `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again). **What it delivers depends on how the value was first consumed:** if a `then` was attached *before* the state settled, `setValue` moved the value out of the still-engaged slot, so the re-fire copies a **moved-from** value (e.g. an empty `shared_ptr` on the backend path); only when every `then` was attached *after* settling does each receive a copy of the original value |
-| Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path) |
-| Second `then`/`onError` registered **before** ready | Overwrites the stored `onOk`/`onErr` slot; the last handler registered before the state settles is the one that fires |
+| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again, this handler only). **What it delivers depends on how the value was first consumed:** if any `then` was attached *before* the state settled, `setValue` copied the value into every handler but the last and moved it only into the final one — the stored `value` itself is untouched by that dispatch, so a later `attachThen` fire-now still reads an intact `*value` and gets a fresh copy |
+| Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path, this handler only) |
+| Second `then`/`onError` registered **before** ready | Appended alongside the first — both fire when the result lands, in attachment order; neither is discarded |
 
 **Orphan logging.** If a `Completion` is destroyed while its state holds an
 unhandled error, `~CompletionState` logs it through `morph::log::logError`:

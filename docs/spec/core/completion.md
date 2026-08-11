@@ -35,50 +35,65 @@ guarded by `std::mutex mtx`.
 | `value` | `std::optional<T>` | The success value, set once |
 | `error` | `std::exception_ptr` | The error, set once via `setException` |
 | `ready` | `bool` | `true` once either `value` or `error` is set |
-| `onOk` | `std::function<void(T)>` | Stored success callback, moved out on dispatch |
-| `onErr` | `std::function<void(std::exception_ptr)>` | Stored error callback, moved out on dispatch |
+| `onOk` | `std::vector<std::function<void(T)>>` | Stored success callbacks, in attachment order; moved out on dispatch |
+| `onErr` | `std::vector<std::function<void(std::exception_ptr)>>` | Stored error callbacks, in attachment order; moved out on dispatch |
 | `onErrAttached` | `bool` | Suppresses orphan logging when `true`; set to `(cbExec != nullptr)` — never set on a null-executor state |
 | `cbExec` | `::morph::exec::IExecutor*` | Executor for callback dispatch; may be `nullptr` |
 
 **Setting a value or exception.** `setValue(T)` and `setException(exception_ptr)`
 are called by the producer. If the state is already `ready`, the call is a no-op
-(only the first result wins). When a callback is already registered (via
-`attachThen` / `attachOnError`), a fire-once closure is built under the lock and
-posted to the executor outside the lock, so the callback never runs under the
-mutex. The closure is posted only when `cbExec != nullptr`; with a null executor
-it is built but never delivered.
+(only the first result wins). When one or more callbacks are already registered
+(via `attachThen` / `attachOnError`), a fire-once closure invoking every
+registered callback, in attachment order, is built under the lock and posted to
+the executor outside the lock, so no callback ever runs under the mutex. The
+closure is posted only when `cbExec != nullptr`; with a null executor it is
+built but never delivered. Each individual handler invocation inside that
+closure is wrapped in its own `try { ... } catch (...) { logError(...); }`, so a
+throwing handler is logged and skipped without preventing the handlers attached
+after it from running — fan-out means every attached handler gets its turn,
+independent of an earlier one misbehaving.
 
 `setException` additionally sets `onErrAttached = (cbExec != nullptr)` — but
-only along the branch where an `onErr` handler was already registered. It marks
-the error handled (suppressing the orphan logger) **only when an executor exists
-to actually deliver it**. With a null executor the handler is present but the
-closure is never posted, so `onErrAttached` stays `false` and the abandoned
-error still reaches the destructor's orphan logger rather than vanishing
-silently.
+only along the branch where at least one `onErr` handler was already
+registered. It marks the error handled (suppressing the orphan logger) **only
+when an executor exists to actually deliver it**. With a null executor the
+handlers are present but the closure is never posted, so `onErrAttached` stays
+`false` and the abandoned error still reaches the destructor's orphan logger
+rather than vanishing silently.
 
-**Attaching callbacks.** `attachThen(handler)` and `attachOnError(handler)` are
-called by `Completion::then()` / `onError()`. If the state is already ready with
-the corresponding kind of result (value for `then`, exception for `onError`), a
-fire-now closure is built and posted to the executor. Otherwise, if the state is
-not yet ready, the handler is stored in `onOk` / `onErr` for later dispatch. If
-the state is already ready with the *opposite* kind of result (e.g. `attachThen`
-on an error state, or `attachOnError` on a value state), neither branch runs: no
-closure is built and no handler is stored — the attach is a silent no-op.
+**Attaching callbacks — composes, does not overwrite.** `attachThen(handler)`
+and `attachOnError(handler)` are called by `Completion::then()` / `onError()`.
+If the state is already ready with the corresponding kind of result (value for
+`then`, exception for `onError`), a fire-now closure for *this* handler is built
+and posted to the executor immediately (this handler alone — earlier handlers,
+if any, already fired when the state became ready, or will each fire from their
+own immediate call). Otherwise, if the state is not yet ready, the handler is
+appended to `onOk` / `onErr` — **every** handler attached while the state is
+still pending is kept, not just the most recent one. When the result finally
+arrives, `setValue`/`setException` invokes all of them, in the order they were
+attached, from one posted closure. If the state is already ready with the
+*opposite* kind of result (e.g. `attachThen` on an error state, or
+`attachOnError` on a value state), neither branch runs: no closure is built and
+no handler is stored — the attach is a silent no-op, for that call only (it does
+not affect any other handler already stored).
 
 **Copy vs. move of the value on dispatch.** The two dispatch paths handle the
 stored value differently, and the difference is observable:
 
-- *Set-after-attach* (`setValue` finds an already-registered `onOk`): the value
-  is **moved** out of `value` into the closure (`std::move(*value)`). After
-  dispatch, `value` holds a moved-from `T`.
+- *Set-after-attach* (`setValue` finds one or more already-registered `onOk`
+  handlers): every handler but the last is invoked with a **copy** of the
+  value; only the final handler in attachment order receives it **moved**
+  (`std::move(savedVal)`). After dispatch, `value` itself holds a moved-from
+  `T` only if a subsequent `attachThen()` re-attach reads it (see below) — the
+  in-flight closure's own copies are unaffected by that.
 - *Attach-after-ready* (`attachThen` fires now against a settled value): the
   value is **copied** (`savedVal = *value`), leaving `value` intact.
 
 The fire-now copy is what makes a repeated `then()` on an already-settled value
 state fire again with the same result (see [Failure modes](#failure-modes)); a
 move there would hand the second handler a moved-from value. Errors have no such
-asymmetry — an `exception_ptr` is cheap to copy and is copied on both paths, so
-`error` is never emptied.
+asymmetry — an `exception_ptr` is cheap to copy and is copied for every handler
+on both paths, so `error` is never emptied.
 
 `attachOnError` sets `onErrAttached = (cbExec != nullptr)` unconditionally on
 entry, before inspecting the state. So attaching an error handler on a
@@ -163,40 +178,47 @@ structural (construct-then-share), not enforced at runtime.
 
 ## Failure modes
 
-These are the sharp edges of the single-shot, single-consumer design. None of
-them raise or throw — they are silent by construction.
+These are the sharp edges of the single-shot design. None of them raise or
+throw — they are silent by construction.
 
-- **Last-writer-wins callback slots.** Each state has exactly one `onOk` slot
-  and one `onErr` slot. A second `then()` overwrites the first success handler
-  (`onOk = std::move(handler)`); a second `onError()` overwrites the first error
-  handler. Only one handler per outcome survives, and it is the most recent one
-  registered *while the state was not yet ready*. There is no fan-out to
-  multiple consumers.
+- **Fan-out on attach, not overwrite.** Each state holds a `std::vector` of
+  success handlers (`onOk`) and a `std::vector` of error handlers (`onErr`). A
+  second, third, ... `then()` (or `onError()`) attached while the state is not
+  yet ready is *appended*, not swapped in — every handler attached before
+  readiness runs when the result arrives, in the order it was attached. This
+  closes the earlier "last-writer-wins" foot-gun (issue #59), where a second
+  `onError()` on the same still-pending `Completion` silently discarded the
+  first handler and, because `onErrAttached` was still set, suppressed the
+  orphan logger too — losing the error's diagnostic entirely.
 
 - **Mismatched attach on a ready state is a silent no-op.** `then()` on a state
   that is already `ready` with an *error* does nothing — no closure, no stored
   handler, no error surfaced to the `then` handler. Symmetrically, `onError()`
   on a state that is already `ready` with a *value* does nothing. Only an
   attach that matches the settled outcome (or precedes readiness) has any
-  effect.
+  effect. This is per-call: it never removes or otherwise disturbs any handler
+  already stored from an earlier, matching attach.
 
-- **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, an
-  attached or pending error handler is never delivered — there is no executor to
-  post it on. Crucially, `onErrAttached` is left `false` in that case (it is set
-  to `(cbExec != nullptr)`), so the abandoned error still reaches the
+- **Null-executor error drop, but no silencing.** With `cbExec == nullptr`, any
+  attached or pending error handlers are never delivered — there is no executor
+  to post them on. Crucially, `onErrAttached` is left `false` in that case (it
+  is set to `(cbExec != nullptr)`), so the abandoned error still reaches the
   destructor's orphan logger. The error is *undelivered* but never *lost*: it
   surfaces as an `[orphan]` log line instead. (A null-executor **value** is
   simply dropped with no diagnostic — only errors have orphan logging.)
 
-- **Overwriting a delivered handler has no effect.** Once a handler has fired
-  (its slot was moved out on dispatch), re-registering is governed by the rules
-  above against the now-`ready` state — i.e. a matching-outcome re-attach fires
-  again with the settled result, a mismatched one is a no-op. A re-attached
-  `then` fires with a *copy* of the value (the fire-now path copies; see
-  [Shared state](#shared-state--completionstatet)), so the value is not consumed
-  by the first fire-now dispatch. If the value was instead delivered via the
-  set-after-attach path (moved out), a subsequent `then()` re-attach still fires,
-  but against the now moved-from `value`.
+- **Attaching after delivery re-fires against the settled state.** Once every
+  stored handler has fired (the vector was moved out on dispatch), a further
+  `then()`/`onError()` call is governed by the rules above against the
+  now-`ready` state — i.e. a matching-outcome attach fires immediately with the
+  settled result, a mismatched one is a no-op. A late `then()` fires with a
+  *copy* of the value (the fire-now path copies; see
+  [Shared state](#shared-state--completionstatet)), so the value is not
+  consumed by any fire-now dispatch. If the value was instead delivered via the
+  set-after-attach path (the *last* stored handler received it moved), a
+  subsequent `then()` attach still fires, but against the now moved-from
+  `value` — since `attachThen`'s fire-now path reads `*value` directly, not
+  from the (already-emptied) handler vector.
 
 ## Empty state
 
@@ -225,10 +247,10 @@ that will never signal.
 
 | Member | Signature | Notes |
 |---|---|---|
-| `setValue(T)` | `void setValue(T)` | Producer-side; no-op if already ready. Posts callback if one was registered. |
-| `setException(exception_ptr)` | `void setException(std::exception_ptr const&)` | Producer-side; no-op if already ready. Posts callback if one was registered. |
-| `attachThen(function<void(T)>)` | `void attachThen(std::function<void(T)>)` | Consumer-side; fires immediately if ready with value, stores otherwise. |
-| `attachOnError(function<void(exception_ptr)>)` | `void attachOnError(std::function<void(std::exception_ptr)>)` | Consumer-side; fires immediately if ready with error, stores if not yet ready, no-op if ready with a value. Sets `onErrAttached = (cbExec != nullptr)`, so orphan logging is suppressed only when an executor exists to deliver on. |
+| `setValue(T)` | `void setValue(T)` | Producer-side; no-op if already ready. Posts one closure invoking every registered success handler, in attachment order, if any were registered. |
+| `setException(exception_ptr)` | `void setException(std::exception_ptr const&)` | Producer-side; no-op if already ready. Posts one closure invoking every registered error handler, in attachment order, if any were registered. |
+| `attachThen(function<void(T)>)` | `void attachThen(std::function<void(T)>)` | Consumer-side; fires immediately (this handler only) if ready with value, else appends to the stored handler list. |
+| `attachOnError(function<void(exception_ptr)>)` | `void attachOnError(std::function<void(std::exception_ptr)>)` | Consumer-side; fires immediately (this handler only) if ready with error, appends to the stored handler list if not yet ready, no-op if ready with a value. Sets `onErrAttached = (cbExec != nullptr)`, so orphan logging is suppressed only when an executor exists to deliver on. |
 | destructor | `~CompletionState()` | Orphan-detection: logs unhandled exceptions when destroyed with an error and no `onErr` attached. |
 
 ## Design decisions
@@ -242,7 +264,9 @@ that will never signal.
 | First-result-wins | **`setValue`/`setException` are no-ops after `ready`** | An asynchronous operation should complete exactly once; subsequent calls are silently ignored. |
 | Move-only handle | **`Completion` is move-only, `CompletionState` is shared via `shared_ptr`** | The handle is owned by one consumer at a time; the shared state is owned jointly by the producer and any consumer that has moved the handle. |
 | Empty completion | **Null state pointer makes `then`/`onError` no-ops** | Default-constructed `Completion` is a safe placeholder that never signals. |
-| Value copy on fire-now | **`attachThen` copies `*value`; `setValue` moves it into the closure** | The set-after-attach path moves because the value is consumed exactly once. The attach-after-ready path must copy so `value` stays intact and a repeated `then()` on a settled state can still fire with the result. |
+| Value copy on fire-now | **`attachThen` copies `*value`; `setValue` moves it only into the last handler's invocation** | The set-after-attach path copies the value into every handler but the last (moving only into the final call), so no earlier handler observes a moved-from value and the value is still consumed exactly once overall. The attach-after-ready path must copy so `value` stays intact and a repeated `then()` on a settled state can still fire with the result. |
+| Handler fan-out | **`onOk`/`onErr` are `std::vector`s, appended to on each attach** | Fixes issue #59: a second `onError()` (or `then()`) on the same still-pending `Completion` used to silently replace the first handler in a single-slot field. Composing (invoking every attached handler, in order) matches the mental model of an observer list and is what most call sites composing behavior via repeated attach actually expect. |
+| Per-handler exception isolation | **Each composed handler invocation is wrapped in its own `try`/`catch (...)`, logged via `logError` and swallowed** | Fan-out means every attached handler should get its turn regardless of what an earlier one does. Without per-handler isolation, one throwing handler would unwind the whole posted closure and silently skip every handler attached after it — turning a single misbehaving consumer into an outage for unrelated ones sharing the same `Completion`. |
 
 ## Limitations
 
@@ -259,10 +283,14 @@ future/promise or a monadic async type. Its scope is narrow by design:
   promise/awaiter machinery. Consumption is callback-only.
 - **No cancellation.** There is no handle to cancel an outstanding operation;
   once started, it runs to completion (or is abandoned).
-- **Single consumer, one handler per outcome.** The handle is move-only and each
-  state has exactly one `onOk` and one `onErr` slot. There is no multicast /
-  fan-out; a later registration overwrites an earlier one (see
-  [Failure modes](#failure-modes)).
+- **Single consumer handle, but multiple handlers per outcome.** The
+  `Completion<T>` handle itself is move-only — only one owner at a time — but
+  each state's `onOk`/`onErr` are vectors, so repeated `then()`/`onError()`
+  calls on the same handle (or the `Completion&` it returns for chaining) all
+  compose: every handler attached before readiness runs, in attachment order
+  (see [Failure modes](#failure-modes)). This is in-process fan-out to
+  multiple callbacks on one handle, not multicast to multiple *handles* — there
+  is still only one `Completion<T>` per operation.
 - **No synchronous blocking.** There is no `wait()` or `get()`.
 
 **Orphan logging fires from `~CompletionState`, not from handle destruction.**

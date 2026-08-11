@@ -81,7 +81,7 @@ TEST_CASE("CompletionState: setValue with no executor does not post callback", "
     state->cbExec = nullptr;
 
     bool fired = false;
-    state->onOk = [&](int) { fired = true; };
+    state->onOk.push_back([&](int) { fired = true; });
     state->setValue(3);
     REQUIRE_FALSE(fired);
 }
@@ -184,7 +184,7 @@ void exerciseSetValueBranches(const T& sampleValue, morph::exec::IExecutor& exec
 
     // onOk attached but cbExec nullptr → cbExec null short-circuit arm in line 43.
     auto stateNoExec = std::make_shared<detail::CompletionState<T>>();
-    stateNoExec->onOk = [](const T&) {};
+    stateNoExec->onOk.push_back([](const T&) {});
     stateNoExec->setValue(T{sampleValue});
     REQUIRE(stateNoExec->ready);
 }
@@ -228,7 +228,7 @@ void exerciseSetExceptionBranches(morph::exec::IExecutor& exec) {
 
     // onErr set but cbExec nullptr → cbExec null short-circuit arm in line 60.
     auto stateNoExec = std::make_shared<detail::CompletionState<T>>();
-    stateNoExec->onErr = [](const std::exception_ptr&) {};
+    stateNoExec->onErr.push_back([](const std::exception_ptr&) {});
     stateNoExec->setException(std::make_exception_ptr(std::runtime_error{"err"}));
 }
 

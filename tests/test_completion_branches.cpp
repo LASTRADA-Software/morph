@@ -27,7 +27,7 @@ TEST_CASE("CompletionState: setException with no executor does not post callback
     auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
     state->cbExec = nullptr;
     bool fired = false;
-    state->onErr = [&](const std::exception_ptr&) { fired = true; };
+    state->onErr.push_back([&](const std::exception_ptr&) { fired = true; });
     state->setException(std::make_exception_ptr(std::runtime_error{"no-exec"}));
     REQUIRE_FALSE(fired);
     REQUIRE(state->ready);
