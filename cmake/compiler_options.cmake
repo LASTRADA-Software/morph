@@ -84,12 +84,31 @@ function(apply_warnings target)
             -Wno-pre-c++17-compat-pedantic
             -Wno-pre-c++20-compat
             -Wno-pre-c++20-compat-pedantic
+            # -Wc++20-compat is the sibling of -Wpre-c++20-compat for a
+            # narrower set of syntax (consteval, implicit `typename` in alias
+            # templates) that only some Clang builds separate out from the
+            # pre-c++20-compat umbrella above — same "we target C++23"
+            # rationale, added once the WASM leg's Emscripten-bundled clang
+            # (older than the Linux/Windows clang this project otherwise
+            # builds with) was the first to actually split it out and fire it
+            # on model_key.hpp/quantity.hpp/forms.hpp/bridge.hpp.
+            -Wno-c++20-compat
             # (b) Inherent to a header-only, templated library.
             -Wno-weak-vtables               # vtable emitted per TU for inline-virtual classes
             -Wno-ctad-maybe-unsupported     # CTAD on types without explicit deduction guides
             -Wno-padded                     # struct tail/inter-member padding
             -Wno-exit-time-destructors      # function-local statics with non-trivial dtors
             -Wno-global-constructors        # non-trivial namespace-scope initializers
+            # Emscripten's sysroot stdio.h defines `#define stderr (stderr)`
+            # (a legal, intentional self-referential object-like macro used
+            # to make `stderr` a valid preprocessor token while still
+            # resolving to the libc symbol) -- logger.hpp's
+            # std::println(stderr, ...) call trips -Wdisabled-macro-expansion
+            # on that expansion. Not fixable in logger.hpp itself: the macro
+            # is the *platform's*, not this codebase's, and every other
+            # target's libc either doesn't define stderr as a macro at all or
+            # doesn't self-reference it this way.
+            -Wno-disabled-macro-expansion
             # (c) Stylistic / opinionated noise, not defects.
             -Wno-missing-noreturn
             $<$<BOOL:${MORPH_CLANG_HAS_WNO_NRVO}>:-Wno-nrvo>  # not eliding a trivial-type copy on return
