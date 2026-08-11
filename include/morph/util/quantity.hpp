@@ -1030,6 +1030,36 @@ struct NamedQuantity : Quantity<U> {
     [[nodiscard]] static NamedQuantity fromDouble(double raw) { return NamedQuantity{Base::fromDouble(raw)}; }
 };
 
+/// @brief Renders @p quantity as value + unit (`5.2kW`, `N/A%`) — the same
+///        text `std::format("{}", quantity)` produces via the `std::formatter`
+///        specialization just below, exposed as a plain function so a caller
+///        can render a `Quantity` without going through `std::format` itself.
+///
+/// Exists because Emscripten's bundled libc++ (older than the Linux/Windows
+/// standard library this project otherwise builds against — see
+/// `.github/workflows/wasm-ladder.yml`'s `EMSDK_VERSION`) has a known
+/// limitation recognising `std::formatter` partial specializations
+/// parameterized over an `auto` non-type template parameter (`U` here) for
+/// `std::format`'s compile-time formattability check — `std::format("{}",
+/// someQuantity)` fails to compile there with "the supplied type is not
+/// formattable" even though the specialization is valid and the identical
+/// call compiles and runs correctly on every other toolchain this project
+/// targets. `toString()` bypasses that check entirely: it calls the same
+/// underlying logic directly instead of through `std::format`'s trait
+/// machinery, so it works identically everywhere, WASM included.
+/// @tparam U   Unit enumerator.
+/// @tparam Dec Declared decimals.
+/// @param quantity The value to render.
+/// @return The formatted text.
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] inline std::string toString(const Quantity<U, Dec>& quantity) {
+    constexpr auto display = UnitTraits<decltype(U)>::meta(U).display;
+    if (quantity.value()) {
+        return detail::formatRationalDecimal(*quantity.value()) + std::string{display};
+    }
+    return "N/A" + std::string{display};
+}
+
 }  // namespace morph::units
 
 #if MORPH_QUANTITY_PROVENANCE
@@ -1037,6 +1067,7 @@ struct NamedQuantity : Quantity<U> {
 #endif
 
 /// @brief Renders value + unit (`5.2kW`, `N/A%`); no `operator<<` is provided.
+///        Delegates to `morph::units::toString` so the two never drift.
 /// @tparam U   Unit enumerator.
 /// @tparam Dec Declared decimals.
 template <auto U, std::uint32_t Dec>
@@ -1051,12 +1082,7 @@ struct std::formatter<morph::units::Quantity<U, Dec>> {
     /// @param ctx      Format context.
     /// @return Output iterator past the written text.
     auto format(const morph::units::Quantity<U, Dec>& quantity, std::format_context& ctx) const {
-        constexpr auto display = morph::units::UnitTraits<decltype(U)>::meta(U).display;
-        if (quantity.value()) {
-            return std::format_to(ctx.out(), "{}{}", morph::units::detail::formatRationalDecimal(*quantity.value()),
-                                  display);
-        }
-        return std::format_to(ctx.out(), "N/A{}", display);
+        return std::format_to(ctx.out(), "{}", morph::units::toString(quantity));
     }
 };
 
