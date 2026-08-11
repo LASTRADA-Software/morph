@@ -10,6 +10,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Global, build-wide: the Lightweight ORM (fetched into examples/common's
+# ladder testkit and examples/bank) includes <Windows.h> from SqlStatement.hpp
+# with no NOMINMAX/WIN32_LEAN_AND_MEAN guard of its own, so its `min`/`max`
+# macros leak into every translation unit that (transitively) includes it and
+# break any later std::min/std::max/std::numeric_limits<T>::min() call in the
+# same TU (e.g. examples/common/clock.hpp). Defined here, before any
+# subdirectory is added, so it reaches every target that could end up in such
+# a TU, not just the ones that call apply_warnings().
+if(WIN32)
+    add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
+endif()
+
 option(MORPH_BUILD_TESTS         "Build tests"         ON)
 option(MORPH_BUILD_EXAMPLES      "Build examples"      ON)
 option(MORPH_BUILD_BANK_EXAMPLE  "Build the SQLite/Lightweight bank example (heavy deps)" OFF)
