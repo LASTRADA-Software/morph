@@ -77,6 +77,31 @@ TEST_CASE("morph::async::Completion on_error does not fire on value", "[completi
     REQUIRE_FALSE(errorFired);
 }
 
+TEST_CASE("morph::async::Completion onError composes every attached handler, in attachment order",
+          "[completion]") {
+    // CompletionState<T>::attachOnError appends to a vector of handlers, so a
+    // second .onError() call on the same still-pending Completion<T> — even
+    // via the separate Completion& returned from the first call, since
+    // then()/onError() both return *this — fires alongside the first rather
+    // than replacing it (see docs/spec/core/completion.md, "Handler
+    // fan-out"). This is the mechanism behind Presenter::track()'s onErr
+    // parameter (examples/common/gui/presenter.hpp), documented here at its
+    // source.
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
+    morph::async::Completion<int> comp{state, &exec};
+
+    bool handlerAFired = false;
+    bool handlerBFired = false;
+    comp.onError([&](const std::exception_ptr&) { handlerAFired = true; });
+    comp.onError([&](const std::exception_ptr&) { handlerBFired = true; });
+
+    state->setException(std::make_exception_ptr(std::runtime_error{"test error"}));
+
+    REQUIRE(handlerAFired);
+    REQUIRE(handlerBFired);
+}
+
 TEST_CASE("morph::async::Completion callback is posted through executor", "[completion]") {
     struct CountingExecutor : morph::exec::IExecutor {
         std::atomic<int> count{0};
