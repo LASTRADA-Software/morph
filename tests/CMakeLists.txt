@@ -319,3 +319,44 @@ if(NOT MORPH_CLIENT_ONLY_RUNTIME_THROW_EXITCODE EQUAL 0)
         "--- program output ---\n"
         "${MORPH_CLIENT_ONLY_RUNTIME_THROW_RUN_OUTPUT}")
 endif()
+
+# Issue #61: BRIDGE_REGISTER_ACTION_FOR_CLIENT lets a MORPH_CLIENT_ONLY client
+# register an action's ActionTraits (JSON codecs + an explicitly-named Result
+# type) without ever needing the real model's complete class body -- see
+# docs/spec/core/registry.md, "BRIDGE_REGISTER_ACTION_FOR_CLIENT".
+# compile_checks/client_only_facade_no_model_header.cpp forward-declares (never
+# defines) ClientOnlyFacadeModel and proves the resulting ActionTraits
+# specialisation still round-trips JSON correctly. try_run(), not try_compile():
+# this probe's main() actually exercises toJson/fromJson, not just links.
+unset(MORPH_CLIENT_ONLY_FACADE_COMPILED CACHE)
+unset(MORPH_CLIENT_ONLY_FACADE_EXITCODE CACHE)
+try_run(MORPH_CLIENT_ONLY_FACADE_EXITCODE MORPH_CLIENT_ONLY_FACADE_COMPILED
+    "${CMAKE_CURRENT_BINARY_DIR}/client_only_facade_check"
+    "${CMAKE_CURRENT_SOURCE_DIR}/compile_checks/client_only_facade_no_model_header.cpp"
+    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MORPH_VETTED_HMAC_GUARD_INCLUDE_DIRS}"
+    CXX_STANDARD 23
+    COMPILE_DEFINITIONS "-DMORPH_CLIENT_ONLY"
+    LINK_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}"
+    COMPILE_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_FACADE_COMPILE_OUTPUT
+    RUN_OUTPUT_VARIABLE MORPH_CLIENT_ONLY_FACADE_RUN_OUTPUT
+)
+if(NOT MORPH_CLIENT_ONLY_FACADE_COMPILED)
+    message(FATAL_ERROR
+        "BRIDGE_REGISTER_ACTION_FOR_CLIENT guard check failed: "
+        "compile_checks/client_only_facade_no_model_header.cpp failed to "
+        "compile/link with MORPH_CLIENT_ONLY defined, even though "
+        "ClientOnlyFacadeModel is never a complete type anywhere in this "
+        "program (BRIDGE_REGISTER_ACTION_FOR_CLIENT must not require model "
+        "completeness).\n"
+        "--- compiler/linker output ---\n"
+        "${MORPH_CLIENT_ONLY_FACADE_COMPILE_OUTPUT}")
+endif()
+if(NOT MORPH_CLIENT_ONLY_FACADE_EXITCODE EQUAL 0)
+    message(FATAL_ERROR
+        "BRIDGE_REGISTER_ACTION_FOR_CLIENT guard check failed: "
+        "compile_checks/client_only_facade_no_model_header.cpp did not "
+        "round-trip its action through toJson/fromJson correctly "
+        "(exit code ${MORPH_CLIENT_ONLY_FACADE_EXITCODE}).\n"
+        "--- program output ---\n"
+        "${MORPH_CLIENT_ONLY_FACADE_RUN_OUTPUT}")
+endif()

@@ -570,6 +570,113 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     BRIDGE_REGISTER_ACTION_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_4, BRIDGE_REGISTER_ACTION_3) \
     (__VA_ARGS__)
 
+/// @brief Registers action type @p A (for model @p M) the same way
+///        `BRIDGE_REGISTER_ACTION` does, but names the action's result type
+///        @p RESULT explicitly instead of deducing it from
+///        `decltype(std::declval<M&>().execute(std::declval<A>()))`.
+///
+/// `BRIDGE_REGISTER_ACTION`'s `Result` deduction requires `M` to be a
+/// **complete type with `execute(A)` declared** at the point of registration
+/// — ordinarily the model's own header, which a client must then `#include`
+/// (and everything that header transitively pulls in — a persistence mixin's
+/// database-driver headers, for a model backed by one) just to compute
+/// `ActionTraits<A>::Result`, even under `MORPH_CLIENT_ONLY`, where the
+/// client never constructs `M` or calls `M::execute` at all (see
+/// `docs/spec/core/registry.md`, "MORPH_CLIENT_ONLY").
+///
+/// A pure client names @p RESULT directly instead, so @p M can be a
+/// lightweight, declaration-only facade type — forward-declared or declaring
+/// no members at all — carrying none of the real model's persistence
+/// surface. @p M still needs `BRIDGE_REGISTER_MODEL(M, ...)` (for
+/// `ModelTraits<M>::typeId()`, itself needing no completeness either) and is
+/// used only as `BridgeHandler<M>`'s template tag and dispatch-registry key;
+/// nothing on the path a `MORPH_CLIENT_ONLY` build actually calls
+/// (`BridgeHandler<M>::execute<A>()`/`executeJson`, routed through
+/// `Bridge::executeVia`) reads a member of `M`, so `M` need not be complete
+/// at the call site at all.
+///
+/// A build that does **not** define `MORPH_CLIENT_ONLY` may also use this
+/// macro — the emitted `ActionTraits<A>` specialisation is identical either
+/// way — but gets none of the header-avoidance benefit unless `M` really is
+/// left incomplete, since something in that same link must still define the
+/// real model to satisfy `MORPH_DETAIL_REGISTER_MODEL_LOCAL`/
+/// `MORPH_DETAIL_REGISTER_ACTION_LOCAL`'s registrars (suppressed only under
+/// `MORPH_CLIENT_ONLY`).
+///
+/// @warning @p RESULT must name the exact same type `BRIDGE_REGISTER_ACTION`
+/// would have deduced from the real model's `M::execute(A)`. Nothing checks
+/// this — a mismatch is a silent JSON (de)serialisation bug (wrong shape
+/// on the wire), not a compile error, since `resultToJson`/`resultFromJson`
+/// below are instantiated against whatever @p RESULT names, and the server
+/// side (registered separately, from the real model's own header, via the
+/// plain `BRIDGE_REGISTER_ACTION`) still serialises the type `M::execute`
+/// actually returns.
+///
+/// @param M      Model type -- may be a declaration-only facade under
+///               `MORPH_CLIENT_ONLY`; must be the real, complete model type
+///               otherwise (see above).
+/// @param A      Concrete action type.
+/// @param RESULT The action's result type, named explicitly.
+/// @param NAME   String literal used as the action type-id.
+/// @param ...    Optional: a `morph::model::Loggable` value (defaults to `Loggable::Yes`).
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT(...)                                                                     \
+    BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(__VA_ARGS__, BRIDGE_REGISTER_ACTION_FOR_CLIENT_5,                       \
+                                            BRIDGE_REGISTER_ACTION_FOR_CLIENT_4)                                   \
+    (__VA_ARGS__)
+
+/// @cond detail
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT_PICK(_1, _2, _3, _4, _5, NAME, ...) NAME
+
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT_4(M, A, RESULT, NAME) \
+    BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, ::morph::model::Loggable::Yes)
+
+#define BRIDGE_REGISTER_ACTION_FOR_CLIENT_5(M, A, RESULT, NAME, LOGGABLE)                                      \
+    template <>                                                                                                \
+    struct morph::model::ActionTraits<A> {                                                                     \
+        using Result = RESULT;                                                                                 \
+        static constexpr std::string_view typeId() { return NAME; }                                            \
+        static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
+        static std::string toJson(const A& action) {                                                           \
+            std::string out;                                                                                   \
+            if (auto errCode = glz::write_json(action, out)) {                                                 \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
+            }                                                                                                  \
+            return out;                                                                                        \
+        }                                                                                                      \
+        static A fromJson(std::string_view jsonStr) {                                                          \
+            A action{};                                                                                        \
+            /* null_terminated=false: jsonStr is a caller-supplied view with no      */                        \
+            /* guaranteed trailing '\0' (e.g. an execute envelope's `body`) — see    */                        \
+            /* the identical fix + rationale on morph::wire::decode (wire.hpp).      */                        \
+            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
+            if (auto errCode = glz::read<kLenientRead>(action, jsonStr)) {                                     \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
+            }                                                                                                  \
+            return action;                                                                                     \
+        }                                                                                                      \
+        static std::string resultToJson(const Result& result) {                                                \
+            std::string out;                                                                                   \
+            if (auto errCode = glz::write_json(result, out)) {                                                 \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
+            }                                                                                                  \
+            return out;                                                                                        \
+        }                                                                                                      \
+        static Result resultFromJson(std::string_view jsonStr) {                                               \
+            Result result{};                                                                                   \
+            /* null_terminated=false: see the identical fix on fromJson() above. */                            \
+            static constexpr glz::opts kLenientRead{.null_terminated = false, .error_on_unknown_keys = false}; \
+            if (auto errCode = glz::read<kLenientRead>(result, jsonStr)) {                                     \
+                throw morph::model::detail::ParseError{glz::format_error(errCode, jsonStr)};                   \
+            }                                                                                                  \
+            return result;                                                                                     \
+        }                                                                                                      \
+    };                                                                                                         \
+    MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)                                                             \
+    namespace {                                                                                                \
+    [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
+        morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
+    }
+
 /// @cond detail
 #define BRIDGE_REGISTER_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
 
