@@ -123,7 +123,7 @@ TEST_CASE("morph::model::detail::ModelRegistryFactory: registerModel accepts a c
     // ModelHolder<Model> runs.
     int const injectedSeed = 100;
     registry.registerModel<DiModel>("REG_DiModel", [injectedSeed] {
-        return std::make_unique<morph::model::detail::ModelHolder<DiModel>>(DiModel{injectedSeed});
+        return std::make_unique<morph::model::detail::ModelHolder<DiModel>>(injectedSeed);
     });
 
     auto holder = registry.create("REG_DiModel");
