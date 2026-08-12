@@ -442,112 +442,119 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dc3/qt__web
 <div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="comment">    /// @param handler Callable invoked on the Qt thread whenever the connection</span></div>
 <div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span><span class="comment">    ///                drops. Pass `nullptr` to clear.</span></div>
 <div class="line"><a id="l00319" name="l00319"></a><span class="lineno"><a class="line" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784">  319</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784">setDisconnectHandler</a>(<span class="keyword">const</span> std::function&lt;<span class="keywordtype">void</span>()&gt;&amp; handler) <span class="keyword">override</span>;</div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span> </div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="keyword">private</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="comment">    /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.</span></div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span>    std::string sendSync(<span class="keyword">const</span> std::string&amp; msg);</div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span><span class="comment"></span> </div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span><span class="comment">    /// @brief Slot called by `QWebSocket` when a text frame arrives.</span></div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span>    <span class="keywordtype">void</span> onTextMessage(<span class="keyword">const</span> QString&amp; message);</div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span><span class="comment"></span> </div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span><span class="comment">    /// @brief Schedules a reconnect attempt with exponential backoff.</span></div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>    <span class="keywordtype">void</span> scheduleReconnect();</div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span><span class="comment"></span> </div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="comment">    /// @brief Installs the session stamped onto every control envelope this</span></div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="comment">    ///        backend subsequently builds (`register`, `registerShared`,</span></div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span><span class="comment">    ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.</span></div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span><span class="comment">    /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.</span></div>
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno"><a class="line" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc">  325</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc">setSession</a>(<a class="code hl_struct" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> session) <span class="keyword">override</span>;</div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span> </div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span><span class="keyword">private</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span><span class="comment">    /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.</span></div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span>    std::string sendSync(<span class="keyword">const</span> std::string&amp; msg);</div>
 <div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="comment"></span> </div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">    /// @brief Attempts to reopen the socket using the saved URL/TLS config.</span></div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    <span class="keywordtype">void</span> attemptReconnect();</div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">    /// @brief Slot called by `QWebSocket` when a text frame arrives.</span></div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span>    <span class="keywordtype">void</span> onTextMessage(<span class="keyword">const</span> QString&amp; message);</div>
 <div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment"></span> </div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">    /// @brief Assigns a call-id, records the pending registration, and sends</span></div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">    ///        the `register` envelope. Shared by `registerModelAsync`&#39;s</span></div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment">    ///        immediate path and the queued-request flush on `connected`.</span></div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span>    <span class="keywordtype">void</span> sendRegisterAsync(<span class="keyword">const</span> std::string&amp; typeId, std::string_view contextKey,</div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>                           std::function&lt;<span class="keywordtype">void</span>(::morph::exec::detail::ModelId)&gt; onRegistered,</div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span>                           std::function&lt;<span class="keywordtype">void</span>(<span class="keyword">const</span> std::string&amp;)&gt; onError);</div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment"></span> </div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment">    /// @brief Sends every request queued by `registerModelAsync` while the</span></div>
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">    ///        socket was not yet connected, in FIFO order. Called from the</span></div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="comment">    ///        `connected` slot, before the reconnect handler fires.</span></div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>    <span class="keywordtype">void</span> flushQueuedRegistrations();</div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span> </div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span>    QUrl _serverUrl;</div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="preprocessor">#ifndef QT_NO_SSL</span></div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span>    std::optional&lt;QSslConfiguration&gt; _tls;</div>
-<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="preprocessor">#endif</span></div>
-<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span>    <a class="code hl_typedef" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a> _cfg;</div>
-<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span>    QWebSocket _socket;</div>
-<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span>    QTimer _reconnectTimer;</div>
-<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span>    std::chrono::milliseconds _currentReconnectDelay;</div>
-<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span>    <span class="keywordtype">bool</span> _connected{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span>    <span class="keywordtype">bool</span> _everConnected{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>    <span class="keywordtype">bool</span> _shuttingDown{<span class="keyword">false</span>};</div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>    std::function&lt;void()&gt; _reconnectHandler;</div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>    std::function&lt;void()&gt; _connectHandler;</div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>    std::function&lt;void()&gt; _disconnectHandler;</div>
-<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span> </div>
-<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>    std::string _pendingReply;</div>
-<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>    QEventLoop* _syncLoop{<span class="keyword">nullptr</span>};</div>
-<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span> </div>
-<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>    <span class="keyword">struct </span>PendingExecute {</div>
-<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span>        std::shared_ptr&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt; state;</div>
-<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>        std::function&lt;std::shared_ptr&lt;void&gt;(std::string_view)&gt; deserialize;</div>
-<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span>        ::morph::exec::IExecutor* cbExec;</div>
-<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>    };</div>
-<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span>    uint64_t _nextCallId{0};</div>
-<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span>    std::unordered_map&lt;uint64_t, PendingExecute&gt; _pending;</div>
-<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>    std::mutex _pendingMtx;</div>
-<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span><span class="comment"></span> </div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="comment">    /// @brief One in-flight `registerModelAsync` call, keyed by `callId`.</span></div>
-<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="comment">    /// Kept separate from `PendingExecute`/`_pending` (a different `callId`</span></div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="comment">    /// namespace would be a protocol change; this shares the same namespace</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">    /// and counter, just a different local map) because a register reply&#39;s</span></div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">    /// shape (`modelId`, no `deserialize` step) differs from an execute</span></div>
-<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment">    /// reply&#39;s.</span></div>
-<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span>    <span class="keyword">struct </span>PendingRegistration {</div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
-<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
-<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span>    };</div>
-<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span>    std::unordered_map&lt;uint64_t, PendingRegistration&gt; _pendingRegistrations;</div>
-<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="comment"></span> </div>
-<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="comment">    /// @brief One `registerModelAsync` call made before the socket had</span></div>
-<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span><span class="comment">    ///        finished connecting. No call-id is assigned until the request</span></div>
-<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span><span class="comment">    ///        is actually sent (from `flushQueuedRegistrations`), so a queued</span></div>
-<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span><span class="comment">    ///        entry that never gets to fire (backend destroyed first) needs no</span></div>
-<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span><span class="comment">    ///        cancellation bookkeeping.</span></div>
-<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>    <span class="keyword">struct </span>QueuedRegistration {</div>
-<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span>        std::string typeId;</div>
-<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span>        std::string contextKey;</div>
-<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
-<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
-<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span>    };</div>
-<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span>    std::vector&lt;QueuedRegistration&gt; _queuedRegistrations;</div>
-<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span><span class="comment"></span> </div>
-<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span><span class="comment">    /// @brief Call-ids of `deregister` envelopes still awaiting their (unused)</span></div>
-<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span><span class="comment">    ///        reply (see issue #65).</span></div>
-<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span><span class="comment">    /// `deregisterModel` is fire-and-forget: nobody observes the reply, but it</span></div>
-<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span><span class="comment">    /// still needs a real, non-zero `callId` so `onTextMessage` can recognise</span></div>
-<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span><span class="comment">    /// and drop it explicitly, rather than letting it fall through to the</span></div>
-<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment">    /// `callId == 0` branch and collide with a parked `sendSync` waiter. A</span></div>
-<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span><span class="comment">    /// late reply for an id no longer in this set (already dropped, or the</span></div>
-<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span><span class="comment">    /// backend was cancelled/destroyed) is simply ignored — nothing to clean</span></div>
-<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span><span class="comment">    /// up either way.</span></div>
-<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span>    std::unordered_set&lt;uint64_t&gt; _pendingDeregisters;</div>
-<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span><span class="comment"></span> </div>
-<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span><span class="comment">    /// @brief One in-flight `assignPrimaryAsync` call, keyed by `callId`.</span></div>
-<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span><span class="comment">    /// Mirrors `PendingRegistration`/`_pendingRegistrations`: same `callId`</span></div>
-<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span><span class="comment">    /// namespace and counter, separate map because an `assign` reply is</span></div>
-<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span><span class="comment">    /// matched the same way a `register`/`registerShared` reply is (a bare</span></div>
-<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span><span class="comment">    /// `modelId`, echoing back the instance that was promoted).</span></div>
-<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span>    <span class="keyword">struct </span>PendingAssign {</div>
-<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
-<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
-<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span>    };</div>
-<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span>    std::unordered_map&lt;uint64_t, PendingAssign&gt; _pendingAssigns;</div>
-<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span>};</div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">    /// @brief Schedules a reconnect attempt with exponential backoff.</span></div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span>    <span class="keywordtype">void</span> scheduleReconnect();</div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment"></span> </div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">    /// @brief Attempts to reopen the socket using the saved URL/TLS config.</span></div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span>    <span class="keywordtype">void</span> attemptReconnect();</div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment"></span> </div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment">    /// @brief Assigns a call-id, records the pending registration, and sends</span></div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment">    ///        the `register` envelope. Shared by `registerModelAsync`&#39;s</span></div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">    ///        immediate path and the queued-request flush on `connected`.</span></div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span>    <span class="keywordtype">void</span> sendRegisterAsync(<span class="keyword">const</span> std::string&amp; typeId, std::string_view contextKey,</div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span>                           std::function&lt;<span class="keywordtype">void</span>(::morph::exec::detail::ModelId)&gt; onRegistered,</div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span>                           std::function&lt;<span class="keywordtype">void</span>(<span class="keyword">const</span> std::string&amp;)&gt; onError);</div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="comment"></span> </div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="comment">    /// @brief Sends every request queued by `registerModelAsync` while the</span></div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="comment">    ///        socket was not yet connected, in FIFO order. Called from the</span></div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="comment">    ///        `connected` slot, before the reconnect handler fires.</span></div>
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span>    <span class="keywordtype">void</span> flushQueuedRegistrations();</div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span> </div>
+<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span>    QUrl _serverUrl;</div>
+<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="preprocessor">#ifndef QT_NO_SSL</span></div>
+<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span>    std::optional&lt;QSslConfiguration&gt; _tls;</div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="preprocessor">#endif</span></div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span>    <a class="code hl_typedef" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c">Config</a> _cfg;</div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span>    QWebSocket _socket;</div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span>    QTimer _reconnectTimer;</div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span>    std::chrono::milliseconds _currentReconnectDelay;</div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span>    <span class="keywordtype">bool</span> _connected{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span>    <span class="keywordtype">bool</span> _everConnected{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span>    <span class="keywordtype">bool</span> _shuttingDown{<span class="keyword">false</span>};</div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span>    std::function&lt;void()&gt; _reconnectHandler;</div>
+<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span>    std::function&lt;void()&gt; _connectHandler;</div>
+<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span>    std::function&lt;void()&gt; _disconnectHandler;</div>
+<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span>    <a class="code hl_struct" href="../../dd/d85/structmorph_1_1session_1_1Context.html">::morph::session::Context</a> _session;</div>
+<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span> </div>
+<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span>    std::string _pendingReply;</div>
+<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span>    QEventLoop* _syncLoop{<span class="keyword">nullptr</span>};</div>
+<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span> </div>
+<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span>    <span class="keyword">struct </span>PendingExecute {</div>
+<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span>        std::shared_ptr&lt;::morph::async::detail::CompletionState&lt;std::shared_ptr&lt;void&gt;&gt;&gt; state;</div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span>        std::function&lt;std::shared_ptr&lt;void&gt;(std::string_view)&gt; deserialize;</div>
+<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span>        ::morph::exec::IExecutor* cbExec;</div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span>    };</div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span>    uint64_t _nextCallId{0};</div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span>    std::unordered_map&lt;uint64_t, PendingExecute&gt; _pending;</div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span>    std::mutex _pendingMtx;</div>
+<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment"></span> </div>
+<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">    /// @brief One in-flight `registerModelAsync` call, keyed by `callId`.</span></div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span><span class="comment">    /// Kept separate from `PendingExecute`/`_pending` (a different `callId`</span></div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span><span class="comment">    /// namespace would be a protocol change; this shares the same namespace</span></div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span><span class="comment">    /// and counter, just a different local map) because a register reply&#39;s</span></div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="comment">    /// shape (`modelId`, no `deserialize` step) differs from an execute</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="comment">    /// reply&#39;s.</span></div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span>    <span class="keyword">struct </span>PendingRegistration {</div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span>    };</div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span>    std::unordered_map&lt;uint64_t, PendingRegistration&gt; _pendingRegistrations;</div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment"></span> </div>
+<div class="line"><a id="l00393" name="l00393"></a><span class="lineno">  393</span><span class="comment">    /// @brief One `registerModelAsync` call made before the socket had</span></div>
+<div class="line"><a id="l00394" name="l00394"></a><span class="lineno">  394</span><span class="comment">    ///        finished connecting. No call-id is assigned until the request</span></div>
+<div class="line"><a id="l00395" name="l00395"></a><span class="lineno">  395</span><span class="comment">    ///        is actually sent (from `flushQueuedRegistrations`), so a queued</span></div>
+<div class="line"><a id="l00396" name="l00396"></a><span class="lineno">  396</span><span class="comment">    ///        entry that never gets to fire (backend destroyed first) needs no</span></div>
+<div class="line"><a id="l00397" name="l00397"></a><span class="lineno">  397</span><span class="comment">    ///        cancellation bookkeeping.</span></div>
+<div class="line"><a id="l00398" name="l00398"></a><span class="lineno">  398</span>    <span class="keyword">struct </span>QueuedRegistration {</div>
+<div class="line"><a id="l00399" name="l00399"></a><span class="lineno">  399</span>        std::string typeId;</div>
+<div class="line"><a id="l00400" name="l00400"></a><span class="lineno">  400</span>        std::string contextKey;</div>
+<div class="line"><a id="l00401" name="l00401"></a><span class="lineno">  401</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
+<div class="line"><a id="l00402" name="l00402"></a><span class="lineno">  402</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
+<div class="line"><a id="l00403" name="l00403"></a><span class="lineno">  403</span>    };</div>
+<div class="line"><a id="l00404" name="l00404"></a><span class="lineno">  404</span>    std::vector&lt;QueuedRegistration&gt; _queuedRegistrations;</div>
+<div class="line"><a id="l00405" name="l00405"></a><span class="lineno">  405</span><span class="comment"></span> </div>
+<div class="line"><a id="l00406" name="l00406"></a><span class="lineno">  406</span><span class="comment">    /// @brief Call-ids of `deregister` envelopes still awaiting their (unused)</span></div>
+<div class="line"><a id="l00407" name="l00407"></a><span class="lineno">  407</span><span class="comment">    ///        reply (see issue #65).</span></div>
+<div class="line"><a id="l00408" name="l00408"></a><span class="lineno">  408</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00409" name="l00409"></a><span class="lineno">  409</span><span class="comment">    /// `deregisterModel` is fire-and-forget: nobody observes the reply, but it</span></div>
+<div class="line"><a id="l00410" name="l00410"></a><span class="lineno">  410</span><span class="comment">    /// still needs a real, non-zero `callId` so `onTextMessage` can recognise</span></div>
+<div class="line"><a id="l00411" name="l00411"></a><span class="lineno">  411</span><span class="comment">    /// and drop it explicitly, rather than letting it fall through to the</span></div>
+<div class="line"><a id="l00412" name="l00412"></a><span class="lineno">  412</span><span class="comment">    /// `callId == 0` branch and collide with a parked `sendSync` waiter. A</span></div>
+<div class="line"><a id="l00413" name="l00413"></a><span class="lineno">  413</span><span class="comment">    /// late reply for an id no longer in this set (already dropped, or the</span></div>
+<div class="line"><a id="l00414" name="l00414"></a><span class="lineno">  414</span><span class="comment">    /// backend was cancelled/destroyed) is simply ignored — nothing to clean</span></div>
+<div class="line"><a id="l00415" name="l00415"></a><span class="lineno">  415</span><span class="comment">    /// up either way.</span></div>
+<div class="line"><a id="l00416" name="l00416"></a><span class="lineno">  416</span>    std::unordered_set&lt;uint64_t&gt; _pendingDeregisters;</div>
+<div class="line"><a id="l00417" name="l00417"></a><span class="lineno">  417</span><span class="comment"></span> </div>
+<div class="line"><a id="l00418" name="l00418"></a><span class="lineno">  418</span><span class="comment">    /// @brief One in-flight `assignPrimaryAsync` call, keyed by `callId`.</span></div>
+<div class="line"><a id="l00419" name="l00419"></a><span class="lineno">  419</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00420" name="l00420"></a><span class="lineno">  420</span><span class="comment">    /// Mirrors `PendingRegistration`/`_pendingRegistrations`: same `callId`</span></div>
+<div class="line"><a id="l00421" name="l00421"></a><span class="lineno">  421</span><span class="comment">    /// namespace and counter, separate map because an `assign` reply is</span></div>
+<div class="line"><a id="l00422" name="l00422"></a><span class="lineno">  422</span><span class="comment">    /// matched the same way a `register`/`registerShared` reply is (a bare</span></div>
+<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span><span class="comment">    /// `modelId`, echoing back the instance that was promoted).</span></div>
+<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span>    <span class="keyword">struct </span>PendingAssign {</div>
+<div class="line"><a id="l00425" name="l00425"></a><span class="lineno">  425</span>        std::function&lt;void(::morph::exec::detail::ModelId)&gt; onRegistered;</div>
+<div class="line"><a id="l00426" name="l00426"></a><span class="lineno">  426</span>        std::function&lt;void(<span class="keyword">const</span> std::string&amp;)&gt; onError;</div>
+<div class="line"><a id="l00427" name="l00427"></a><span class="lineno">  427</span>    };</div>
+<div class="line"><a id="l00428" name="l00428"></a><span class="lineno">  428</span>    std::unordered_map&lt;uint64_t, PendingAssign&gt; _pendingAssigns;</div>
+<div class="line"><a id="l00429" name="l00429"></a><span class="lineno">  429</span>};</div>
 </div>
-<div class="line"><a id="l00423" name="l00423"></a><span class="lineno">  423</span> </div>
-<div class="line"><a id="l00424" name="l00424"></a><span class="lineno">  424</span>}  <span class="comment">// namespace morph::qt</span></div>
+<div class="line"><a id="l00430" name="l00430"></a><span class="lineno">  430</span> </div>
+<div class="line"><a id="l00431" name="l00431"></a><span class="lineno">  431</span>}  <span class="comment">// namespace morph::qt</span></div>
 <div class="ttc" id="aclassmorph_1_1async_1_1Completion_html"><div class="ttname"><a href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a></div><div class="ttdoc">Move-only handle representing the eventual result of an asynchronous operation.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/d76/completion_8hpp_source.html#l00190">completion.hpp:190</a></div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a0d712428fa45193506db2c03b41793aa"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa">morph::qt::QtWebSocketBackend::QtWebSocketBackend</a></div><div class="ttdeci">QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), std::optional&lt; QSslConfiguration &gt; tls=std::nullopt, Config cfg=Config{})</div><div class="ttdoc">Constructs the backend and opens a WebSocket connection to serverUrl.</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a286541f7d30275b6004f8a5dcd999b7f"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a286541f7d30275b6004f8a5dcd999b7f">morph::qt::QtWebSocketBackend::setReconnectHandler</a></div><div class="ttdeci">void setReconnectHandler(const std::function&lt; void()&gt; &amp;handler) override</div><div class="ttdoc">Installs the handler Bridge uses to re-register handlers after a reconnect.</div></div>
@@ -559,6 +566,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dc3/qt__web
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a72f35dfcfcfb007b05d14185d8ed2f2f"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f">morph::qt::QtWebSocketBackend::waitForConnected</a></div><div class="ttdeci">bool waitForConnected(int timeoutMs=5000)</div><div class="ttdoc">Pumps the Qt event loop until the socket is connected or timeoutMs elapses.</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a741e68faad6ca0388f2d6c3740a3c784"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a741e68faad6ca0388f2d6c3740a3c784">morph::qt::QtWebSocketBackend::setDisconnectHandler</a></div><div class="ttdeci">void setDisconnectHandler(const std::function&lt; void()&gt; &amp;handler) override</div><div class="ttdoc">Installs a handler invoked whenever the socket drops.</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a74433cc659e1bf91a8dcba58b6dec2b0"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0">morph::qt::QtWebSocketBackend::notifyBackendChanged</a></div><div class="ttdeci">void notifyBackendChanged() override</div><div class="ttdoc">No-op — this backend holds no local model objects.</div><div class="ttdef"><b>Definition</b> <a href="#l00289">qt_websocket_backend.hpp:289</a></div></div>
+<div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_a898676248ae91890928c1e051a11c4bc"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a898676248ae91890928c1e051a11c4bc">morph::qt::QtWebSocketBackend::setSession</a></div><div class="ttdeci">void setSession(::morph::session::Context session) override</div><div class="ttdoc">Installs the session stamped onto every control envelope this backend subsequently builds (register,...</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a">morph::qt::QtWebSocketBackend::deregisterModel</a></div><div class="ttdeci">void deregisterModel(::morph::exec::detail::ModelId mid) override</div><div class="ttdoc">Sends a deregister message fire-and-forget (does not wait for a reply).</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_aa6b15f2bbb8154ddfb30406de340b8c0"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa6b15f2bbb8154ddfb30406de340b8c0">morph::qt::QtWebSocketBackend::assignPrimaryAsync</a></div><div class="ttdeci">bool assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary, std::function&lt; void(::morph::exec::detail::ModelId)&gt; onRegistered, std::function&lt; void(const std::string &amp;)&gt; onError) override</div><div class="ttdoc">Sends an assign message and returns without blocking; the reply is matched later, asynchronously,...</div></div>
 <div class="ttc" id="aclassmorph_1_1qt_1_1QtWebSocketBackend_html_aaeeb1552d6d0d5601f9457d5bd3494cf"><div class="ttname"><a href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aaeeb1552d6d0d5601f9457d5bd3494cf">morph::qt::QtWebSocketBackend::cancelPending</a></div><div class="ttdeci">void cancelPending(const std::exception_ptr &amp;exc) override</div><div class="ttdoc">Resolves every pending execute call&#39;s Completion with exc, and fails every pending async registration...</div></div>
@@ -575,6 +583,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dc3/qt__web
 <div class="ttc" id="astructmorph_1_1qt_1_1QtWebSocketBackendConfig_html_a3eb7d1ba338774ed582fe26de164a4b9"><div class="ttname"><a href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a3eb7d1ba338774ed582fe26de164a4b9">morph::qt::QtWebSocketBackendConfig::backoffMultiplier</a></div><div class="ttdeci">double backoffMultiplier</div><div class="ttdoc">Multiplier applied to the delay after each failed attempt.</div><div class="ttdef"><b>Definition</b> <a href="#l00040">qt_websocket_backend.hpp:40</a></div></div>
 <div class="ttc" id="astructmorph_1_1qt_1_1QtWebSocketBackendConfig_html_a6c56987caa7c301720c589d6de8ec7ac"><div class="ttname"><a href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a6c56987caa7c301720c589d6de8ec7ac">morph::qt::QtWebSocketBackendConfig::asyncRegistrationEnabled</a></div><div class="ttdeci">bool asyncRegistrationEnabled</div><div class="ttdoc">Opt in to registerModelAsync (see its doc comment on IBackend).</div><div class="ttdef"><b>Definition</b> <a href="#l00057">qt_websocket_backend.hpp:57</a></div></div>
 <div class="ttc" id="astructmorph_1_1qt_1_1QtWebSocketBackendConfig_html_ac3c821f0b4d2405c5b1b5f70640a212a"><div class="ttname"><a href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#ac3c821f0b4d2405c5b1b5f70640a212a">morph::qt::QtWebSocketBackendConfig::reconnectEnabled</a></div><div class="ttdeci">bool reconnectEnabled</div><div class="ttdoc">Whether to attempt automatic reconnect after an unsolicited disconnect.</div><div class="ttdef"><b>Definition</b> <a href="#l00031">qt_websocket_backend.hpp:31</a></div></div>
+<div class="ttc" id="astructmorph_1_1session_1_1Context_html"><div class="ttname"><a href="../../dd/d85/structmorph_1_1session_1_1Context.html">morph::session::Context</a></div><div class="ttdoc">Per-call session context carried through the bridge to the model.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d5e/session_8hpp_source.html#l00026">session.hpp:26</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

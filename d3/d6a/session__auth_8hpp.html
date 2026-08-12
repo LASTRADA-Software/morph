@@ -141,6 +141,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d6a/session
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Asession_3A_3ASessionToken" id="r_morph_3A_3Asession_3A_3ASessionToken"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html">morph::session::SessionToken</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Verified claims carried by a session token.  <a href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Asession_3A_3ATokenIssuanceError" id="r_morph_3A_3Asession_3A_3ATokenIssuanceError"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html">morph::session::TokenIssuanceError</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown by <span class="tt"><a class="el" href="../../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33" title="Serialises claims and returns a signed token string.">TokenIssuer::issue</a></span> if serialising the claims fails.  <a href="../../d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Asession_3A_3Adetail_3A_3AEscapingWriteOpts" id="r_morph_3A_3Asession_3A_3Adetail_3A_3AEscapingWriteOpts"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html">morph::session::detail::EscapingWriteOpts</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Write options that escape ASCII control bytes as <span class="tt">\\uXXXX</span> sequences.  <a href="../../de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Asession_3A_3ATokenIssuer" id="r_morph_3A_3Asession_3A_3ATokenIssuer"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../dc/de7/classmorph_1_1session_1_1TokenIssuer.html">morph::session::TokenIssuer</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Mints signed bearer tokens from claims using a shared secret.  <a href="../../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Asession_3A_3ATokenVerifier" id="r_morph_3A_3Asession_3A_3ATokenVerifier"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html">morph::session::TokenVerifier</a></td></tr>
@@ -180,6 +184,8 @@ Functions</h2></td></tr>
 <tr class="memdesc:a0f07101ed7fc307683c3896acb1a805b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Reference HMAC-SHA256 <span class="tt"><a class="el" href="#afe63b47bbe6b2084d6808466a30421c0" title="Pluggable message-authentication primitive: mac(secret, message).">MacFunction</a></span> (the default). Returns raw MAC bytes.  <br /></td></tr>
 <tr class="memitem:a1464d95168cbb3fa09ffc995c9868f24" id="r_a1464d95168cbb3fa09ffc995c9868f24"><td class="memItemLeft">int64_t&#160;</td><td class="memItemRight"><a class="el" href="#a1464d95168cbb3fa09ffc995c9868f24">morph::session::systemClockMs</a> ()</td></tr>
 <tr class="memdesc:a1464d95168cbb3fa09ffc995c9868f24"><td class="mdescLeft">&#160;</td><td class="mdescRight">Default clock: <span class="tt">std::chrono::system_clock</span> in milliseconds since epoch.  <br /></td></tr>
+<tr class="memitem:aa30790cb1906464da78888740ad3b7fa" id="r_aa30790cb1906464da78888740ad3b7fa"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa30790cb1906464da78888740ad3b7fa">morph::session::detail::throwOnGlazeError</a> (const glz::error_ctx &amp;errCode, std::string_view context)</td></tr>
+<tr class="memdesc:aa30790cb1906464da78888740ad3b7fa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts a Glaze error into a <span class="tt"><a class="el" href="../../d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html" title="Thrown by TokenIssuer::issue if serialising the claims fails.">TokenIssuanceError</a></span>, or does nothing if <code class="param">errCode</code> reports success. See <span class="tt">journal::detail::throwOnGlazeError</span> for the identical pattern in the sibling writer.  <br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-var-members" class="groupheader"><a id="var-members" name="var-members"></a>
 Variables</h2></td></tr>
@@ -532,6 +538,46 @@ Variables</h2></td></tr>
 <dl class="section return"><dt>Returns</dt><dd>Current time in ms since the Unix epoch. </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00277">277</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa30790cb1906464da78888740ad3b7fa" name="aa30790cb1906464da78888740ad3b7fa"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa30790cb1906464da78888740ad3b7fa">&#9670;&#160;</a></span>throwOnGlazeError()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::session::detail::throwOnGlazeError </td>
+          <td>(</td>
+          <td class="paramtype">const glz::error_ctx &amp;</td>          <td class="paramname"><span class="paramname"><em>errCode</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>context</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Converts a Glaze error into a <span class="tt">TokenIssuanceError</span>, or does nothing if <code class="param">errCode</code> reports success. See <span class="tt">journal::detail::throwOnGlazeError</span> for the identical pattern in the sibling writer. </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">errCode</td><td>Result of a <span class="tt">glz::write</span> call. </td></tr>
+    <tr><td class="paramname">context</td><td>Buffer passed to <span class="tt">glz::format_error</span> for the message. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00334">334</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

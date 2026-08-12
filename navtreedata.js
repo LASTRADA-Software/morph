@@ -52,9 +52,9 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a585623f5455bba799db2e7ca0c22a947",
-"d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html",
-"df/d65/structmorph_1_1forms_1_1Choice.html"
+"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087",
+"d9/db7/socket__backend_8hpp_source.html",
+"df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

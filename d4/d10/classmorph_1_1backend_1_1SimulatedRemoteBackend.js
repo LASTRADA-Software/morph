@@ -12,5 +12,6 @@ var classmorph_1_1backend_1_1SimulatedRemoteBackend =
     [ "negotiateProtocolVersion", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#adcfb2aa99aecc7f5a0972f4794fd4ecd", null ],
     [ "execute", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#af575c96f8350bdf7745cf45662314bc4", null ],
     [ "notifyBackendChanged", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec", null ],
-    [ "cancelPending", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237", null ]
+    [ "cancelPending", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237", null ],
+    [ "setSession", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#abc1c2ef71669812ca3831f20c84487a3", null ]
 ];

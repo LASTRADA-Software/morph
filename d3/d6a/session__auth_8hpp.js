@@ -1,6 +1,8 @@
 var session__auth_8hpp =
 [
     [ "morph::session::SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", "d8/dd5/structmorph_1_1session_1_1SessionToken" ],
+    [ "morph::session::TokenIssuanceError", "d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html", null ],
+    [ "morph::session::detail::EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts" ],
     [ "morph::session::TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", "dc/de7/classmorph_1_1session_1_1TokenIssuer" ],
     [ "morph::session::TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", "d5/dc7/classmorph_1_1session_1_1TokenVerifier" ],
     [ "morph::session::SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer" ],
@@ -19,6 +21,7 @@ var session__auth_8hpp =
     [ "morph::session::detail::base64UrlDecode", "d3/d6a/session__auth_8hpp.html#aa2ae7cff98328471581cc6134806e03c", null ],
     [ "morph::session::hmacSha256", "d3/d6a/session__auth_8hpp.html#a0f07101ed7fc307683c3896acb1a805b", null ],
     [ "morph::session::systemClockMs", "d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24", null ],
+    [ "morph::session::detail::throwOnGlazeError", "d3/d6a/session__auth_8hpp.html#aa30790cb1906464da78888740ad3b7fa", null ],
     [ "morph::session::detail::kB64Alphabet", "d3/d6a/session__auth_8hpp.html#a6e0fcee610e01c4702d0b5edee30b5e5", null ],
     [ "morph::session::kClockSkewMs", "d3/d6a/session__auth_8hpp.html#a0514fd0c3e0770d0a922742091e073a8", null ]
 ];

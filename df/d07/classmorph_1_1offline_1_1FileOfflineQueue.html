@@ -172,7 +172,7 @@ Protected Member Functions</h2></td></tr>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). Not safe for multiple processes to open the same path concurrently — same restriction as <span class="tt">FileActionLog</span>.</dd></dl>
 <dl class="section user"><dt>Idempotency-key dedup</dt><dd>A keyed <span class="tt"><a class="el" href="#a128b884f80e0ad01d4c5142466b9c0b0" title="Appends payload with no idempotency key.">enqueue</a></span> does a linear scan over the currently-pending items to look for a matching <span class="tt">idempotencyKey</span> — O(pending items) per call. That is fine at the queue depths this reference implementation targets; a host with high-volume keyed enqueues should prefer <span class="tt"><a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html" title="Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...">SqliteOfflineQueue</a></span>, whose dedup is index-backed. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aa6d8eebf47c6a78de20445063a58eb49" name="aa6d8eebf47c6a78de20445063a58eb49"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aa6d8eebf47c6a78de20445063a58eb49">&#9670;&#160;</a></span>FileOfflineQueue()</h2>
@@ -212,7 +212,7 @@ Protected Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00120">120</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -241,7 +241,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Closes the underlying file. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00131">131</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00152">152</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +280,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a580ca19c41a025fd3a6f45f2f7fb9490">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00145">145</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00166">166</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -323,7 +323,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#adde4b8a1021e5bb0374f3843acc7fe40">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00174">174</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -355,7 +355,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a7f244a0141c703a6f15972b39d8624b9">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00171">171</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -392,7 +392,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a1399eda29916d144d93c728f1e0d06e5">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00183">183</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -434,7 +434,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00194">194</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00215">215</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -476,7 +476,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#ab3e24454f2625fcd447f76d9ed0fd820">morph::offline::IOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00212">212</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html#l00233">233</a> of file <a class="el" href="../../d5/df5/file__offline__queue_8hpp_source.html">file_offline_queue.hpp</a>.</p>
 
 </div>
 </div>

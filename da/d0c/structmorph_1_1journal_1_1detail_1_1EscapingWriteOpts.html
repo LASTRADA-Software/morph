@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::bridge::AllowShared Struct Reference</title>
+<title>morph: morph::journal::detail::EscapingWriteOpts Struct Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dfb/structmorph_1_1bridge_1_1AllowShared.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html','../../','dc/d4c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts-members'); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,22 +117,46 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dfb/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::bridge::AllowShared Struct Reference</div></div>
+  <div class="headertitle"><div class="title">morph::journal::detail::EscapingWriteOpts Struct Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: joins the shared instance directory.  
+<p>Write options that escape ASCII control bytes as <span class="tt">\\uXXXX</span> sequences.  
  <a href="#details">More...</a></p>
 
-<p><code>#include &lt;<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>&gt;</code></p>
+<p><code>#include &lt;<a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>&gt;</code></p>
+<table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
+Public Attributes</h2></td></tr>
+<tr class="memitem:a2755c7e8ad562866813940f4d4218398" id="r_a2755c7e8ad562866813940f4d4218398"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a2755c7e8ad562866813940f4d4218398">escape_control_characters</a> = true</td></tr>
+<tr class="memdesc:a2755c7e8ad562866813940f4d4218398"><td class="mdescLeft">&#160;</td><td class="mdescRight">Emit control bytes as <span class="tt">\\uXXXX</span> rather than raw.  <br /></td></tr>
+</table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p><span class="tt"><a class="el" href="../../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html" title="RAII wrapper that binds a single model type to a Bridge.">BridgeHandler</a></span> sharing policy: joins the shared instance directory. </p>
-<p>A shared handler registers <b>nothing</b> at construction. It acquires an instance the first time a keyed action or an explicit <span class="tt">attach()</span> names a primary key, and every other <span class="tt"><a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html" title="BridgeHandler sharing policy: joins the shared instance directory.">AllowShared</a></span> handler naming that same key — in this process or, for a remote backend, in any other client — reaches the same instance. Releasing the last such handler destroys it.</p>
-<p>A shared handler that only ever runs <em>keyless</em> actions never attaches, and its <span class="tt">execute</span> fails fast with "handler not bound": there is no instance to run against and inventing a private one would silently defeat the sharing the caller asked for. Attach first — see docs/planned/shared_model_instances.md. </p>
+<div class="textblock"><p>Write options that escape ASCII control bytes as <span class="tt">\\uXXXX</span> sequences. </p>
+<p>glaze 7.4 leaves control bytes (0x00-0x1F) unescaped by default, which breaks a <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html" title="One recorded execution of an action against a model instance.">LogEntry</a></span> carrying one in <span class="tt">entityKey</span>/<span class="tt">payload</span>/<span class="tt">error</span>/<span class="tt">principal</span>/ <span class="tt">idempotencyKey</span> two ways: RFC 8259 requires those bytes escaped, so the raw byte alone yields JSON <span class="tt">fromJson</span>'s <span class="tt">glz::read</span> throws on; worse, once the same string also contains an escaped <span class="tt">\\endiskip</span> or <span class="tt">"</span>, glaze's chunked writer path silently rewrites the control byte as two 0x00 bytes, corrupting the payload before it ever reaches disk. This mirrors <span class="tt"><a class="el" href="../../de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html" title="Write options that escape ASCII control bytes as \\uXXXX sequences.">morph::wire::detail::EscapingWriteOpts</a></span> (<span class="tt"><a class="el" href="../../dc/de4/wire_8hpp_source.html">core/wire.hpp</a></span>) exactly; duplicated here (rather than shared) so this header stays free of a <span class="tt">core/</span> dependency for <span class="tt">MORPH_CLIENT_ONLY</span>-style consumers that only want the journal. Escaping is lossless, so any such byte still round-trips through <span class="tt">fromJson</span> unchanged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01372">1372</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
-</div><hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/core/<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></li>
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+</div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
+<a id="a2755c7e8ad562866813940f4d4218398" name="a2755c7e8ad562866813940f4d4218398"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2755c7e8ad562866813940f4d4218398">&#9670;&#160;</a></span>escape_control_characters</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::journal::detail::EscapingWriteOpts::escape_control_characters = true</td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>Emit control bytes as <span class="tt">\\uXXXX</span> rather than raw. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../da/d78/action__log_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a>.</p>
+
+</div>
+</div>
+<hr/>The documentation for this struct was generated from the following file:<ul>
+<li>morph/journal/<a class="el" href="../../da/d78/action__log_8hpp_source.html">action_log.hpp</a></li>
 </ul>
 </div><!-- contents -->
 </div><!-- doc-content -->
@@ -147,7 +171,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dfb/structm
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>bridge</b></li><li class="navelem"><a href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html">AllowShared</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>journal</b></li><li class="navelem"><b>detail</b></li><li class="navelem"><a href="../../da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html">EscapingWriteOpts</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

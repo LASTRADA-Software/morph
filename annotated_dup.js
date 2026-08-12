@@ -71,6 +71,9 @@ var annotated_dup =
         [ "VisibleWhen", "d8/d10/structmorph_1_1forms_1_1VisibleWhen.html", "d8/d10/structmorph_1_1forms_1_1VisibleWhen" ]
       ] ],
       [ "journal", null, [
+        [ "detail", null, [
+          [ "EscapingWriteOpts", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts" ]
+        ] ],
         [ "FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", "d0/d2e/classmorph_1_1journal_1_1FileActionLog" ],
         [ "IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", "df/d4e/structmorph_1_1journal_1_1IActionLog" ],
         [ "InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog" ],
@@ -137,6 +140,7 @@ var annotated_dup =
       ] ],
       [ "session", null, [
         [ "detail", null, [
+          [ "EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts" ],
           [ "ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext" ]
         ] ],
         [ "AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer" ],
@@ -145,6 +149,7 @@ var annotated_dup =
         [ "Principal", "d0/d26/structmorph_1_1session_1_1Principal.html", "d0/d26/structmorph_1_1session_1_1Principal" ],
         [ "SessionToken", "d8/dd5/structmorph_1_1session_1_1SessionToken.html", "d8/dd5/structmorph_1_1session_1_1SessionToken" ],
         [ "SigningAuthorizer", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html", "db/dd9/classmorph_1_1session_1_1SigningAuthorizer" ],
+        [ "TokenIssuanceError", "d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html", null ],
         [ "TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", "dc/de7/classmorph_1_1session_1_1TokenIssuer" ],
         [ "TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", "d5/dc7/classmorph_1_1session_1_1TokenVerifier" ]
       ] ],

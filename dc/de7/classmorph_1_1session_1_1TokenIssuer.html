@@ -137,7 +137,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Mints signed bearer tokens from claims using a shared secret. </p>
 <p>Wire format: <span class="tt">base64url(claimsJson) "." base64url(mac(secret, payload))</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a481f5554cb6af08565623f293a61e5e8" name="a481f5554cb6af08565623f293a61e5e8"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a481f5554cb6af08565623f293a61e5e8">&#9670;&#160;</a></span>TokenIssuer()</h2>
@@ -175,7 +175,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00335">335</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00382">382</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -204,15 +204,21 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Serialises <code class="param">claims</code> and returns a signed token string. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Writes with <span class="tt"><a class="el" href="../../de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html" title="Write options that escape ASCII control bytes as \\uXXXX sequences.">detail::EscapingWriteOpts</a></span> so a raw ASCII control byte in <span class="tt">principal</span>/<span class="tt">roles</span> round-trips through <span class="tt"><a class="el" href="../../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492" title="Verifies token&#39;s signature and expiry and returns its claims.">TokenVerifier::verify</a></span> instead of producing invalid JSON (or, alongside an escaped <span class="tt">\\endiskip</span>/<span class="tt">"</span>, silently corrupted JSON) — see that struct's doc comment. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">claims</td><td>Claims to embed and sign. </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The signed <span class="tt">payload.sig</span> token. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">TokenIssuanceError</td><td>on encode failure (see <span class="tt"><a class="el" href="../../d3/d6a/session__auth_8hpp.html#aa30790cb1906464da78888740ad3b7fa" title="Converts a Glaze error into a TokenIssuanceError, or does nothing if errCode reports success....">detail::throwOnGlazeError</a></span> for why this is not realistically reachable for <span class="tt"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html" title="Verified claims carried by a session token.">SessionToken</a></span>). </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00396">396</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

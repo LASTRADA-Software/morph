@@ -53,6 +53,7 @@ var hierarchy =
     [ "morph::forms::RequiredWhen&lt; V, A, Cond &gt;", "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html", null ],
     [ "morph::forms::RuleList&lt; Rules &gt;", "d3/d8b/structmorph_1_1forms_1_1RuleList.html", null ],
     [ "morph::forms::VisibleWhen&lt; V, A, Cond &gt;", "d8/d10/structmorph_1_1forms_1_1VisibleWhen.html", null ],
+    [ "morph::journal::detail::EscapingWriteOpts", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html", null ],
     [ "morph::journal::IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", [
       [ "morph::journal::FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", null ],
       [ "morph::journal::InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", null ],
@@ -98,6 +99,7 @@ var hierarchy =
     [ "morph::qt::QtWebSocketServer", "d9/d42/classmorph_1_1qt_1_1QtWebSocketServer.html", null ],
     [ "morph::qt::QtWebSocketServerConfig", "de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html", null ],
     [ "morph::session::Context", "dd/d85/structmorph_1_1session_1_1Context.html", null ],
+    [ "morph::session::detail::EscapingWriteOpts", "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html", null ],
     [ "morph::session::detail::ScopedContext", "dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html", null ],
     [ "morph::session::IAuthorizer", "d5/d07/structmorph_1_1session_1_1IAuthorizer.html", [
       [ "morph::session::AllowAllAuthorizer", "dd/d85/structmorph_1_1session_1_1AllowAllAuthorizer.html", null ],
@@ -139,7 +141,8 @@ var hierarchy =
         [ "morph::journal::SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
         [ "morph::model::ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", null ],
         [ "morph::offline::FileOfflineQueueError", "d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.html", null ],
-        [ "morph::offline::SqliteOfflineQueueError", "dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html", null ]
+        [ "morph::offline::SqliteOfflineQueueError", "dc/d46/structmorph_1_1offline_1_1SqliteOfflineQueueError.html", null ],
+        [ "morph::session::TokenIssuanceError", "d1/da4/structmorph_1_1session_1_1TokenIssuanceError.html", null ]
       ] ]
     ] ]
 ];
