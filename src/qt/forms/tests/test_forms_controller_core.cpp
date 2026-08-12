@@ -143,6 +143,62 @@ TEST_CASE("morph::qt::forms::FormsControllerCore forwards fetchOptions' body, no
     CHECK(reply.find("alpha") == std::string::npos);
 }
 
+TEST_CASE("morph::qt::forms::FormsControllerCore composes over a caller-supplied Bridge/executor",
+          "[forms_controller_core]") {
+    // Issue #57: FormsControllerCore must be usable against a Bridge the
+    // caller already owns (e.g. one already switched to a Remote/Socket
+    // backend, or shared across multiple presenters) instead of always
+    // building and owning its own private, always-local Bridge.
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::qt::QtExecutor gui;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    morph::qt::forms::FormsControllerCore<PingModel> core{bridge, &gui, R"({"EchoAction":{}})"};
+    CHECK(core.schemasJson() == R"({"EchoAction":{}})");
+
+    std::atomic<bool> done{false};
+    std::string reply;
+    core.submitIfValid(
+        "EchoAction", R"({"text":"composed"})",
+        [&](std::string resultJson) {
+            reply = std::move(resultJson);
+            done.store(true);
+        },
+        [&](const std::exception_ptr&) { done.store(true); });
+
+    pumpUntil([&] { return done.load(); });
+    CHECK(reply == R"("echo: composed")");
+}
+
+TEST_CASE(
+    "morph::qt::forms::FormsControllerCore composed over a caller Bridge dispatches through a later switchBackend",
+    "[forms_controller_core]") {
+    // The composed-over Bridge is the caller's own -- a later switchBackend()
+    // on that same Bridge (e.g. local -> remote/socket) must still be
+    // reachable through this core's handler, proving the core never captured
+    // a private snapshot of the backend.
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::qt::QtExecutor gui;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    morph::qt::forms::FormsControllerCore<PingModel> core{bridge, &gui, std::string{}};
+
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool));
+
+    std::atomic<bool> done{false};
+    std::string reply;
+    core.submitIfValid(
+        "EchoAction", R"({"text":"after-switch"})",
+        [&](std::string resultJson) {
+            reply = std::move(resultJson);
+            done.store(true);
+        },
+        [&](const std::exception_ptr&) { done.store(true); });
+
+    pumpUntil([&] { return done.load(); });
+    CHECK(reply == R"("echo: after-switch")");
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app{argc, argv};
     return Catch::Session().run(argc, argv);

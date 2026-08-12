@@ -27,6 +27,7 @@ without knowing their concrete types.
   - [ActionExecuteRegistry](#actionexecuteregistry)
 - [Registration macros](#registration-macros)
 - [`MORPH_CLIENT_ONLY` — suppressing model-owning registrars](#morph_client_only--suppressing-model-owning-registrars)
+  - [`BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for `MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
   - [BRIDGE_REGISTER_MODEL](#bridge_register_model)
   - [BRIDGE_REGISTER_ACTION](#bridge_register_action)
   - [BRIDGE_REGISTER_VALIDATOR](#bridge_register_validator)
@@ -592,6 +593,12 @@ must include `<morph/bridge.hpp>` (directly or transitively) because
 `registerActionExecutorOnce` is only defined there. Without it, the link fails
 with an unresolved external symbol.
 
+A client-side alternative, `BRIDGE_REGISTER_ACTION_FOR_CLIENT`, avoids the
+`Result`-deduction step that forces `M` to be a complete type — see
+[`BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for
+`MORPH_CLIENT_ONLY`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only)
+below.
+
 ### `BRIDGE_REGISTER_VALIDATOR(A, FN)`
 
 Specialises `ActionValidator<A>` with a custom predicate.
@@ -682,6 +689,95 @@ running `LocalBackend` gets a clear, immediate diagnostic instead of a
 
 Off by default: the standard build (and every existing consumer) is unaffected.
 
+### `BRIDGE_REGISTER_ACTION_FOR_CLIENT` — a header seam for `MORPH_CLIENT_ONLY`
+
+`MORPH_CLIENT_ONLY` removes the *link* dependency on a model's implementation
+(above), but not the *header* dependency: `BRIDGE_REGISTER_ACTION`'s `Result`
+type is `decltype(std::declval<M&>().execute(std::declval<A>()))`, so `M` must
+be a **complete type with `execute(A)` declared** at the exact point the macro
+is invoked — ordinarily the model's own header. A pure client that never
+constructs `M` still has to `#include` that header (and everything it pulls
+in transitively — a persistence mixin's database-driver headers, for a model
+backed by one) purely to let this `decltype` resolve, even though a
+`MORPH_CLIENT_ONLY` build never calls `Model::execute` at all (`executeVia`'s
+`localOp` throws instead, per the previous section). A WASM/browser client has
+no include path for a native database client library at all, so this is a hard
+build blocker, not merely extra compile weight.
+
+`BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)` closes this seam:
+it emits the exact same `ActionTraits<A>` specialisation as
+`BRIDGE_REGISTER_ACTION`, except `Result` is the explicitly-named @p RESULT
+type argument instead of a `decltype`-deduced one. `M` is then used only as
+`BridgeHandler<M>`'s template tag and `ActionExecuteRegistry`'s dispatch key —
+both routes call only `ModelTraits<M>::typeId()` (needs the trait
+specialisation, not `M`'s completeness) and, under `MORPH_CLIENT_ONLY`, never
+reach `holder.into<M>()`/`M::execute(...)` (gated out inside `executeVia`, see
+above) — so `M` may be **forward-declared and never defined** anywhere in the
+client's link. A client's model header therefore reduces to one forward
+declaration plus the two registration macros; the real, complete model
+(inheriting whatever persistence mixin it needs) lives only in the
+server-side translation unit that actually owns it.
+
+```cpp
+// client_only_model.hpp -- the ENTIRE client-visible surface for RecordModel,
+// under MORPH_CLIENT_ONLY. No database-driver header, no ORM mixin, in sight.
+struct RecordModel;  // forward declaration only -- never defined here
+
+struct RecordMeasurement { /* ...fields... */ };
+struct RecordMeasurementResult { /* ...fields... */ };
+
+BRIDGE_REGISTER_MODEL(RecordModel, "RecordModel")
+BRIDGE_REGISTER_ACTION_FOR_CLIENT(RecordModel, RecordMeasurement, RecordMeasurementResult, "RecordMeasurement")
+```
+
+**`M` being incomplete constrains *which* `BridgeHandler<M>` constructor a
+client may use.** `BridgeHandler<M>`'s default constructor
+(`BridgeHandler(Bridge&, IExecutor*)`) calls `Bridge::registerHandler<M>()`,
+which unconditionally builds `[] { return ModelFactory::create<M>(); }` — and
+`ModelFactory::create<M>` default-constructs `M` by value, requiring `M`
+complete. Using it here would silently reintroduce the exact completeness
+requirement this macro exists to avoid. The client must instead use the
+**pre-built-binding constructor**
+(`BridgeHandler(Bridge&, IExecutor*, shared_ptr<HandlerBinding>)`) with a
+`modelFactory` that is never actually invoked in a `MORPH_CLIENT_ONLY` process
+(no `LocalBackend` exists to call it — see `Bridge::executeVia`'s
+`MORPH_CLIENT_ONLY` guard, above):
+
+```cpp
+auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+binding->typeId = std::string{morph::model::ModelTraits<RecordModel>::typeId()};
+binding->modelFactory = [] -> std::unique_ptr<morph::model::detail::IModelHolder> {
+    throw std::logic_error("client-only: RecordModel has no local instance");
+};
+morph::bridge::BridgeHandler<RecordModel> handler{bridge, guiExec, std::move(binding)};
+
+// Dispatch generically -- executeJson never touches RecordModel's definition.
+handler.executeJson("RecordMeasurement", bodyJson);
+```
+
+**`@p RESULT` is not checked against the real model's `execute` return
+type — this is the one thing the macro cannot verify.** A mismatch is a
+silent JSON-shape bug (the client (de)serialises the wrong shape on the wire),
+not a compile error: nothing here compares against the server-side
+registration, which still uses the plain `BRIDGE_REGISTER_ACTION` from the
+real model's own header and therefore still deduces `Result` correctly from
+`Model::execute`'s actual return type. Keeping the two declarations in sync is
+the caller's responsibility, same as any hand-written wire contract.
+
+Usable with or without `MORPH_CLIENT_ONLY` defined — the emitted
+`ActionTraits<A>` is identical either way — but the header-avoidance benefit
+only materialises when `M` is genuinely left incomplete at the client's
+registration site *and* `MORPH_CLIENT_ONLY` is defined (so
+`MORPH_DETAIL_REGISTER_MODEL_LOCAL`/`MORPH_DETAIL_REGISTER_ACTION_LOCAL`'s
+registrars, which do need `M` complete, are suppressed for that build).
+
+**Confirmed empirically**
+(`tests/compile_checks/client_only_facade_no_model_header.cpp`, run via
+`try_run()` in `tests/CMakeLists.txt`): `ClientOnlyFacadeModel` is
+forward-declared and never defined anywhere in that probe's link; it compiles,
+links, and round-trips `ClientOnlyFacadeAction` through `toJson`/`fromJson`
+correctly under `MORPH_CLIENT_ONLY`.
+
 ## API reference
 
 ### Traits and policies
@@ -726,7 +822,8 @@ Off by default: the standard build (and every existing consumer) is unaffected.
 | Macro | Arguments | Generates |
 |---|---|---|
 | `BRIDGE_REGISTER_MODEL` | `(M, NAME)` | `ModelTraits<M>` specialisation + static-init factory registration. |
-| `BRIDGE_REGISTER_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + static-init dispatcher and executor registration. Optional 4th arg: `Loggable`. |
+| `BRIDGE_REGISTER_ACTION` | `(M, A, NAME, ...)` | `ActionTraits<A>` specialisation + static-init dispatcher and executor registration. Optional 4th arg: `Loggable`. `Result` deduced from `decltype(M::execute(A))`, requiring `M` complete. |
+| `BRIDGE_REGISTER_ACTION_FOR_CLIENT` | `(M, A, RESULT, NAME, ...)` | Same as `BRIDGE_REGISTER_ACTION`, except `Result` is the explicitly-named `RESULT` argument — `M` may be forward-declared only. See ["a header seam for `MORPH_CLIENT_ONLY`"](#bridge_register_action_for_client--a-header-seam-for-morph_client_only). |
 | `BRIDGE_REGISTER_VALIDATOR` | `(A, FN)` | `ActionValidator<A>` specialisation + custom predicate. |
 
 ### Detail helpers
