@@ -110,8 +110,8 @@ TEST_CASE("FileOfflineQueue: a control byte in payload survives being written an
         // A second, ordinary item after the control-byte one so the
         // control-byte line is NOT the trailing line — FileOfflineQueue
         // tolerates (skips) a malformed *trailing* line as a torn-write
-        // heuristic, but rethrows on any earlier malformed line, so this is
-        // the shape that actually exercises the bug rather than the
+        // heuristic, but rethrows on any earlier malformed line, so this
+        // shape exercises the escaping path itself rather than the
         // torn-line tolerance.
         queue.enqueue(payload);
         queue.enqueue("second");
