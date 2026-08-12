@@ -1127,8 +1127,8 @@ A&) const noexcept`, `emitNode()`), which is what makes them substitutable
 everywhere an existing single-node condition already worked:
 
 - **Nested inside a `when` clause** — `requiredWhen`/`visibleWhen`/`readonlyWhen`
-  accept a compound condition exactly where they previously accepted only a
-  leaf, with no change to those three rule kinds themselves.
+  accept a compound condition in the same `when` position a leaf condition
+  occupies, with no change to those three rule kinds themselves.
 - **Directly as a top-level `formRules` entry** — `andOf`/`orOf`/`notOf`
   declare `isPresentation = false` and a `test()`, so `ruleList(andOf(...))`
   is itself a valid, directly-gating rule — "a single rule with a compound
