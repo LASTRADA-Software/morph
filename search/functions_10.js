@@ -27,5 +27,6 @@ var searchData=
   ['rulekey_24',['ruleKey',['../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc',1,'morph::forms::i18n']]],
   ['rulelist_25',['ruleList',['../d4/d11/forms_8hpp.html#a358de01c6c16cb34980b10c4f2a5f007',1,'morph::forms']]],
   ['run_26',['run',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b',1,'morph::offline::SyncWorker']]],
-  ['runfor_27',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]]
+  ['runfor_27',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]],
+  ['runonce_28',['runOnce',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a0d4fd8fb8b80488a7a33f3a1100ae39e',1,'morph::exec::MainThreadExecutor']]]
 ];

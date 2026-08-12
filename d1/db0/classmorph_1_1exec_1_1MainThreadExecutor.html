@@ -141,6 +141,10 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a75c70e9c83fbda739ad5f3d93a820e85"><td class="mdescLeft">&#160;</td><td class="mdescRight">Enqueues <code class="param">task</code> to be run on the next <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span> call.  <br /></td></tr>
 <tr class="memitem:af57aad9894721245d25d6c64b006cdc9" id="r_af57aad9894721245d25d6c64b006cdc9"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9">runFor</a> (std::chrono::milliseconds timeout)</td></tr>
 <tr class="memdesc:af57aad9894721245d25d6c64b006cdc9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pumps the task queue for up to <code class="param">timeout</code>.  <br /></td></tr>
+<tr class="memitem:a0d4fd8fb8b80488a7a33f3a1100ae39e" id="r_a0d4fd8fb8b80488a7a33f3a1100ae39e"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#a0d4fd8fb8b80488a7a33f3a1100ae39e">runOnce</a> ()</td></tr>
+<tr class="memdesc:a0d4fd8fb8b80488a7a33f3a1100ae39e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Dequeues and runs at most one pending task, without blocking.  <br /></td></tr>
+<tr class="memitem:aa176a496a1a032a2e8a24ba56b693186" id="r_aa176a496a1a032a2e8a24ba56b693186"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa176a496a1a032a2e8a24ba56b693186">drain</a> ()</td></tr>
+<tr class="memdesc:aa176a496a1a032a2e8a24ba56b693186"><td class="mdescLeft">&#160;</td><td class="mdescRight">Runs tasks until the queue is empty, with no wall-clock timeout.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Single-thread executor intended for use on the calling (main) thread. </p>
@@ -218,6 +222,68 @@ Public Member Functions</h2></td></tr>
 </dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00153">153</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a0d4fd8fb8b80488a7a33f3a1100ae39e" name="a0d4fd8fb8b80488a7a33f3a1100ae39e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d4fd8fb8b80488a7a33f3a1100ae39e">&#9670;&#160;</a></span>runOnce()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::exec::MainThreadExecutor::runOnce </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Dequeues and runs at most one pending task, without blocking. </p>
+<p>Never waits for a task to appear: if the queue is empty, returns <span class="tt">false</span> immediately. Otherwise pops exactly one task, runs it, and returns <span class="tt">true</span> whether or not that task threw. Unlike <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span>, there is no wall-clock wait — this is the single-step primitive for callers (e.g. tests or external event loops) that want deterministic, one-task-at-a-time control instead of a timed pump.</p>
+<p>Must be called from the thread that "owns" this executor. </p><dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if a task was dequeued and run, <span class="tt">false</span> if the queue was empty. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
+
+</div>
+</div>
+<a id="aa176a496a1a032a2e8a24ba56b693186" name="aa176a496a1a032a2e8a24ba56b693186"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa176a496a1a032a2e8a24ba56b693186">&#9670;&#160;</a></span>drain()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::exec::MainThreadExecutor::drain </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Runs tasks until the queue is empty, with no wall-clock timeout. </p>
+<p>Repeatedly calls the same dequeue-and-invoke step as <span class="tt"><a class="el" href="#a0d4fd8fb8b80488a7a33f3a1100ae39e" title="Dequeues and runs at most one pending task, without blocking.">runOnce()</a></span> until the queue reports empty, then returns. It does <b>not</b> wait for tasks posted after draining begins: a task that posts new work while running extends the drain (the new task is still queued and gets consumed), but <span class="tt"><a class="el" href="#aa176a496a1a032a2e8a24ba56b693186" title="Runs tasks until the queue is empty, with no wall-clock timeout.">drain()</a></span> never blocks waiting for an <em>externally</em> posted task the way <span class="tt"><a class="el" href="#af57aad9894721245d25d6c64b006cdc9" title="Pumps the task queue for up to timeout.">runFor()</a></span> does — it simply stops once the queue is observed empty.</p>
+<p>Must be called from the thread that "owns" this executor. </p>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d76/executor_8hpp_source.html#l00204">204</a> of file <a class="el" href="../../d7/d76/executor_8hpp_source.html">executor.hpp</a>.</p>
 
 </div>
 </div>

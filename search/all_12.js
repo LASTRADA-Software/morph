@@ -52,5 +52,6 @@ var searchData=
   ['ruleliteral_49',['RuleLiteral',['../db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html',1,'morph::forms']]],
   ['rules_50',['rules',['../d3/d8b/structmorph_1_1forms_1_1RuleList.html#a04b00f8f7ca42ec629c0b1a26d54d32f',1,'morph::forms::RuleList']]],
   ['run_51',['run',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b',1,'morph::offline::SyncWorker']]],
-  ['runfor_52',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]]
+  ['runfor_52',['runFor',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#af57aad9894721245d25d6c64b006cdc9',1,'morph::exec::MainThreadExecutor']]],
+  ['runonce_53',['runOnce',['../d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html#a0d4fd8fb8b80488a7a33f3a1100ae39e',1,'morph::exec::MainThreadExecutor']]]
 ];
