@@ -40,3 +40,4 @@ qt_add_qml_module(bank_gui
 target_include_directories(bank_gui PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(bank_gui PRIVATE bank_lib Qt6::Quick Qt6::Qml Qt6::QuickControls2)
 target_compile_features(bank_gui PRIVATE cxx_std_23)
+apply_bigobj(bank_gui)

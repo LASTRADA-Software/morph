@@ -27,6 +27,7 @@ qt_add_qml_module(lab_forms_demo_module
 target_include_directories(lab_forms_demo_module PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)
 target_link_libraries(lab_forms_demo_module PUBLIC morph::morph morph::qt_forms morph_forms_moduleplugin Qt6::Quick Qt6::Qml)
 target_compile_features(lab_forms_demo_module PUBLIC cxx_std_23)
+apply_bigobj(lab_forms_demo_module)
 
 qt_add_executable(morph_forms_qml main.cpp)
 target_link_libraries(morph_forms_qml PRIVATE lab_forms_demo_moduleplugin Qt6::Quick)

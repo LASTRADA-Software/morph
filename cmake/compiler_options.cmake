@@ -208,6 +208,22 @@ function(apply_coverage target)
         -fprofile-instr-generate)
 endfunction()
 
+function(apply_bigobj target)
+    # Demo/example/test binaries that instantiate schema, rule, or form
+    # templates over many action types push their .obj's COFF section count
+    # past the 32-bit SN_LOFF format's limit under MSVC Debug (no /Og
+    # folding, full /Zi debug info), aborting with C1128 ("number of
+    # sections exceeded object file format limit"). Several unrelated
+    # targets have hit this independently as they grew (morph_forms_demo,
+    # lab_forms_demo_module, morph_tests) -- call this on any target built
+    # from demo/example/ladder sources instead of waiting for it to recur.
+    # /bigobj switches to the extended section-count format; harmless on
+    # Release and on other compilers.
+    target_compile_options(${target} PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+    )
+endfunction()
+
 function(apply_fuzzer target)
     # tests/fuzz/*: libFuzzer harnesses over morph::wire::decode and
     # RemoteServer::dispatchMessage. Only meaningful on Clang (libFuzzer ships
