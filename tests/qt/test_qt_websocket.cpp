@@ -213,7 +213,7 @@ TEST_CASE(
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -238,6 +238,90 @@ TEST_CASE(
     pumpUntil([] { return false; }, 20);  // drain the disconnected signal
 
     CHECK(binding->currentId.load() == 0U);  // onRegistered never fired; still safely unbound
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: registerModelAsync called before the socket connects queues and retries once "
+    "connected fires",
+    "[qt][ws][issue54]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    // Deliberately do NOT call waitForConnected() before registering -- this is
+    // exactly the ordering a single-threaded WASM client must use, since it can
+    // never block waiting for the connection to settle (see issue #54).
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
+        morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "WsEchoModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); };
+    // registerModelAsync is called here, before the socket has finished its
+    // handshake. Previously this called onError("disconnected") immediately
+    // and never retried -- currentId would stay 0 forever even once the
+    // socket connects moments later. It must instead queue the attempt and
+    // retry once `connected` fires.
+    bridge.registerHandler(binding);
+    CHECK(binding->currentId.load() == 0U);  // not connected yet, nothing sent
+
+    pumpUntil([&] { return binding->currentId.load() != 0U; }, 200);
+    REQUIRE(binding->currentId.load() != 0U);
+
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec, binding};
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{42}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 42);
+}
+
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: a fire-and-forget deregister's reply cannot be misrouted to a following "
+    "synchronous register",
+    "[qt][ws][issue65]") {
+    // Reproduces issue #65: deregisterModel() is fire-and-forget with callId
+    // 0, and registerModel()'s sendSync path also parks its nested event loop
+    // waiting for a callId==0 reply. Back to back on the same connection,
+    // whichever callId==0 reply lands first used to be handed to the parked
+    // sync loop -- if it was the deregister's stray "ok" (no modelId), the
+    // new registration's currentId came back 0 (or garbage) and the real
+    // register reply was dropped as unmatched. Repeated many times to make a
+    // pre-fix race land reliably (the issue itself measured ~1-in-8 in
+    // isolated runs); every iteration must produce a real, non-zero,
+    // *distinct* modelId with no dropped/garbled reply.
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{4};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url};
+    REQUIRE(backend.waitForConnected());
+
+    // First instance to be deregistered fire-and-forget.
+    auto firstId = backend.registerModel("WsEchoModel", [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
+    REQUIRE(firstId.v != 0U);
+
+    constexpr int iterations = 40;
+    for (int i = 0; i < iterations; ++i) {
+        backend.deregisterModel(firstId);  // fire-and-forget, callId == 0
+        // Immediately issue a synchronous register on the same connection --
+        // the exact adjacency the issue describes. Its reply must be the
+        // real "ok" with a fresh modelId, never the deregister's stray ack.
+        auto newId =
+            backend.registerModel("WsEchoModel", [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); });
+        REQUIRE(newId.v != 0U);
+        firstId = newId;
+    }
 }
 
 TEST_CASE("morph::qt::QtWebSocketBackend: exception delivered via onError", "[qt][ws]") {
@@ -641,7 +725,7 @@ TEST_CASE("morph::qt::QtWebSocketBackend: register after the server closes fails
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -702,7 +786,7 @@ TEST_CASE("Server closing notifies morph::qt::QtWebSocketBackend disconnected si
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -737,7 +821,7 @@ TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully closes idle clients wit
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -762,7 +846,7 @@ TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully waits for an in-flight 
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -796,7 +880,7 @@ TEST_CASE("morph::qt::QtWebSocketServer::closeGracefully hard-stops once the dea
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};
@@ -1431,7 +1515,7 @@ TEST_CASE("QtWebSocketServer::close() reclaims every client's scope", "[qt][ws][
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
     auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
-    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, 0);
+    auto wsServer = std::make_unique<morph::qt::QtWebSocketServer>(*server, quint16{0});
     REQUIRE(wsServer->listen());
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer->port())};

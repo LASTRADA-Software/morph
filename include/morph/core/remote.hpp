@@ -364,7 +364,22 @@ public:
     ///
     /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @return JSON-encoded reply envelope.
-    std::string handleInline(const std::string& msg) {
+    std::string handleInline(const std::string& msg) { return handleInline(msg, 0); }
+
+    /// @brief Like `handleInline(msg)`, but additionally attributes any
+    ///        `register` decoded from @p msg to a connection scope.
+    ///
+    /// The synchronous counterpart to the scoped `handle(msg, reply, cid)`
+    /// overload — same "processed inline, safe from the worker pool itself"
+    /// contract as the two-argument `handleInline`, with `register`/`attach`
+    /// additionally recorded in `cid`'s scope so a later `closeConnection(cid)`
+    /// reclaims it. Passing `cid == 0` is exactly the unscoped overload above.
+    ///
+    /// @param msg JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @param cid Connection scope to attribute a `register` in @p msg to;
+    ///            `0` means unscoped.
+    /// @return JSON-encoded reply envelope.
+    std::string handleInline(const std::string& msg, ConnectionId cid) {
         try {
             auto env = ::morph::wire::decode(msg);
             if (env.kind == "execute") {
@@ -377,7 +392,7 @@ public:
         }
         std::string reply;
         std::function<void(std::string)> capture = [&reply](std::string out) noexcept { reply = std::move(out); };
-        dispatchMessage(msg, capture);
+        dispatchMessage(msg, capture, cid);
         return reply;
     }
 
@@ -1464,9 +1479,40 @@ private:
 /// blocking wait).
 class SimulatedRemoteBackend : public detail::IBackend {
 public:
-    /// @brief Constructs the backend targeting @p server.
+    /// @brief Constructs the backend targeting @p server, unscoped.
+    ///
+    /// Every `register`/`deregister`/`attach`/`assign`/`instances` call this
+    /// backend makes uses `ConnectionId{0}` — the server's "unscoped" sentinel
+    /// (`backend.md`, "Connection scopes") — exactly as before connection
+    /// scopes existed. Use the `ConnectionId` constructor below to give this
+    /// backend its own scope instead, so tests can exercise connection-scoped
+    /// state (rate limiting, connection-drop recovery, shared-instance
+    /// attach/detach across connections) deterministically without a real
+    /// socket.
     /// @param server The `RemoteServer` instance to forward calls to.
     explicit SimulatedRemoteBackend(RemoteServer& server) : _server{server} {}
+
+    /// @brief Constructs the backend targeting @p server, scoped to @p cid.
+    ///
+    /// @p cid must have been obtained from `server.openConnection()` — the
+    /// same connection-scope mechanism `QtWebSocketServer`/`morph::net::SocketServer`
+    /// use for a real transport, made available for in-process simulation. Every
+    /// `register`/`attach`/`assign`/`instances` call this backend makes is
+    /// attributed to @p cid's scope (via the three-argument `RemoteServer::handle`/
+    /// `handleInline` overloads), so a `deregisterModel`/destructor-driven
+    /// `closeConnection` reclaims exactly what this backend registered — the
+    /// same reclamation guarantee a dropped socket gives a real client.
+    ///
+    /// The backend does **not** call `closeConnection` itself on destruction:
+    /// unlike a real transport, there is no single well-defined "this
+    /// connection is gone" moment to hook here (the caller may want to keep
+    /// the scope open past this object's lifetime, e.g. to construct a
+    /// second `SimulatedRemoteBackend` against the same scope). Call
+    /// `closeConnection(cid)` explicitly, or destroy `server` itself, when
+    /// the simulated connection should be reclaimed.
+    /// @param server The `RemoteServer` instance to forward calls to.
+    /// @param cid    Connection scope, as returned by `server.openConnection()`.
+    SimulatedRemoteBackend(RemoteServer& server, ConnectionId cid) : _server{server}, _cid{cid} {}
 
     /// @brief Registers the model type on the server and returns its assigned id.
     ///
@@ -1497,8 +1543,8 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
-        auto reply = ::morph::wire::decode(
-            _server.handleInline(::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey}))));
+        auto reply = ::morph::wire::decode(_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey})), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1521,9 +1567,10 @@ public:
         if (identity.primary.empty()) {
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto reply =
-            ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeRegisterShared(
-                typeId, std::string{identity.primary}, std::string{identity.contextKey}))));
+        auto reply = ::morph::wire::decode(_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
+                                                                     std::string{identity.contextKey})),
+            _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1550,8 +1597,10 @@ public:
             }
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeAttach(
-            typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey}))));
+        auto reply = ::morph::wire::decode(_server.handleInline(
+            ::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                                             std::string{identity.contextKey})),
+            _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1567,8 +1616,8 @@ public:
         if (primary.empty() || mid.v == 0U) {
             return;
         }
-        (void)_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v)));
+        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v)),
+                                   _cid);
     }
 
     /// @brief Asks the server for the live shared primary keys of @p typeId.
@@ -1576,8 +1625,8 @@ public:
     /// @return Canonical key strings of the live shared instances.
     /// @throws std::runtime_error if the server replies with an error.
     std::vector<std::string> listInstances(const std::string& typeId) override {
-        auto reply =
-            ::morph::wire::decode(_server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId))));
+        auto reply = ::morph::wire::decode(
+            _server.handleInline(::morph::wire::encode(::morph::wire::makeInstances(typeId)), _cid));
         if (reply.kind != "ok") {
             throw std::runtime_error("instances failed: " + reply.message);
         }
@@ -1589,9 +1638,14 @@ public:
     }
 
     /// @brief Deregisters the model on the server. Processed inline; safe from any thread.
+    ///
+    /// Carries this backend's own `ConnectionId`, so a shared instance's
+    /// attach count is decremented against *this* backend's scope entry —
+    /// never a different connection's — exactly as a real transport's
+    /// `deregister` does (`backend.md`, "Connection scopes").
     /// @param mid Id of the model to deregister.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
-        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)));
+        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)), _cid);
     }
 
     /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
@@ -1638,21 +1692,23 @@ public:
         env.session = std::move(call.session);
         auto deser = std::move(call.deserializeResult);
 
-        _server.handle(::morph::wire::encode(env),
-                       [state, deser = std::move(deser)](const std::string& replyJson) mutable {
-                           try {
-                               auto reply = ::morph::wire::decode(replyJson);
-                               if (reply.kind == "ok") {
-                                   state->setValue(deser(reply.body));
-                               } else if (reply.message == "timeout") {
-                                   throw TimeoutError{};
-                               } else {
-                                   throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
-                               }
-                           } catch (...) {
-                               state->setException(std::current_exception());
-                           }
-                       });
+        _server.handle(
+            ::morph::wire::encode(env),
+            [state, deser = std::move(deser)](const std::string& replyJson) mutable {
+                try {
+                    auto reply = ::morph::wire::decode(replyJson);
+                    if (reply.kind == "ok") {
+                        state->setValue(deser(reply.body));
+                    } else if (reply.message == "timeout") {
+                        throw TimeoutError{};
+                    } else {
+                        throw std::runtime_error(reply.message.empty() ? "malformed reply" : reply.message);
+                    }
+                } catch (...) {
+                    state->setException(std::current_exception());
+                }
+            },
+            _cid);
         return comp;
     }
 
@@ -1682,6 +1738,11 @@ private:
     }
 
     RemoteServer& _server;
+    // 0 = unscoped (the default constructor's behavior, unchanged); non-zero
+    // when constructed with a ConnectionId from server.openConnection() (see
+    // issue #48). Threaded through every handle()/handleInline() call this
+    // backend makes.
+    ConnectionId _cid{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
 };

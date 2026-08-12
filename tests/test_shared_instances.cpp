@@ -267,6 +267,43 @@ TEST_CASE("two AllowShared handlers naming one key reach one instance", "[shared
     REQUIRE(second.primary().value_or(-1) == 42);
 }
 
+// ── Issue #68: executeJson skips the payload-keyed attach step for
+// AllowShared handlers ───────────────────────────────────────────────────
+//
+// ActionExecuteRegistry::registerAction used to build a single executor that
+// unconditionally static_cast the type-erased handler pointer to
+// BridgeHandler<Model, NoSharing>*, regardless of the real handler's Sharing
+// argument. For an AllowShared handler dispatched via executeJson, that
+// meant `kShared` resolved false *inside the mis-typed instantiation*, so
+// the attach-then-dispatch branch never ran and the call fell straight to
+// executeVia with currentId == 0 -- "handler not bound".
+
+TEST_CASE("executeJson attaches a payload-keyed action on an AllowShared handler, same as execute<Action>",
+          "[shared-instances][issue68]") {
+    morph::testing::InlineExecutor exec;
+    Bridge bridge{makeLocal(exec)};
+
+    BridgeHandler<ShiCounterModel, AllowShared> handler{bridge, &exec};
+    REQUIRE_FALSE(handler.primary().has_value());  // unattached at construction
+
+    // ShiAddTo is payload-keyed (BRIDGE_MODEL_KEY). Dispatched through the
+    // type-erased executeJson path -- exactly what a schema-driven "submit by
+    // action name" caller does -- this must attach the handler to key 42
+    // before dispatching, precisely as the templated execute<ShiAddTo>()
+    // does.
+    auto result = settle(handler.executeJson("SHI_AddTo", R"({"id":42,"amount":10})"));
+    REQUIRE(result == R"({"value":10})");
+    REQUIRE(handler.primary().value_or(-1) == 42);
+
+    // A second AllowShared handler naming the same key via executeJson must
+    // reach the same instance, proving the attach step really ran (not just
+    // that the dispatch happened to succeed against a fresh/unbound id).
+    BridgeHandler<ShiCounterModel, AllowShared> second{bridge, &exec};
+    auto secondResult = settle(second.executeJson("SHI_AddTo", R"({"id":42,"amount":5})"));
+    REQUIRE(secondResult == R"({"value":15})");
+    REQUIRE(second.primary().value_or(-1) == 42);
+}
+
 TEST_CASE("a plain handler never joins the directory", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     Bridge bridge{makeLocal(exec)};

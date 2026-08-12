@@ -727,3 +727,103 @@ TEST_CASE("morph::backend::RemoteServer: a shared register on a closed scope is 
     REQUIRE(reg.env.message == "connection closed");
     REQUIRE(server->health().liveModels == 0U);
 }
+
+// ── Issue #48: connection-scoped SimulatedRemoteBackend ─────────────────────
+//
+// SimulatedRemoteBackend used to send every register/deregister/attach/assign
+// through the unscoped two-argument RemoteServer::handle/handleInline, so it
+// had no way to open its own connection scope -- every simulated client
+// looked identical to the server's registry, and closeConnection-style
+// reclamation (rate limiting, connection-drop recovery, cross-connection
+// shared-instance attach/detach) could not be exercised without a real
+// socket. The ConnectionId constructor closes that gap.
+
+TEST_CASE("morph::backend::SimulatedRemoteBackend: the unscoped constructor still uses ConnectionId{0}",
+          "[remote][connection-scope][issue48]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    morph::backend::SimulatedRemoteBackend backend{*server};
+    auto mid = backend.registerModel("CS_SquareModel", {});
+    REQUIRE(mid.v != 0U);
+
+    // Never attributed to any connection scope -- closing an arbitrary,
+    // never-opened cid must not affect it (mirrors the existing "unscoped
+    // handle() never populates any connection scope" regression test above).
+    server->closeConnection(999999);
+    REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE("morph::backend::SimulatedRemoteBackend: a connection-scoped backend's registrations are reclaimed by "
+          "closeConnection",
+          "[remote][connection-scope][issue48]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cid = server->openConnection();
+    morph::backend::SimulatedRemoteBackend backend{*server, cid};
+
+    auto mid = backend.registerModelWithContext("CS_SquareModel", {}, {});
+    REQUIRE(mid.v != 0U);
+    REQUIRE(server->health().liveModels == 1U);
+
+    server->closeConnection(cid);
+    REQUIRE(server->health().liveModels == 0U);
+}
+
+TEST_CASE(
+    "morph::backend::SimulatedRemoteBackend: two connection-scoped backends sharing a key reach one instance, "
+    "and each closeConnection releases only its own reference",
+    "[remote][connection-scope][issue48][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+    morph::backend::SimulatedRemoteBackend backendA{*server, cidA};
+    morph::backend::SimulatedRemoteBackend backendB{*server, cidB};
+
+    auto midA = backendA.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
+    auto midB = backendB.registerModelShared("CS_SquareModel", {}, {.contextKey = "42", .primary = "42"});
+    REQUIRE(midA.v == midB.v);  // one instance, not two
+    REQUIRE(server->health().liveModels == 1U);
+
+    // Closing A's connection releases only A's reference -- B still holds
+    // the instance, exactly the cross-connection accounting a real
+    // QtWebSocketServer/SocketServer gives, now reachable without a socket.
+    server->closeConnection(cidA);
+    REQUIRE(server->health().liveModels == 1U);
+
+    server->closeConnection(cidB);
+    REQUIRE(server->health().liveModels == 0U);
+}
+
+TEST_CASE("morph::backend::SimulatedRemoteBackend: deregisterModel releases this backend's own connection "
+          "reference, not whichever connection attached last",
+          "[remote][connection-scope][issue48][shared-instances]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+    morph::backend::SimulatedRemoteBackend backendA{*server, cidA};
+    morph::backend::SimulatedRemoteBackend backendB{*server, cidB};
+
+    auto midA = backendA.registerModelShared("CS_SquareModel", {}, {.contextKey = "7", .primary = "7"});
+    auto midB = backendB.registerModelShared("CS_SquareModel", {}, {.contextKey = "7", .primary = "7"});
+    REQUIRE(midA.v == midB.v);
+
+    // A releases its own reference explicitly; the instance must survive
+    // because B's reference is still live.
+    backendA.deregisterModel(midA);
+    REQUIRE(server->health().liveModels == 1U);
+
+    // Closing B's connection (which never explicitly deregistered) is what
+    // finally releases the last reference.
+    server->closeConnection(cidB);
+    REQUIRE(server->health().liveModels == 0U);
+}

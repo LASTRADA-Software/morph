@@ -166,6 +166,19 @@ for a future issue if it proves necessary.
 by `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false` — see
 its own section below).
 
+**Queueing before the first connect.** A `registerModelAsync` call made before
+the socket has finished connecting is **queued**, not failed — this is exactly
+the ordering a single-threaded WASM client must use, since it can never block
+waiting for the connection to settle (a `BridgeHandler` constructed the moment
+the backend is wired up, before the first `connected` signal). The queued
+request is sent, in FIFO order, the moment `connected` fires next (the first
+connect included, before the reconnect handler runs) — no protocol change: a
+call-id is assigned only at send time, same as the immediate path. If the
+socket is torn down (destroyed, or disconnects) before ever connecting, the
+queue is drained by `cancelPending`, which still invokes each queued request's
+`onError` exactly once, exactly like an in-flight (already-sent) registration
+would. See `QtWebSocketBackend`'s own section below.
+
 ## Error types
 
 Four exception types are thrown into in-flight `Completion`s:
@@ -556,6 +569,26 @@ in-process simulation of remote execution.
 - `cancelPending` snapshots and resolves pending completions, same pattern as
   `LocalBackend`.
 
+**Connection scope.** The default constructor, `SimulatedRemoteBackend(RemoteServer&)`,
+carries `ConnectionId{0}` — the server's "unscoped" sentinel — on every call it
+makes, exactly as before connection scopes existed. A second constructor,
+`SimulatedRemoteBackend(RemoteServer&, ConnectionId)`, takes a `ConnectionId`
+obtained from `server.openConnection()` and threads it through every
+`register`/`registerShared`/`attach`/`assign`/`instances`/`deregister`/`execute`
+call this backend makes (via the three-argument `RemoteServer::handle`/
+two-argument `handleInline(msg, cid)` overloads) — the in-process equivalent of
+what `QtWebSocketServer`/`morph::net::SocketServer` give a real transport
+connection (see "Connection scopes" above). This lets a test construct several
+independently-scoped simulated clients against one `RemoteServer` and exercise
+connection-scoped state deterministically: two such backends sharing a key
+reach one instance and their `deregisterModel`/`closeConnection` release only
+their own reference, and `closeConnection(cid)` reclaims exactly what that one
+backend registered. The backend does **not** call `closeConnection` on its own
+destruction — unlike a real socket there is no single unambiguous "this
+connection is gone" moment to hook here — so a caller that wants the scope
+reclaimed calls `server.closeConnection(cid)` explicitly (or lets the server
+itself be destroyed).
+
 ## `QtWebSocketBackend` — client-side WebSocket transport
 
 `morph::qt::QtWebSocketBackend` is the concrete `IBackend` that talks to a
@@ -599,7 +632,14 @@ by `_pendingMtx`, because `cancelPending` can be called from `Bridge` /
   **`registerModelAsync` is the non-blocking alternative**, opt-in via
   `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false`, so
   every existing embedder keeps `registerModel`'s synchronous behavior
-  unchanged). See [Asynchronous registration](#asynchronous-registration--registermodelasync).
+  unchanged). A call made before the socket has finished connecting is queued
+  (`_queuedRegistrations`) rather than failed, and flushed — each entry
+  assigned a call-id and sent, in FIFO order — from the `connected` slot, the
+  first connect included, before `_connectHandler`'s reconnect-handler
+  counterpart runs. If the backend is destroyed (or the socket disconnects)
+  before that queue is ever flushed, `cancelPending` drains it and still
+  invokes each entry's `onError` exactly once. See [Asynchronous
+  registration](#asynchronous-registration--registermodelasync).
 - `deregisterModel` — **fire-and-forget**, not synchronous: if `_connected`, it
   sends a `deregister` envelope and returns immediately without waiting for the
   ack; if disconnected, it does nothing. This deliberately avoids a nested

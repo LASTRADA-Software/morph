@@ -245,6 +245,58 @@ struct IBackend {
         (void)primary;
     }
 
+    /// @brief Optional non-blocking counterpart to `assignPrimary`.
+    ///
+    /// `assignPrimary` is synchronous: a backend whose promote step requires a
+    /// round-trip (a socket backend) can only implement that by blocking the
+    /// calling thread until the reply arrives — `QtWebSocketBackend` does this
+    /// via a nested `QEventLoop`, exactly the blocking shape
+    /// `registerModelAsync` exists to let a caller avoid for the bind step.
+    /// The promote step (the second half of a shared handler's result-keyed
+    /// `execute()`, after `Bridge::ensureBound`) reaches the same nested loop
+    /// on a single-threaded WASM build, which cannot spin one at all.
+    ///
+    /// Overriding this lets such a backend promote without blocking: send the
+    /// request and return `true` immediately, then invoke exactly one of
+    /// @p onRegistered / @p onError once the reply arrives, on the backend's
+    /// own thread (unless the backend is destroyed first, in which case
+    /// neither fires). `Bridge::assignHandlerPrimary` prefers this path when
+    /// it is available and falls back to the synchronous `assignPrimary`
+    /// otherwise, so every backend that has not opted in (every backend as of
+    /// this writing, other than `QtWebSocketBackend`) is unaffected.
+    ///
+    /// The default implementation offers no async path and returns `false`
+    /// without calling either callback — the caller (`Bridge::assignHandlerPrimary`)
+    /// falls back to `assignPrimary` in that case, matching every caller's
+    /// behavior before this method existed.
+    ///
+    /// @param mid          Live instance to promote.
+    /// @param typeId       Model type id — the directory's first key component.
+    /// @param primary      Canonical string encoding of the key to file it under.
+    /// @param onRegistered Invoked with @p mid (echoed back, for symmetry with
+    ///                     `registerModelAsync`'s callback shape) on success —
+    ///                     including the no-op cases `assignPrimary` documents
+    ///                     (empty primary, dead `mid`, key already taken, `mid`
+    ///                     already keyed differently): those are not backend
+    ///                     failures, so they resolve `onRegistered` exactly as
+    ///                     the synchronous path returns normally for them.
+    /// @param onError      Invoked with a diagnostic message on a genuine
+    ///                     backend/transport failure.
+    /// @return `true` if this backend accepted the request and will invoke
+    ///         exactly one callback later; `false` if it has no async path
+    ///         (neither callback is invoked in that case).
+    virtual bool assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId,
+                                    std::string_view primary,
+                                    std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                    std::function<void(const std::string&)> onError) {
+        (void)mid;
+        (void)typeId;
+        (void)primary;
+        (void)onRegistered;
+        (void)onError;
+        return false;
+    }
+
     /// @brief Lists the primary keys of live shared instances of @p typeId.
     ///
     /// Only instances created through `registerModelShared`/`attachModel` with a
