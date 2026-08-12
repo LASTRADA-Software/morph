@@ -991,8 +991,9 @@ template <typename V, typename A, RuleLiteral L>
     return Equals<V, A, L>{field, std::move(literal)};
 }
 
-/// @brief `equals` overload for a string-literal argument (`equals(&A::code,
-/// "X")`), so callers do not have to spell `std::string{"X"}` explicitly.
+/// @brief `equals` overload for a string-literal argument
+/// (`equals(&A::code, "X")`), so callers do not have to spell
+/// `std::string{"X"}` explicitly.
 ///
 /// The literal is captured inline as a `detail::LiteralString`, not copied into a
 /// `std::string`, so the resulting node stays a literal type and the documented
