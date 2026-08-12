@@ -148,6 +148,12 @@ struct QFCalibrate {
     morph::units::Quantity<QFUnit::kg, 5> referenceMass;
 };
 
+struct QFWholeCount {
+    // A zero-decimal declared-precision override: a whole-unit count (or a
+    // zero-decimal currency such as JPY/KRW) carries no fractional digit.
+    morph::units::Quantity<QFUnit::kg, 0> wholeUnits;
+};
+
 struct QFSlotInfo {
     std::int64_t id = 0;
     std::string name;
@@ -445,6 +451,15 @@ TEST_CASE("Forms::SchemaJson::DeclaredPrecisionOverrideSurfaces", "[forms]") {
     auto const schema = morph::forms::schemaJson<QFCalibrate>();
     CHECK(schema.contains(R"("x-decimalPlaces":5)"));
     CHECK(schema.contains(R"("required":["referenceMass"])"));
+}
+
+TEST_CASE("Forms::SchemaJson::ZeroDecimalPlacesOverrideSurfaces", "[forms]") {
+    // A field-level Quantity<kg, 0> override advertises x-decimalPlaces:0 --
+    // the declared-decimals floor is 0, not 1, and the field is still
+    // required like any other non-optional Quantity member.
+    auto const schema = morph::forms::schemaJson<QFWholeCount>();
+    CHECK(schema.contains(R"("x-decimalPlaces":0)"));
+    CHECK(schema.contains(R"("required":["wholeUnits"])"));
 }
 
 TEST_CASE("Forms::SchemaJson::Memoized", "[forms]") {

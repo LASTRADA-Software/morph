@@ -207,13 +207,44 @@ TEST_CASE("Rational::PrecisionCap", "[rational]")
     // Precision at the cap is accepted unchanged.
     CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 18 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 
+    // Zero decimal places is a legal precision (zero-decimal currencies like
+    // JPY/KRW): the floor is 0, not 1.
+    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 0 });
+
     // In a release build (NDEBUG) an out-of-range precision is clamped into
-    // [1, kMaxDecimalPlaces]. A debug build asserts before reaching here, so
-    // these clamp checks only run when NDEBUG is defined.
+    // [0, kMaxDecimalPlaces]. A debug build asserts before reaching here, so
+    // this clamp check only runs when NDEBUG is defined.
 #ifdef NDEBUG
-    CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 0 } }.getDecimalPlaces() == DecimalPlaces { 1 });
     CHECK(Rational { Numerator{1}, Denominator{2}, DecimalPlaces { 99 } }.getDecimalPlaces() == DecimalPlaces { 18 });
 #endif
+}
+
+TEST_CASE("Rational::ZeroDecimalPlaces", "[rational]")
+{
+    // DecimalPlaces{0} is a fully legal precision: a whole-number quantity
+    // (e.g. a JPY/KRW amount) carries no fractional digit at all.
+    DecimalPlaces const dp0 { 0 };
+    Rational const whole { 1200, dp0 };
+    CHECK(whole.getDecimalPlaces() == dp0);
+    CHECK(whole.numerator == 1200);
+    CHECK(whole.denominator == 1);
+    CHECK(std::format("{}", whole) == "1200");
+
+    // toDouble at 0 requested places rounds to the nearest integer.
+    CHECK(Rational { Numerator{7}, Denominator{2}, dp0 }.toDouble(0) == Catch::Approx(4.0));
+
+    // Arithmetic between a dp0 and a wider-precision operand still
+    // max-propagates, same as any other pair.
+    auto const sum = whole + Rational { Numerator{1}, Denominator{4}, dp2 };
+    CHECK(sum.getDecimalPlaces() == dp2);
+
+    // Wire round-trip at dp == 0.
+    Rational restored {};
+    REQUIRE_FALSE(glz::read_json(restored, R"({"num":1200,"den":1,"dp":0})"));
+    CHECK(restored.getDecimalPlaces() == dp0);
+    auto const written = glz::write_json(restored);
+    REQUIRE(written.has_value());
+    CHECK(*written == R"({"num":1200,"den":1,"dp":0})");
 }
 
 TEST_CASE("Rational::StrongTypePrecision", "[rational]")
@@ -835,17 +866,19 @@ TEST_CASE("Rational::Wire::CanonicalisesOnRead", "[rational]")
 
 TEST_CASE("Rational::Wire::HostileInputClamps", "[rational]")
 {
-    // Zero denominator and out-of-range precision are clamped, not asserted:
-    // wire input is untrusted.
+    // Zero denominator and out-of-range (too high) precision are clamped, not
+    // asserted: wire input is untrusted.
     Rational hostile {};
     REQUIRE_FALSE(glz::read_json(hostile, R"({"num":5,"den":0,"dp":99})"));
     CHECK(hostile.denominator == 1);
     CHECK(hostile.numerator == 5);
     CHECK(hostile.getDecimalPlaces() == DecimalPlaces { kMaxDecimalPlaces });
 
+    // dp:0 is a legal precision (the floor is 0, not 1): it is honored as-is,
+    // not clamped up.
     Rational zeroPrecision {};
     REQUIRE_FALSE(glz::read_json(zeroPrecision, R"({"num":1,"den":2,"dp":0})"));
-    CHECK(zeroPrecision.getDecimalPlaces() == dp1);
+    CHECK(zeroPrecision.getDecimalPlaces() == DecimalPlaces { 0 });
 }
 
 TEST_CASE("Rational::Wire::MissingFieldsUseWireDefaults", "[rational]")

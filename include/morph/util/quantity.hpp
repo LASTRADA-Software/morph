@@ -547,8 +547,8 @@ struct Context {
 template <auto U, std::uint32_t DeclaredDecimals>
     requires UnitEnum<decltype(U)>
 struct Quantity {
-    static_assert(DeclaredDecimals >= 1 && DeclaredDecimals <= math::kMaxDecimalPlaces,
-                  "declared decimals must be within [1, kMaxDecimalPlaces]");
+    static_assert(DeclaredDecimals <= math::kMaxDecimalPlaces,
+                  "declared decimals must be within [0, kMaxDecimalPlaces]");
 
     /// @brief The payload; `std::nullopt` means "not entered / not measured".
     std::optional<math::Rational> payload;

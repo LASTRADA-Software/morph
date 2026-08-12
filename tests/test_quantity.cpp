@@ -36,6 +36,7 @@ enum class U : std::uint16_t {
     tonne,
     celsius,
     fahrenheit,
+    yen,  // zero-decimal currency: no fractional subunit.
 };
 
 }  // namespace qt
@@ -56,6 +57,7 @@ struct morph::units::UnitTraits<qt::U> {
             case qt::U::tonne: return {"t", "t", 3};
             case qt::U::celsius: return {"celsius", "C", 1};
             case qt::U::fahrenheit: return {"fahrenheit", "F", 1};
+            case qt::U::yen: return {"yen", "JPY", 0};
             default:               return {"?", "?", 3};
         }
     }
@@ -135,6 +137,7 @@ using Kilogram = Quantity<qt::U::kilogram>;
 using Tonne = Quantity<qt::U::tonne>;
 using Celsius = Quantity<qt::U::celsius>;
 using Fahrenheit = Quantity<qt::U::fahrenheit>;
+using Yen = Quantity<qt::U::yen>;  // declaredDecimals defaults to 0.
 using Tariff = NamedQuantity<"tariff", qt::U::euro_per_kwh>;
 using StandingCharge = NamedQuantity<"standing", qt::U::euro>;
 
@@ -144,6 +147,11 @@ static_assert(!morph::units::isQuantity<Rational>);
 static_assert(morph::units::HasUnitRelations<qt::U>);
 static_assert(Kilowatt::unit == qt::U::kilowatt);
 static_assert(Kilowatt::declaredDecimals == 3);
+// Zero declared decimals is legal (a zero-decimal currency like JPY/KRW):
+// the declared-decimals floor is 0, not 1. Yen's UnitMeta::defaultDecimals
+// is 0 and Quantity<U> defaults DeclaredDecimals from it.
+static_assert(Yen::declaredDecimals == 0);
+static_assert(std::same_as<Yen, Quantity<qt::U::yen, 0>>);
 static_assert(std::same_as<decltype(std::declval<Kilowatt>() * std::declval<Hours>()), KilowattHour>);
 static_assert(std::same_as<decltype(std::declval<KilowattHour>() / std::declval<Hours>()), Kilowatt>);
 static_assert(std::same_as<decltype(std::declval<KilowattHour>() / std::declval<KilowattHour>()), Quantity<qt::U::scalar>>);
@@ -280,6 +288,41 @@ TEST_CASE("Quantity::formatting", "[quantity]") {
     CHECK(std::format("{}", Quantity<qt::U::scalar>::fromDouble(0.3)) == "0.3");
     CHECK(std::format("{}", Kilowatt{}) == "N/AkW");
     CHECK(std::format("{}", Tariff::fromDouble(0.3)) == "0.3EUR/kWh");
+}
+
+TEST_CASE("Quantity::zero-decimal currency (declaredDecimals == 0)", "[quantity]") {
+    // A zero-decimal currency (JPY/KRW): fromDouble rounds to the nearest
+    // whole unit at DeclaredDecimals == 0, and formatting shows no fractional
+    // digit or decimal point at all.
+    auto const price = Yen::fromDouble(1200.0);
+    REQUIRE(price.hasValue());
+    CHECK(price.value()->getDecimalPlaces() == DecimalPlaces{0});
+    CHECK(std::format("{}", price) == "1200JPY");
+
+    // fromDouble rounds a fractional input half-away-from-zero to the nearest
+    // whole yen (no fractional subunit exists to carry the remainder).
+    CHECK(std::format("{}", Yen::fromDouble(1200.6)) == "1201JPY");
+    CHECK(std::format("{}", Yen::fromDouble(1200.4)) == "1200JPY");
+
+    // Empty still formats as N/A + unit, same as any other Quantity.
+    CHECK(std::format("{}", Yen{}) == "N/AJPY");
+
+    // Arithmetic between two dp-0 values stays at dp 0.
+    auto const sum = Yen::fromDouble(500.0) + Yen::fromDouble(700.0);
+    REQUIRE(sum.hasValue());
+    CHECK(sum.value()->getDecimalPlaces() == DecimalPlaces{0});
+    CHECK(std::format("{}", sum) == "1200JPY");
+
+    // Wire round-trip: the payload is the nullable Rational, same shape as
+    // any other Quantity, with "dp":0 preserved rather than bumped to 1.
+    auto const written = glz::write_json(price);
+    REQUIRE(written.has_value());
+    CHECK(*written == R"({"num":1200,"den":1,"dp":0})");
+
+    Yen restored{};
+    REQUIRE_FALSE(glz::read_json(restored, *written));
+    CHECK(restored == price);
+    CHECK(restored.value()->getDecimalPlaces() == DecimalPlaces{0});
 }
 
 TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[quantity][format]") {

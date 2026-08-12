@@ -24,7 +24,9 @@
 /// `Rational{1, 3, DecimalPlaces{9}}`. Precision is capped at
 /// `kMaxDecimalPlaces` (18, the largest `k` for which `10^k` fits in
 /// `int64_t`); out-of-range values assert in debug and clamp into
-/// `[1, kMaxDecimalPlaces]` in release.
+/// `[0, kMaxDecimalPlaces]` in release. Zero decimal places is a legal
+/// precision — a whole-number quantity (e.g. a JPY/KRW amount) carries no
+/// fractional digit at all.
 ///
 /// @par Cross-precision arithmetic
 /// Binary arithmetic propagates `std::max` of the two operands'
@@ -37,7 +39,7 @@
 ///   - `denominator > 0` (strictly positive — never zero, never negative)
 ///   - `gcd(|numerator|, denominator) == 1`
 ///   - canonical zero is `0/1`
-///   - `1 <= decimalPlaces.value <= kMaxDecimalPlaces`
+///   - `0 <= decimalPlaces.value <= kMaxDecimalPlaces`
 ///
 /// All sign lives in the numerator.
 ///
@@ -107,7 +109,7 @@ namespace morph::math {
 /// Prevents the precision from being confused with a numerator or a
 /// denominator at a call site: `Rational{1, 3, DecimalPlaces{9}}`.
 struct DecimalPlaces {
-    /// @brief Raw digit count. Rational's invariant keeps it in [1, kMaxDecimalPlaces].
+    /// @brief Raw digit count. Rational's invariant keeps it in [0, kMaxDecimalPlaces].
     std::uint32_t value{};
 
     constexpr DecimalPlaces() noexcept = default;
@@ -163,12 +165,14 @@ enum class RationalError : std::uint8_t {
 
 namespace detail {
 
-/// @brief Clamps a raw precision into `[1, kMaxDecimalPlaces]` silently — for
+/// @brief Clamps a raw precision into `[0, kMaxDecimalPlaces]` silently — for
 ///        untrusted wire input.
+///
+/// The lower bound is `0`, not `1`: zero decimal places is a legal precision
+/// (a whole-number quantity, e.g. a JPY/KRW amount with no fractional
+/// subunit). `rawDecimalPlaces` is unsigned, so there is no below-zero case
+/// to clamp; only the upper bound can ever fire.
 [[nodiscard]] constexpr std::uint32_t clampWireDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
-    if (rawDecimalPlaces < 1) {
-        return 1;
-    }
     if (rawDecimalPlaces > kMaxDecimalPlaces) {
         return kMaxDecimalPlaces;
     }
@@ -178,7 +182,7 @@ namespace detail {
 /// @brief Clamps like `clampWireDecimalPlaces` but asserts in debug — for
 ///        call sites that state a precision in code, where out-of-range is a bug.
 [[nodiscard]] constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
-    assert(rawDecimalPlaces >= 1 && rawDecimalPlaces <= kMaxDecimalPlaces);
+    assert(rawDecimalPlaces <= kMaxDecimalPlaces);
     return clampWireDecimalPlaces(rawDecimalPlaces);
 }
 
@@ -233,7 +237,7 @@ struct Rational {
     /// @brief Strictly positive denominator. Never zero, never negative.
     std::int64_t denominator{1};
 
-    /// @brief Decimal-precision tag. Invariant: 1 <= value <= kMaxDecimalPlaces.
+    /// @brief Decimal-precision tag. Invariant: 0 <= value <= kMaxDecimalPlaces.
     DecimalPlaces decimalPlaces{1};
 
     /// @brief Default-constructs the canonical zero (0/1) at precision 1.
@@ -241,7 +245,7 @@ struct Rational {
 
     /// @brief Constructs from a whole integer at the given precision.
     /// @param whole            The integer value; stored as `whole/1`.
-    /// @param wantedPrecision  Decimal precision; clamped to [1, kMaxDecimalPlaces].
+    /// @param wantedPrecision  Decimal precision; clamped to [0, kMaxDecimalPlaces].
     constexpr Rational(std::int64_t whole, DecimalPlaces wantedPrecision) noexcept
         : numerator{whole}, decimalPlaces{detail::clampDecimalPlaces(wantedPrecision.value)} {}
 
@@ -253,7 +257,7 @@ struct Rational {
     ///
     /// @param wantedNumerator   Signed numerator.
     /// @param wantedDenominator Denominator. May be negative or zero on input.
-    /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
+    /// @param wantedPrecision   Decimal precision; clamped to [0, kMaxDecimalPlaces].
     constexpr Rational(Numerator wantedNumerator, Denominator wantedDenominator,
                        DecimalPlaces wantedPrecision) noexcept
         : numerator{wantedNumerator.value},
@@ -265,7 +269,7 @@ struct Rational {
     /// @brief Validating factory.
     /// @param wantedNumerator   Signed numerator.
     /// @param wantedDenominator Denominator; `0` is rejected instead of clamped.
-    /// @param wantedPrecision   Decimal precision; clamped to [1, kMaxDecimalPlaces].
+    /// @param wantedPrecision   Decimal precision; clamped to [0, kMaxDecimalPlaces].
     /// @return The canonical rational, or `DivisionByZero` if @p wantedDenominator is 0.
     [[nodiscard]] static constexpr std::expected<Rational, RationalError> from(
         Numerator wantedNumerator, Denominator wantedDenominator, DecimalPlaces wantedPrecision) noexcept {

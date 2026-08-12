@@ -61,6 +61,7 @@ add_executable(morph_tests
     test_outbox.cpp
     test_rational.cpp
     test_quantity.cpp
+    test_tagged.cpp
     test_quantity_forms.cpp
     test_nested_forms.cpp
     test_flows_apps.cpp
