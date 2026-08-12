@@ -63,6 +63,7 @@ add_executable(morph_tests
     test_quantity.cpp
     test_tagged.cpp
     test_quantity_forms.cpp
+    test_quantity_decode_validation.cpp
     test_nested_forms.cpp
     test_flows_apps.cpp
     test_views.cpp

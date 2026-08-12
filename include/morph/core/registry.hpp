@@ -236,6 +236,13 @@ public:
             // No-op for actions with no Quantity members. See
             // docs/spec/forms/forms.md.
             ::morph::forms::reconcileDeclaredPrecision(action);
+            // Pre-decode wire validation seam: reject a Quantity field whose
+            // engaged value falls outside its unit's declared bounds
+            // (UnitTraits<E>::bounds), before the action's own validate()
+            // (a business-rule check) ever runs. No-op for actions with no
+            // Quantity members, or whose units declare no bounds(). See
+            // docs/spec/forms/forms.md, "Pre-decode wire validation".
+            ::morph::forms::enforceQuantityBounds(action);
             // Overwrite any computed fields from their declared inputs. This is
             // the true server-side execution site for every remote and Qt
             // WebSocket topology (RemoteServer -> ActionDispatcher::dispatch) --

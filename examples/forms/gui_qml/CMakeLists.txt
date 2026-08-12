@@ -29,18 +29,6 @@ target_link_libraries(lab_forms_demo_module PUBLIC morph::morph morph::qt_forms 
 target_compile_features(lab_forms_demo_module PUBLIC cxx_std_23)
 apply_bigobj(lab_forms_demo_module)
 
-# FormsController.cpp instantiates schema/rule templates over every demo
-# action type -- the same pattern examples/forms/CMakeLists.txt's
-# morph_forms_demo target hit (see #80). Under MSVC Debug (no /Og folding,
-# full /Zi debug info) this pushes the .obj's COFF section count past the
-# 32-bit SN_LOFF format's limit, aborting with C1128 ("number of sections
-# exceeded object file format limit"). /bigobj switches to the extended
-# section-count format; harmless on Release and on other compilers, so it is
-# unconditional for this target.
-target_compile_options(lab_forms_demo_module PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
-)
-
 qt_add_executable(morph_forms_qml main.cpp)
 target_link_libraries(morph_forms_qml PRIVATE lab_forms_demo_moduleplugin Qt6::Quick)
 

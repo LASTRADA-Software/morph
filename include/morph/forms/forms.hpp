@@ -56,9 +56,11 @@
 ///   control-track bounds and increment — advisory, not a validation bound.
 /// - **`x-rules`** — for an action declaring a `static constexpr formRules`
 ///   (`morph::forms::ruleList(...)`): a closed, typed cross-field rule
-///   vocabulary (`requiredWhen`, comparisons, membership, presentation)
-///   evaluated identically by the schema, the client, and the server. See
-///   `morph::forms::allRulesSatisfied` below and docs/spec/forms/forms.md.
+///   vocabulary (`requiredWhen`, comparisons, membership, presentation, and
+///   the compound `andOf`/`orOf`/`notOf` conditions that nest a condition
+///   tree to any depth) evaluated identically by the schema, the client, and
+///   the server. See `morph::forms::allRulesSatisfied` below and
+///   docs/spec/forms/forms.md.
 /// - **`x-computed` / `x-readonly`** — for a member listed as the destination
 ///   of an action's `computedFields` declaration: the field is derived from
 ///   sibling inputs (named in `x-computed.inputs`) and must not be rendered as
@@ -138,6 +140,7 @@
 #include <memory>
 #include <morph/detail/fixed_string.hpp>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -446,6 +449,30 @@ template <auto MemberPtr>
     return found;
 }
 
+/// @brief Deduces the action type a condition/rule node's `test(const A&)
+/// const` ranges over, from its member-function-pointer type. Every
+/// condition/rule node in this header (`Engaged`, `Equals`, `Greater`, …, and
+/// the compound `And`/`Or`/`Not` nodes) exposes exactly this shape, so
+/// `andOf`/`orOf`/`notOf` use it to recover `A` without requiring every leaf
+/// node to name it as a separate member type.
+/// @tparam TestMemberPtr Pointer-to-member-function type of `&Cond::test`.
+template <typename TestMemberPtr>
+struct ConditionActionTypeFromTest;
+
+/// @brief Specialisation matching `bool (Cond::*)(const A&) const noexcept`.
+/// @tparam Cond The condition/rule node type.
+/// @tparam A    The deduced action type.
+template <typename Cond, typename A>
+struct ConditionActionTypeFromTest<bool (Cond::*)(const A&) const noexcept> {
+    /// @brief The deduced action type.
+    using type = A;
+};
+
+/// @brief The action type @p Cond's `test()` ranges over.
+/// @tparam Cond A condition/rule node type (must expose `test(const A&) const noexcept`).
+template <typename Cond>
+using ConditionActionType = typename ConditionActionTypeFromTest<decltype(&Cond::test)>::type;
+
 /// @brief The closed set of cross-field rule and condition kinds `x-rules`
 /// carries in its `kind` field. One flat enum serves both top-level rules
 /// (`RequiredWhen`, `Greater`, `ExactlyOneOf`, `VisibleWhen`, ...) and the
@@ -466,6 +493,9 @@ enum class RuleKind : std::uint8_t {
     MutuallyExclusive,
     VisibleWhen,
     ReadonlyWhen,
+    And,
+    Or,
+    Not,
 };
 
 /// @brief The wire `"kind"` string for @p kind, exactly as documented in
@@ -498,6 +528,12 @@ enum class RuleKind : std::uint8_t {
             return "visibleWhen";
         case RuleKind::ReadonlyWhen:
             return "readonlyWhen";
+        case RuleKind::And:
+            return "and";
+        case RuleKind::Or:
+            return "or";
+        case RuleKind::Not:
+            return "not";
         default:
             return "";
     }
@@ -1318,6 +1354,146 @@ template <typename V, typename A, typename Cond>
     return ReadonlyWhen<V, A, Cond>{field, when};
 }
 
+/// @brief Compound condition: all of `Conds...` hold. Nests to any depth —
+/// each `Cond` may itself be a leaf (`Engaged`, `Equals`, a comparison, …) or
+/// another `And`/`Or`/`Not`. Usable both as a nested `when` clause and
+/// directly as a top-level `formRules` entry (it declares `isPresentation`
+/// and `test()` exactly like every other validation rule), which is what
+/// lets a single rule carry a compound condition tree instead of factoring
+/// the composition into multiple single-condition rules.
+/// @tparam A     Action type every nested condition ranges over.
+/// @tparam Conds Nested condition node types, at least two.
+template <typename A, typename... Conds>
+struct And {
+    /// @brief The nested conditions, in declaration order.
+    std::tuple<Conds...> conditions;
+    /// @brief The wire `"kind"` this node emits: `"and"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::And;
+    /// @brief Validation rule (not presentation): participates in the gate
+    /// when used as a top-level `formRules` entry.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when every nested condition holds.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        return std::apply([&](const auto&... cond) { return (cond.test(action) && ...); }, conditions);
+    }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"and","conditions":[{...}, ...]}`.
+    [[nodiscard]] glz::generic_u64 emitNode() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t nested{};
+        std::apply([&](const auto&... cond) { (nested.emplace_back(cond.emitNode()), ...); }, conditions);
+        node["conditions"] = nested;
+        return node;
+    }
+};
+
+/// @brief Builds an `And<A, Conds...>` condition: every listed condition must
+/// hold.
+/// @tparam Cond0 First condition's node type (deduced); its action type `A`
+///               is recovered from `test()` and shared by every other node.
+/// @tparam Conds Remaining nested condition node types (deduced).
+/// @param condition0  The first nested condition.
+/// @param conditions  The remaining nested conditions, at least one more.
+/// @return The compound condition node.
+template <typename Cond0, typename... Conds>
+[[nodiscard]] constexpr auto andOf(Cond0 condition0, Conds... conditions) {
+    return And<detail::ConditionActionType<Cond0>, Cond0, Conds...>{
+        std::tuple<Cond0, Conds...>{std::move(condition0), std::move(conditions)...}};
+}
+
+/// @brief Compound condition: at least one of `Conds...` holds. Nests to any
+/// depth, and is usable directly as a top-level `formRules` entry, exactly
+/// like `And`.
+/// @tparam A     Action type every nested condition ranges over.
+/// @tparam Conds Nested condition node types, at least two.
+template <typename A, typename... Conds>
+struct Or {
+    /// @brief The nested conditions, in declaration order.
+    std::tuple<Conds...> conditions;
+    /// @brief The wire `"kind"` this node emits: `"or"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Or;
+    /// @brief Validation rule (not presentation): participates in the gate
+    /// when used as a top-level `formRules` entry.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when at least one nested condition holds.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept {
+        return std::apply([&](const auto&... cond) { return (cond.test(action) || ...); }, conditions);
+    }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"or","conditions":[{...}, ...]}`.
+    [[nodiscard]] glz::generic_u64 emitNode() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        glz::generic_u64::array_t nested{};
+        std::apply([&](const auto&... cond) { (nested.emplace_back(cond.emitNode()), ...); }, conditions);
+        node["conditions"] = nested;
+        return node;
+    }
+};
+
+/// @brief Builds an `Or<A, Conds...>` condition: at least one listed
+/// condition must hold.
+/// @tparam Cond0 First condition's node type (deduced); its action type `A`
+///               is recovered from `test()` and shared by every other node.
+/// @tparam Conds Remaining nested condition node types (deduced).
+/// @param condition0  The first nested condition.
+/// @param conditions  The remaining nested conditions, at least one more.
+/// @return The compound condition node.
+template <typename Cond0, typename... Conds>
+[[nodiscard]] constexpr auto orOf(Cond0 condition0, Conds... conditions) {
+    return Or<detail::ConditionActionType<Cond0>, Cond0, Conds...>{
+        std::tuple<Cond0, Conds...>{std::move(condition0), std::move(conditions)...}};
+}
+
+/// @brief Compound condition: the nested condition does **not** hold. Nests
+/// to any depth, and is usable directly as a top-level `formRules` entry,
+/// exactly like `And`/`Or`.
+/// @tparam A    Action type the nested condition ranges over.
+/// @tparam Cond Nested condition node type.
+template <typename A, typename Cond>
+struct Not {
+    /// @brief The negated condition.
+    Cond condition;
+    /// @brief The wire `"kind"` this node emits: `"not"`.
+    static constexpr detail::RuleKind kind = detail::RuleKind::Not;
+    /// @brief Validation rule (not presentation): participates in the gate
+    /// when used as a top-level `formRules` entry.
+    static constexpr bool isPresentation = false;
+
+    /// @brief Evaluates the condition against @p action.
+    /// @param action The action snapshot to inspect.
+    /// @return `true` when the nested condition does **not** hold.
+    [[nodiscard]] constexpr bool test(const A& action) const noexcept { return !condition.test(action); }
+
+    /// @brief Emits this condition's `x-rules` JSON node.
+    /// @return `{"kind":"not","condition":{...}}`.
+    [[nodiscard]] glz::generic_u64 emitNode() const {
+        glz::generic_u64 node{};
+        node["kind"] = std::string{detail::ruleKindName(kind)};
+        node["condition"] = condition.emitNode();
+        return node;
+    }
+};
+
+/// @brief Builds a `Not<A, Cond>` condition: negates @p condition.
+/// @tparam Cond Nested condition node type (deduced); its action type `A` is
+///              recovered from `test()`.
+/// @param condition The condition to negate.
+/// @return The compound condition node.
+template <typename Cond>
+[[nodiscard]] constexpr auto notOf(Cond condition) {
+    return Not<detail::ConditionActionType<Cond>, Cond>{std::move(condition)};
+}
+
 /// @brief Composed list of an action's declared cross-field rules — the
 /// value of `A::formRules`. Built by `ruleList(...)`; never constructed
 /// directly.
@@ -2133,6 +2309,81 @@ constexpr void reconcileDeclaredPrecision(A& action) {
         }(std::make_index_sequence<memberCount>{});
     } else {
         static_cast<void>(action);
+    }
+}
+
+/// @brief Thrown when a decoded action has a `Quantity` field whose engaged
+/// value falls outside its unit's declared bounds (`UnitTraits<E>::bounds`).
+///
+/// Distinct from `morph::model::ValidationError`: this is a **decode-level**
+/// rejection — a wire payload that violates a physical/unit constraint baked
+/// into the field's type, caught before an action's own `validate()` (a
+/// business-rule check) ever runs. See docs/spec/forms/forms.md, "Pre-decode
+/// wire validation — `checkQuantityBounds`".
+struct QuantityDecodeError : std::runtime_error {
+    /// @brief Constructs the error with a message naming the offending field.
+    /// @param fieldName The wire (JSON) name of the out-of-bounds field.
+    explicit QuantityDecodeError(std::string_view fieldName)
+        : std::runtime_error("quantity field out of declared bounds: " + std::string{fieldName}) {}
+};
+
+/// @brief Checks every `Quantity` member of @p action against its unit's
+///        declared bounds (`morph::units::Quantity::withinDeclaredBounds`,
+///        driven by the optional `UnitTraits<E>::bounds(E)` customisation
+///        point).
+///
+/// This is the **pre-decode wire validation seam**: called on the decode path
+/// — right after `ActionTraits<A>::fromJson` and `reconcileDeclaredPrecision`,
+/// before `recomputeAll`/`ActionValidator<A>::ready` — so a wire payload
+/// carrying a value outside a field's declared physical/unit bounds (e.g. a
+/// percentage above 100, a mass below zero) is rejected uniformly at the
+/// framework level, before an action's own `validate()` (a business-rule
+/// check, not a decode-level one) ever runs. No-op — always returns
+/// `std::nullopt` — for actions with no `Quantity` members, or whose
+/// `Quantity` members' units declare no `bounds()`: zero behaviour change,
+/// backward compatible, exactly like `reconcileDeclaredPrecision`.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Decoded action to check.
+/// @return The wire name of the first out-of-bounds `Quantity` member
+///         encountered (in declaration order), or `std::nullopt` when every
+///         `Quantity` member is within its declared bounds (or the unit
+///         declares none).
+template <typename A>
+[[nodiscard]] inline std::optional<std::string> checkQuantityBounds(const A& action) {
+    using Plain = std::remove_cvref_t<A>;
+    std::optional<std::string> offender;
+    if constexpr (glz::reflectable<Plain> || glz::glaze_object_t<Plain>) {
+        detail::forEachNamedMember(action, [&]<std::size_t I>(std::string_view name, const auto& member) {
+            static_cast<void>(I);
+            if (offender.has_value()) {
+                return;
+            }
+            using Member = std::remove_cvref_t<decltype(member)>;
+            if constexpr (units::isQuantity<Member>) {
+                if (!member.withinDeclaredBounds()) {
+                    offender = std::string{name};
+                }
+            }
+        });
+    } else {
+        static_cast<void>(action);
+    }
+    return offender;
+}
+
+/// @brief Runs `checkQuantityBounds<A>(action)` and throws `QuantityDecodeError`
+/// naming the first out-of-bounds field, if any. The throwing counterpart used
+/// directly on the decode path (registry.hpp/bridge.hpp call sites); a caller
+/// that wants the field name without an exception uses `checkQuantityBounds`
+/// itself.
+/// @tparam A     Action type (a reflectable aggregate).
+/// @param action Decoded action to check.
+/// @throws QuantityDecodeError if any `Quantity` member is outside its unit's
+///         declared bounds.
+template <typename A>
+inline void enforceQuantityBounds(const A& action) {
+    if (auto offender = checkQuantityBounds(action); offender.has_value()) {
+        throw QuantityDecodeError{*offender};
     }
 }
 

@@ -570,10 +570,72 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-section` | property node (sibling of `$ref`) | non-negative integer | The 0-based index of this field's group in `x-layout.groups`. Omitted under the same conditions as `x-group`. |
 | `x-colspan` | property node (sibling of `$ref`) | positive integer | Number of grid columns the field should span, from `FieldSpan::colspan`. Emitted only when greater than `1` (the default, single-column width). A renderer laying fields out in a grid widens the control; a single-column renderer ignores it. |
 | `x-rules` | top-level (object) | array of rule objects | Cross-field rules the renderer must satisfy before enabling submit, and should surface live as inline errors. Emitted only when the action declares `formRules`; absent otherwise. A renderer that ignores it falls back to per-field `required` only. |
-| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
-| ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). |
-| ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on. Present only on these condition-bearing kinds. |
+| ↳ `kind` | rule / condition object | string | One of the closed vocabulary ids in the "Cross-field rules" section's table above (or a condition id: `engaged`, `notEngaged`, `equals`, `and`, `or`, `not`). An unrecognised `kind` must be treated as "cannot evaluate" — the renderer leaves the gate to the server rather than passing the rule (fail-closed). |
+| ↳ `fields` | rule / condition object | array of strings | Wire field names the rule ranges over, in declaration order (operand order is significant for `greater`/`less`). Absent on `and`/`or`/`not`, which range over nested conditions (`conditions`/`condition` below) instead of fields directly. |
+| ↳ `when` | `requiredWhen` / `visibleWhen` / `readonlyWhen` object | rule/condition object | The nested condition the rule keys on. Present only on these condition-bearing kinds. May itself be an `and`/`or`/`not` node (a compound condition), nested to any depth — see [Compound conditions](#compound-conditions--andof--orof--notof). |
 | ↳ `value` | `equals` condition object | scalar / `{num,den}` | The literal an `equals` condition compares against; a numeric literal is the exact `Rational` `{num, den}`, never a `double`. |
+| ↳ `conditions` | `and` / `or` condition object | array of condition objects | The nested conditions combined by boolean AND / OR, in declaration order; each element is itself a full condition/rule object (any `kind`, including a nested `and`/`or`/`not`) — see [Compound conditions](#compound-conditions--andof--orof--notof). |
+| ↳ `condition` | `not` condition object | condition object | The single nested condition negated by boolean NOT (singular key, since `not` wraps exactly one child). |
+| `x-submitMode` | top-level (object) | string | `"explicit"` opts a side-effectful (non-query) action out of the shipped renderer's default auto-submit-on-validity behavior — see [Explicit submit mode](#explicit-submit-mode--x-submitmode). Absent, or any value other than `"explicit"`, keeps the default. Not emitted by `schemaJson<A>()`; a schema author sets it by hand (or a hand-authored schema fixture/example does), the same way `x-layout`/`x-widget` overrides are authored today. |
+
+### Explicit submit mode — `x-submitMode`
+
+The shipped `DynamicForm.qml` renderer's default behavior is to call
+`controller.submitIfValid(actionType, bodyJson)` the instant every field and
+rule is satisfied — safe for a read-only query action, but unsafe for any
+side-effectful (mutating) action: a mutation would fire on every keystroke
+that happens to leave the form momentarily valid, with no user confirmation.
+
+Setting the top-level `"x-submitMode": "explicit"` schema key opts a form out
+of that default:
+
+- `revalidate()` still recomputes `ready`/`previewLine` live (so `x-rules`,
+  `required`, and every other live-validation affordance are unaffected) but
+  never calls `submitIfValid` on its own.
+- The renderer instead shows an explicit **Submit** button (`objectName:
+  "submitButton"`), enabled only while `ready` — matching the existing
+  `x-order`/required-asterisk convention of gating on the same readiness
+  state the auto-submit label already reflected. Clicking it is the sole
+  trigger; `DynamicForm.submit()` is the function it calls, itself a no-op
+  unless the form is currently ready.
+- The button is loaded (via a `Loader`, `active: explicitSubmitMode`) only
+  when the schema opts in — a default (auto-submit) form has no such control
+  anywhere in its item tree, not merely a hidden one.
+
+Any schema describing a side-effectful action should carry this flag before
+being safely rendered by the shipped renderer; a schema that omits it (every
+existing schema, and any read-only query action) renders exactly as before —
+zero behavior change.
+
+### Array fields — `type: "array"`
+
+glaze emits `{"type": "array", "items": {...}}` for a `std::vector<T>`
+member, standard JSON-Schema vocabulary rather than an `x-*` extension. The
+shipped `DynamicForm.qml` renderer gives it a dedicated
+comma-separated-with-validation `TextField` control (`objectName: "field_" +
+name`, exactly like a scalar field's control — the two are mutually
+exclusive per field, so exactly one claims that name) instead of falling
+through to the plain-text control, whose fallback (`JSON.stringify(text)`)
+would wrap the typed text as a JSON *string*, not an array — a body the
+server's schema validation always rejects.
+
+Typed text is split on comma, each entry trimmed of surrounding whitespace,
+and empty entries dropped: `"red, green, blue"` → `["red","green","blue"]`,
+`"  red ,, green ,"` → `["red","green"]`. A field with today's scope —
+array-of-string — is fully supported; an `items` type other than `"string"`
+still renders this control and still encodes each comma-separated entry as a
+JSON string (not, e.g., a JSON number), so a `std::vector<int>` field is
+usable but not yet type-checked per element the way a scalar `Quantity`/
+integer field is. The submitted literal for a **fully-blank** array field
+follows the same blank-means-unengaged convention as every other field
+(`fieldJsonLiteral` returns `null` for empty/whitespace-only text), so an
+optional, untouched array field is omitted from the request body entirely
+rather than submitted as `[]`. Once the field holds *any* non-whitespace
+text, though — including a comma-only entry like `" , , "`, which is not
+blank by that check even though every individual entry is dropped — it
+encodes to a genuine empty array `[]`, not `null`; a `required` array field
+is satisfied by engagement (non-blank text), not by having at least one
+surviving entry.
 
 ### Versioning stance
 
@@ -597,7 +659,10 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
   resolution/dual-read, the exact rational digit arithmetic, the unit
   selector, the required-field submit gate, the options-fetch, layout/
   grouping into sections/tabs, the widget-hint controls — textarea, slider,
-  radio group — and the localisation dual-read), `DateTimePicker.qml` (manual
+  radio group — the comma-separated-with-validation `"array"`-typed field
+  control (see [Array fields](#array-fields--type-array)), the explicit
+  submit mode (see [Explicit submit mode](#explicit-submit-mode--x-submitmode)),
+  and the localisation dual-read), `DateTimePicker.qml` (manual
   ISO-8601 entry plus a calendar/time popup), `SlotRegistry.qml` (below), and
   `I18nCatalog.hpp`/`.cpp` (a `QObject`/`QML_ELEMENT` in-memory
   `TranslationProvider` realization — see
@@ -991,6 +1056,9 @@ the client and the server evaluate identically from the same serialized form.
 | `readonlyWhen(field, cond)` | **Presentation:** `field` is editable only while `cond` does **not** hold. | `"readonlyWhen"` | no |
 | `engaged(field)` / `notEngaged(field)` | `field` is / is not engaged. | `"engaged"` / `"notEngaged"` | yes (condition-only) |
 | `equals(field, literal)` | `field`'s engaged value equals `literal`. | `"equals"` | yes (condition-only) |
+| `andOf(cond1, cond2, ...)` | Every listed condition holds (boolean AND). | `"and"` | yes — also usable directly as a top-level rule |
+| `orOf(cond1, cond2, ...)` | At least one listed condition holds (boolean OR). | `"or"` | yes — also usable directly as a top-level rule |
+| `notOf(cond)` | The nested condition does **not** hold (boolean NOT). | `"not"` | yes — also usable directly as a top-level rule |
 
 `engaged`/`notEngaged`/`requiredWhen`/the membership rules accept any
 `EngageableField` — an `EmptyCapableField` (`Quantity`/`Choice`/`Timestamp`) or
@@ -1024,6 +1092,82 @@ library was in use. Serialisation is unaffected: `emitNode()` emits the same
 JSON string either way. Passing an explicit `std::string` still stores a
 `std::string` and still cannot be `constexpr` when it allocates; that is
 inherent to the type the caller chose.
+
+### Compound conditions — `andOf` / `orOf` / `notOf`
+
+The single-node conditions above (`engaged`, `notEngaged`, `equals`, and the
+comparison kinds reused as booleans) compose into a **recursive condition
+tree** via three more factories:
+
+```cpp
+struct BookRoom {
+    // ...
+    static constexpr auto formRules = morph::forms::ruleList(
+        // discount required only when BOTH promo and a loyalty code are engaged
+        morph::forms::requiredWhen(
+            &BookRoom::discount,
+            morph::forms::andOf(morph::forms::engaged(&BookRoom::promo),
+                                morph::forms::engaged(&BookRoom::loyaltyCode))));
+};
+```
+
+- **`andOf(cond1, cond2, ...)`** — holds when every listed condition holds
+  (at least two conditions; `test()` short-circuits left to right).
+- **`orOf(cond1, cond2, ...)`** — holds when at least one listed condition
+  holds (at least two conditions; `test()` short-circuits left to right).
+- **`notOf(cond)`** — holds when the single nested condition does **not**
+  hold.
+
+Each factory accepts **any** condition or rule node as a child — a leaf
+(`engaged`, `equals`, `greater`, …) or another `andOf`/`orOf`/`notOf` — so a
+tree nests to any depth: `orOf(notOf(engaged(&A::x)), andOf(engaged(&A::y),
+engaged(&A::z)))` is a valid `when` clause. All three nodes share this
+uniform shape with every existing rule/condition node (`kind`, `test(const
+A&) const noexcept`, `emitNode()`), which is what makes them substitutable
+everywhere an existing single-node condition already worked:
+
+- **Nested inside a `when` clause** — `requiredWhen`/`visibleWhen`/`readonlyWhen`
+  accept a compound condition in the same `when` position a leaf condition
+  occupies, with no change to those three rule kinds themselves.
+- **Directly as a top-level `formRules` entry** — `andOf`/`orOf`/`notOf`
+  declare `isPresentation = false` and a `test()`, so `ruleList(andOf(...))`
+  is itself a valid, directly-gating rule — "a single rule with a compound
+  condition tree", not only a condition factored inside another rule.
+
+`andOf`/`orOf`/`notOf` add no new closed-vocabulary *rule* kinds — they are
+closed-vocabulary *conditions*, matching the existing "closed, typed" design
+of every other node in this table: an application still cannot supply an
+arbitrary lambda, only compose the existing typed primitives into a tree.
+
+#### Schema emission — nested `conditions` / `condition`
+
+`andOf`/`orOf` emit a `"conditions"` array of nested condition nodes;
+`notOf` emits a single nested `"condition"` object (singular, since it wraps
+exactly one child):
+
+```json
+{ "kind": "requiredWhen", "fields": ["discount"],
+  "when": { "kind": "and", "conditions": [
+    { "kind": "engaged", "fields": ["promo"] },
+    { "kind": "engaged", "fields": ["loyaltyCode"] }
+  ]}
+}
+```
+
+```json
+{ "kind": "or", "conditions": [
+  { "kind": "not", "condition": { "kind": "engaged", "fields": ["promo"] } },
+  { "kind": "and", "conditions": [
+    { "kind": "engaged", "fields": ["email"] },
+    { "kind": "engaged", "fields": ["phone"] }
+  ]}
+]}
+```
+
+A renderer that does not recognise `"and"`/`"or"`/`"not"` treats them as an
+unrecognised `kind` per the existing fail-closed rule (see "Renderer
+fallback" below) — it defers enforcement to the server rather than guessing
+at the nested structure, exactly like any other unrecognised `kind`.
 
 ### Presentation rules never gate
 
@@ -1248,7 +1392,8 @@ for the exhaustive tables and design rationale.
 | `ruleList(rules...)` | function template | Composes rule/condition nodes into the `RuleList` an action assigns to `formRules`. |
 | `HasFormRules<A>` | concept | `true` when `A` declares a `static constexpr formRules` member. |
 | `allRulesSatisfied<A>(action)` | function template | `true` when every **validation** rule in `A::formRules` holds (or there are none); skips presentation rules. `noexcept`. |
-| `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
+| `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen`/`andOf`/`orOf`/`notOf` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
+| `detail::ConditionActionType<Cond>` | alias template | The action type `A` a condition/rule node's `test(const A&) const noexcept` ranges over, deduced from `&Cond::test`'s member-function-pointer type. Used internally by `andOf`/`orOf`/`notOf` to recover `A` without every leaf node separately naming it. |
 
 ### `computed<Dst, Inputs...>()` / `computeList()` / `recomputeAll<A>()`
 
@@ -1438,6 +1583,37 @@ rather than an advisory hint. The reconciliation is a no-op for actions with no
 the server-side wire path (see [registry.md](../core/registry.md)), so
 `x-decimalPlaces` is now an enforced contract on every dispatch path — local,
 client-bridge, and remote wire.
+
+### Pre-decode wire validation — `checkQuantityBounds`
+
+Reconciling declared precision (above) still leaves a wire payload that is
+merely *representable*, not necessarily *physically or contractually
+sensible* — a percentage of `250`, a mass of `-5`. `morph::forms::
+checkQuantityBounds<A>(action)` closes that gap: it walks every reflected
+`Quantity` member of a decoded action and checks
+`Quantity::withinDeclaredBounds()` (see
+[quantity_type.md, "Pre-decode wire validation"](../util/quantity_type.md#pre-decode-wire-validation--declared-bounds))
+against the optional `UnitTraits<E>::bounds(E)` a unit may declare. It returns
+the wire name of the first offending field, or `std::nullopt` — a no-op for
+actions with no `Quantity` members, or whose units declare no bounds.
+`morph::forms::enforceQuantityBounds<A>(action)` is the throwing counterpart,
+raising `morph::forms::QuantityDecodeError` naming that field.
+
+Both wire-decoding dispatch runners — `ActionDispatcher::registerAction`'s
+server-side runner and `ActionExecuteRegistry::registerAction`'s client
+bridge runner (see [registry.md](../core/registry.md)/[bridge.md](../core/bridge.md))
+— call `enforceQuantityBounds` immediately after `reconcileDeclaredPrecision`
+and before `recomputeAll`/`ActionValidator<A>::ready`, so an out-of-bounds
+wire value is rejected **before an action's own `validate()` ever sees it**.
+`QuantityDecodeError` is deliberately **not** `morph::model::ValidationError`
+— the two error types stay distinct so a caller can tell "the wire payload
+itself was impossible" (a decode-level, framework-enforced constraint) from
+"the decoded action failed its own business rule" (a `validate()`-level
+rejection an action author wrote). The in-process `Bridge::executeVia`
+`localOp` path is unaffected — no JSON decode happens there (see "Advertised
+precision is enforced on dispatch" above for why `reconcileDeclaredPrecision`
+is likewise skipped on that path), so a `Quantity` a caller constructs
+directly carries whatever value the caller gave it, unchecked at this seam.
 
 ### One cached schema per type — no localisation
 

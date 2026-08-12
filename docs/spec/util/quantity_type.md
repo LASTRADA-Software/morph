@@ -494,6 +494,68 @@ selector lists; the selector deliberately offers only the one-hop neighbours the
 as alternatives, but `g` lists only `kg` — even though `g → t` converts by
 chaining through `kg`.)
 
+### Pre-decode wire validation — declared bounds
+
+`setWire` (above) is deliberately permissive: it silently clamps a hostile
+`dp` and normalises a non-canonical numerator/denominator rather than
+rejecting them, so decoding itself never throws. That leaves a gap for a
+value that decodes *successfully* but is still physically or contractually
+impossible for its unit — a percentage above 100, a mass below zero — with no
+seam to reject it before an action's own `validate()` (a business-rule check,
+not a decode-level one) runs.
+
+`Quantity<U, Dec>::withinDeclaredBounds() -> bool` closes that gap, driven by
+an **optional** customisation point:
+
+```cpp
+template <>
+struct morph::units::UnitTraits<Unit> {
+    static constexpr UnitMeta meta(Unit u) noexcept { /* ... */ }
+
+    // Optional: declares [min, max] for units that have a physical/contract range.
+    static constexpr morph::units::QuantityBounds bounds(Unit u) noexcept {
+        switch (u) {
+            case Unit::percent:
+                return {.min = Rational{0, DecimalPlaces{1}}, .max = Rational{100, DecimalPlaces{1}}};
+            default:
+                return {.min = Rational{Numerator{std::numeric_limits<std::int64_t>::min()}, Denominator{1}, DecimalPlaces{1}},
+                        .max = Rational{Numerator{std::numeric_limits<std::int64_t>::max()}, Denominator{1}, DecimalPlaces{1}}};
+        }
+    }
+};
+```
+
+- **`QuantityBounds { Rational min; Rational max; }`** — an inclusive range.
+- **`HasUnitBounds<E>`** — `true` when `UnitTraits<E>` declares `bounds(E)`.
+  A unit enum with no `bounds()` declares none: every value its precision
+  allows is accepted, byte-for-byte the same as before this feature existed
+  — this is an opt-in check, not a new default restriction.
+- **`withinDeclaredBounds()`** — `true` when the payload is empty (an
+  unengaged field has nothing to be out of bounds), when the unit declares no
+  `bounds()`, or when the engaged value satisfies `min <= value <= max`.
+  Comparison is on the exact `Rational` (via `operator<=>`), never a lossy
+  `double`.
+
+**The forms-layer seam.** `morph::forms::checkQuantityBounds<A>(action)`
+(`forms.hpp`) walks every reflected `Quantity` member of an action the same
+way `reconcileDeclaredPrecision` does, and returns the wire name of the first
+member failing `withinDeclaredBounds()` (or `std::nullopt`).
+`morph::forms::enforceQuantityBounds<A>(action)` throws
+`morph::forms::QuantityDecodeError` naming that field. Both dispatch runners
+that decode wire JSON into an action — `ActionDispatcher::registerAction`'s
+server-side runner and `ActionExecuteRegistry::registerAction`'s client
+bridge runner (`registry.hpp`/`bridge.hpp`) — call `enforceQuantityBounds`
+immediately after `reconcileDeclaredPrecision` and before `recomputeAll`/the
+`ActionValidator::ready` check, so an out-of-bounds wire value is rejected
+before an action's own `validate()` ever sees it. `QuantityDecodeError` is
+deliberately **not** `morph::model::ValidationError` — the two stay distinct
+so a caller (or a test) can tell "the wire payload itself was impossible"
+from "the decoded action failed its own business rule". The in-process
+`localOp` execution path (`bridge.hpp`) is unaffected, for the same reason it
+skips `reconcileDeclaredPrecision`: no JSON decode happens there, so there is
+nothing to validate at that seam — a `Quantity` constructed directly by
+calling code carries whatever bounds the caller gave it.
+
 ## Unit conversion — `UnitRelation` and `convert`
 
 Arithmetic works only on values of the *same* unit, but the same physical
@@ -697,6 +759,8 @@ readability).
 | `UnitEnum<E>` | concept | Satisfied by an enum with a `UnitTraits<E>::meta`. Constrains `Quantity`. |
 | `isQuantity<T>` | `inline constexpr bool` variable template | Compile-time test: `true` when `T` is a `Quantity<...>`. |
 | `operator*`, `operator/` (on `E`) | `consteval` | Application-supplied unit algebra deducing cross-dimension result units; an unsupported combination fails to compile. |
+| `QuantityBounds { min, max }` | struct | Inclusive `Rational` range returned by the optional `UnitTraits<E>::bounds(E)` customisation point — the pre-decode wire validation seam (see "Pre-decode wire validation" above). |
+| `HasUnitBounds<E>` | concept | `true` when `UnitTraits<E>` declares `bounds(E)`. A unit enum without it declares no bounds: every value its precision allows is accepted. |
 
 ### `Quantity<U, Dec>` — compile-time members
 
@@ -730,6 +794,7 @@ readability).
 | Member | Signature | Notes |
 |---|---|---|
 | `hasValue()` | `constexpr bool hasValue() const noexcept` | Engaged? No implicit `bool` conversion. |
+| `withinDeclaredBounds()` | `constexpr bool withinDeclaredBounds() const noexcept` | The pre-decode wire validation seam: `true` when empty, when the unit declares no `bounds()`, or when the engaged value satisfies `min <= value <= max` (exact `Rational` comparison). See "Pre-decode wire validation" above. |
 | `value()` | `const std::optional<Rational>& value() const noexcept` | The payload; pattern-match or `->` it. |
 | `value_or(fallback)` | `Rational value_or(Rational const&) const` | Payload if engaged, else the fallback. |
 | `operator*` | `const Rational& operator*() const` | Unchecked access to the engaged value (UB when empty, like `std::optional`). |

@@ -1708,6 +1708,15 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // silently keeping whatever runtime `dp` the client sent. No-op for
                 // actions with no Quantity members. See docs/spec/forms.md.
                 ::morph::forms::reconcileDeclaredPrecision(action);
+                // Pre-decode wire validation seam: reject a Quantity field whose
+                // engaged value falls outside its unit's declared bounds
+                // (UnitTraits<E>::bounds), before the validator/business-rule
+                // check below. No-op for actions with no Quantity members, or
+                // whose units declare no bounds(). See docs/spec/forms/forms.md,
+                // "Pre-decode wire validation". Thrown as QuantityDecodeError,
+                // caught by the same catch block as every other decode/validation
+                // failure on this path.
+                ::morph::forms::enforceQuantityBounds(action);
                 // Overwrite any computed fields from their declared inputs -- a
                 // computed field is never trusted from the client, on any path.
                 // No-op for actions with no computedFields. See docs/spec/forms/forms.md.

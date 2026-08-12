@@ -10,9 +10,21 @@
 //   x-widget         -> control choice (textarea/slider/radio); unknown ids
 //                       and a missing key both fall back to the type default
 //   x-min/x-max/x-step -> slider track bounds + increment (Ranged fields)
+//   type: "array"    -> comma-separated-with-validation control; encodes to
+//                       a genuine JSON array literal, e.g. "a, b" -> ["a","b"]
+//   x-submitMode: "explicit" -> suppresses auto-submit-on-validity; renders
+//                       an explicit Submit button (enabled only while ready)
+//                       instead -- see "Explicit submit mode" below
 //
 // Quantity payloads are assembled as JSON text from the typed digit string,
 // so they are exact at any magnitude (same contract as the HTML renderer).
+//
+// By default, the form calls controller.submitIfValid(...) automatically
+// the instant every field/rule is satisfied (safe for a read-only query
+// action). A schema for a side-effectful action should set the top-level
+// "x-submitMode": "explicit" key: this suppresses that auto-call and instead
+// requires the user to press the rendered Submit button, which is disabled
+// until the form is ready.
 
 pragma ComponentBehavior: Bound
 
@@ -57,6 +69,15 @@ Frame {
     // support (the fallback the spec requires).
     property var rules: schema["x-rules"] || []
     property int rulesRevision: 0
+
+    // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit submit
+    // mode"): opts a side-effectful (non-query) action out of the default
+    // auto-fire-on-validity behavior. When set, revalidate() still recomputes
+    // `ready`/`previewLine` live but never calls submitIfValid() on its own;
+    // an explicit submit Button (added to the layout below), enabled only
+    // while `ready`, is the sole way to fire. Absent (the default) or any
+    // other value keeps today's auto-submit-on-validity behavior unchanged.
+    property bool explicitSubmitMode: schema["x-submitMode"] === "explicit"
 
     // i18n: a host-supplied translation catalog (see I18nCatalog.hpp) and the
     // BCP-47 locale to resolve against. `catalog: null` (the default) means
@@ -192,6 +213,15 @@ Frame {
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
                     isInteger: types.indexOf("integer") !== -1,
+                    // "array" (glaze's std::vector<T> schema shape: {"type":
+                    // "array", "items": {...}}) -- a comma-separated-with-
+                    // validation control, not the plain text field's
+                    // fall-through (which would wrap the typed text as a
+                    // JSON *string*, not an array). Scoped to array-of-string
+                    // today; any other item type still renders this control
+                    // but each entry is encoded as a JSON string, same as an
+                    // array of strings, rather than silently misencoding.
+                    isArray: types.indexOf("array") !== -1,
                     required: required.indexOf(name) !== -1,
                     minimum: p.minimum,
                     maximum: p.maximum,
@@ -319,9 +349,11 @@ Frame {
     }
 
     // Evaluates one condition node (`engaged` / `notEngaged` / `equals` / a
-    // comparison kind reused as a boolean). An unrecognised `kind` fails
-    // closed (`false`) -- the renderer defers enforcement to the server
-    // rather than passing an unknown validation condition.
+    // comparison kind reused as a boolean / the compound `and`/`or`/`not`
+    // kinds, which recurse into `conditions`/`condition` to any depth). An
+    // unrecognised `kind` fails closed (`false`) -- the renderer defers
+    // enforcement to the server rather than passing an unknown validation
+    // condition.
     function testCondition(cond) {
         const kind = cond.kind
         const names = cond.fields || []
@@ -346,14 +378,36 @@ Frame {
             if (kind === "less") return lv < rv
             return lv <= rv
         }
+        if (kind === "and") {
+            const nested = cond.conditions || []
+            for (let i = 0; i < nested.length; ++i) {
+                if (!testCondition(nested[i]))
+                    return false
+            }
+            return true
+        }
+        if (kind === "or") {
+            const nested = cond.conditions || []
+            for (let i = 0; i < nested.length; ++i) {
+                if (testCondition(nested[i]))
+                    return true
+            }
+            return false
+        }
+        if (kind === "not")
+            return !testCondition(cond.condition)
         return false
     }
 
     // Evaluates one top-level x-rules entry. Presentation kinds
     // (visibleWhen/readonlyWhen) always return true -- they never gate
     // submission, only presentation (see fieldVisible/fieldReadonly below).
-    // An unrecognised rule kind fails closed: the renderer defers
-    // enforcement to the server rather than passing the rule.
+    // `and`/`or`/`not` are valid directly as a top-level rule (not only
+    // nested inside a `when` clause) -- a single rule carrying a compound
+    // condition tree -- so they delegate to testCondition exactly like the
+    // comparison kinds already do. An unrecognised rule kind fails closed:
+    // the renderer defers enforcement to the server rather than passing the
+    // rule.
     function testRule(rule) {
         const kind = rule.kind
         const names = rule.fields || []
@@ -376,6 +430,8 @@ Frame {
         }
         if (kind === "visibleWhen" || kind === "readonlyWhen")
             return true
+        if (kind === "and" || kind === "or" || kind === "not")
+            return testCondition(rule)
         return false
     }
 
@@ -566,6 +622,23 @@ Frame {
         return (scaled.neg ? "-" : "") + padded.slice(0, -to.decimals) + "." + padded.slice(-to.decimals)
     }
 
+    // Encodes an "array"-typed field's comma-separated entry text as a
+    // genuine JSON array literal of strings -- e.g. "red, green, blue" ->
+    // ["red","green","blue"] -- never the JSON *string* the generic
+    // fallback (`JSON.stringify(text)`) would have produced. Splits on
+    // comma, trims surrounding whitespace off each entry, and drops empty
+    // entries (so "red,, green," -> ["red","green"], not ["red","","green",""]).
+    // An entry list that is blank or entirely empty after trimming (","," ,")
+    // returns "[]" -- a genuinely empty array is still a valid array
+    // literal, distinct from the field itself being unengaged (handled by
+    // fieldJsonLiteral's blank-text check before this is ever called).
+    function arrayJsonLiteral(text) {
+        const items = text.split(",")
+            .map(function (item) { return item.trim() })
+            .filter(function (item) { return item !== "" })
+        return JSON.stringify(items)
+    }
+
     // Encodes one field's current input text as the JSON literal morph
     // expects on the wire, applying the same per-kind syntax and bounds
     // checks as submission. Returns null when the field is blank or its
@@ -576,6 +649,9 @@ Frame {
         const text = (opt(fieldValues[f.name], "")).trim()
         if (text === "")
             return null
+        if (f.isArray) {
+            return arrayJsonLiteral(text)
+        }
         if (f.isChoice) {
             return text  // already a JSON literal (see the ComboBox's onActivated)
         }
@@ -648,7 +724,18 @@ Frame {
         ready = ok
         previewLine = ok ? "{" + parts.join(",") + "}" : ""
         rulesRevision++
-        if (ready && form.controller && form.programmaticEdit === 0)
+        // In explicit-submit mode the renderer never fires on its own --
+        // only submit() (wired to the explicit submit Button below) does.
+        if (!form.explicitSubmitMode && ready && form.controller && form.programmaticEdit === 0)
+            form.controller.submitIfValid(form.actionType, form.previewLine)
+    }
+
+    // Explicit submit mode's sole trigger: the submit Button's onClicked
+    // calls this. A no-op unless the form is currently ready -- the button
+    // is also disabled while !ready, so this guard is defense in depth, not
+    // the only gate.
+    function submit() {
+        if (ready && form.controller)
             form.controller.submitIfValid(form.actionType, form.previewLine)
     }
 
@@ -949,10 +1036,11 @@ Frame {
 
                 TextField {
                     id: entry
-                    objectName: "field_" + fieldColumn.modelData.name
+                    objectName: fieldColumn.modelData.isArray ? "" : "field_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null
                              && !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                              && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
+                             && !fieldColumn.modelData.isArray
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
                     placeholderText: fieldColumn.modelData.placeholder !== ""
@@ -980,6 +1068,37 @@ Frame {
                     Accessible.name: fieldColumn.modelData.name
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
                                              + fieldColumn.modelData.description
+                }
+
+                // "array" (glaze's std::vector<T> schema shape) — a
+                // comma-separated-with-validation control: the typed text is
+                // split on comma, each entry trimmed, and encoded as a
+                // genuine JSON array literal by fieldJsonLiteral/
+                // arrayJsonLiteral, never wrapped as a JSON *string* the way
+                // the plain TextField's fallback would. Reuses the plain
+                // TextField's field_ objectName -- the two are mutually
+                // exclusive per field (isArray), so exactly one claims it.
+                TextField {
+                    id: arrayEntry
+                    objectName: fieldColumn.modelData.isArray ? "field_" + fieldColumn.modelData.name : ""
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isArray
+                    Layout.fillWidth: true
+                    readOnly: fieldColumn.modelData.readOnly
+                    placeholderText: fieldColumn.modelData.placeholder !== ""
+                                     ? fieldColumn.modelData.placeholder
+                                     : "comma-separated (e.g. red, green, blue)"
+                    onTextChanged: form.setFieldValue(fieldColumn.modelData.name, text)
+                    // Re-seed from the retained value whenever this delegate
+                    // is (re)created — see the plain TextField's comment
+                    // above for why (tab-switch destroys/rebuilds delegates).
+                    Component.onCompleted: form.withoutAutoSubmit(function() {
+                        arrayEntry.text = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                    })
+                    Accessible.role: Accessible.EditableText
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
+                                             + " Comma-separated list."
                 }
 
                 // x-widget: "textarea" (a Multiline field) — same wire string
@@ -1190,7 +1309,11 @@ Frame {
 
         Label {
             Layout.topMargin: 8
-            text: form.ready ? "✓ executes automatically as you type" : "fill the required (*) fields"
+            text: {
+                if (!form.ready)
+                    return "fill the required (*) fields"
+                return form.explicitSubmitMode ? "✓ ready -- press Submit" : "✓ executes automatically as you type"
+            }
             opacity: 0.6
             font.italic: true
             // A blocked submit is announced, not merely tinted (docs/spec/
@@ -1200,6 +1323,26 @@ Frame {
             Accessible.role: Accessible.StaticText
             Accessible.name: text
             Accessible.description: text
+        }
+
+        // "x-submitMode": "explicit" (docs/spec/forms/forms.md, "Explicit
+        // submit mode"): the sole trigger for a side-effectful action's
+        // submission. Enabled only while `ready`, matching the required (*)
+        // asterisk / submit-gate convention documented in this file's header
+        // comment -- a disabled button communicates the same gate the
+        // auto-submit label does for the default mode. Loaded only when the
+        // schema opts in, so a default (auto-submit) schema has no such
+        // control anywhere in the item tree, not merely a hidden one.
+        Loader {
+            active: form.explicitSubmitMode
+            Layout.topMargin: 4
+            sourceComponent: Button {
+                id: submitButton
+                objectName: "submitButton"
+                enabled: form.ready
+                text: "Submit"
+                onClicked: form.submit()
+            }
         }
 
         Label {

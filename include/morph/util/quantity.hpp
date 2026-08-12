@@ -235,9 +235,25 @@ struct UnitAlternative {
     std::int64_t den{1};
 };
 
+/// @brief Optional physical/wire bounds for one unit: the inclusive range a
+///        decoded value must fall within to be accepted. Returned by the
+///        optional `UnitTraits<E>::bounds(E)` customisation point (detected
+///        by `HasUnitBounds`) — e.g. a percentage unit bounding itself to
+///        `[0, 100]`, or a mass unit rejecting a negative reading no scale
+///        can physically produce. Absent by default: a unit with no declared
+///        bounds accepts any value its precision allows, exactly as before
+///        this feature existed.
+struct QuantityBounds {
+    /// @brief Inclusive lower bound.
+    morph::math::Rational min;
+    /// @brief Inclusive upper bound.
+    morph::math::Rational max;
+};
+
 /// @brief Customisation point: the application specialises this for its unit
 ///        enum, returning a `UnitMeta` per enumerator and (optionally) a
-///        `relations` array of `UnitRelation` entries.
+///        `relations` array of `UnitRelation` entries and/or a `bounds(E)`
+///        static method.
 /// @tparam E The application's unit enum type.
 template <typename E>
 struct UnitTraits;
@@ -252,6 +268,16 @@ concept UnitEnum = std::is_enum_v<E> && requires(E unit) {
 template <typename E>
 concept HasUnitRelations = requires {
     { UnitTraits<E>::relations };
+};
+
+/// @brief Concept: `UnitTraits<E>` declares an optional `static constexpr
+///        QuantityBounds bounds(E)` — the pre-decode validation seam a field's
+///        unit opts into. A unit enum with no `bounds()` simply has none:
+///        every value its precision allows is accepted, unchanged from
+///        before this feature existed. `E` is the application's unit enum type.
+template <typename E>
+concept HasUnitBounds = requires(E unit) {
+    { UnitTraits<E>::bounds(unit) } -> std::convertible_to<QuantityBounds>;
 };
 
 namespace detail {
@@ -624,6 +650,32 @@ struct Quantity {
     /// @brief Whether a value has been entered/measured.
     /// @return `true` if the payload is engaged.
     [[nodiscard]] constexpr bool hasValue() const noexcept { return payload.has_value(); }
+
+    /// @brief Pre-decode validation seam: whether the current payload falls
+    ///        within this field's unit-declared bounds (`UnitTraits<E>::bounds`),
+    ///        when the unit declares any. An empty payload, or a unit with no
+    ///        declared `bounds()` (`HasUnitBounds` not satisfied), is always
+    ///        within bounds — this is an *opt-in* check, not a new default
+    ///        restriction, so a unit system that declares no bounds behaves
+    ///        exactly as it did before this feature existed.
+    ///
+    ///        Comparison is on the exact `Rational` value only (never a lossy
+    ///        `double`), consistent with every other exact comparison in this
+    ///        header.
+    /// @return `true` when empty, when the unit declares no bounds, or when
+    ///         the engaged value satisfies `min <= value <= max`.
+    [[nodiscard]] constexpr bool withinDeclaredBounds() const noexcept {
+        if constexpr (HasUnitBounds<decltype(U)>) {
+            if (!payload.has_value()) {
+                return true;
+            }
+            auto const bounds = UnitTraits<decltype(U)>::bounds(U);
+            return (*payload <=> bounds.min) != std::strong_ordering::less &&
+                   (*payload <=> bounds.max) != std::strong_ordering::greater;
+        } else {
+            return true;
+        }
+    }
 
     /// @brief The payload, for pattern-matching / `->` access.
     /// @return Const reference to the optional payload.
