@@ -676,6 +676,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_exec_reg_, __COUNTER__) =                      \
         morph::model::detail::registerActionExecutorOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);  \
     }
+/// @endcond
 
 /// @cond detail
 #define BRIDGE_REGISTER_ACTION_PICK(_1, _2, _3, _4, NAME, ...) NAME
