@@ -27,6 +27,7 @@ add_executable(morph_tests
     test_bridge_remote.cpp
     test_bridge_pending_calls.cpp
     test_bridge_execute_json.cpp
+    test_bridge_pending_calls.cpp
     test_remote_extra.cpp
     test_remote_connection_scope.cpp
     test_remote_step_interleaving.cpp
