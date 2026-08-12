@@ -108,6 +108,7 @@ var hierarchy =
     [ "morph::session::TokenIssuer", "dc/de7/classmorph_1_1session_1_1TokenIssuer.html", null ],
     [ "morph::session::TokenVerifier", "d5/dc7/classmorph_1_1session_1_1TokenVerifier.html", null ],
     [ "morph::time::DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", null ],
+    [ "morph::time::ScopedNowOverride", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html", null ],
     [ "morph::time::Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", null ],
     [ "morph::units::Quantity&lt; U, DeclaredDecimals &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", null ],
     [ "morph::units::Quantity&lt; U &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", [

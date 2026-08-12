@@ -1,5 +1,9 @@
 var NAVTREEINDEX1 =
 {
+"d4/d7e/structmorph_1_1forms_1_1FieldSpan.html":[2,0,0,7,7],
+"d4/d7e/structmorph_1_1forms_1_1FieldSpan.html#a184758ddc704457ef5e99e5d6b4960e8":[2,0,0,7,7,1],
+"d4/d7e/structmorph_1_1forms_1_1FieldSpan.html#a6362b9b28f2075172b67b4f28726e75a":[2,0,0,7,7,0],
+"d4/db0/structmorph_1_1net_1_1SocketServerConfig.html":[2,0,0,12,3],
 "d4/db0/structmorph_1_1net_1_1SocketServerConfig.html#aee4ba6011ddc2be1f5da9b9861108ea2":[2,0,0,12,3,0],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html":[2,0,0,2,6],
 "d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a3125da15823891abf6a3bf4fc6355bb3":[2,0,0,2,6,2],
@@ -245,9 +249,5 @@ var NAVTREEINDEX1 =
 "d9/dea/structmorph_1_1views_1_1BindEntry.html#a99e098e70044e9cd459def84d45cc6fb":[2,0,0,19,0,0],
 "d9/dfd/structmorph_1_1app_1_1AppTraits.html":[2,0,0,0,4],
 "da/d03/structmorph_1_1math_1_1DecimalPlaces.html":[2,0,0,10,0],
-"da/d03/structmorph_1_1math_1_1DecimalPlaces.html#a17e7ca40f94288381c128102153b7607":[2,0,0,10,0,1],
-"da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa6d381d9d51f4aa69e33411b0f162edb":[2,0,0,10,0,2],
-"da/d03/structmorph_1_1math_1_1DecimalPlaces.html#aa749623abe11b8ef07f2738716eda722":[2,0,0,10,0,0],
-"da/d23/classmorph_1_1journal_1_1SessionLog.html":[2,0,0,8,8],
-"da/d23/classmorph_1_1journal_1_1SessionLog.html#a1582b1dab2f48f9e3f9f84b54b425d0b":[2,0,0,8,8,2]
+"da/d03/structmorph_1_1math_1_1DecimalPlaces.html#a17e7ca40f94288381c128102153b7607":[2,0,0,10,0,1]
 };

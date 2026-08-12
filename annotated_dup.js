@@ -150,6 +150,7 @@ var annotated_dup =
       ] ],
       [ "time", null, [
         [ "DateTime", "d5/d44/structmorph_1_1time_1_1DateTime.html", "d5/d44/structmorph_1_1time_1_1DateTime" ],
+        [ "ScopedNowOverride", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html", "d3/d86/classmorph_1_1time_1_1ScopedNowOverride" ],
         [ "Timestamp", "db/dec/structmorph_1_1time_1_1Timestamp.html", "db/dec/structmorph_1_1time_1_1Timestamp" ]
       ] ],
       [ "units", null, [

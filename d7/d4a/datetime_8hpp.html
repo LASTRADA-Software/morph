@@ -129,9 +129,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d4a/datetim
 <code>#include &lt;compare&gt;</code><br />
 <code>#include &lt;cstdint&gt;</code><br />
 <code>#include &lt;format&gt;</code><br />
+<code>#include &lt;functional&gt;</code><br />
+<code>#include &lt;mutex&gt;</code><br />
 <code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;string_view&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
 </div>
 <p><a href="../../d7/d4a/datetime_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -139,11 +142,17 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d4a/datetim
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Atime_3A_3ADateTime" id="r_morph_3A_3Atime_3A_3ADateTime"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">morph::time::DateTime</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">A UTC instant with millisecond precision.  <a href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Atime_3A_3AScopedNowOverride" id="r_morph_3A_3Atime_3A_3AScopedNowOverride"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html">morph::time::ScopedNowOverride</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">RAII helper that fixes <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a></span> to a constant instant (or a custom callable) for its lifetime and restores the previous override on destruction.  <a href="../../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Atime_3A_3ATimestamp" id="r_morph_3A_3Atime_3A_3ATimestamp"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">morph::time::Timestamp</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">An optionally-empty timestamp field.  <a href="../../db/dec/structmorph_1_1time_1_1Timestamp.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-func-members" class="groupheader"><a id="func-members" name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a6bbe2fc294eab5234e9625f0f633993a" id="r_a6bbe2fc294eab5234e9625f0f633993a"><td class="memItemLeft">std::pair&lt; std::mutex, std::function&lt; <a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">DateTime</a>()&gt; &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a6bbe2fc294eab5234e9625f0f633993a">morph::time::detail::nowOverrideState</a> ()</td></tr>
+<tr class="memdesc:a6bbe2fc294eab5234e9625f0f633993a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Process-wide override for <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a></span>, guarded by a mutex.  <br /></td></tr>
+<tr class="memitem:a9f0054c406ab3d5c85915800e0c41a60" id="r_a9f0054c406ab3d5c85915800e0c41a60"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9f0054c406ab3d5c85915800e0c41a60">morph::time::setNowOverride</a> (std::function&lt; <a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">DateTime</a>()&gt; clock)</td></tr>
+<tr class="memdesc:a9f0054c406ab3d5c85915800e0c41a60"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs <code class="param">clock</code> as the process-wide override for <span class="tt"><a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da" title="The current UTC instant, truncated to milliseconds.">DateTime::now()</a></span> (and therefore <span class="tt"><a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495" title="An engaged timestamp holding the current UTC instant.">Timestamp::now()</a></span>, which delegates to it).  <br /></td></tr>
 <tr class="memitem:a7d27df0d06dda6a17c1cfd883fb6dfbc" id="r_a7d27df0d06dda6a17c1cfd883fb6dfbc"><td class="memItemLeft">constexpr std::optional&lt; std::chrono::milliseconds &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7d27df0d06dda6a17c1cfd883fb6dfbc">morph::time::operator-</a> (const <a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">Timestamp</a> &amp;lhs, const <a class="el" href="../../db/dec/structmorph_1_1time_1_1Timestamp.html">Timestamp</a> &amp;rhs) noexcept</td></tr>
 <tr class="memdesc:a7d27df0d06dda6a17c1cfd883fb6dfbc"><td class="mdescLeft">&#160;</td><td class="mdescRight">The signed duration between two engaged timestamps.  <br /></td></tr>
 </table>
@@ -160,6 +169,75 @@ Functions</h2></td></tr>
 
 <p class="definition">Definition in file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Function Documentation</h2>
+<a id="a6bbe2fc294eab5234e9625f0f633993a" name="a6bbe2fc294eab5234e9625f0f633993a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a6bbe2fc294eab5234e9625f0f633993a">&#9670;&#160;</a></span>nowOverrideState()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::pair&lt; std::mutex, std::function&lt; DateTime()&gt; &gt; &amp; morph::time::detail::nowOverrideState </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Process-wide override for <span class="tt">DateTime::now()</span>, guarded by a mutex. </p>
+<p>Function-local static backing <span class="tt">DateTime::now()</span>'s override seam.</p>
+<p>Mirrors <span class="tt">morph::journal::detail::defaultActionLogState()</span> — the same "mutex-guarded function-local static" shape used for the action-log and logger override seams elsewhere in the codebase. An empty <span class="tt">std::function</span> (the default) means "no override installed"; <span class="tt">DateTime::now()</span> falls back to <span class="tt">std::chrono::system_clock::now()</span> in that case. Forward-declared here (before <span class="tt">DateTime</span> is a complete type &ndash; a function signature only needs <span class="tt">DateTime</span> to be declared, not defined) and defined out-of-line just after the <span class="tt">DateTime</span> struct, before <span class="tt">DateTime::now()</span>'s first caller needs it.</p>
+<p>Defined out-of-line (after <span class="tt">DateTime</span> is a complete type) since the state is keyed on <span class="tt">std::function&lt;DateTime()&gt;</span>. </p><dl class="section return"><dt>Returns</dt><dd>Reference to the process-wide <span class="tt">(mutex, override callable)</span> pair; the callable is empty when no override is installed. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a9f0054c406ab3d5c85915800e0c41a60" name="a9f0054c406ab3d5c85915800e0c41a60"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a9f0054c406ab3d5c85915800e0c41a60">&#9670;&#160;</a></span>setNowOverride()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">void morph::time::setNowOverride </td>
+          <td>(</td>
+          <td class="paramtype">std::function&lt; <a class="el" href="../../d5/d44/structmorph_1_1time_1_1DateTime.html">DateTime</a>()&gt;</td>          <td class="paramname"><span class="paramname"><em>clock</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Installs <code class="param">clock</code> as the process-wide override for <span class="tt">DateTime::now()</span> (and therefore <span class="tt">Timestamp::now()</span>, which delegates to it). </p>
+<p>Every call to <span class="tt">DateTime::now()</span> — including inside a registry-constructed (remotely instantiated) model that has no constructor parameter to receive an injected clock — consults this override before falling back to <span class="tt">std::chrono::system_clock::now()</span>. This is the seam <span class="tt">docs/spec/util/datetime.md</span> describes for deterministic testing of time-dependent model behavior: a test fixes "now" once via <span class="tt">ScopedNowOverride</span> and every <span class="tt">DateTime::now()</span>/<span class="tt">Timestamp::now()</span> call for its lifetime — direct or from inside a model under test — observes the fixed instant. Thread-safe.</p>
+<dl class="section warning"><dt>Warning</dt><dd><code class="param">clock</code> must not throw (<span class="tt">DateTime::now()</span> is <span class="tt">noexcept</span> and calls it directly — an exception escaping <code class="param">clock</code> terminates the process) and must not call <span class="tt">DateTime::now()</span>/<span class="tt">Timestamp::now()</span>, <span class="tt">setNowOverride</span>, or construct a <span class="tt">ScopedNowOverride</span> itself: <span class="tt">now()</span> holds a non-recursive mutex while invoking <code class="param">clock</code>, so any of those self-deadlocks. </dd></dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">clock</td><td>Callable returning the instant <span class="tt">DateTime::now()</span> should report, or an empty <span class="tt">std::function</span> to clear the override (restore real wall-clock time). </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a7d27df0d06dda6a17c1cfd883fb6dfbc" name="a7d27df0d06dda6a17c1cfd883fb6dfbc"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a7d27df0d06dda6a17c1cfd883fb6dfbc">&#9670;&#160;</a></span>operator-()</h2>
 
@@ -197,7 +275,7 @@ Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">lhs - rhs</span> as a chrono duration, or <span class="tt">std::nullopt</span> if either is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00282">282</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/d4a/datetime_8hpp_source.html#l00413">413</a> of file <a class="el" href="../../d7/d4a/datetime_8hpp_source.html">datetime.hpp</a>.</p>
 
 </div>
 </div>

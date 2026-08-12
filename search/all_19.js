@@ -11,9 +11,10 @@ var searchData=
   ['_7escopedactionlog_8',['~ScopedActionLog',['../de/d66/classmorph_1_1journal_1_1ScopedActionLog.html#a9cbd2beb9019cacb8ac8171abe2cadf2',1,'morph::journal::ScopedActionLog']]],
   ['_7escopedcontext_9',['~ScopedContext',['../dd/dca/classmorph_1_1session_1_1detail_1_1ScopedContext.html#a5a09dfacc940c7cd2ff4343b097f95e0',1,'morph::session::detail::ScopedContext']]],
   ['_7escopedloggeroverride_10',['~ScopedLoggerOverride',['../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf',1,'morph::log::ScopedLoggerOverride']]],
-  ['_7escopedobserveoverride_11',['~ScopedObserveOverride',['../d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d',1,'morph::observe::ScopedObserveOverride']]],
-  ['_7esocketbackend_12',['~SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7de340062de34a174bd659f4d68ee69e',1,'morph::net::SocketBackend']]],
-  ['_7esocketserver_13',['~SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a120e0fa0fd4691bf8d3b957c1357888d',1,'morph::net::SocketServer']]],
-  ['_7esqliteofflinequeue_14',['~SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b',1,'morph::offline::SqliteOfflineQueue']]],
-  ['_7ethreadpoolexecutor_15',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]]
+  ['_7escopednowoverride_11',['~ScopedNowOverride',['../d3/d86/classmorph_1_1time_1_1ScopedNowOverride.html#a029ef9b06dcc3cc2d8cf4a9a46dac0cd',1,'morph::time::ScopedNowOverride']]],
+  ['_7escopedobserveoverride_12',['~ScopedObserveOverride',['../d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d',1,'morph::observe::ScopedObserveOverride']]],
+  ['_7esocketbackend_13',['~SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7de340062de34a174bd659f4d68ee69e',1,'morph::net::SocketBackend']]],
+  ['_7esocketserver_14',['~SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a120e0fa0fd4691bf8d3b957c1357888d',1,'morph::net::SocketServer']]],
+  ['_7esqliteofflinequeue_15',['~SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b',1,'morph::offline::SqliteOfflineQueue']]],
+  ['_7ethreadpoolexecutor_16',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]]
 ];
