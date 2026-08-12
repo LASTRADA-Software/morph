@@ -274,8 +274,7 @@ concept HasUnitRelations = requires {
 ///        QuantityBounds bounds(E)` — the pre-decode validation seam a field's
 ///        unit opts into. A unit enum with no `bounds()` simply has none:
 ///        every value its precision allows is accepted, unchanged from
-///        before this feature existed.
-/// @tparam E The application's unit enum type.
+///        before this feature existed. `E` is the application's unit enum type.
 template <typename E>
 concept HasUnitBounds = requires(E unit) {
     { UnitTraits<E>::bounds(unit) } -> std::convertible_to<QuantityBounds>;
