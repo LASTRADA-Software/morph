@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "executor.hpp"
 #include "logger.hpp"
@@ -22,8 +23,13 @@ struct CompletionState {
     std::optional<T> value;
     std::exception_ptr error;
     bool ready = false;
-    std::function<void(T)> onOk;
-    std::function<void(std::exception_ptr)> onErr;
+    // Every handler attached while the state is not yet ready is kept (not
+    // overwritten): a second/third attach composes with earlier ones instead of
+    // silently discarding them. Dispatch invokes all of them, in attachment
+    // order, from a single posted closure. See docs/spec/core/completion.md,
+    // "Failure modes" / fan-out.
+    std::vector<std::function<void(T)>> onOk;
+    std::vector<std::function<void(std::exception_ptr)>> onErr;
     bool onErrAttached = false;
     ::morph::exec::IExecutor* cbExec = nullptr;
 
@@ -36,11 +42,32 @@ struct CompletionState {
             }
             value = std::move(val);
             ready = true;
-            if (onOk) {
-                auto savedFn = std::move(onOk);
+            if (!onOk.empty()) {
+                auto savedFns = std::move(onOk);
                 auto savedVal = std::move(*value);
-                callback = [savedFn = std::move(savedFn), savedVal = std::move(savedVal)]() mutable {
-                    savedFn(std::move(savedVal));
+                callback = [savedFns = std::move(savedFns), savedVal = std::move(savedVal)]() mutable {
+                    // Every handler but the last sees a copy (the value is only
+                    // moved into the final invocation), so an earlier handler
+                    // cannot leave the value moved-from for a later one. Each
+                    // handler is isolated in its own try/catch so one throwing
+                    // handler cannot prevent its siblings from running --
+                    // fan-out means every attached handler gets its turn,
+                    // independent of whether an earlier one misbehaves. An
+                    // escaping exception here would otherwise unwind the whole
+                    // posted closure and silently skip every handler after the
+                    // one that threw.
+                    for (std::size_t i = 0; i + 1 < savedFns.size(); ++i) {
+                        try {
+                            savedFns[i](savedVal);
+                        } catch (...) {
+                            ::morph::log::logError("[completion] then handler threw; continuing with next handler");
+                        }
+                    }
+                    try {
+                        savedFns.back()(std::move(savedVal));
+                    } catch (...) {
+                        ::morph::log::logError("[completion] then handler threw; continuing with next handler");
+                    }
                 };
             }
         }
@@ -57,10 +84,22 @@ struct CompletionState {
             }
             error = exc;
             ready = true;
-            if (onErr) {
-                auto savedFn = std::move(onErr);
+            if (!onErr.empty()) {
+                auto savedFns = std::move(onErr);
                 auto savedErr = error;
-                callback = [savedFn = std::move(savedFn), savedErr]() mutable { savedFn(savedErr); };
+                callback = [savedFns = std::move(savedFns), savedErr]() mutable {
+                    // Isolate each handler so one throwing onError handler
+                    // cannot suppress its siblings -- see the matching comment
+                    // in setValue's callback above.
+                    for (auto& fn : savedFns) {
+                        try {
+                            fn(savedErr);
+                        } catch (...) {
+                            ::morph::log::logError(
+                                "[completion] onError handler threw; continuing with next handler");
+                        }
+                    }
+                };
                 // Only mark the error handled (suppressing the destructor's orphan
                 // log) if we actually have an executor to deliver on. With a null
                 // executor the callback below is never posted, so the error must
@@ -80,7 +119,7 @@ struct CompletionState {
                 auto savedVal = *value;
                 fireNow = [handler = std::move(handler), savedVal]() mutable { handler(std::move(savedVal)); };
             } else if (!ready) {
-                onOk = std::move(handler);
+                onOk.push_back(std::move(handler));
             }
         }
         if (fireNow != nullptr && cbExec != nullptr) {
@@ -99,7 +138,7 @@ struct CompletionState {
                 auto savedErr = error;
                 fireNow = [handler = std::move(handler), savedErr]() mutable { handler(savedErr); };
             } else if (!ready) {
-                onErr = std::move(handler);
+                onErr.push_back(std::move(handler));
             }
         }
         if (fireNow != nullptr && cbExec != nullptr) {
