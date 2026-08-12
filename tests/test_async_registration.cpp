@@ -788,10 +788,7 @@ TEST_CASE(
 // call inside that window.
 TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registration settles all resolve",
           "[bridge][registration][issue60][concurrency]") {
-    // 50 trials x 8 real OS threads each (400 total thread spawns) still gives
-    // the scheduler repeated chances to land a call inside the narrow window
-    // under test.
-    constexpr int kTrials = 50;
+    constexpr int kTrials = 200;
     constexpr int kWaitersPerTrial = 8;
 
     for (int trial = 0; trial < kTrials; ++trial) {
