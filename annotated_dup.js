@@ -161,6 +161,12 @@ var annotated_dup =
         [ "Quantity", "d5/dda/structmorph_1_1units_1_1Quantity.html", "d5/dda/structmorph_1_1units_1_1Quantity" ],
         [ "NamedQuantity", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", "d1/d58/structmorph_1_1units_1_1NamedQuantity" ]
       ] ],
+      [ "util", null, [
+        [ "detail", null, [
+          [ "IsTagged", "d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html", null ]
+        ] ],
+        [ "Tagged", "dc/d7a/structmorph_1_1util_1_1Tagged.html", "dc/d7a/structmorph_1_1util_1_1Tagged" ]
+      ] ],
       [ "views", null, [
         [ "BindEntry", "d9/dea/structmorph_1_1views_1_1BindEntry.html", "d9/dea/structmorph_1_1views_1_1BindEntry" ],
         [ "ActionDescriptor", "d0/d03/structmorph_1_1views_1_1ActionDescriptor.html", "d0/d03/structmorph_1_1views_1_1ActionDescriptor" ],

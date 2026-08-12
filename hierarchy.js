@@ -118,6 +118,8 @@ var hierarchy =
     [ "morph::units::UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", null ],
     [ "morph::units::UnitRelation&lt; E &gt;", "da/d8f/structmorph_1_1units_1_1UnitRelation.html", null ],
     [ "morph::units::UnitTraits&lt; E &gt;", "de/d93/structmorph_1_1units_1_1UnitTraits.html", null ],
+    [ "morph::util::detail::IsTagged&lt; T &gt;", "d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html", null ],
+    [ "morph::util::Tagged&lt; T, Tag &gt;", "dc/d7a/structmorph_1_1util_1_1Tagged.html", null ],
     [ "morph::views::ActionDescriptor", "d0/d03/structmorph_1_1views_1_1ActionDescriptor.html", null ],
     [ "morph::views::BindEntry", "d9/dea/structmorph_1_1views_1_1BindEntry.html", null ],
     [ "morph::views::CollectionView", "df/d26/structmorph_1_1views_1_1CollectionView.html", null ],

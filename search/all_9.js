@@ -30,6 +30,8 @@ var searchData=
   ['isquantity_27',['isQuantity',['../d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69',1,'morph::units']]],
   ['issue_28',['issue',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#aa52f9bc64855fcd2963dcb353187da33',1,'morph::session::TokenIssuer']]],
   ['issuedatms_29',['issuedAtMs',['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#afb6785806e6a8a89687140e50bd9f6c5',1,'morph::session::SessionToken']]],
-  ['iszero_30',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
-  ['it_20exists_31',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
+  ['istagged_30',['IsTagged',['../d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html',1,'morph::util::detail']]],
+  ['istagged_31',['isTagged',['../d9/ded/tagged_8hpp.html#a00c6d7d7ea7e5988e1103b1bc63014e1',1,'morph::util']]],
+  ['iszero_32',['isZero',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a20223710651ba7be327488bba15a89bd',1,'morph::math::Rational']]],
+  ['it_20exists_33',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]]
 ];
