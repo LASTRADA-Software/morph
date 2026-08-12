@@ -130,33 +130,49 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d2/d3b/qt__exe
 <div class="line"><a id="l00008" name="l00008"></a><span class="lineno">    8</span> </div>
 <div class="line"><a id="l00009" name="l00009"></a><span class="lineno">    9</span><span class="keyword">namespace </span>morph::qt {</div>
 <div class="line"><a id="l00010" name="l00010"></a><span class="lineno">   10</span><span class="comment"></span> </div>
-<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment">/// @brief `IExecutor` implementation that posts tasks to the Qt event loop.</span></div>
+<div class="line"><a id="l00011" name="l00011"></a><span class="lineno">   11</span><span class="comment">/// @brief `IExecutor` implementation that posts tasks to a Qt event loop.</span></div>
 <div class="line"><a id="l00012" name="l00012"></a><span class="lineno">   12</span><span class="comment">///</span></div>
 <div class="line"><a id="l00013" name="l00013"></a><span class="lineno">   13</span><span class="comment">/// Uses `QMetaObject::invokeMethod` with `Qt::QueuedConnection` so the callable</span></div>
-<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment">/// always runs on the thread that owns `QCoreApplication` (typically the GUI thread).</span></div>
-<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment">///</span></div>
-<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment">/// Thread-safe: `post()` may be called from any thread. No `QObject` subclass is</span></div>
-<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment">/// required by the caller.</span></div>
-<div class="foldopen" id="foldopen00018" data-start="{" data-end="};">
-<div class="line"><a id="l00018" name="l00018"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">   18</a></span><span class="keyword">class </span><a class="code hl_class" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">QtExecutor</a> : <span class="keyword">public</span> <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> {</div>
-<div class="line"><a id="l00019" name="l00019"></a><span class="lineno">   19</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="comment">    /// @brief Posts @p fn to the Qt event loop for execution on the GUI thread.</span></div>
-<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">    /// Returns immediately. @p fn is invoked asynchronously once the event loop</span></div>
-<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">    /// processes the queued event.</span></div>
-<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">    /// @param fn Callable to execute on the GUI thread.</span></div>
-<div class="foldopen" id="foldopen00026" data-start="{" data-end="}">
-<div class="line"><a id="l00026" name="l00026"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">   26</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">post</a>(std::function&lt;<span class="keywordtype">void</span>()&gt; fn)<span class="keyword"> override </span>{</div>
-<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span>        QMetaObject::invokeMethod(QCoreApplication::instance(), std::move(fn), Qt::QueuedConnection);</div>
-<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span>    }</div>
+<div class="line"><a id="l00014" name="l00014"></a><span class="lineno">   14</span><span class="comment">/// always runs on the thread that owns the configured context object — by</span></div>
+<div class="line"><a id="l00015" name="l00015"></a><span class="lineno">   15</span><span class="comment">/// default `QCoreApplication::instance()`, i.e. the GUI thread.</span></div>
+<div class="line"><a id="l00016" name="l00016"></a><span class="lineno">   16</span><span class="comment">///</span></div>
+<div class="line"><a id="l00017" name="l00017"></a><span class="lineno">   17</span><span class="comment">/// Thread-safe: `post()` may be called from any thread. No `QObject` subclass is</span></div>
+<div class="line"><a id="l00018" name="l00018"></a><span class="lineno">   18</span><span class="comment">/// required by the caller.</span></div>
+<div class="foldopen" id="foldopen00019" data-start="{" data-end="};">
+<div class="line"><a id="l00019" name="l00019"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">   19</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> : <span class="keyword">public</span> <a class="code hl_struct" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> {</div>
+<div class="line"><a id="l00020" name="l00020"></a><span class="lineno">   20</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00021" name="l00021"></a><span class="lineno">   21</span><span class="comment">    /// @brief Constructs an executor that posts tasks to @p context&#39;s thread.</span></div>
+<div class="line"><a id="l00022" name="l00022"></a><span class="lineno">   22</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00023" name="l00023"></a><span class="lineno">   23</span><span class="comment">    /// @param context `QObject` whose owning thread&#39;s event loop runs posted</span></div>
+<div class="line"><a id="l00024" name="l00024"></a><span class="lineno">   24</span><span class="comment">    /// tasks; `QMetaObject::invokeMethod` dispatches to whichever thread</span></div>
+<div class="line"><a id="l00025" name="l00025"></a><span class="lineno">   25</span><span class="comment">    /// `context-&gt;thread()` reports at the time each task is posted, so tasks</span></div>
+<div class="line"><a id="l00026" name="l00026"></a><span class="lineno">   26</span><span class="comment">    /// posted after `context` is moved to a different thread run there.</span></div>
+<div class="line"><a id="l00027" name="l00027"></a><span class="lineno">   27</span><span class="comment">    /// Defaults to `QCoreApplication::instance()`, preserving the previous</span></div>
+<div class="line"><a id="l00028" name="l00028"></a><span class="lineno">   28</span><span class="comment">    /// GUI-thread-only behaviour. Passing `nullptr` (e.g. when constructed</span></div>
+<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span><span class="comment">    /// before `QCoreApplication` exists) makes `post()` a no-op, matching</span></div>
+<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span><span class="comment">    /// `QMetaObject::invokeMethod`&#39;s own handling of a null target.</span></div>
+<div class="line"><a id="l00031" name="l00031"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b">   31</a></span>    <span class="keyword">explicit</span> <a class="code hl_function" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a>(QObject* context = QCoreApplication::instance()) : _context{context} {}</div>
+<div class="line"><a id="l00032" name="l00032"></a><span class="lineno">   32</span><span class="comment"></span> </div>
+<div class="line"><a id="l00033" name="l00033"></a><span class="lineno">   33</span><span class="comment">    /// @brief Posts @p fn to the Qt event loop for execution on the context&#39;s thread.</span></div>
+<div class="line"><a id="l00034" name="l00034"></a><span class="lineno">   34</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00035" name="l00035"></a><span class="lineno">   35</span><span class="comment">    /// Returns immediately. @p fn is invoked asynchronously once the event loop</span></div>
+<div class="line"><a id="l00036" name="l00036"></a><span class="lineno">   36</span><span class="comment">    /// processes the queued event.</span></div>
+<div class="line"><a id="l00037" name="l00037"></a><span class="lineno">   37</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00038" name="l00038"></a><span class="lineno">   38</span><span class="comment">    /// @param fn Callable to execute on the context object&#39;s thread.</span></div>
+<div class="foldopen" id="foldopen00039" data-start="{" data-end="}">
+<div class="line"><a id="l00039" name="l00039"></a><span class="lineno"><a class="line" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">   39</a></span>    <span class="keywordtype">void</span> <a class="code hl_function" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">post</a>(std::function&lt;<span class="keywordtype">void</span>()&gt; fn)<span class="keyword"> override </span>{</div>
+<div class="line"><a id="l00040" name="l00040"></a><span class="lineno">   40</span>        QMetaObject::invokeMethod(_context, std::move(fn), Qt::QueuedConnection);</div>
+<div class="line"><a id="l00041" name="l00041"></a><span class="lineno">   41</span>    }</div>
 </div>
-<div class="line"><a id="l00029" name="l00029"></a><span class="lineno">   29</span>};</div>
+<div class="line"><a id="l00042" name="l00042"></a><span class="lineno">   42</span> </div>
+<div class="line"><a id="l00043" name="l00043"></a><span class="lineno">   43</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00044" name="l00044"></a><span class="lineno">   44</span>    QObject* _context;</div>
+<div class="line"><a id="l00045" name="l00045"></a><span class="lineno">   45</span>};</div>
 </div>
-<div class="line"><a id="l00030" name="l00030"></a><span class="lineno">   30</span> </div>
-<div class="line"><a id="l00031" name="l00031"></a><span class="lineno">   31</span>}  <span class="comment">// namespace morph::qt</span></div>
-<div class="ttc" id="aclassmorph_1_1qt_1_1QtExecutor_html"><div class="ttname"><a href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html">morph::qt::QtExecutor</a></div><div class="ttdoc">IExecutor implementation that posts tasks to the Qt event loop.</div><div class="ttdef"><b>Definition</b> <a href="#l00018">qt_executor.hpp:18</a></div></div>
-<div class="ttc" id="aclassmorph_1_1qt_1_1QtExecutor_html_a2d369ad4c6f855ff345339374b451b1f"><div class="ttname"><a href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">morph::qt::QtExecutor::post</a></div><div class="ttdeci">void post(std::function&lt; void()&gt; fn) override</div><div class="ttdoc">Posts fn to the Qt event loop for execution on the GUI thread.</div><div class="ttdef"><b>Definition</b> <a href="#l00026">qt_executor.hpp:26</a></div></div>
+<div class="line"><a id="l00046" name="l00046"></a><span class="lineno">   46</span> </div>
+<div class="line"><a id="l00047" name="l00047"></a><span class="lineno">   47</span>}  <span class="comment">// namespace morph::qt</span></div>
+<div class="ttc" id="aclassmorph_1_1qt_1_1QtExecutor_html_a2d369ad4c6f855ff345339374b451b1f"><div class="ttname"><a href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f">morph::qt::QtExecutor::post</a></div><div class="ttdeci">void post(std::function&lt; void()&gt; fn) override</div><div class="ttdoc">Posts fn to the Qt event loop for execution on the context&#39;s thread.</div><div class="ttdef"><b>Definition</b> <a href="#l00039">qt_executor.hpp:39</a></div></div>
+<div class="ttc" id="aclassmorph_1_1qt_1_1QtExecutor_html_a4f32eb604dfa5c0ea08bc945e4a2391b"><div class="ttname"><a href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b">morph::qt::QtExecutor::QtExecutor</a></div><div class="ttdeci">QtExecutor(QObject *context=QCoreApplication::instance())</div><div class="ttdoc">Constructs an executor that posts tasks to context&#39;s thread.</div><div class="ttdef"><b>Definition</b> <a href="#l00031">qt_executor.hpp:31</a></div></div>
 <div class="ttc" id="astructmorph_1_1exec_1_1IExecutor_html"><div class="ttname"><a href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">morph::exec::IExecutor</a></div><div class="ttdoc">Abstract executor interface.</div><div class="ttdef"><b>Definition</b> <a href="../../d7/d76/executor_8hpp_source.html#l00023">executor.hpp:23</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->

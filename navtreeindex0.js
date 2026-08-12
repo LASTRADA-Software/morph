@@ -239,7 +239,8 @@ var NAVTREEINDEX0 =
 "d4/d11/forms_8hpp.html":[3,0,0,2,3],
 "d4/d11/forms_8hpp_source.html":[3,0,0,2,3],
 "d4/d30/classmorph_1_1qt_1_1QtExecutor.html":[2,0,0,15,1],
-"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f":[2,0,0,15,1,0],
+"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f":[2,0,0,15,1,1],
+"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b":[2,0,0,15,1,0],
 "d4/d49/structmorph_1_1exec_1_1IExecutor.html":[2,0,0,5,0],
 "d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5":[2,0,0,5,0,0],
 "d4/d5e/session_8hpp_source.html":[3,0,0,8,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX0 =
 "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940":[2,0,0,3,4,11],
 "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087":[2,0,0,3,4,13],
 "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a30fc608c0c73cee91e8a1481cacd4b00":[2,0,0,3,4,6],
-"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78":[2,0,0,3,4,4],
-"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a585623f5455bba799db2e7ca0c22a947":[2,0,0,3,4,9]
+"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a421fba9e2f183185c0f05f8b43c66d78":[2,0,0,3,4,4]
 };
