@@ -22,6 +22,7 @@ split:
 - [`Timestamp`](#timestamp)
   - [Free functions (namespace scope)](#free-functions-namespace-scope)
   - [Empty-state semantics](#empty-state-semantics)
+- [The `now()` override seam](#the-now-override-seam)
 - [Glaze codec](#glaze-codec)
 - [`std::format` support](#stdformat-support)
 - [Design decisions](#design-decisions)
@@ -62,7 +63,7 @@ Unix time with leap seconds ignored.
 | default ctor | `constexpr DateTime() noexcept` | The Unix epoch (1970-01-01T00:00:00.000Z). |
 | sys_time ctor | `constexpr DateTime(sys_time<milliseconds>) noexcept` | Wraps an existing UTC instant. |
 | calendar ctor | `constexpr DateTime(std::chrono::year, std::chrono::month, std::chrono::day, std::chrono::hours, std::chrono::minutes, std::chrono::seconds, std::chrono::milliseconds = milliseconds{0}) noexcept` | Composes from calendar/clock components. Performs **no** validation (unlike `fromIso8601`): a valid `year_month_day` is a caller precondition, and out-of-range components yield an unspecified instant. |
-| `now()` | `static DateTime now() noexcept` | The current UTC instant, truncated to milliseconds. |
+| `now()` | `static DateTime now() noexcept` | The current UTC instant, truncated to milliseconds — or the installed override's instant, if one is active. See [The `now()` override seam](#the-now-override-seam). |
 | `fromIso8601(text)` | `static std::optional<DateTime> fromIso8601(string_view) noexcept` | Strict parser (see [Wire format](#wire-format)); returns `nullopt` when malformed. |
 
 ### `DateTime` — access and inspection
@@ -94,7 +95,7 @@ and a non-optional `Timestamp` member is *required* by `morph::forms` rules.
 | default ctor | `constexpr Timestamp() noexcept` | The **empty** state. |
 | DateTime ctor | `constexpr Timestamp(DateTime) noexcept` | Engages with the given instant. |
 | optional ctor | `constexpr Timestamp(std::optional<DateTime>) noexcept` | Adopts an optional payload as-is. |
-| `now()` | `static Timestamp now() noexcept` | `Timestamp{DateTime::now()}`. |
+| `now()` | `static Timestamp now() noexcept` | `Timestamp{DateTime::now()}` — delegates to `DateTime::now()`, so it observes the same override. |
 | `hasValue()` | `constexpr bool hasValue() const noexcept` | Engaged? No implicit `bool` conversion. |
 | `operator*` | `constexpr DateTime const& operator*() const noexcept` | Unchecked access to the engaged value (UB when empty, like `std::optional`). |
 | `operator<=>` | `constexpr auto operator<=>(Timestamp const&) const noexcept = default` | Default ordering on the optional payload; empty sorts before engaged. |
@@ -114,6 +115,84 @@ and a non-optional `Timestamp` member is *required* by `morph::forms` rules.
 - **Wire.** An empty `Timestamp` serializes as JSON `null` (or, as a struct
   member, is omitted — the glaze `meta` delegates to `std::optional<DateTime>`).
 - **Difference.** `lhs - rhs` returns `nullopt` if either operand is empty.
+
+## The `now()` override seam
+
+`DateTime::now()` (and therefore `Timestamp::now()`, which delegates to it) is
+not a bare `system_clock::now()` call — it first consults a process-wide,
+mutex-guarded override slot, falling back to real wall-clock time only when
+no override is installed. This is the injection point for deterministic
+testing of time-dependent behavior in models that are **registry-constructed**
+(`morph::model::detail::ModelRegistryFactory::create`, `docs/spec/core/registry.md`)
+and therefore have no constructor parameter through which a test could hand
+them a mock clock: a test fixes "now" once, for a scope, and every
+`DateTime::now()`/`Timestamp::now()` call anywhere in that scope — including
+deep inside a model's `execute()` — observes the fixed instant, with **zero
+change to production call sites**.
+
+```cpp
+namespace morph::time {
+    void setNowOverride(std::function<DateTime()> clock);  // nullptr/empty clears it
+
+    class ScopedNowOverride {
+    public:
+        explicit ScopedNowOverride(DateTime fixedInstant);       // constant "now"
+        explicit ScopedNowOverride(std::function<DateTime()> clock);  // custom callable
+        ~ScopedNowOverride();  // restores the previous override
+        // move/copy disabled
+    };
+}
+```
+
+- **`setNowOverride(clock)`** installs @p clock as the override; every
+  subsequent `DateTime::now()` call invokes it instead of
+  `system_clock::now()`. Passing an empty `std::function` (or `nullptr`)
+  clears the override and restores real wall-clock time. Thread-safe (guarded
+  by the same mutex `now()` reads through).
+- **`ScopedNowOverride`** is the RAII installer applications and tests should
+  reach for instead of calling `setNowOverride` directly — it mirrors
+  `morph::journal::ScopedActionLog` and `morph::log::ScopedLoggerOverride`
+  (the same scoped-install-then-restore shape used for the codebase's other
+  process-wide override seams): the constructor saves whatever override was
+  active before (possibly none), installs the new one, and the destructor
+  restores exactly what it saved — so nested guards unwind correctly and one
+  test case's fixed "now" never leaks into the next. Non-copyable,
+  non-movable (an RAII guard with no meaningful transfer semantics, matching
+  `ScopedActionLog`).
+- **Two constructors**: `ScopedNowOverride{someDateTime}` fixes "now" to a
+  constant instant — the common case ("this record expires 24 hours after
+  `2026-01-01T00:00:00Z`"); `ScopedNowOverride{someCallable}` installs an
+  arbitrary `DateTime()`-returning callable for scenarios that need "now" to
+  advance across calls within the same test (a fake clock that ticks).
+
+**The override callable must not throw and must not be reentrant.**
+`DateTime::now()` is `noexcept` and calls the installed override directly — an
+exception escaping the callable therefore escapes a `noexcept` function and
+calls `std::terminate()`. The callable also runs *while `now()`'s internal
+mutex is held*, so it must not itself call `DateTime::now()`/`Timestamp::now()`,
+`setNowOverride`, or construct a `ScopedNowOverride`: the mutex is
+non-recursive, and any of those self-deadlocks on the calling thread. This
+mirrors the identical constraint on `morph::log`'s sink callback (`logger.hpp`:
+*"A sink must therefore not call back into `morph::log`... `std::mutex` is
+non-recursive and that would self-deadlock"*) — the same hazard class, for the
+same reason.
+
+```cpp
+TEST_CASE("expiry logic") {
+    morph::time::ScopedNowOverride guard{morph::time::DateTime::fromIso8601("2026-01-01T00:00:00Z").value()};
+    // Anywhere in this scope, including inside a registry-constructed model's
+    // execute(), DateTime::now()/Timestamp::now() return the fixed instant --
+    // no model constructor parameter needed.
+    auto holder = morph::model::detail::ModelRegistryFactory::instance().create("SubscriptionModel");
+    // ... exercise time-dependent behavior deterministically ...
+}
+```
+
+The seam is process-wide, not per-instance: it is intended for test scopes
+(one `ScopedNowOverride` per test case, or per `SECTION`) and for tools that
+need to pin "now" globally (a replay/import job re-processing historical
+data), not as a way to give two concurrently-running models two different
+simulated clocks — see [Limitations](#limitations).
 
 ## Glaze codec
 
@@ -145,6 +224,7 @@ An empty format spec `{}` or `{:}` is accepted; any non-empty spec throws
 | Timestamp empty state | **Inside the struct**, not `std::optional<Timestamp>` | Same one-kind-of-empty design as `Quantity`; required-ness is a `morph::forms` property, not a type property. |
 | Formatting | **`std::formatter` only** | Single formatting path; no `operator<<`. |
 | Time zone support | **UTC only** | All application timestamps are UTC; no time zone offset parsing, no local time storage. A non-UTC input (`+02:00`) is rejected as malformed. |
+| `now()` injection | **Process-wide mutex-guarded override slot**, not a constructor parameter or thread-local | Registry-constructed models (`ModelRegistryFactory::create`) have no constructor parameter a test could use to inject a clock — see `docs/spec/core/registry.md`. A global override consulted by `DateTime::now()` itself needs no change to any call site or model constructor; `ScopedNowOverride` bounds its lifetime to a test/tool scope. Mirrors the existing `setActionLog`/`ScopedActionLog` and logger-override seams rather than inventing a new pattern. |
 
 ## Range & precision
 
@@ -250,6 +330,16 @@ learns only that the string was not a valid canonical UTC timestamp.
   of action members) but means a stray `sys_time`, `DateTime`, or
   `optional<DateTime>` converts silently at call sites and in overload
   resolution.
+- **The `now()` override is a single process-wide slot, not per-thread or
+  per-instance.** `ScopedNowOverride` swaps one global override in and back
+  out; it does not give two concurrently-running models (or two threads)
+  independent simulated clocks, and a `ScopedNowOverride` installed on one
+  thread affects `DateTime::now()` calls made concurrently on every other
+  thread for its lifetime. This is adequate for the intended use (one test
+  case at a time fixing "now" for whatever it exercises in-process) but is not
+  a per-context clock injection mechanism — tests that run cases in parallel
+  within one binary, or that need two different simulated instants live at
+  once, are outside what this seam provides.
 
 ## Cross-references
 
@@ -266,6 +356,14 @@ learns only that the string was not a valid canonical UTC timestamp.
   hostile input into a valid value (there is a meaningful fallback); `DateTime`'s
   codec *rejects* it as a read error (there is no meaningful "nearest valid
   timestamp"). Same framework, opposite boundary policy, chosen per type.
+- **`../core/registry.md`** — `ModelRegistryFactory::create` constructs
+  registry-registered models with no constructor parameter, which is exactly
+  why `DateTime::now()`/`Timestamp::now()` need a seam that does not go
+  through a constructor: `ScopedNowOverride`, consulted by `now()` itself,
+  reaches a model's `execute()` regardless of how the model was constructed.
+- **`../journal/journal.md`** — `journal::setActionLog`/`ScopedActionLog`, the
+  action-log override this seam's shape (mutex-guarded slot + RAII
+  scoped-install-and-restore helper) is modeled on.
 
 ### Worked example — a required `Timestamp` field
 

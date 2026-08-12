@@ -94,3 +94,8 @@ TEST_CASE("Two isolated dispatchers do not share state", "[di]") {
 
     REQUIRE_THROWS_AS(dispatcher2.dispatch("DiModel", "DiAction", *holder, R"({"x":4})"), std::runtime_error);
 }
+
+// Note: coverage for the registry-constructed-model DI seam (issue #56) lives
+// in tests/test_registry_extra.cpp ("ModelRegistryFactory: registerModel
+// accepts a custom factory closure" et al.) to avoid duplicating the same
+// scenario across two files.

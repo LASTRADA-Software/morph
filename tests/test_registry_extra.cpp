@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -94,6 +96,90 @@ TEST_CASE("morph::model::detail::ModelRegistryFactory: re-registering same typeI
     auto holder = registry.create("REG_RxModel");
     REQUIRE(holder != nullptr);
     REQUIRE(holder->type() == std::type_index(typeid(RxModel)));
+}
+
+// ── morph::model::detail::ModelRegistryFactory: custom factory DI seam ──────────────────────────────
+
+namespace {
+struct DiModel {
+    int seed = 0;
+    int execute(const RxAction& act) const { return act.val + seed; }
+};
+}  // namespace
+
+template <>
+struct morph::model::ModelTraits<DiModel> {
+    static constexpr std::string_view typeId() { return "REG_DiModel"; }
+};
+
+TEST_CASE("morph::model::detail::ModelRegistryFactory: registerModel accepts a custom factory closure",
+          "[registry]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    // The DI seam: a factory closure capturing a per-instance dependency
+    // (here, a plain int standing in for an injected clock/log/feature flag),
+    // equivalent to Bridge::HandlerBinding::modelFactory for Local-mode. The
+    // closure returns an owning holder pointer -- the caller controls
+    // construction end-to-end, including which constructor overload of
+    // ModelHolder<Model> runs.
+    int const injectedSeed = 100;
+    registry.registerModel<DiModel>("REG_DiModel", [injectedSeed] {
+        return std::make_unique<morph::model::detail::ModelHolder<DiModel>>(injectedSeed);
+    });
+
+    auto holder = registry.create("REG_DiModel");
+    REQUIRE(holder != nullptr);
+    REQUIRE(holder->type() == std::type_index(typeid(DiModel)));
+    auto& model = holder->into<DiModel>();
+    REQUIRE(model.seed == 100);
+    REQUIRE(model.execute(RxAction{5}) == 105);
+}
+
+TEST_CASE("morph::model::detail::ModelRegistryFactory: custom factory produces independent instances per create()",
+          "[registry]") {
+    morph::model::detail::ModelRegistryFactory registry;
+    int counter = 0;
+    registry.registerModel<DiModel>("REG_DiModel", [&counter] {
+        return std::make_unique<morph::model::detail::ModelHolder<DiModel>>(DiModel{++counter});
+    });
+
+    auto holder1 = registry.create("REG_DiModel");
+    auto holder2 = registry.create("REG_DiModel");
+    REQUIRE(holder1->into<DiModel>().seed == 1);
+    REQUIRE(holder2->into<DiModel>().seed == 2);
+}
+
+TEST_CASE(
+    "morph::model::detail::ModelRegistryFactory: custom factory overload does NOT auto-attach the default action log",
+    "[registry]") {
+    // Unlike the single-argument (default-construction) overload -- which
+    // goes through ModelFactory::create and auto-attaches
+    // morph::journal::defaultActionLog() -- the custom-factory overload
+    // leaves attaching a log entirely up to the factory closure (or a later
+    // explicit attachActionLog call). ScopedActionLog bounds the process-wide
+    // default log to this test's scope so it never leaks into others.
+    morph::journal::ScopedActionLog const logGuard{std::make_shared<morph::journal::InMemoryActionLog>()};
+
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<DiModel>("REG_DiModel_NoAutoLog",
+                                    [] { return std::make_unique<morph::model::detail::ModelHolder<DiModel>>(); });
+
+    auto holder = registry.create("REG_DiModel_NoAutoLog");
+    REQUIRE_FALSE(holder->hasActionLog());
+}
+
+TEST_CASE("morph::model::detail::ModelRegistryFactory: default-construction overload DOES auto-attach the "
+          "default action log",
+          "[registry]") {
+    // The contrasting case: the plain registerModel<Model>(modelId) overload
+    // is unchanged and still goes through ModelFactory::create, which
+    // auto-attaches the process-wide default log when one is installed.
+    morph::journal::ScopedActionLog const logGuard{std::make_shared<morph::journal::InMemoryActionLog>()};
+
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<DiModel>("REG_DiModel_AutoLog");
+
+    auto holder = registry.create("REG_DiModel_AutoLog");
+    REQUIRE(holder->hasActionLog());
 }
 
 // ── morph::model::detail::ActionDispatcher: KeyHash collision avoidance (basic) ─────────────────────

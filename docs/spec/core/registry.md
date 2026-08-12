@@ -119,18 +119,28 @@ application code — nothing has a symbolic dependency on it. Consequences:
   path that could dispatch/create a plugin's model must run after the module is
   loaded; there is no ordering guarantee relative to other TUs' static init.
 
-### Remotely instantiated models must be default-constructible
+### Remotely instantiated models must be default-constructible — unless registered with a custom factory
 
-`ModelRegistryFactory::create` reaches models through
-`ModelFactory::create<Model>()`, which does `std::make_unique<ModelHolder<Model>>()`
-with **no constructor arguments** (see `model.hpp`). Any model registered with
-`BRIDGE_REGISTER_MODEL` that will be instantiated by string id from a remote
-`"register"` message must therefore be **default-constructible**. A model with no
+`ModelRegistryFactory::create` reaches models registered via
+`BRIDGE_REGISTER_MODEL` (i.e. via the single-argument
+`registerModel<Model>(modelId)`) through `ModelFactory::create<Model>()`,
+which does `std::make_unique<ModelHolder<Model>>()` with **no constructor
+arguments** (see `model.hpp`). Any model registered that way — the ordinary,
+common case — must therefore be **default-constructible**. A model with no
 accessible default constructor still compiles the macro (which only needs
-`ModelTraits`) but fails to compile the factory instantiation. Models that need
-injected dependencies are instead constructed by a custom
-`HandlerBinding::modelFactory` closure and are not reachable through the string-id
-factory path.
+`ModelTraits`) but fails to compile the factory instantiation.
+
+This is no longer the only registry-constructed path, though: the
+two-argument `registerModel<Model>(modelId, factory)` overload (see
+[`ModelRegistryFactory`](#modelregistryfactory) below) lets `factory` build
+the holder however it likes — including calling a non-default constructor —
+so a model that needs injected dependencies (previously reachable only
+through a custom `Bridge::HandlerBinding::modelFactory` closure, and therefore
+only via `Local`-mode/in-process registration) can now be registered for
+`Socket`-mode/remote instantiation too, by calling
+`ModelRegistryFactory::instance().registerModel<Model>(modelId, factory)`
+directly instead of (or in addition to, last-write-wins) relying on
+`BRIDGE_REGISTER_MODEL`'s default-construction registrar.
 
 ## Customisation traits
 
@@ -405,12 +415,53 @@ instantiate models on demand from incoming `"register"` messages.
 class ModelRegistryFactory {
     template <typename Model>
     void registerModel(std::string_view modelId);
+
+    template <typename Model, typename Factory>
+        requires std::invocable<Factory> &&
+                 std::convertible_to<std::invoke_result_t<Factory>, std::unique_ptr<IModelHolder>>
+    void registerModel(std::string_view modelId, Factory factory);
+
     std::unique_ptr<IModelHolder> create(std::string_view modelId);
     static ModelRegistryFactory& instance();
 };
 ```
 
 - `create` throws `std::runtime_error` for unknown model types.
+- The single-argument `registerModel<Model>(modelId)` registers the plain
+  default-construction path — equivalent to
+  `registerModel<Model>(modelId, [] { return ModelFactory::create<Model>(); })`
+  — and is what `BRIDGE_REGISTER_MODEL` always uses.
+- The two-argument overload is the **per-instance dependency-injection seam
+  for registry-constructed (`Socket`-mode) models** — the equivalent, for
+  `RemoteServer`'s registry path, of `Bridge::HandlerBinding::modelFactory` for
+  the client-side `Local`-mode path. `factory` runs once per `create(modelId)`
+  call (i.e. once per incoming `"register"` request, and once per fresh
+  shared-instance creation — see `acquireSharedInstance`, `remote.hpp`), and
+  may capture and hand the model constructor arbitrary per-instance
+  dependencies an ordinary default constructor cannot reach: an injectable
+  clock (see `docs/spec/util/datetime.md`'s `now()` override seam for the
+  complementary, constructor-free path to the same goal), a secondary log
+  handle, a feature flag. It is also the **only** way to register a model
+  whose constructor takes arguments at all — such a model has no accessible
+  default constructor, so the single-argument overload cannot compile against
+  it (see [Remotely instantiated models must be default-constructible — unless
+  registered with a custom factory](#remotely-instantiated-models-must-be-default-constructible--unless-registered-with-a-custom-factory)).
+  `factory` returns an owning pointer convertible to
+  `std::unique_ptr<IModelHolder>` (e.g.
+  `std::make_unique<ModelHolder<Model>>(...)`) — the caller controls
+  construction end-to-end, including which `ModelHolder<Model>` constructor
+  overload runs. Unlike the default-construction overload, this one does
+  **not** auto-attach the process-wide default action log
+  (`morph::journal::defaultActionLog()`); a caller supplying its own factory is
+  assumed to attach whatever log/identity it needs inside the closure via
+  `IModelHolder::attachActionLog`, or to rely on `RemoteServer`'s
+  `LogProvider` doing so afterward, exactly as the default path already
+  allows. Two registrations for the same `modelId` still silently
+  last-write-wins, as for the single-argument overload (see
+  [Failure modes](#failure-modes)) — registering a custom factory under an id
+  that a `BRIDGE_REGISTER_MODEL(Model, id)` invocation already claimed
+  overwrites that default-construction factory, and vice versa, whichever
+  static-init/runtime call happens last.
 
 #### Instance identity and per-instance authorization
 
