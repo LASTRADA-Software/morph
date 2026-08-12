@@ -125,13 +125,13 @@ always carry the current session. Control messages — `register`,
 `registerShared` (`registerModelShared`), `attach` (`attachModel`), `assign`
 (`assignPrimary`), and `deregister` (`deregisterModel`) — are different: each
 is built directly inside the concrete backend, which has no other route to
-the `Bridge`'s session. Before `IBackend::setSession` existed, every one of
-these envelopes carried a default-constructed (empty, unauthenticated)
-`session::Context` regardless of what `Bridge::setDefaultSession()` held, so
-`RemoteServer::authorizeRegister` could never see a caller's identity and the
-owner principal it records at `register` time was always empty — degrading
-`IAuthorizer::authorizeInstance`'s ownership check to allow-all for every
-instance a `Bridge` registered (see [session.md](../session/session.md)).
+the `Bridge`'s session except `IBackend::setSession`. Every wire-backed
+implementation stamps the session `setSession` last installed onto these
+envelopes too, so `RemoteServer::authorizeRegister` sees the caller's
+identity and the owner principal it records at `register` time reflects the
+registering session — which is what `IAuthorizer::authorizeInstance`'s
+ownership check relies on for every instance a `Bridge` registers (see
+[session.md](../session/session.md)).
 
 `Bridge` calls `IBackend::setSession` in two places: once from its
 constructor (with the just-constructed, typically empty, default session) and

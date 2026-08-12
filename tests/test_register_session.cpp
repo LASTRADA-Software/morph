@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Reproduces and verifies the fix for #63: register/attach/assign/deregister
-// envelopes built by the wire-backed IBackend implementations (SimulatedRemoteBackend,
-// SocketBackend) never carried Bridge::defaultSession(), so a RemoteServer whose
-// authorizer requires authentication rejected every register — and, even under an
-// allow-all authorizer, the recorded owner principal was always empty, degrading
-// authorizeInstance's ownership check to allow-all. See docs/spec/session/session.md
-// ("How a Context originates and flows") and docs/spec/core/backend.md ("IBackend").
+// The wire-backed IBackend implementations (SimulatedRemoteBackend,
+// SocketBackend) stamp Bridge::defaultSession() onto every
+// register/attach/assign/deregister envelope, so a RemoteServer whose
+// authorizer requires authentication can allow register, and the recorded
+// owner principal reflects the registering session rather than always being
+// empty — which is what authorizeInstance's ownership check relies on. See
+// docs/spec/session/session.md ("How a Context originates and flows") and
+// docs/spec/core/backend.md ("IBackend").
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
@@ -66,10 +67,10 @@ TEST_CASE("Bridge::setDefaultSession's token reaches the register envelope so au
         {.principal = "alice", .issuedAtMs = 0, .expiresAtMs = 9999999999999, .roles = {}});
     bridge.setDefaultSession(session);
 
-    // Before the fix, registerModelWithContext (called from BridgeHandler's
-    // constructor) sent a register envelope with a default-constructed
-    // (empty) session, so RegisterRequiresAuth::authorizeRegister denied it
-    // and this constructor threw "register failed: unauthorized".
+    // registerModelWithContext (called from BridgeHandler's constructor)
+    // stamps the Bridge's default session onto the register envelope, so
+    // RegisterRequiresAuth::authorizeRegister sees "alice" as the principal
+    // and allows it — this constructor does not throw.
     morph::bridge::BridgeHandler<RegSessModel> handler{bridge, &cbExec};
 
     std::atomic<int> result{-1};
@@ -111,9 +112,8 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
         {.principal = "alice", .issuedAtMs = 0, .expiresAtMs = 9999999999999, .roles = {}});
     aliceBridge.setDefaultSession(aliceSession);
 
-    // Registers on behalf of "alice" — before the fix, the owner recorded on
-    // the server was always empty (the envelope's session was never set),
-    // which degraded authorizeInstance's ownership check to allow-all.
+    // Registers on behalf of "alice" — the register envelope carries the
+    // Bridge's default session, so the server records "alice" as the owner.
     morph::bridge::BridgeHandler<RegSessModel> aliceHandler{aliceBridge, &cbExec};
 
     std::atomic<int> aliceResult{-1};
@@ -126,8 +126,9 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
     REQUIRE(aliceResult.load() == 2);
 
     // Bob (a different, also-valid principal) attempts to execute against the
-    // *same* model id alice's handler was bound to. Before the fix this would
-    // succeed (owner was empty => allow-all); after the fix it is denied.
+    // *same* model id alice's handler was bound to. The recorded owner is
+    // "alice", so authorizeInstance denies Bob rather than falling back to
+    // allow-all.
     morph::bridge::Bridge bobBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
     morph::session::Context bobSession;
     bobSession.principal = "bob";

@@ -399,12 +399,12 @@ struct IBackend {
     /// envelopes regardless of this hook. Control messages are different: they
     /// are built directly by the concrete backend (`registerModelWithContext`,
     /// `registerModelShared`, `attachModel`, `assignPrimary`, `deregisterModel`),
-    /// which has no other way to learn the `Bridge`'s current session. Without
-    /// this hook those envelopes always carried a default-constructed (empty,
-    /// unauthenticated) `session::Context`, so `RemoteServer::authorizeRegister`
-    /// could never see a caller's identity and the owner principal recorded at
-    /// `register` time was always empty — degrading `authorizeInstance`'s
-    /// ownership check to allow-all for every instance a `Bridge` registered.
+    /// which has no other way to learn the `Bridge`'s current session except
+    /// this hook. Stamping the stored session onto those envelopes is what lets
+    /// `RemoteServer::authorizeRegister` see a caller's identity and the owner
+    /// principal recorded at `register` time reflect the registering session —
+    /// which `authorizeInstance`'s ownership check relies on for every instance
+    /// a `Bridge` registers.
     ///
     /// `Bridge::setDefaultSession()` calls this immediately, and
     /// `Bridge::switchBackend()` calls it on the new backend before any

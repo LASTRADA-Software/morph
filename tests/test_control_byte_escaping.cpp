@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Reproduces and verifies the fix for #62: three sibling writers on
-// caller-supplied strings never got the control-byte escaping fix that
-// morph::wire::encode already applies via morph::wire::detail::EscapingWriteOpts
-// (see docs/spec/session/session.md and docs/spec/security.md):
+// Verifies that three sibling writers on caller-supplied strings apply the
+// same control-byte escaping morph::wire::encode applies via
+// morph::wire::detail::EscapingWriteOpts (see docs/spec/session/session.md
+// and docs/spec/security.md):
 //   - morph::journal::toJson(LogEntry)             (journal/action_log.hpp)
 //   - morph::offline::detail::toJson(FileQueueRecord) (offline/file_offline_queue.hpp)
 //   - morph::session::TokenIssuer::issue(SessionToken) (session/session_auth.hpp)
