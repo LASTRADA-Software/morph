@@ -51,6 +51,7 @@ struct morph::units::UnitTraits<QDVUnit> {
             case QDVUnit::percent:
                 return {.min = Rational{Numerator{0}, Denominator{1}, DecimalPlaces{1}},
                         .max = Rational{Numerator{100}, Denominator{1}, DecimalPlaces{1}}};
+            case QDVUnit::mass:
             default:
                 return {.min = Rational{Numerator{-1'000'000'000}, Denominator{1}, DecimalPlaces{1}},
                         .max = Rational{Numerator{1'000'000'000}, Denominator{1}, DecimalPlaces{1}}};
@@ -126,12 +127,15 @@ struct QDVReading {
 
 TEST_CASE("Forms::CheckQuantityBounds::NoOffenderWhenEverythingWithinBounds", "[forms][decode]") {
     QDVReading reading{.moisture = Percent{Rational{Numerator{45}, Denominator{1}, DecimalPlaces{1}}},
-                       .sampleMass = Mass{Rational{Numerator{10}, Denominator{1}, DecimalPlaces{1}}}};
+                       .sampleMass = Mass{Rational{Numerator{10}, Denominator{1}, DecimalPlaces{1}}},
+                       .note = {}};
     CHECK_FALSE(morph::forms::checkQuantityBounds(reading).has_value());
 }
 
 TEST_CASE("Forms::CheckQuantityBounds::ReportsFirstOffendingFieldName", "[forms][decode]") {
-    QDVReading reading{.moisture = Percent{Rational{Numerator{250}, Denominator{1}, DecimalPlaces{1}}}};
+    QDVReading reading{.moisture = Percent{Rational{Numerator{250}, Denominator{1}, DecimalPlaces{1}}},
+                       .sampleMass = {},
+                       .note = {}};
     auto const offender = morph::forms::checkQuantityBounds(reading);
     REQUIRE(offender.has_value());
     CHECK(*offender == "moisture");
@@ -143,7 +147,9 @@ TEST_CASE("Forms::CheckQuantityBounds::EmptyFieldsNeverOffend", "[forms][decode]
 }
 
 TEST_CASE("Forms::EnforceQuantityBounds::ThrowsQuantityDecodeErrorNamingTheField", "[forms][decode]") {
-    QDVReading reading{.moisture = Percent{Rational{Numerator{-5}, Denominator{1}, DecimalPlaces{1}}}};
+    QDVReading reading{.moisture = Percent{Rational{Numerator{-5}, Denominator{1}, DecimalPlaces{1}}},
+                       .sampleMass = {},
+                       .note = {}};
     REQUIRE_THROWS_AS(morph::forms::enforceQuantityBounds(reading), morph::forms::QuantityDecodeError);
     try {
         morph::forms::enforceQuantityBounds(reading);
@@ -154,7 +160,9 @@ TEST_CASE("Forms::EnforceQuantityBounds::ThrowsQuantityDecodeErrorNamingTheField
 }
 
 TEST_CASE("Forms::EnforceQuantityBounds::NoOpWhenWithinBounds", "[forms][decode]") {
-    QDVReading reading{.moisture = Percent{Rational{Numerator{50}, Denominator{1}, DecimalPlaces{1}}}};
+    QDVReading reading{.moisture = Percent{Rational{Numerator{50}, Denominator{1}, DecimalPlaces{1}}},
+                       .sampleMass = {},
+                       .note = {}};
     CHECK_NOTHROW(morph::forms::enforceQuantityBounds(reading));
 }
 
@@ -178,7 +186,9 @@ BRIDGE_REGISTER_ACTION(QDVModel, QDVReading, "QDV_Reading")
 
 TEST_CASE("Forms::NoDrift::ActionDispatcherRejectsOutOfBoundsQuantityAsDecodeError", "[forms][decode][dispatch]") {
     auto holder = morph::model::detail::ModelFactory::create<QDVModel>();
-    QDVReading const badReading{.moisture = Percent{Rational{Numerator{250}, Denominator{1}, DecimalPlaces{1}}}};
+    QDVReading const badReading{.moisture = Percent{Rational{Numerator{250}, Denominator{1}, DecimalPlaces{1}}},
+                                .sampleMass = {},
+                                .note = {}};
     auto const payload = morph::model::ActionTraits<QDVReading>::toJson(badReading);
 
     REQUIRE_THROWS_AS(
@@ -189,7 +199,8 @@ TEST_CASE("Forms::NoDrift::ActionDispatcherRejectsOutOfBoundsQuantityAsDecodeErr
 TEST_CASE("Forms::NoDrift::ActionDispatcherAcceptsInBoundsQuantity", "[forms][decode][dispatch]") {
     auto holder = morph::model::detail::ModelFactory::create<QDVModel>();
     QDVReading const goodReading{.moisture = Percent{Rational{Numerator{50}, Denominator{1}, DecimalPlaces{1}}},
-                                 .sampleMass = Mass{Rational{Numerator{10}, Denominator{1}, DecimalPlaces{1}}}};
+                                 .sampleMass = Mass{Rational{Numerator{10}, Denominator{1}, DecimalPlaces{1}}},
+                                 .note = {}};
     auto const payload = morph::model::ActionTraits<QDVReading>::toJson(goodReading);
 
     auto const resultJson =
@@ -204,7 +215,9 @@ TEST_CASE("Forms::NoDrift::LocalBackendRejectsOutOfBoundsQuantityViaOnError", "[
     morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
     morph::bridge::BridgeHandler<QDVModel> handler{bridge, &cbExec};
 
-    QDVReading const badReading{.moisture = Percent{Rational{Numerator{-10}, Denominator{1}, DecimalPlaces{1}}}};
+    QDVReading const badReading{.moisture = Percent{Rational{Numerator{-10}, Denominator{1}, DecimalPlaces{1}}},
+                                .sampleMass = {},
+                                .note = {}};
     auto const payload = morph::model::ActionTraits<QDVReading>::toJson(badReading);
 
     std::atomic<bool> sawDecodeError{false};
