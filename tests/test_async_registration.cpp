@@ -787,7 +787,14 @@ TEST_CASE(
 // call inside that window.
 TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registration settles all resolve",
           "[bridge][registration][issue60][concurrency]") {
-    constexpr int kTrials = 200;
+    // 50 trials x 8 real OS threads each (400 total thread spawns) still gives
+    // the scheduler repeated chances to land a call inside the narrow window
+    // under test, while keeping the total real-thread-spawn cost low enough
+    // to fit comfortably in a bounded per-wait budget under Valgrind's heavy
+    // instrumentation on a loaded CI runner -- 200 trials (1600 spawns) was
+    // observed exceeding a 10s per-trial wait budget under real CI Valgrind,
+    // not just local timing noise.
+    constexpr int kTrials = 50;
     constexpr int kWaitersPerTrial = 8;
 
     for (int trial = 0; trial < kTrials; ++trial) {
@@ -846,14 +853,16 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
         }
         // kDefaultWaitBudget (2000ms) is sized for a typical single async
         // completion; this spawns kWaitersPerTrial real OS threads per trial,
-        // 200 trials in a row -- under Valgrind's heavy instrumentation, just
-        // getting all 8 threads scheduled and past their first fetch_add can
-        // plausibly take longer than that on a loaded CI runner. Give this
-        // specific wait a larger explicit budget rather than raising the
-        // global default (which would slow every other test's failure
-        // detection).
+        // kTrials times in a row -- under Valgrind's heavy instrumentation on
+        // a loaded/shared CI runner, just getting all 8 threads scheduled and
+        // past their first fetch_add can plausibly exceed even a generous
+        // budget (10s was observed insufficient on real CI Valgrind, not just
+        // local timing noise -- see kTrials' own comment on why the total
+        // thread-spawn count was also cut). Give this specific wait a larger
+        // explicit budget rather than raising the global default (which would
+        // slow every other test's failure detection).
         REQUIRE(morph::testing::waitUntil([&] { return readyWaiters.load() == kWaitersPerTrial; },
-                                           std::chrono::milliseconds{10'000}));
+                                           std::chrono::milliseconds{30'000}));
         go.store(true);
         rawBackend->completeNext();
 
