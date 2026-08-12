@@ -146,6 +146,27 @@ TEST_CASE("Forms::CheckQuantityBounds::EmptyFieldsNeverOffend", "[forms][decode]
     CHECK_FALSE(morph::forms::checkQuantityBounds(reading).has_value());
 }
 
+// A non-aggregate (user-declared constructor, private member) is neither
+// glz::reflectable nor glz::glaze_object_t, so checkQuantityBounds's
+// if constexpr takes its else branch: a no-op, exactly like
+// reconcileDeclaredPrecision's identical fallback for actions with
+// hand-written codecs and no reflectable shape. Nothing to walk, nothing to
+// flag -- but this path must still compile and return std::nullopt rather
+// than being an untested assumption.
+class QDVNonReflectable {
+public:
+    explicit QDVNonReflectable(int value) : _value{value} {}
+    [[nodiscard]] int value() const { return _value; }
+
+private:
+    int _value;
+};
+
+TEST_CASE("Forms::CheckQuantityBounds::NonReflectableActionIsANoOp", "[forms][decode]") {
+    QDVNonReflectable const action{42};
+    CHECK_FALSE(morph::forms::checkQuantityBounds(action).has_value());
+}
+
 TEST_CASE("Forms::EnforceQuantityBounds::ThrowsQuantityDecodeErrorNamingTheField", "[forms][decode]") {
     QDVReading reading{.moisture = Percent{Rational{Numerator{-5}, Denominator{1}, DecimalPlaces{1}}},
                        .sampleMass = {},
