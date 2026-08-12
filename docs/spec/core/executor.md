@@ -33,7 +33,7 @@ There are seven types, split across `morph::exec` (in `executor.hpp`),
 | `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`. |
 | `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
-| `QtExecutor` | `morph::qt` | Posts tasks to the Qt event loop; they run on the `QCoreApplication` (GUI) thread. |
+| `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
 | `StrandExecutor` | `morph::exec::detail` | Per-key serialising wrapper — tasks with the same `ModelId` never overlap. |
