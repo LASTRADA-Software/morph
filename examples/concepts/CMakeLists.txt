@@ -41,6 +41,7 @@ if(MORPH_BUILD_TESTS)
         )
         target_link_libraries(morph_concepts_tests PRIVATE morph::morph Catch2::Catch2WithMain)
         apply_warnings(morph_concepts_tests)
+        apply_bigobj(morph_concepts_tests)
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)

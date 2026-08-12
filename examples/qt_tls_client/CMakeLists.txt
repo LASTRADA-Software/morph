@@ -10,6 +10,7 @@
 add_executable(morph_qt_tls_example main.cpp)
 target_link_libraries(morph_qt_tls_example PRIVATE morph_qt_impl)
 apply_warnings(morph_qt_tls_example)
+apply_bigobj(morph_qt_tls_example)
 
 target_compile_definitions(morph_qt_tls_example PRIVATE
     QT_TLS_EXAMPLE_CERTS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/certs"

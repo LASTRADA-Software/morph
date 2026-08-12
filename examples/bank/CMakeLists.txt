@@ -65,6 +65,7 @@ add_library(bank_lib STATIC
 target_include_directories(bank_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(bank_lib PUBLIC morph::morph Lightweight::Lightweight)
 target_compile_features(bank_lib PUBLIC cxx_std_23)
+apply_bigobj(bank_lib)
 # Note: deliberately NOT calling apply_warnings() here — the third-party ORM
 # headers are not -Werror clean and would fail the build.
 
@@ -72,6 +73,7 @@ target_compile_features(bank_lib PUBLIC cxx_std_23)
 add_executable(bank_cli src/cli/main.cpp)
 target_link_libraries(bank_cli PRIVATE bank_lib)
 target_compile_features(bank_cli PRIVATE cxx_std_23)
+apply_bigobj(bank_cli)
 
 # ── Qt 6 GUI (opt-in) ────────────────────────────────────────────────────────
 if(MORPH_BUILD_BANK_GUI)
@@ -103,6 +105,7 @@ if(MORPH_BUILD_TESTS)
         target_include_directories(bank_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
         target_link_libraries(bank_tests PRIVATE bank_lib Catch2::Catch2WithMain)
         target_compile_features(bank_tests PRIVATE cxx_std_23)
+        apply_bigobj(bank_tests)
 
         list(APPEND CMAKE_MODULE_PATH ${Catch2_DIR})
         include(Catch)

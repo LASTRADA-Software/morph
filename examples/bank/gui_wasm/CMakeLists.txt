@@ -72,3 +72,4 @@ target_link_libraries(bank_gui_wasm PRIVATE
     Qt6::Core Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2
 )
 target_compile_features(bank_gui_wasm PRIVATE cxx_std_23)
+apply_bigobj(bank_gui_wasm)
