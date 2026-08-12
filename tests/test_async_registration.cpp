@@ -18,11 +18,14 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -53,6 +56,37 @@ template <>
 struct morph::model::ModelTraits<ARModel> {
     static constexpr std::string_view typeId() { return "AR_Model"; }
 };
+
+// ── Issue #67: assignHandlerPrimary prefers IBackend::assignPrimaryAsync ────
+//
+// A model whose result-keyed action (BRIDGE_KEY_FROM_RESULT) drives
+// Bridge::assignHandlerPrimary. Needs **external** linkage (not an anonymous
+// namespace) for the same reason as test_shared_instances.cpp's ShiCreate:
+// glaze's plain-aggregate reflection cannot see into an anonymous namespace,
+// and BRIDGE_REGISTER_* specialises templates at global scope.
+// NOLINTBEGIN(misc-use-internal-linkage)
+struct ARCreate {
+    std::int64_t initial = 0;
+};
+
+struct ARCreated {
+    std::int64_t id = 0;
+    std::int64_t value = 0;
+};
+
+struct ARCreateModel {
+    std::int64_t value = 0;
+    ARCreated execute(const ARCreate& act) {
+        static std::atomic<std::int64_t> nextId{5000};
+        value = act.initial;
+        return {.id = nextId.fetch_add(1), .value = value};
+    }
+};
+
+BRIDGE_REGISTER_MODEL(ARCreateModel, "AR_CreateModel")
+BRIDGE_REGISTER_ACTION(ARCreateModel, ARCreate, "AR_Create")
+BRIDGE_MODEL_KEY_FROM_RESULT(ARCreateModel, ARCreate, &ARCreated::id);
+// NOLINTEND(misc-use-internal-linkage)
 
 namespace {
 
@@ -175,6 +209,69 @@ public:
 
 private:
     std::shared_ptr<AsyncRegisterBackend> _target;
+};
+
+// Offers an async assignPrimary path that does not complete until the test
+// calls completeNext()/failNext() -- the assignHandlerPrimary counterpart of
+// AsyncRegisterBackend above, simulating a backend (QtWebSocketBackend is the
+// one real example) whose promote-in-place reply arrives later, on its own
+// thread, instead of Bridge::assignHandlerPrimary falling back to the
+// synchronous assignPrimary. Everything else (registration, execute) is
+// delegated to a real LocalBackend so a result-keyed action's ensureBound()
+// step behaves normally; only the promotion step is deferred.
+class AsyncAssignPrimaryBackend : public morph::backend::LocalBackend {
+public:
+    explicit AsyncAssignPrimaryBackend(morph::exec::IExecutor& pool) : LocalBackend{pool} {}
+
+    bool assignPrimaryAsync(morph::exec::detail::ModelId mid, const std::string& typeId, std::string_view primary,
+                            std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                            std::function<void(const std::string&)> onError) override {
+        std::scoped_lock const lock{_pendingMtx};
+        _pending.push_back(Pending{mid, typeId, std::string{primary}, std::move(onRegistered), std::move(onError)});
+        return true;
+    }
+
+    // Test hooks: settle the oldest still-pending async promotion. Unlike
+    // AsyncRegisterBackend::completeNext(), this does not also call the real
+    // (synchronous) assignPrimary -- assignPrimaryAsync's contract is that the
+    // backend performs the promotion itself and merely reports back, so the
+    // test double's completion is the promotion.
+    void completeNext() {
+        Pending pending;
+        {
+            std::scoped_lock const lock{_pendingMtx};
+            REQUIRE_FALSE(_pending.empty());
+            pending = std::move(_pending.front());
+            _pending.erase(_pending.begin());
+        }
+        LocalBackend::assignPrimary(pending.mid, pending.typeId, pending.primary);
+        pending.onRegistered(pending.mid);
+    }
+    void failNext(const std::string& message) {
+        Pending pending;
+        {
+            std::scoped_lock const lock{_pendingMtx};
+            REQUIRE_FALSE(_pending.empty());
+            pending = std::move(_pending.front());
+            _pending.erase(_pending.begin());
+        }
+        pending.onError(message);
+    }
+    [[nodiscard]] std::size_t pendingCount() const {
+        std::scoped_lock const lock{_pendingMtx};
+        return _pending.size();
+    }
+
+private:
+    struct Pending {
+        morph::exec::detail::ModelId mid;
+        std::string typeId;
+        std::string primary;
+        std::function<void(morph::exec::detail::ModelId)> onRegistered;
+        std::function<void(const std::string&)> onError;
+    };
+    mutable std::mutex _pendingMtx;
+    std::vector<Pending> _pending;
 };
 
 }  // namespace
@@ -474,4 +571,276 @@ TEST_CASE("Bridge::whenBound: multiple waiters on the same in-flight registratio
 
     rawBackend->completeNext();
     CHECK(resolvedCount == 3);
+}
+
+// ── Issue #67: assignHandlerPrimary prefers IBackend::assignPrimaryAsync ────
+//
+// A result-keyed action's execute() calls ensureBound() then, once the reply
+// names the key, assignHandlerPrimary(). When the backend offers
+// assignPrimaryAsync, Bridge::assignHandlerPrimary must send the request and
+// return without blocking, publish binding->primary/contextKey only once the
+// (possibly deferred) reply confirms it, and guard a stale reply the same way
+// registerHandlerImpl's async callback does (Bridge/binding gone, or a
+// switchBackend()/concurrent promotion already moved past it).
+
+TEST_CASE("Bridge::assignHandlerPrimary: uses the async path when the backend offers one; publishes on completion",
+          "[bridge][registration][issue67]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    SyncExec cbExec;
+    morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<bool> done{false};
+    std::optional<ARCreated> created;
+    handler.execute(ARCreate{.initial = 7})
+        .then([&](ARCreated result) {
+            created = result;
+            done.store(true);
+        })
+        .onError([&](const std::exception_ptr&) { done.store(true); });
+
+    // The promotion reply has not arrived yet: the handler already has an
+    // anonymous instance (ensureBound ran synchronously against LocalBackend),
+    // so the action itself has already executed and resolved -- but the
+    // promotion is what assignPrimaryAsync defers, not the execute() call.
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(created.has_value());
+    REQUIRE(rawBackend->pendingCount() == 1);
+    // Not yet promoted: the async reply confirming the promotion is still
+    // outstanding, so the handler must not report a primary key it has not
+    // actually been filed under yet.
+    CHECK_FALSE(handler.primary().has_value());
+
+    rawBackend->completeNext();
+    REQUIRE(handler.primary().has_value());
+    CHECK(handler.primary().value_or(-1) == created->id);
+}
+
+TEST_CASE("Bridge::assignHandlerPrimary: async promotion failure leaves the binding unpromoted (no crash, logged)",
+          "[bridge][registration][issue67]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    SyncExec cbExec;
+    morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<bool> done{false};
+    handler.execute(ARCreate{.initial = 3}).then([&](ARCreated) { done.store(true); }).onError([&](
+                                                                                                    const std::exception_ptr&) {
+        done.store(true);
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(rawBackend->pendingCount() == 1);
+
+    REQUIRE_NOTHROW(rawBackend->failNext("simulated promotion failure"));
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE(
+    "Bridge::assignHandlerPrimary: a stale async reply from a backend that is no longer current is ignored",
+    "[bridge][registration][issue67]") {
+    // Mirrors registerHandlerImpl's own "stale reply after switchBackend()"
+    // test above: the async promotion is still pending on the *old* backend
+    // when switchBackend() moves the bridge to a new one; the eventual reply
+    // must not overwrite whatever state the new backend's own handling of
+    // the binding already established.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto asyncBackend = std::make_shared<AsyncAssignPrimaryBackend>(pool);
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    bridge.switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(asyncBackend));
+    SyncExec cbExec;
+    morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::atomic<bool> done{false};
+    handler.execute(ARCreate{.initial = 4}).then([&](ARCreated) { done.store(true); }).onError([&](
+                                                                                                    const std::exception_ptr&) {
+        done.store(true);
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(asyncBackend->pendingCount() == 1);
+    CHECK_FALSE(handler.primary().has_value());
+
+    // Switch away WHILE the promotion on asyncBackend is still pending.
+    morph::exec::ThreadPoolExecutor pool2{2};
+    bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
+
+    // The stale reply from the now-superseded backend finally arrives. It
+    // must be ignored (the `pinned != loadBackend()` guard), not promote the
+    // binding using a backend nothing points at any more.
+    asyncBackend->completeNext();
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE(
+    "Bridge::assignHandlerPrimary: an async reply for an already-promoted binding does not overwrite it",
+    "[bridge][registration][issue67]") {
+    // A binding whose primary is already set (by a concurrent
+    // attach/assign that raced ahead of this async reply, or simply already
+    // promoted) must not be overwritten -- the "if (!strongBinding->primary.
+    // empty())" guard inside the async callback. Drives this directly via
+    // Bridge::ensureBound/assignHandlerPrimary rather than through
+    // BridgeHandler::execute, so the binding's primary can be forced to a
+    // specific value between starting the async promotion and completing it.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_CreateModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARCreateModel>(); };
+    bridge.ensureBound(binding);
+    REQUIRE(binding->currentId.load() != 0U);
+
+    bridge.assignHandlerPrimary<ARCreateModel>(binding, "100");
+    REQUIRE(rawBackend->pendingCount() == 1);
+    CHECK(binding->primary.empty());
+
+    // Something else promotes this binding first -- e.g. a second, faster
+    // assignHandlerPrimary call for the same binding (assignHandlerPrimary's
+    // own early-return guard prevents a second concurrent async request once
+    // primary is non-empty, so simulate the race's *outcome* directly, the
+    // same way the existing already-bound tests in this file drive
+    // currentId directly rather than orchestrating true concurrency).
+    binding->primary = "999";
+    binding->contextKey = "999";
+
+    // The original async reply for "100" now arrives. It must not clobber
+    // the "999" that (in this scenario) got there first.
+    rawBackend->completeNext();
+    CHECK(binding->primary == "999");
+    CHECK(binding->contextKey == "999");
+}
+
+TEST_CASE(
+    "Bridge::assignHandlerPrimary: a stale async reply after the binding itself is dropped is a safe no-op",
+    "[bridge][registration][issue67]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    SyncExec cbExec;
+
+    {
+        morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+        std::atomic<bool> done{false};
+        handler.execute(ARCreate{.initial = 1}).then([&](ARCreated) { done.store(true); }).onError([&](
+                                                                                                        const std::exception_ptr&) {
+            done.store(true);
+        });
+        REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+        REQUIRE(rawBackend->pendingCount() == 1);
+    }  // handler (and its binding, held only weakly by the bridge) drops out of scope here.
+
+    // The deferred reply's weakBinding.lock() must fail cleanly rather than
+    // touch a binding that is now gone.
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+}
+
+TEST_CASE(
+    "Bridge::assignHandlerPrimary: an async reply arriving after ~Bridge() is a safe no-op",
+    "[bridge][registration][issue67]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    // Co-owned via shared_ptr (installed through the switchBackend(shared_ptr)
+    // overload, before any handler exists to be re-registered by it) so the
+    // backend -- and therefore the deferred promotion callbacks it is holding
+    // -- outlives the Bridge below, exactly like AsyncBackendShim does for the
+    // registerHandler ~Bridge() test above.
+    auto rawBackend = std::make_shared<AsyncAssignPrimaryBackend>(pool);
+    auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<morph::backend::LocalBackend>(pool));
+    bridge->switchBackend(std::static_pointer_cast<morph::backend::detail::IBackend>(rawBackend));
+    SyncExec cbExec;
+
+    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARCreateModel, morph::bridge::AllowShared>>(*bridge,
+                                                                                                              &cbExec);
+    std::atomic<bool> done{false};
+    handler->execute(ARCreate{.initial = 9}).then([&](ARCreated) { done.store(true); }).onError([&](
+                                                                                                     const std::exception_ptr&) {
+        done.store(true);
+    });
+    REQUIRE(morph::testing::waitUntil([&] { return done.load(); }));
+    REQUIRE(rawBackend->pendingCount() == 1);
+
+    // ~Bridge() runs; the handler's binding (and the handler itself, which
+    // holds a reference back to the bridge) must not be touched by the reply
+    // that arrives afterward.
+    bridge.reset();
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+}
+
+// ── Bridge::whenBound: double-checked-lock re-check under registrationMtx ───
+//
+// whenBound() checks isBound() lock-free first (the common case: already
+// bound, resolve immediately without ever touching registrationMtx). Only if
+// that sees "not yet" does it acquire registrationMtx and check again, because
+// registerHandlerImpl's callback can bind the id (under _mtx, via
+// currentId.store) and only afterward acquire registrationMtx to resolve
+// waiters -- so a whenBound() call can land in the narrow window between
+// those two steps. Without the second check, such a call would queue a
+// waiter that resolveRegistrationWaiters has *already* iterated past,
+// hanging forever. Racing many concurrent whenBound() callers against one
+// completeNext() many times gives the scheduler repeated chances to land a
+// call inside that window.
+TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registration settles all resolve",
+          "[bridge][registration][issue60][concurrency]") {
+    constexpr int kTrials = 200;
+    constexpr int kWaitersPerTrial = 8;
+
+    for (int trial = 0; trial < kTrials; ++trial) {
+        SyncExec cbExec;
+        auto backend = std::make_unique<AsyncRegisterBackend>();
+        auto* rawBackend = backend.get();
+        morph::bridge::Bridge bridge{std::move(backend)};
+        morph::bridge::BridgeHandler<ARModel> handler{bridge, &cbExec};
+
+        std::atomic<int> resolvedTrue{0};
+        std::atomic<int> resolvedOther{0};
+        std::atomic<int> readyWaiters{0};
+        std::atomic<bool> go{false};
+
+        std::vector<std::thread> waiters;
+        waiters.reserve(kWaitersPerTrial);
+        for (int w = 0; w < kWaitersPerTrial; ++w) {
+            waiters.emplace_back([&] {
+                readyWaiters.fetch_add(1);
+                while (!go.load()) {
+                    // Busy-spin rather than sleep: keeps every waiter thread
+                    // hammering isBound()/whenBound() right as the
+                    // registering thread completes, maximising the odds of
+                    // landing inside the window described above.
+                }
+                handler.whenBound()
+                    .then([&](bool ok) {
+                        if (ok) {
+                            resolvedTrue.fetch_add(1);
+                        } else {
+                            resolvedOther.fetch_add(1);
+                        }
+                    })
+                    .onError([&](const std::exception_ptr&) { resolvedOther.fetch_add(1); });
+            });
+        }
+        REQUIRE(morph::testing::waitUntil([&] { return readyWaiters.load() == kWaitersPerTrial; }));
+        go.store(true);
+        rawBackend->completeNext();
+
+        for (auto& thr : waiters) {
+            thr.join();
+        }
+
+        // Every single waiter's Completion must have settled -- a lost
+        // wakeup (the bug the second isBound() check under the lock
+        // prevents) would leave one hanging with neither counter
+        // incremented, which SyncExec's synchronous callback delivery makes
+        // observable immediately, no polling required.
+        REQUIRE(resolvedTrue.load() + resolvedOther.load() == kWaitersPerTrial);
+        // Once registration has actually completed (rawBackend->completeNext()
+        // returned above), every waiter -- whichever check caught it -- must
+        // see success: nothing here ever fails registration.
+        REQUIRE(resolvedTrue.load() == kWaitersPerTrial);
+    }
 }
