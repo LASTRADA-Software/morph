@@ -78,7 +78,17 @@ TEST_CASE("journal::toJson escapes a control byte alongside an escaped character
     payload += "\"tail";
 
     morph::journal::LogEntry entry{
-        .seq = 1, .modelType = "M", .entityKey = {}, .actionType = "A", .payload = payload, .result = {},
+        .seq = 1,
+        .modelType = "M",
+        .entityKey = {},
+        .actionType = "A",
+        .payload = payload,
+        .result = {},
+        .outcome = morph::journal::Outcome::Succeeded,
+        .error = {},
+        .principal = {},
+        .timestampMs = 0,
+        .idempotencyKey = {},
     };
     std::string json;
     REQUIRE_NOTHROW(json = morph::journal::toJson(entry));

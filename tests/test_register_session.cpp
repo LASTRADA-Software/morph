@@ -62,7 +62,8 @@ TEST_CASE("Bridge::setDefaultSession's token reaches the register envelope so au
 
     morph::session::Context session;
     session.principal = "alice";
-    session.token = morph::session::TokenIssuer{secret}.issue({.principal = "alice", .expiresAtMs = 9999999999999});
+    session.token = morph::session::TokenIssuer{secret}.issue(
+        {.principal = "alice", .issuedAtMs = 0, .expiresAtMs = 9999999999999, .roles = {}});
     bridge.setDefaultSession(session);
 
     // Before the fix, registerModelWithContext (called from BridgeHandler's
@@ -106,8 +107,8 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
     morph::bridge::Bridge aliceBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
     morph::session::Context aliceSession;
     aliceSession.principal = "alice";
-    aliceSession.token =
-        morph::session::TokenIssuer{secret}.issue({.principal = "alice", .expiresAtMs = 9999999999999});
+    aliceSession.token = morph::session::TokenIssuer{secret}.issue(
+        {.principal = "alice", .issuedAtMs = 0, .expiresAtMs = 9999999999999, .roles = {}});
     aliceBridge.setDefaultSession(aliceSession);
 
     // Registers on behalf of "alice" — before the fix, the owner recorded on
@@ -130,7 +131,8 @@ TEST_CASE("register's recorded owner principal is the Bridge's authenticated def
     morph::bridge::Bridge bobBridge{std::make_unique<morph::backend::SimulatedRemoteBackend>(*server)};
     morph::session::Context bobSession;
     bobSession.principal = "bob";
-    bobSession.token = morph::session::TokenIssuer{secret}.issue({.principal = "bob", .expiresAtMs = 9999999999999});
+    bobSession.token = morph::session::TokenIssuer{secret}.issue(
+        {.principal = "bob", .issuedAtMs = 0, .expiresAtMs = 9999999999999, .roles = {}});
     bobBridge.setDefaultSession(bobSession);
 
     // Build a raw envelope targeting alice's modelId directly (bypassing a
