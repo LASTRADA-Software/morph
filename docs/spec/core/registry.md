@@ -225,9 +225,15 @@ struct ValidationError : std::runtime_error {
 (`morph::forms::reconcileDeclaredPrecision`) before the `ready()` check, so a
 hand-built wire payload's `Quantity` values match the schema's advertised
 `x-decimalPlaces` the same way the client bridge dispatch path already
-normalises them (see [forms.md](../forms/forms.md)). `Bridge::executeVia`'s
-`localOp` does not reconcile precision — that path never decodes JSON, so
-there is no wire `dp` to reconcile against.
+normalises them (see [forms.md](../forms/forms.md)). Immediately after
+reconciliation, `morph::forms::enforceQuantityBounds` rejects any `Quantity`
+field whose engaged value falls outside its unit's declared bounds
+(`UnitTraits<E>::bounds`), throwing `QuantityDecodeError` before the `ready()`
+check — a no-op for actions with no `Quantity` members, or whose units
+declare no `bounds()` (see [forms.md](../forms/forms.md), "Pre-decode wire
+validation"). `Bridge::executeVia`'s `localOp` does not reconcile precision or
+enforce bounds — that path never decodes JSON, so there is no wire `dp` or
+wire value to check against.
 
 `ValidationError` derives from `std::runtime_error`, so it is caught by
 existing generic `catch (const std::exception&)` handling on both paths
@@ -386,12 +392,15 @@ class ActionDispatcher {
 ```
 
 - `registerAction` registers a runner that deserialises, reconciles any
-  `Quantity` fields to their declared precision, overwrites any declared
+  `Quantity` fields to their declared precision, rejects any `Quantity` field
+  outside its unit's declared bounds (`morph::forms::enforceQuantityBounds`,
+  throwing `QuantityDecodeError`; a no-op for actions with no `Quantity`
+  members or whose units declare no `bounds()`), overwrites any declared
   computed fields from their inputs (`morph::forms::recomputeAll`,
   [forms.md](../forms/forms.md) — a no-op for actions with no
-  `computedFields`; runs after precision reconciliation and before the
-  validator check, so the validator sees the authoritative computed value),
-  enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
+  `computedFields`; runs after precision reconciliation and bounds
+  enforcement and before the validator check, so the validator sees the
+  authoritative computed value), enforces `ActionValidator<Action>::ready(action)` (throwing `ValidationError`
   on `false`, before `Model::execute` runs), then calls `Model::execute(action)`
   inside a `try`/`catch (const std::exception&)`: on success it serialises the
   result and records a `LogEntry` with `outcome = Outcome::Succeeded` (when

@@ -346,7 +346,7 @@ the action's validator** (see below), calls `execute<Action>`, and serializes
 the result back to JSON. Throws `std::runtime_error` if the action was never
 registered.
 
-Between decode and dispatch the registry executor applies three
+Between decode and dispatch the registry executor applies four
 normalisations, in order, so the request/reply path matches the schema and
 the reactive `set<>` path rather than trusting the raw wire body:
 
@@ -356,6 +356,15 @@ the reactive `set<>` path rather than trusting the raw wire body:
   the schema's advertised `x-decimalPlaces` instead of whatever runtime `dp` the
   client sent. It is a no-op for actions with no `Quantity` members and for
   actions whose type glaze cannot reflect. See [forms.md](../forms/forms.md).
+- **Pre-decode wire validation.** `morph::forms::enforceQuantityBounds` rejects
+  a `Quantity` field whose engaged value falls outside its unit's declared
+  bounds (`UnitTraits<E>::bounds`), throwing `QuantityDecodeError` — caught by
+  the same catch block as every other decode/validation failure on this path.
+  Runs after precision reconciliation and before the validator check below, so
+  an out-of-bounds value never reaches business-rule validation or the
+  handler. No-op for actions with no `Quantity` members, or whose units
+  declare no `bounds()`. See [forms.md](../forms/forms.md), "Pre-decode wire
+  validation".
 - **Computed-field recompute.** `morph::forms::recomputeAll` overwrites every
   `A::computedFields` destination from its declared inputs, discarding
   whatever value the wire carried for it — a computed field is never trusted
