@@ -177,6 +177,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:aaa5a8eb690678014ee8403bfcdca07df"><td class="mdescLeft">&#160;</td><td class="mdescRight">Installs the verified <span class="tt">Principal</span> for this <span class="tt"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html" title="Central dispatcher that routes typed actions to an IBackend.">Bridge</a></span>. Thread-safe.  <br /></td></tr>
 <tr class="memitem:a6316aa3aa3f91f1e09449f42e68ca0ac" id="r_a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="memItemLeft"><a class="el" href="../../d0/d26/structmorph_1_1session_1_1Principal.html">::morph::session::Principal</a>&#160;</td><td class="memItemRight"><a class="el" href="#a6316aa3aa3f91f1e09449f42e68ca0ac">currentPrincipal</a> () const</td></tr>
 <tr class="memdesc:a6316aa3aa3f91f1e09449f42e68ca0ac"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns a copy of the currently installed <span class="tt">Principal</span>. Thread-safe.  <br /></td></tr>
+<tr class="memitem:ad3991ee9236705247dc7164611b2ee0e" id="r_ad3991ee9236705247dc7164611b2ee0e"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ad3991ee9236705247dc7164611b2ee0e">pendingCalls</a> () const noexcept</td></tr>
+<tr class="memdesc:ad3991ee9236705247dc7164611b2ee0e"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of actions dispatched via <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> that have not yet resolved.  <br /></td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db" id="r_a743d9a146b92a58adfd4f993a655a3db"><td class="memTemplParams" colspan="2">template&lt;typename Backend&gt; <br />
 requires std::derived_from&lt;Backend, ::morph::backend::detail::IBackend&gt;</td></tr>
 <tr class="memitem:a743d9a146b92a58adfd4f993a655a3db template"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db">switchBackend</a> (std::unique_ptr&lt; Backend &gt; newBackend)</td></tr>
@@ -889,6 +891,38 @@ template&lt;typename Model&gt; </div>
 
 </div>
 </div>
+<a id="ad3991ee9236705247dc7164611b2ee0e" name="ad3991ee9236705247dc7164611b2ee0e"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad3991ee9236705247dc7164611b2ee0e">&#9670;&#160;</a></span>pendingCalls()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::size_t morph::bridge::Bridge::pendingCalls </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns the number of actions dispatched via <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> that have not yet resolved. </p>
+<p>Incremented once per call, right before the backend dispatch inside <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span>; decremented exactly once when the returned <span class="tt">Completion</span> settles on success or on error (including a cancellation error from <span class="tt"><a class="el" href="#a743d9a146b92a58adfd4f993a655a3db" title="Atomically replaces the active backend with newBackend.">switchBackend()</a></span>/<span class="tt"><a class="el" href="#a7045f7c97ea552add8cfbfc1868daba3" title="Cancels every still-pending completion on the active backend.">~Bridge()</a></span>/a dropped transport). The synchronous "handler not bound" early return — the one case <span class="tt"><a class="el" href="#a3e4ee91931517750f483a3bd0a6a0b1f" title="Dispatches action against the model identified by binding.">executeVia()</a></span> resolves before ever dispatching — is never counted in the first place, so it needs no matching decrement; it never nudges this counter either way. A client can poll this (or watch it drop to zero) to build a "still
+loading" indicator or gate a feature on quiescence, without hand-rolling its own counter around every <span class="tt">execute()</span> call site. A single relaxed atomic load/increment/decrement: cheap enough to read on every frame of a UI loading spinner.</p>
+<dl class="section return"><dt>Returns</dt><dd>Count of actions dispatched but not yet resolved. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00537">537</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a743d9a146b92a58adfd4f993a655a3db" name="a743d9a146b92a58adfd4f993a655a3db"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a743d9a146b92a58adfd4f993a655a3db">&#9670;&#160;</a></span>switchBackend() <span class="overload">[1/2]</span></h2>
 
@@ -933,7 +967,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00549">549</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00568">568</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -969,7 +1003,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00561">561</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00580">580</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1004,7 +1038,7 @@ Templated on the concrete <code class="param">Backend</code> (rather than taking
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00641">641</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00660">660</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>
@@ -1068,7 +1102,7 @@ template&lt;typename Model, typename Action&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the typed result or an exception (including <span class="tt">ValidationError</span> on <span class="tt">LocalBackend</span> when the action fails its validator). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00691">691</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l00710">710</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 
 </div>
 </div>

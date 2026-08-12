@@ -18,6 +18,7 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "defaultSession", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#adaccbb7a89e5625b3e6085d8db59bd97", null ],
     [ "setPrincipal", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#aaa5a8eb690678014ee8403bfcdca07df", null ],
     [ "currentPrincipal", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac", null ],
+    [ "pendingCalls", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ad3991ee9236705247dc7164611b2ee0e", null ],
     [ "switchBackend", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db", null ],
     [ "switchBackend", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe", null ],
     [ "deregisterHandler", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a73ac9d12273ad9a5fbf34f999f796b8c", null ],

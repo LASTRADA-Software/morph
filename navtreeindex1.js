@@ -1,5 +1,6 @@
 var NAVTREEINDEX1 =
 {
+"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028":[2,0,0,3,4,10],
 "d4/d7e/structmorph_1_1forms_1_1FieldSpan.html":[2,0,0,7,7],
 "d4/d7e/structmorph_1_1forms_1_1FieldSpan.html#a184758ddc704457ef5e99e5d6b4960e8":[2,0,0,7,7,1],
 "d4/d7e/structmorph_1_1forms_1_1FieldSpan.html#a6362b9b28f2075172b67b4f28726e75a":[2,0,0,7,7,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d9/dea/structmorph_1_1views_1_1BindEntry.html#a05cc81586265d3aec9b74942adfa4115":[2,0,0,19,0,1],
 "d9/dea/structmorph_1_1views_1_1BindEntry.html#a99e098e70044e9cd459def84d45cc6fb":[2,0,0,19,0,0],
 "d9/dfd/structmorph_1_1app_1_1AppTraits.html":[2,0,0,0,4],
-"da/d03/structmorph_1_1math_1_1DecimalPlaces.html":[2,0,0,10,0],
-"da/d03/structmorph_1_1math_1_1DecimalPlaces.html#a17e7ca40f94288381c128102153b7607":[2,0,0,10,0,1]
+"da/d03/structmorph_1_1math_1_1DecimalPlaces.html":[2,0,0,10,0]
 };
