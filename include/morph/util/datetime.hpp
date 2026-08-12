@@ -284,6 +284,8 @@ namespace detail {
 ///
 /// Defined out-of-line (after `DateTime` is a complete type) since the state
 /// is keyed on `std::function<DateTime()>`.
+/// @return Reference to the process-wide `(mutex, override callable)` pair;
+///         the callable is empty when no override is installed.
 inline std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState() {
     static std::pair<std::mutex, std::function<DateTime()>> state;
     return state;
@@ -298,7 +300,7 @@ inline std::pair<std::mutex, std::function<DateTime()>>& nowOverrideState() {
 /// (remotely instantiated) model that has no constructor parameter to receive
 /// an injected clock — consults this override before falling back to
 /// `std::chrono::system_clock::now()`. This is the seam
-/// [datetime.md](../../docs/spec/util/datetime.md) describes for deterministic
+/// `docs/spec/util/datetime.md` describes for deterministic
 /// testing of time-dependent model behavior: a test fixes "now" once via
 /// `ScopedNowOverride` and every `DateTime::now()`/`Timestamp::now()` call for
 /// its lifetime — direct or from inside a model under test — observes the
