@@ -71,6 +71,7 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
 /// a `core/` dependency. Escaping is lossless, so any such byte still
 /// round-trips through `fromJson` unchanged.
 struct EscapingWriteOpts : glz::opts {
+    /// @brief Emit control bytes as `\\uXXXX` rather than raw.
     // NOLINTNEXTLINE(readability-identifier-naming) — glaze's option name, matched by name.
     bool escape_control_characters = true;
 };
