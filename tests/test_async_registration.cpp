@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -789,11 +790,7 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
           "[bridge][registration][issue60][concurrency]") {
     // 50 trials x 8 real OS threads each (400 total thread spawns) still gives
     // the scheduler repeated chances to land a call inside the narrow window
-    // under test, while keeping the total real-thread-spawn cost low enough
-    // to fit comfortably in a bounded per-wait budget under Valgrind's heavy
-    // instrumentation on a loaded CI runner -- 200 trials (1600 spawns) was
-    // observed exceeding a 10s per-trial wait budget under real CI Valgrind,
-    // not just local timing noise.
+    // under test.
     constexpr int kTrials = 50;
     constexpr int kWaitersPerTrial = 8;
 
@@ -806,40 +803,59 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
 
         std::atomic<int> resolvedTrue{0};
         std::atomic<int> resolvedOther{0};
-        std::atomic<int> readyWaiters{0};
-        std::atomic<bool> go{false};
+        int readyWaiters = 0;
+        bool go = false;
+        std::mutex goMtx;
+        std::condition_variable goCv;
+        std::condition_variable readyCv;
 
         std::vector<std::thread> waiters;
         waiters.reserve(kWaitersPerTrial);
-        // Releases every still-spinning waiter and joins all of them
+        // Releases every still-waiting waiter and joins all of them
         // unconditionally, including on the exception-unwind path a failed
-        // REQUIRE below takes -- without this, a waiter thread still busy-
-        // spinning on `go` when the destructor for `waiters` runs would
-        // either hang forever (joining a thread that never exits) or crash
-        // via std::terminate (a joinable std::thread destroyed without being
+        // REQUIRE below takes -- without this, a waiter thread still parked
+        // on goCv when the destructor for `waiters` runs would either hang
+        // forever (joining a thread that never wakes) or crash via
+        // std::terminate (a joinable std::thread destroyed without being
         // joined/detached), masking the real assertion failure with an
         // unrelated crash.
         struct ReleaseAndJoin {
-            std::atomic<bool>& go;
+            std::mutex& goMtx;
+            std::condition_variable& goCv;
+            bool& go;
             std::vector<std::thread>& waiters;
             ~ReleaseAndJoin() {
-                go.store(true);
+                {
+                    std::scoped_lock const lock{goMtx};
+                    go = true;
+                }
+                goCv.notify_all();
                 for (auto& thr : waiters) {
                     if (thr.joinable()) {
                         thr.join();
                     }
                 }
             }
-        } releaseAndJoin{go, waiters};
+        } releaseAndJoin{goMtx, goCv, go, waiters};
+        // Both waits below are genuinely blocking (condition_variable),
+        // never a busy-spin: Valgrind serialises threads onto one real core
+        // with no scheduling-fairness guarantee against a tight spin loop --
+        // reproduced hanging/crashing under real Valgrind with this test's
+        // original `while (!go.load()) {}`, and again with a polling
+        // `waitUntil` re-acquiring `goMtx` in a loop (still a spin, just on a
+        // mutex instead of an atomic). Only a wait that actually parks the
+        // thread (no polling of any kind, on any variable) is safe under
+        // Valgrind's cooperative scheduler here.
         for (int w = 0; w < kWaitersPerTrial; ++w) {
             waiters.emplace_back([&] {
-                readyWaiters.fetch_add(1);
-                while (!go.load()) {
-                    // Busy-spin rather than sleep: keeps every waiter thread
-                    // hammering isBound()/whenBound() right as the
-                    // registering thread completes, maximising the odds of
-                    // landing inside the window described above.
+                {
+                    std::scoped_lock const lock{goMtx};
+                    ++readyWaiters;
                 }
+                readyCv.notify_one();
+                std::unique_lock<std::mutex> lock{goMtx};
+                goCv.wait(lock, [&] { return go; });
+                lock.unlock();
                 handler.whenBound()
                     .then([&](bool ok) {
                         if (ok) {
@@ -851,19 +867,13 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
                     .onError([&](const std::exception_ptr&) { resolvedOther.fetch_add(1); });
             });
         }
-        // kDefaultWaitBudget (2000ms) is sized for a typical single async
-        // completion; this spawns kWaitersPerTrial real OS threads per trial,
-        // kTrials times in a row -- under Valgrind's heavy instrumentation on
-        // a loaded/shared CI runner, just getting all 8 threads scheduled and
-        // past their first fetch_add can plausibly exceed even a generous
-        // budget (10s was observed insufficient on real CI Valgrind, not just
-        // local timing noise -- see kTrials' own comment on why the total
-        // thread-spawn count was also cut). Give this specific wait a larger
-        // explicit budget rather than raising the global default (which would
-        // slow every other test's failure detection).
-        REQUIRE(morph::testing::waitUntil([&] { return readyWaiters.load() == kWaitersPerTrial; },
-                                           std::chrono::milliseconds{30'000}));
-        go.store(true);
+        {
+            std::unique_lock<std::mutex> lock{goMtx};
+            REQUIRE(readyCv.wait_for(lock, std::chrono::milliseconds{30'000},
+                                     [&] { return readyWaiters == kWaitersPerTrial; }));
+            go = true;
+        }
+        goCv.notify_all();
         rawBackend->completeNext();
 
         // Join before asserting, not just in ReleaseAndJoin's destructor:
