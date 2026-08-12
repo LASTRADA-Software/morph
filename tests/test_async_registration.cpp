@@ -804,6 +804,26 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
 
         std::vector<std::thread> waiters;
         waiters.reserve(kWaitersPerTrial);
+        // Releases every still-spinning waiter and joins all of them
+        // unconditionally, including on the exception-unwind path a failed
+        // REQUIRE below takes -- without this, a waiter thread still busy-
+        // spinning on `go` when the destructor for `waiters` runs would
+        // either hang forever (joining a thread that never exits) or crash
+        // via std::terminate (a joinable std::thread destroyed without being
+        // joined/detached), masking the real assertion failure with an
+        // unrelated crash.
+        struct ReleaseAndJoin {
+            std::atomic<bool>& go;
+            std::vector<std::thread>& waiters;
+            ~ReleaseAndJoin() {
+                go.store(true);
+                for (auto& thr : waiters) {
+                    if (thr.joinable()) {
+                        thr.join();
+                    }
+                }
+            }
+        } releaseAndJoin{go, waiters};
         for (int w = 0; w < kWaitersPerTrial; ++w) {
             waiters.emplace_back([&] {
                 readyWaiters.fetch_add(1);
@@ -824,10 +844,28 @@ TEST_CASE("Bridge::whenBound: concurrent callers racing the exact moment registr
                     .onError([&](const std::exception_ptr&) { resolvedOther.fetch_add(1); });
             });
         }
-        REQUIRE(morph::testing::waitUntil([&] { return readyWaiters.load() == kWaitersPerTrial; }));
+        // kDefaultWaitBudget (2000ms) is sized for a typical single async
+        // completion; this spawns kWaitersPerTrial real OS threads per trial,
+        // 200 trials in a row -- under Valgrind's heavy instrumentation, just
+        // getting all 8 threads scheduled and past their first fetch_add can
+        // plausibly take longer than that on a loaded CI runner. Give this
+        // specific wait a larger explicit budget rather than raising the
+        // global default (which would slow every other test's failure
+        // detection).
+        REQUIRE(morph::testing::waitUntil([&] { return readyWaiters.load() == kWaitersPerTrial; },
+                                           std::chrono::milliseconds{10'000}));
         go.store(true);
         rawBackend->completeNext();
 
+        // Join before asserting, not just in ReleaseAndJoin's destructor:
+        // the destructor only runs once this scope exits, which is *after*
+        // the REQUIREs below -- without an explicit join here, those
+        // REQUIREs would race the very threads whose resolved/other counters
+        // they check, reading a partial count before every .then()/.onError()
+        // callback has actually run. ReleaseAndJoin::~ReleaseAndJoin() still
+        // exists purely as an exception-safety net (see its own comment);
+        // joining a thread twice is a no-op via the joinable() guard both
+        // places use.
         for (auto& thr : waiters) {
             thr.join();
         }
