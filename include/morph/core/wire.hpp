@@ -301,7 +301,7 @@ namespace detail {
 ///   anywhere serializes to JSON the peer's `decode` then throws on.
 /// - **Silent corruption.** Worse, the writer's chunked fast path mangles such a
 ///   byte outright once the string also contains an escaped character: with a
-///   `\\` or `"` earlier in the same string, a 0x0B at certain offsets is written
+///   backslash or double-quote character earlier in the same string, a 0x0B at certain offsets is written
 ///   as *two* 0x00 bytes. The payload is destroyed before it reaches the wire,
 ///   so no amount of post-processing on the serialized form can recover it —
 ///   the escaping has to happen inside the writer.

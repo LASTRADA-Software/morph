@@ -9,6 +9,17 @@ add_executable(morph_forms_demo main.cpp)
 target_link_libraries(morph_forms_demo PRIVATE morph::morph)
 apply_warnings(morph_forms_demo)
 
+# main.cpp instantiates schema/rule templates over every demo action type;
+# under MSVC Debug (more sections per symbol than Release: no /Og folding,
+# full /Zi debug info) that pushes main.cpp.obj's COFF section count past the
+# 32-bit SN_LOFF format's limit -- MSVC then aborts with C1128 ("number of
+# sections exceeded object file format limit"). /bigobj switches the object
+# file to the extended section-count format; harmless on Release and on
+# other compilers, so it is unconditional for this target.
+target_compile_options(morph_forms_demo PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+)
+
 if(DEFINED AF_SANITIZER)
     apply_sanitizers(morph_forms_demo ${AF_SANITIZER})
 endif()
