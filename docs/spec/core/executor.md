@@ -33,7 +33,7 @@ There are seven types, split across `morph::exec` (in `executor.hpp`),
 | `IExecutor` | `morph::exec` | Abstract base: a single pure-virtual `post(task)`. |
 | `ThreadPoolExecutor` | `morph::exec` | Fixed-size thread pool, FIFO queue, task exceptions logged (never propagate). |
 | `MainThreadExecutor` | `morph::exec` | Collects tasks from any thread, drains on `runFor()` from the owning thread. |
-| `QtExecutor` | `morph::qt` | Posts tasks to the Qt event loop; they run on the `QCoreApplication` (GUI) thread. |
+| `QtExecutor` | `morph::qt` | Posts tasks to a Qt event loop; they run on the configured context object's thread (the `QCoreApplication`/GUI thread by default). |
 | `ModelId` | `morph::exec::detail` | Opaque 64-bit identifier for a model instance, used as a strand key. |
 | `ModelIdHash` | `morph::exec::detail` | Hash functor so `ModelId` can be an `unordered_map` key. |
 | `StrandExecutor` | `morph::exec::detail` | Per-key serialising wrapper — tasks with the same `ModelId` never overlap. |
@@ -117,31 +117,44 @@ handling and locking discipline described above apply identically to
 
 ## `QtExecutor`
 
-An `IExecutor` implementation that marshals tasks onto the Qt event loop. Lives
+An `IExecutor` implementation that marshals tasks onto a Qt event loop. Lives
 in `morph::qt` (header `morph/qt/qt_executor.hpp`) and is compiled only when Qt
 is available; it is the GUI leg of the executor family and the counterpart the
 [bridge](bridge.md) hands to backends as their main-thread executor.
 
-`post()` forwards the callable to
-`QMetaObject::invokeMethod(QCoreApplication::instance(), fn, Qt::QueuedConnection)`.
-Because the connection is queued and the target object is the application
-instance, the task always runs on the thread that owns `QCoreApplication`
-(typically the GUI thread), regardless of which thread called `post()`.
-`post()` is therefore thread-safe and returns immediately; the task runs later,
-once the event loop processes the queued event. The caller does **not** need to
-be (or supply) a `QObject`.
+The constructor takes an optional `QObject* context`, defaulting to
+`QCoreApplication::instance()`. `post()` forwards the callable to
+`QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`. Because the
+connection is queued, the task always runs on the thread that owns `context`
+(the application/GUI thread by default), regardless of which thread called
+`post()`. `post()` is therefore thread-safe and returns immediately; the task
+runs later, once that thread's event loop processes the queued event. The
+caller does **not** need to be (or supply) a `QObject` — only the constructor
+optionally takes one, to pick the target thread.
+
+Passing a non-default `context` — e.g. a plain `QObject` that has been
+`moveToThread()`'d onto a worker `QThread` with its own event loop — lets a
+`QtExecutor` dispatch to that worker thread instead of the GUI thread. This is
+the standard way to get a `QtExecutor`-compatible `IExecutor` for a non-main
+thread: give the worker thread a live `QObject` and construct the executor with
+a pointer to it. `QMetaObject::invokeMethod` reads `context->thread()` at
+dispatch time, so if `context` is reparented to a different thread after
+construction, subsequently posted tasks follow it to the new thread.
 
 Unlike `MainThreadExecutor`, `QtExecutor` needs no explicit `runFor()` drain —
-the running Qt event loop *is* the dispatcher. It is stateless: it owns no
-queue, spawns no thread, and holds no members, so it has no lifetime or shutdown
-concerns of its own. The context object passed to `invokeMethod` is always
-`QCoreApplication::instance()`, so Qt drops the queued invocation only if the
-**application object itself** is destroyed before the event is processed (i.e. at
-shutdown). Qt has no visibility into `QObject`s *captured inside* the opaque
-`std::function`: a task whose captured widget was deleted still runs and will
-dereference the dangling pointer. There is **no** per-task implicit cancellation
-— callers that capture a `QObject` must guard it themselves (e.g. `QPointer` or a
-liveness token) (see [Limitations](#limitations)).
+the running Qt event loop *is* the dispatcher. It is otherwise stateless: it
+owns no queue, spawns no thread, and holds only the `context` pointer, so it has
+no lifetime or shutdown concerns of its own beyond that pointer's validity.
+Because the context object is not owned by `QtExecutor`, Qt drops the queued
+invocation if **that object** (or the thread it lives on) is destroyed before
+the event is processed — for the default context this means application
+shutdown; for a custom worker-thread context, callers must keep the context
+`QObject` alive at least as long as tasks may still be posted. Qt has no
+visibility into `QObject`s *captured inside* the opaque `std::function`: a task
+whose captured widget was deleted still runs and will dereference the dangling
+pointer. There is **no** per-task implicit cancellation — callers that capture a
+`QObject` must guard it themselves (e.g. `QPointer` or a liveness token) (see
+[Limitations](#limitations)).
 
 ## `StrandExecutor` and `ModelId`
 
@@ -293,10 +306,11 @@ concurrently.
   and there is no lock-ordering deadlock. The net guarantee: tasks with the same
   `ModelId` never overlap; tasks with different keys may run in parallel on the
   base pool.
-- `QtExecutor` holds no state; its thread safety is entirely Qt's.
-  `QMetaObject::invokeMethod` with `Qt::QueuedConnection` is documented as safe
-  to call from any thread, and the queued event is dispatched serially by the
-  single event loop that owns `QCoreApplication`.
+- `QtExecutor` holds only a `QObject*` context pointer; its thread safety is
+  entirely Qt's. `QMetaObject::invokeMethod` with `Qt::QueuedConnection` is
+  documented as safe to call from any thread, and the queued event is
+  dispatched serially by the event loop of whichever thread owns the context
+  object (`QCoreApplication`'s thread by default).
 
 ## Failure modes
 
@@ -305,7 +319,7 @@ concurrently.
 | `ThreadPoolExecutor` | The worker `loop` catches it. `std::exception` is logged as `"[thread-pool] task threw: " + what()`; any other type is logged as `"[thread-pool] task threw unknown exception"`. The worker keeps looping. |
 | `StrandExecutor` | The strand task wrapper catches it. `std::exception` is logged as `"[strand] task threw: " + what()`; any other type is logged as `"[strand] task threw unknown exception"`. The strand's drain/erase bookkeeping and `_inFlight` decrement still run, so the next task for the key proceeds. |
 | `MainThreadExecutor` | `runFor` catches **only** `std::exception`, logged as `"[main-thread] callback threw: " + what()`, then continues with the next task. **Any non-`std::exception` type propagates out of `runFor()`** and is the caller's problem. |
-| `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the Qt event loop (`QCoreApplication::exec`); Qt's default behaviour is to `std::terminate`. Tasks posted to the GUI leg must not let exceptions escape. |
+| `QtExecutor` | No `try`/`catch` of its own. A throwing task propagates into whoever drives the target thread's event loop (`QCoreApplication::exec` by default, or the worker thread's loop for a custom context); Qt's default behaviour is to `std::terminate`. Tasks posted through it must not let exceptions escape. |
 
 All logging goes through `morph::log::logError`. The design principle: a task
 failure must never kill a worker/strand or abort sibling tasks, but it must also
@@ -345,7 +359,8 @@ rather than being hidden).
 
 | Member | Signature | Notes |
 |---|---|---|
-| `post` | `void post(std::function<void()> fn) override` | Posts `fn` to the Qt event loop via `QMetaObject::invokeMethod(..., Qt::QueuedConnection)`; runs on the `QCoreApplication` thread. Thread-safe; returns immediately. |
+| ctor | `explicit QtExecutor(QObject* context = QCoreApplication::instance())` | Stores `context` as the `invokeMethod` target. Defaults to the application instance (GUI thread). `nullptr` makes `post()` a no-op (matches `QMetaObject::invokeMethod`'s handling of a null target). |
+| `post` | `void post(std::function<void()> fn) override` | Posts `fn` to `context`'s event loop via `QMetaObject::invokeMethod(context, ..., Qt::QueuedConnection)`; runs on whichever thread owns `context` at dispatch time. Thread-safe; returns immediately. |
 
 ### `ModelId` (`morph::exec::detail`)
 
@@ -383,7 +398,7 @@ rather than being hidden).
 | Strand per-key invariant | **`post()` *and* drain-and-erase both hold `_mapMtx` across their whole decision** | Serialises lookup, re-arm, and erase so at most one live strand exists per key and any `running` strand is the map's current entry. Holding the combined lock only in the drain step was insufficient — `post()` re-armed under `strand->mtx` alone after releasing `_mapMtx`, so a drain could erase the strand in that gap, orphan it, and let a second strand for the same key run concurrently. |
 | No `std::future` / return value | **Fire-and-forget only** | Executors schedule side-effect tasks. Callers that need results use shared state or futures externally. |
 | No `std::executor` conformance | **Custom interface, not `std::executor`** | C++26 `std::executor` is not yet widely available. This is a minimal in-house abstraction. |
-| `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Stateless free-standing `IExecutor`** | Uses `QMetaObject::invokeMethod(QCoreApplication::instance(), fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot. Keeps the GUI leg a drop-in `IExecutor` with zero owned state and lets Qt's event loop be the sole dispatcher. |
+| `QtExecutor` via `invokeMethod`, not a `QObject` subclass | **Near-stateless free-standing `IExecutor`, target configurable via ctor** | Uses `QMetaObject::invokeMethod(context, fn, Qt::QueuedConnection)`, so callers need no custom `QObject`, event type, or slot — they only optionally supply a `QObject*` to pick the target thread. Defaults to `QCoreApplication::instance()` so existing GUI-thread call sites are unaffected. Keeps the type a drop-in `IExecutor` holding a single pointer, with Qt's event loop as the sole dispatcher. |
 | `QtExecutor` in a separate `morph::qt` header | **Isolate the Qt dependency** | The core executor family (`executor.hpp`, `strand.hpp`) stays Qt-free; only the GUI/bridge layer includes `qt/qt_executor.hpp`. Backends depend on `IExecutor`, never on Qt. |
 
 ## Limitations
@@ -397,11 +412,12 @@ These are honest, known gaps — accepted trade-offs, not bugs:
   caller to learn the queue is backing up.
 - **No cancellation.** Once posted, a task cannot be cancelled or removed. The
   signature is fire-and-forget `std::function<void()>` with no token, handle, or
-  future. There is no implicit cancellation either: `QtExecutor` posts against
-  `QCoreApplication::instance()`, so Qt drops a queued invocation only at
-  application shutdown, never because a `QObject` captured inside the callable was
-  deleted — such a task still runs against the dangling capture. Callers must
-  guard their own captures.
+  future. There is no implicit cancellation either: by default `QtExecutor`
+  posts against `QCoreApplication::instance()`, so Qt drops a queued invocation
+  only at application shutdown (or, for a custom `context`, when that object or
+  its thread is destroyed) — never because a `QObject` captured *inside* the
+  callable was deleted. Such a task still runs against the dangling capture.
+  Callers must guard their own captures.
 - **No graceful drain / `waitIdle` on `ThreadPoolExecutor`.** The destructor
   drains already-queued tasks but there is no method to wait until the queue is
   empty, to flush pending work before shutdown, or to reject work posted during

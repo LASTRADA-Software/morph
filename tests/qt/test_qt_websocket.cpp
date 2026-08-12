@@ -10,6 +10,7 @@
 #include <QSslConfiguration>
 #include <QSslKey>
 #include <QSslSocket>
+#include <QThread>
 #include <QWebSocket>
 #include <atomic>
 #include <catch2/catch_session.hpp>
@@ -137,6 +138,52 @@ static QSslConfiguration makeMitmServerTlsConfig() {
     cfg.setLocalCertificate(QSslCertificate{&certFile, QSsl::Pem});
     cfg.setPrivateKey(QSslKey{&keyFile, QSsl::Rsa, QSsl::Pem});
     return cfg;
+}
+
+// ── QtExecutor tests ─────────────────────────────────────────────────────────
+
+TEST_CASE("morph::qt::QtExecutor: default context posts to QCoreApplication::instance()", "[qt][executor]") {
+    auto* app = ensureApp();
+    morph::qt::QtExecutor exec;
+    std::atomic<QThread*> ranOnThread{nullptr};
+    std::atomic<bool> ran{false};
+    exec.post([&] {
+        ranOnThread = QThread::currentThread();
+        ran = true;
+    });
+    pumpUntil([&] { return ran.load(); });
+    REQUIRE(ran.load());
+    REQUIRE(ranOnThread.load() == app->thread());
+}
+
+TEST_CASE("morph::qt::QtExecutor: explicit context posts to that object's thread, not the caller's",
+          "[qt][executor]") {
+    ensureApp();
+
+    // Worker thread with its own event loop and a QObject living in it — the
+    // "non-main thread event loop" scenario from the issue.
+    QThread worker;
+    worker.start();
+    QObject context;
+    context.moveToThread(&worker);
+
+    morph::qt::QtExecutor exec{&context};
+    std::atomic<QThread*> ranOnThread{nullptr};
+    std::atomic<bool> ran{false};
+    exec.post([&] {
+        ranOnThread = QThread::currentThread();
+        ran = true;
+    });
+
+    for (int idx = 0; idx < 200 && !ran.load(); ++idx) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(ran.load());
+    REQUIRE(ranOnThread.load() == &worker);
+    REQUIRE(ranOnThread.load() != QThread::currentThread());
+
+    worker.quit();
+    worker.wait();
 }
 
 // ── Plain WebSocket tests ────────────────────────────────────────────────────
