@@ -10,6 +10,7 @@ var classmorph_1_1qt_1_1QtWebSocketBackend =
     [ "registerModelShared", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#af7db92dbacfb0b4f1ce047f0930b3c73", null ],
     [ "attachModel", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a53075c01e7c657d63f9b2e50973d3a07", null ],
     [ "assignPrimary", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a2e72e36877b55424f38b5597a6562a6d", null ],
+    [ "assignPrimaryAsync", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa6b15f2bbb8154ddfb30406de340b8c0", null ],
     [ "listInstances", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a68b32a73162878f79091c4ebbd808084", null ],
     [ "deregisterModel", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aa00b19a8994d4d4f2ca9b9b7a3e3a70a", null ],
     [ "execute", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a374300e019ee7e66a133f35c60dd8c74", null ],

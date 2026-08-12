@@ -1,7 +1,7 @@
 var searchData=
 [
   ['handle_0',['handle',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701',1,'morph::backend::RemoteServer::handle(std::string msg, std::function&lt; void(std::string)&gt; reply)'],['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a73dbbbc8a19d6df1e2d1a8c7353fdb1a',1,'morph::backend::RemoteServer::handle(std::string msg, std::function&lt; void(std::string)&gt; reply, ConnectionId cid)']]],
-  ['handleinline_1',['handleInline',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818',1,'morph::backend::RemoteServer']]],
+  ['handleinline_1',['handleInline',['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818',1,'morph::backend::RemoteServer::handleInline(const std::string &amp;msg)'],['../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#a70db4922eb76217cb1126bd54493f745',1,'morph::backend::RemoteServer::handleInline(const std::string &amp;msg, ConnectionId cid)']]],
   ['handlerbinding_20—_20why_20it_20exists_2',['HandlerBinding — why it exists',['../index.html#handlerbinding--why-it-exists',1,'']]],
   ['handshaketimeout_3',['handshakeTimeout',['../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html#ad4e5d1376e1c4cce8c9d1806dcd789a8',1,'morph::qt::QtWebSocketServerConfig']]],
   ['hasformrules_4',['HasFormRules',['../d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html',1,'morph::forms']]],

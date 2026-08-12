@@ -135,7 +135,9 @@ Inheritance diagram for morph::backend::SimulatedRemoteBackend:</div>
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a978cad0db6efd8ccd3f33c1bf15be188" id="r_a978cad0db6efd8ccd3f33c1bf15be188"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a978cad0db6efd8ccd3f33c1bf15be188">SimulatedRemoteBackend</a> (<a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> &amp;server)</td></tr>
-<tr class="memdesc:a978cad0db6efd8ccd3f33c1bf15be188"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend targeting <code class="param">server</code>.  <br /></td></tr>
+<tr class="memdesc:a978cad0db6efd8ccd3f33c1bf15be188"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend targeting <code class="param">server</code>, unscoped.  <br /></td></tr>
+<tr class="memitem:a058e080534112e88525e4245dc89137a" id="r_a058e080534112e88525e4245dc89137a"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a058e080534112e88525e4245dc89137a">SimulatedRemoteBackend</a> (<a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> &amp;server, ConnectionId cid)</td></tr>
+<tr class="memdesc:a058e080534112e88525e4245dc89137a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend targeting <code class="param">server</code>, scoped to <code class="param">cid</code>.  <br /></td></tr>
 <tr class="memitem:ae2e0de3d0e1107efca7f5c86a8c4e295" id="r_ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295">registerModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;) override</td></tr>
 <tr class="memdesc:ae2e0de3d0e1107efca7f5c86a8c4e295"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers the model type on the server and returns its assigned id.  <br /></td></tr>
 <tr class="memitem:ae1668b44851b9b9455891a2ad39a1b79" id="r_ae1668b44851b9b9455891a2ad39a1b79"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#ae1668b44851b9b9455891a2ad39a1b79">registerModelWithContext</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;, std::string_view contextKey) override</td></tr>
@@ -163,10 +165,10 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p><span class="tt">IBackend</span> adapter that routes all calls through a <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> as wire <span class="tt">Envelope</span> messages. </p>
 <p>Intended for testing and in-process simulation of remote execution. <span class="tt"><a class="el" href="#ae2e0de3d0e1107efca7f5c86a8c4e295" title="Registers the model type on the server and returns its assigned id.">registerModel()</a></span> and <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel()</a></span> are processed inline on the calling thread via <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#abcdee5e1504ebcbef2415b029eec8818" title="Synchronously processes a JSON Envelope on the calling thread and returns the reply.">RemoteServer::handleInline</a></span>. <span class="tt"><a class="el" href="#af575c96f8350bdf7745cf45662314bc4" title="Serialises the action, sends it to the server, and returns a Completion.">execute()</a></span> is asynchronous: it sends the message through <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span> and resolves the returned <span class="tt">Completion</span> when the reply arrives (there is no <span class="tt">std::promise</span> and no blocking wait). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01465">1465</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01480">1480</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a978cad0db6efd8ccd3f33c1bf15be188" name="a978cad0db6efd8ccd3f33c1bf15be188"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a978cad0db6efd8ccd3f33c1bf15be188">&#9670;&#160;</a></span>SimulatedRemoteBackend() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -188,15 +190,57 @@ Public Member Functions</h2></td></tr>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the backend targeting <code class="param">server</code>. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Constructs the backend targeting <code class="param">server</code>, unscoped. </p>
+<p>Every <span class="tt">register</span>/<span class="tt">deregister</span>/<span class="tt">attach</span>/<span class="tt">assign</span>/<span class="tt">instances</span> call this backend makes uses <span class="tt">ConnectionId{0}</span> — the server's "unscoped" sentinel (<span class="tt">backend.md</span>, "Connection scopes") — exactly as before connection scopes existed. Use the <span class="tt">ConnectionId</span> constructor below to give this backend its own scope instead, so tests can exercise connection-scoped state (rate limiting, connection-drop recovery, shared-instance attach/detach across connections) deterministically without a real socket. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01469">1469</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01493">1493</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a058e080534112e88525e4245dc89137a" name="a058e080534112e88525e4245dc89137a"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a058e080534112e88525e4245dc89137a">&#9670;&#160;</a></span>SimulatedRemoteBackend() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::backend::SimulatedRemoteBackend::SimulatedRemoteBackend </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html">RemoteServer</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>server</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">ConnectionId</td>          <td class="paramname"><span class="paramname"><em>cid</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs the backend targeting <code class="param">server</code>, scoped to <code class="param">cid</code>. </p>
+<p><code class="param">cid</code> must have been obtained from <span class="tt">server.openConnection()</span> — the same connection-scope mechanism <span class="tt">QtWebSocketServer</span>/<span class="tt"><a class="el" href="../../dc/d9a/classmorph_1_1net_1_1SocketServer.html" title="Raw-socket WebSocket server front for morph::backend::RemoteServer.">morph::net::SocketServer</a></span> use for a real transport, made available for in-process simulation. Every <span class="tt">register</span>/<span class="tt">attach</span>/<span class="tt">assign</span>/<span class="tt">instances</span> call this backend makes is attributed to <code class="param">cid's</code> scope (via the three-argument <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html#ae0a8a4b505069b41f9005705e93d4701" title="Asynchronously processes a JSON Envelope and calls reply with the response.">RemoteServer::handle</a></span>/ <span class="tt">handleInline</span> overloads), so a <span class="tt"><a class="el" href="#ae05332b7c26d6617e468f1c750431404" title="Deregisters the model on the server. Processed inline; safe from any thread.">deregisterModel</a></span>/destructor-driven <span class="tt">closeConnection</span> reclaims exactly what this backend registered — the same reclamation guarantee a dropped socket gives a real client.</p>
+<p>The backend does <b>not</b> call <span class="tt">closeConnection</span> itself on destruction: unlike a real transport, there is no single well-defined "this
+connection is gone" moment to hook here (the caller may want to keep the scope open past this object's lifetime, e.g. to construct a second <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span> against the same scope). Call <span class="tt">closeConnection(cid)</span> explicitly, or destroy <span class="tt">server</span> itself, when the simulated connection should be reclaimed. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">server</td><td>The <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span> instance to forward calls to. </td></tr>
+    <tr><td class="paramname">cid</td><td>Connection scope, as returned by <span class="tt">server.openConnection()</span>. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01515">1515</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -244,7 +288,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01481">1481</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01527">1527</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -296,7 +340,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01497">1497</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01543">1543</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -349,7 +393,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01518">1518</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01564">1564</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -408,7 +452,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01544">1544</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01591">1591</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -454,7 +498,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01565">1565</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01614">1614</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -496,7 +540,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01578">1578</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01627">1627</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -524,14 +568,14 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Deregisters the model on the server. Processed inline; safe from any thread. </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Carries this backend's own <span class="tt">ConnectionId</span>, so a shared instance's attach count is decremented against <em>this</em> backend's scope entry — never a different connection's — exactly as a real transport's <span class="tt">deregister</span> does (<span class="tt">backend.md</span>, "Connection scopes"). </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">mid</td><td>Id of the model to deregister. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01593">1593</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01647">1647</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -568,7 +612,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01609">1609</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01663">1663</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -616,7 +660,7 @@ Public Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>Completion that resolves with the deserialized result or an error. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01625">1625</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01679">1679</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -645,7 +689,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — models live in <span class="tt"><a class="el" href="../../d4/dc1/classmorph_1_1backend_1_1RemoteServer.html" title="Server-side message handler that owns model instances and dispatches actions.">RemoteServer</a></span>, not locally. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01660">1660</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01716">1716</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>
@@ -680,7 +724,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01664">1664</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d0/dfc/remote_8hpp_source.html#l01720">1720</a> of file <a class="el" href="../../d0/dfc/remote_8hpp_source.html">remote.hpp</a>.</p>
 
 </div>
 </div>

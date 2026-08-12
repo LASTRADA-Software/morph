@@ -158,6 +158,8 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a53075c01e7c657d63f9b2e50973d3a07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">attach</span> and blocks for the reply, re-pointing from <code class="param">current</code>.  <br /></td></tr>
 <tr class="memitem:a2e72e36877b55424f38b5597a6562a6d" id="r_a2e72e36877b55424f38b5597a6562a6d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2e72e36877b55424f38b5597a6562a6d">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
 <tr class="memdesc:a2e72e36877b55424f38b5597a6562a6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files a live server-side instance under <code class="param">primary</code>.  <br /></td></tr>
+<tr class="memitem:aa6b15f2bbb8154ddfb30406de340b8c0" id="r_aa6b15f2bbb8154ddfb30406de340b8c0"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa6b15f2bbb8154ddfb30406de340b8c0">assignPrimaryAsync</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary, std::function&lt; void(::morph::exec::detail::ModelId)&gt; onRegistered, std::function&lt; void(const std::string &amp;)&gt; onError) override</td></tr>
+<tr class="memdesc:aa6b15f2bbb8154ddfb30406de340b8c0"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">assign</span> message and returns without blocking; the reply is matched later, asynchronously, by <span class="tt">callId</span>.  <br /></td></tr>
 <tr class="memitem:a68b32a73162878f79091c4ebbd808084" id="r_a68b32a73162878f79091c4ebbd808084"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a68b32a73162878f79091c4ebbd808084">listInstances</a> (const std::string &amp;typeId) override</td></tr>
 <tr class="memdesc:a68b32a73162878f79091c4ebbd808084"><td class="mdescLeft">&#160;</td><td class="mdescRight">Asks the server for the live shared primary keys of <code class="param">typeId</code>.  <br /></td></tr>
 <tr class="memitem:aa00b19a8994d4d4f2ca9b9b7a3e3a70a" id="r_aa00b19a8994d4d4f2ca9b9b7a3e3a70a"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#aa00b19a8994d4d4f2ca9b9b7a3e3a70a">deregisterModel</a> (::morph::exec::detail::ModelId mid) override</td></tr>
@@ -182,7 +184,7 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>SSL-less Qt builds (<span class="tt">QT_NO_SSL</span>, including the standard Qt-for-WebAssembly build)</dt><dd>The constructor's <span class="tt">tls</span> parameter (and the <span class="tt">_tls</span> member) does not exist at all when Qt itself was configured without SSL — <span class="tt">QSslConfiguration</span> isn't a type Qt provides in that configuration, so there is no value to accept or ignore. <span class="tt">wss://</span> still works on such a build regardless: in a WASM/browser deployment the browser terminates TLS before Qt's <span class="tt">QWebSocket</span> ever sees the connection, so the only thing genuinely unavailable is the ability to <em>configure</em> TLS from C++ (client certificates, pinning, etc.) — plain <span class="tt">wss://</span> and <span class="tt">ws://</span> both still connect normally.</dd></dl>
 <dl class="section user"><dt>Threading</dt><dd>Must be used from the Qt event loop thread. <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span> and the internal message handler are both called on that thread. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00094">94</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00095">95</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abb613465047676a5ca37e4c1962efc7c" name="abb613465047676a5ca37e4c1962efc7c"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abb613465047676a5ca37e4c1962efc7c">&#9670;&#160;</a></span>Config</h2>
@@ -198,7 +200,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Alias for the reconnect configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -403,6 +405,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Sends a <span class="tt">register</span> message and returns without blocking; the reply is matched later, asynchronously, by <span class="tt">callId</span>. </p>
 <p>The non-blocking counterpart to <span class="tt"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel</a></span>/<span class="tt">registerModelWithContext</span> (see <span class="tt">IBackend::registerModelAsync</span>'s doc comment for why this exists): <span class="tt"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel</a></span> blocks the calling thread in a nested <span class="tt">QEventLoop</span> via <span class="tt">sendSync</span>, which a WASM main thread cannot do at all. This instead assigns a fresh <span class="tt">callId</span> (the same counter <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span> uses), sends the <span class="tt">register</span> envelope, and returns <span class="tt">true</span> immediately; the reply is matched via <span class="tt">_pendingRegistrations</span> when <span class="tt">onTextMessage</span> sees it (no protocol change needed — the server already echoes <span class="tt">callId</span> on every reply, <span class="tt">register</span> included). Exactly one of <code class="param">onRegistered</code> / <code class="param">onError</code> fires, on the Qt event loop thread, once the reply arrives — or never, if the socket disconnects first without ever reconnecting and <span class="tt"><a class="el" href="#aaeeb1552d6d0d5601f9457d5bd3494cf" title="Resolves every pending execute call&#39;s Completion with exc, and fails every pending async registration...">cancelPending</a></span> is never called again for this id (a disconnect <em>before</em> a reconnect calls <span class="tt"><a class="el" href="#aaeeb1552d6d0d5601f9457d5bd3494cf" title="Resolves every pending execute call&#39;s Completion with exc, and fails every pending async registration...">cancelPending</a></span>, which does invoke <code class="param">onError</code> — see <span class="tt"><a class="el" href="#aaeeb1552d6d0d5601f9457d5bd3494cf" title="Resolves every pending execute call&#39;s Completion with exc, and fails every pending async registration...">cancelPending</a></span>'s doc comment).</p>
+<p>If the socket has not finished connecting yet, the request is <b>queued</b> rather than failed: this is exactly the ordering a single-threaded WASM client must use, since it can never block waiting for the connection to settle (a <span class="tt">BridgeHandler</span> constructed the moment the backend is wired up, before the first <span class="tt">connected</span> signal). The queued request is sent — with a call-id assigned at that point, not now — the moment <span class="tt">connected</span> fires next (first connect included), in FIFO order. If the socket never connects at all and the backend is torn down first, the queued entry is still resolved: <span class="tt"><a class="el" href="#ad3e402f437433e89a65dbe1ef056da84" title="Closes the socket and cleans up pending operations.">~QtWebSocketBackend</a></span> calls <span class="tt"><a class="el" href="#aaeeb1552d6d0d5601f9457d5bd3494cf" title="Resolves every pending execute call&#39;s Completion with exc, and fails every pending async registration...">cancelPending</a></span>, which drains <span class="tt">_queuedRegistrations</span> too and invokes <code class="param">onError</code> exactly once for each — no call-id was ever assigned, but the callback still fires, the same guarantee an already-sent (call-id-bearing) registration gets.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">typeId</td><td>String type-id of the model to instantiate. </td></tr>
@@ -569,6 +572,64 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="aa6b15f2bbb8154ddfb30406de340b8c0" name="aa6b15f2bbb8154ddfb30406de340b8c0"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aa6b15f2bbb8154ddfb30406de340b8c0">&#9670;&#160;</a></span>assignPrimaryAsync()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::qt::QtWebSocketBackend::assignPrimaryAsync </td>
+          <td>(</td>
+          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>mid</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string_view</td>          <td class="paramname"><span class="paramname"><em>primary</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(::morph::exec::detail::ModelId)&gt;</td>          <td class="paramname"><span class="paramname"><em>onRegistered</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(const std::string &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onError</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends an <span class="tt">assign</span> message and returns without blocking; the reply is matched later, asynchronously, by <span class="tt">callId</span>. </p>
+<p>The non-blocking counterpart to <span class="tt"><a class="el" href="#a2e72e36877b55424f38b5597a6562a6d" title="Files a live server-side instance under primary.">assignPrimary</a></span> (see <span class="tt">IBackend::assignPrimaryAsync</span>'s doc comment): <span class="tt"><a class="el" href="#a2e72e36877b55424f38b5597a6562a6d" title="Files a live server-side instance under primary.">assignPrimary</a></span> blocks the calling thread in a nested <span class="tt">QEventLoop</span> via <span class="tt">sendSync</span>, the same shape <span class="tt"><a class="el" href="#ab85e641f3cdb1a912948481df77f3c53" title="Sends a register message and returns without blocking; the reply is matched later,...">registerModelAsync</a></span> exists to let a caller avoid for the bind step. This instead assigns a fresh <span class="tt">callId</span> (the same counter <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span>/<span class="tt"><a class="el" href="#ab85e641f3cdb1a912948481df77f3c53" title="Sends a register message and returns without blocking; the reply is matched later,...">registerModelAsync()</a></span> use), sends the <span class="tt">assign</span> envelope, and returns <span class="tt">true</span> immediately; the reply is matched via <span class="tt">_pendingAssigns</span> when <span class="tt">onTextMessage</span> sees it. Exactly one of <code class="param">onRegistered</code> / <code class="param">onError</code> fires, on the Qt event loop thread, once the reply arrives.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">mid</td><td>Live instance to promote. </td></tr>
+    <tr><td class="paramname">typeId</td><td>Model type id. </td></tr>
+    <tr><td class="paramname">primary</td><td>Canonical string encoding of the key to file it under. </td></tr>
+    <tr><td class="paramname">onRegistered</td><td>Invoked with <code class="param">mid</code> on success (including the documented no-op cases &ndash; see <span class="tt">IBackend::assignPrimaryAsync</span>). </td></tr>
+    <tr><td class="paramname">onError</td><td>Invoked with a diagnostic message on failure or disconnect. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> always &ndash; this backend has an async path (<span class="tt">false</span> is never returned). </dd></dl>
+
+</div>
+</div>
 <a id="a68b32a73162878f79091c4ebbd808084" name="a68b32a73162878f79091c4ebbd808084"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a68b32a73162878f79091c4ebbd808084">&#9670;&#160;</a></span>listInstances()</h2>
 
@@ -634,6 +695,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Sends a <span class="tt">deregister</span> message fire-and-forget (does not wait for a reply). </p>
 <p>No acknowledgement is awaited, which avoids a nested <span class="tt">QEventLoop</span> during destruction (that can trip Qt asserts). Note the server performs no connection-scoped cleanup: an undelivered or lost <span class="tt">deregister</span> leaves the model registered on the server indefinitely.</p>
+<p>Assigned a real, non-zero <span class="tt">callId</span> from the same counter/namespace <span class="tt"><a class="el" href="#a374300e019ee7e66a133f35c60dd8c74" title="Sends an execute message and returns a Completion that resolves on reply.">execute()</a></span>/<span class="tt"><a class="el" href="#ab85e641f3cdb1a912948481df77f3c53" title="Sends a register message and returns without blocking; the reply is matched later,...">registerModelAsync()</a></span> use (see issue #65): <span class="tt">callId == 0</span> is reserved for a parked synchronous control call's reply, and a fire-and-forget <span class="tt">deregister</span> sharing that sentinel could otherwise have its own stray "ok" reply handed to an unrelated <span class="tt"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel</a></span>'s parked <span class="tt">sendSync</span> loop if the two land back to back on the same connection. The reply is tracked in <span class="tt">_pendingDeregisters</span> purely so it can be recognised and dropped in <span class="tt">onTextMessage</span>; nothing observes it.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">mid</td><td>Id of the model to remove on the server. </td></tr>
@@ -714,7 +776,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00241">241</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

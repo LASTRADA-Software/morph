@@ -25,7 +25,7 @@ var searchData=
   ['setwire_22',['setWire',['../d2/d5c/structmorph_1_1math_1_1Rational.html#accfa4dfaaa11bd421cc62f0941d71d31',1,'morph::math::Rational']]],
   ['sha256_23',['sha256',['../d3/d6a/session__auth_8hpp.html#ab845810d53e945b50a3c7a841eebd80e',1,'morph::session::detail']]],
   ['signingauthorizer_24',['SigningAuthorizer',['../db/dd9/classmorph_1_1session_1_1SigningAuthorizer.html#ac9cfd7f42a4e2a0b23a5c9b6e11edd48',1,'morph::session::SigningAuthorizer']]],
-  ['simulatedremotebackend_25',['SimulatedRemoteBackend',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188',1,'morph::backend::SimulatedRemoteBackend']]],
+  ['simulatedremotebackend_25',['SimulatedRemoteBackend',['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a978cad0db6efd8ccd3f33c1bf15be188',1,'morph::backend::SimulatedRemoteBackend::SimulatedRemoteBackend(RemoteServer &amp;server)'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a058e080534112e88525e4245dc89137a',1,'morph::backend::SimulatedRemoteBackend::SimulatedRemoteBackend(RemoteServer &amp;server, ConnectionId cid)']]],
   ['socketbackend_26',['SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#aefa5e6dfde53b76ee0080a2dd5251b58',1,'morph::net::SocketBackend']]],
   ['socketserver_27',['SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a442da28eb4702d7da4490a1379c83ed3',1,'morph::net::SocketServer']]],
   ['sqliteofflinequeue_28',['SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a895bed6a5361c3a637c78dc83f5286c9',1,'morph::offline::SqliteOfflineQueue']]],

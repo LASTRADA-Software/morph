@@ -9,6 +9,7 @@ var classmorph_1_1bridge_1_1Bridge =
     [ "ensureBound", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a691f5af6e6a8b92301d5b209db7760d2", null ],
     [ "assignHandlerPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a22e009f482dd20475ab4baa1e7a1cb3f", null ],
     [ "bindingPrimary", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac2b6aa45af15dd71a4d513edf1f9ddd6", null ],
+    [ "whenBound", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a8fadc389b6e62034cbb02c642c0076d8", null ],
     [ "listInstancesOf", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a7bc25d126522f0419addd7fe0bda46c5", null ],
     [ "addSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a4bd239575a908e19fdc953200496ff14", null ],
     [ "removeSubscription", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ad61a7a7ab7a4fe215761fc0f71380144", null ],

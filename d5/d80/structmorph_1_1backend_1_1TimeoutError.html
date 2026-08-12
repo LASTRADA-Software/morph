@@ -141,7 +141,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>Thrown to a pending <span class="tt">Completion</span> when the server-side <span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#af5dddc630c20f1a242075b6f885a4c9c" title="Max wall-clock time a single execute may take before the server sends an err &quot;timeout&quot; reply and disc...">morph::backend::LimitPolicy::executeTimeout</a></span> elapses before the model's action replies. </p>
 <p>The action keeps running to completion on its strand — morph never interrupts an in-flight <span class="tt">Model::execute</span> — but the caller's wait is bounded. Distinguishes a timeout from any other <span class="tt">err</span> reply (a generic <span class="tt">std::runtime_error</span> on <span class="tt">QtWebSocketBackend</span> / <span class="tt"><a class="el" href="../../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html" title="IBackend adapter that routes all calls through a RemoteServer as wire Envelope messages.">SimulatedRemoteBackend</a></span>), so callers can retry or surface a specific "request timed out" message. See <span class="tt">docs/spec/core/backend.md</span> (<span class="tt"><a class="el" href="../../de/dc7/structmorph_1_1backend_1_1LimitPolicy.html" title="Opt-in, connection-agnostic resource limits enforced by RemoteServer.">LimitPolicy</a></span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00379">379</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00431">431</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac11e1e31982dea91b70cc23594e0db18" name="ac11e1e31982dea91b70cc23594e0db18"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac11e1e31982dea91b70cc23594e0db18">&#9670;&#160;</a></span>TimeoutError()</h2>
@@ -168,7 +168,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Constructs the error with a canned diagnostic message. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00381">381</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d5e/backend_8hpp_source.html#l00433">433</a> of file <a class="el" href="../../d6/d5e/backend_8hpp_source.html">backend.hpp</a>.</p>
 
 </div>
 </div>
