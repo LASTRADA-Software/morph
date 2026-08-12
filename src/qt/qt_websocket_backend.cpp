@@ -138,9 +138,11 @@ std::string QtWebSocketBackend::sendSync(const std::string& msg) {
 
 ::morph::exec::detail::ModelId QtWebSocketBackend::registerModel(
     const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) {
+    auto env = ::morph::wire::makeRegister(typeId);
+    env.session = _session;
     std::string replyJson;
     try {
-        replyJson = sendSync(::morph::wire::encode(::morph::wire::makeRegister(typeId)));
+        replyJson = sendSync(::morph::wire::encode(env));
     } catch (const std::exception& exc) {
         // sendSync throws "disconnected" if the socket drops (or was never
         // connected) while the register reply was outstanding — the nested event
@@ -194,6 +196,7 @@ void QtWebSocketBackend::sendRegisterAsync(const std::string& typeId, std::strin
     }
     auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
     env.callId = callId;
+    env.session = _session;
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
 }
 
@@ -241,9 +244,10 @@ namespace {
     if (identity.primary.empty()) {
         return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
     }
-    return modelIdFromReply(sendSync(::morph::wire::encode(::morph::wire::makeRegisterShared(
-                                typeId, std::string{identity.primary}, std::string{identity.contextKey}))),
-                            "register");
+    auto env = ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
+                                                   std::string{identity.contextKey});
+    env.session = _session;
+    return modelIdFromReply(sendSync(::morph::wire::encode(env)), "register");
 }
 
 ::morph::exec::detail::ModelId QtWebSocketBackend::attachModel(
@@ -255,10 +259,10 @@ namespace {
         }
         return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
     }
-    return modelIdFromReply(
-        sendSync(::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                                                  std::string{identity.contextKey}))),
-        "attach");
+    auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                          std::string{identity.contextKey});
+    env.session = _session;
+    return modelIdFromReply(sendSync(::morph::wire::encode(env)), "attach");
 }
 
 void QtWebSocketBackend::assignPrimary(::morph::exec::detail::ModelId mid, const std::string& typeId,
@@ -266,8 +270,9 @@ void QtWebSocketBackend::assignPrimary(::morph::exec::detail::ModelId mid, const
     if (primary.empty() || mid.v == 0U) {
         return;
     }
-    (void)modelIdFromReply(
-        sendSync(::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v))), "assign");
+    auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
+    env.session = _session;
+    (void)modelIdFromReply(sendSync(::morph::wire::encode(env)), "assign");
 }
 
 bool QtWebSocketBackend::assignPrimaryAsync(::morph::exec::detail::ModelId mid, const std::string& typeId,
@@ -329,6 +334,7 @@ void QtWebSocketBackend::deregisterModel(::morph::exec::detail::ModelId mid) {
     }
     auto env = ::morph::wire::makeDeregister(mid.v);
     env.callId = callId;
+    env.session = _session;
     _socket.sendTextMessage(QString::fromStdString(::morph::wire::encode(env)));
 }
 
@@ -417,6 +423,8 @@ void QtWebSocketBackend::setReconnectHandler(const std::function<void()>& handle
 void QtWebSocketBackend::setConnectHandler(const std::function<void()>& handler) { _connectHandler = handler; }
 
 void QtWebSocketBackend::setDisconnectHandler(const std::function<void()>& handler) { _disconnectHandler = handler; }
+
+void QtWebSocketBackend::setSession(::morph::session::Context session) { _session = std::move(session); }
 
 void QtWebSocketBackend::scheduleReconnect() {
     _reconnectTimer.start(static_cast<int>(_currentReconnectDelay.count()));

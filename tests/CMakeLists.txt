@@ -78,6 +78,8 @@ add_executable(morph_tests
     test_session_auth.cpp
     test_policy_hardening.cpp
     test_register_authorization.cpp
+    test_register_session.cpp
+    test_control_byte_escaping.cpp
     test_opaque_model_ids.cpp
     test_graceful_shutdown.cpp
     test_pinned_facts.cpp

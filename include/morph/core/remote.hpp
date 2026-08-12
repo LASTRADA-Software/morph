@@ -1543,8 +1543,9 @@ public:
     ::morph::exec::detail::ModelId registerModelWithContext(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/,
         std::string_view contextKey) override {
-        auto reply = ::morph::wire::decode(_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeRegister(typeId, std::string{contextKey})), _cid));
+        auto env = ::morph::wire::makeRegister(typeId, std::string{contextKey});
+        env.session = currentSession();
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1567,10 +1568,10 @@ public:
         if (identity.primary.empty()) {
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto reply = ::morph::wire::decode(_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
-                                                                     std::string{identity.contextKey})),
-            _cid));
+        auto env = ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
+                                                       std::string{identity.contextKey});
+        env.session = currentSession();
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1597,10 +1598,10 @@ public:
             }
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        auto reply = ::morph::wire::decode(_server.handleInline(
-            ::morph::wire::encode(::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
-                                                             std::string{identity.contextKey})),
-            _cid));
+        auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                              std::string{identity.contextKey});
+        env.session = currentSession();
+        auto reply = ::morph::wire::decode(_server.handleInline(::morph::wire::encode(env), _cid));
         if (reply.kind == "ok") {
             return ::morph::exec::detail::ModelId{reply.modelId};
         }
@@ -1616,8 +1617,9 @@ public:
         if (primary.empty() || mid.v == 0U) {
             return;
         }
-        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v)),
-                                   _cid);
+        auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
+        env.session = currentSession();
+        (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
     /// @brief Asks the server for the live shared primary keys of @p typeId.
@@ -1645,7 +1647,9 @@ public:
     /// `deregister` does (`backend.md`, "Connection scopes").
     /// @param mid Id of the model to deregister.
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
-        (void)_server.handleInline(::morph::wire::encode(::morph::wire::makeDeregister(mid.v)), _cid);
+        auto env = ::morph::wire::makeDeregister(mid.v);
+        env.session = currentSession();
+        (void)_server.handleInline(::morph::wire::encode(env), _cid);
     }
 
     /// @brief Sends a `"hello"` envelope to the server and classifies its reply.
@@ -1730,11 +1734,26 @@ public:
         }
     }
 
+    /// @brief Installs the session stamped onto every control envelope this
+    ///        backend subsequently builds (`register`, `registerShared`,
+    ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
+    /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
+    void setSession(::morph::session::Context session) override {
+        std::scoped_lock const lock{_sessionMtx};
+        _session = std::move(session);
+    }
+
 private:
     void trackPending(const std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>& state) {
         std::scoped_lock const lock{_pendingMtx};
         std::erase_if(_pending, [](const auto& weak) { return weak.expired(); });
         _pending.emplace_back(state);
+    }
+
+    /// @brief Returns a copy of the session last installed via `setSession`.
+    [[nodiscard]] ::morph::session::Context currentSession() const {
+        std::scoped_lock const lock{_sessionMtx};
+        return _session;
     }
 
     RemoteServer& _server;
@@ -1745,6 +1764,8 @@ private:
     ConnectionId _cid{0};
     std::mutex _pendingMtx;
     std::vector<std::weak_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>>> _pending;
+    mutable std::mutex _sessionMtx;
+    ::morph::session::Context _session;
 };
 
 }  // namespace morph::backend

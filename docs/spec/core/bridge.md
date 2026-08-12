@@ -185,7 +185,14 @@ two overloads:
   every existing call site ambiguous. It converts to a `shared_ptr` and
   delegates to the overload above.
 
-Both run the same two phases under `_mtx`:
+Before either phase, the current default session is pushed onto the new
+backend via `newBackend->setSession(...)` (read under `_sessionMtx` alone,
+never held while calling into the backend) — so every control envelope phase
+1 builds while re-registering handlers on the new backend already carries the
+session, exactly as it would on the backend that is being replaced. See
+`IBackend::setSession` and [backend.md](backend.md#session-propagation-to-control-envelopes).
+
+Both phases below run under `_mtx`:
 
 - **Phase 1 — stage, do not mutate.** Every live binding is registered on the
   new backend and the resulting `(binding, newId)` pairs are collected into a
@@ -242,7 +249,14 @@ sending a now-destroyed `ModelId` to the backend.
 
 **`setDefaultSession(session)`** / **`defaultSession()`** installs a default
 `morph::session::Context` that is attached to every `executeVia()` call.
-Thread-safe, separate mutex from `_mtx`.
+Thread-safe, separate mutex from `_mtx`. `setDefaultSession` also pushes the
+new session to the active backend via `IBackend::setSession` (copied out from
+under `_sessionMtx` before the call, never while holding it), so every
+control envelope (`register`/`registerShared`/`attach`/`assign`/`deregister`)
+the backend subsequently builds carries the session too — not only `execute`
+envelopes. The constructor does the same with the (typically empty) initial
+session. See [session.md](../session/session.md#how-a-context-originates-and-flows)
+and [backend.md](backend.md#session-propagation-to-control-envelopes).
 
 **`setPrincipal(principal)`** / **`currentPrincipal()`** installs and reads
 back a `morph::session::Principal` — the verified identity + roles, readable
@@ -547,14 +561,14 @@ make teardown order-independent.)
 
 | Member | Signature | Notes |
 |---|---|---|
-| ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend. |
+| ctor | `explicit Bridge(unique_ptr<IBackend>)` | Installs reconnect handler on the backend, then pushes the (initially empty) default session via `setSession`. |
 | dtor | `~Bridge()` | Clears the active backend's reconnect handler, then cancels all pending completions with `BridgeDestroyedError`. |
 | `registerHandler<Model>` | `shared_ptr<HandlerBinding> registerHandler()` | Default factory. Prefers `IBackend::registerModelAsync`; see `backend.md`. |
 | `registerHandler(binding)` | `void registerHandler(const shared_ptr<HandlerBinding>&)` | Pre-built binding. Same async-preferring behavior. |
-| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
+| `switchBackend` | `void switchBackend(unique_ptr<IBackend>)` / `void switchBackend(shared_ptr<IBackend>)` | Pushes the current default session onto the new backend via `setSession` before staging. Atomic: stages all re-registrations on the new backend, commits (publishes new ids + swaps) only if all succeed, else rolls back and rethrows leaving old backend + `currentId`s intact. Cancels old backend's pending ops with `BackendChangedError`. Holds both `_mtx` and `_attachMtx` for its duration. The `unique_ptr` overload is a template on the concrete backend type and delegates to the `shared_ptr` one — see below. |
 | `deregisterHandler` | `void deregisterHandler(const shared_ptr<HandlerBinding>&)` | Deregisters from active backend (if bound), resets `currentId` to 0, removes from tracking. |
 | `executeVia<Model, Action>` | `Completion<R> executeVia(const shared_ptr<HandlerBinding>&, Action, IExecutor*)` | Lock-free dispatch. Attaches default session. On `LocalBackend`, rejects an action whose `ActionValidator::ready` returns `false` with `morph::model::ValidationError` via `onError`, before `Model::execute` runs. Records a journal `LogEntry` for loggable actions on both success (`Outcome::Succeeded`) and a throwing `Model::execute` (`Outcome::Failed`, rethrown unchanged). Value-forwarding into the typed `Completion` is `try`/`catch`-guarded — a throwing result move/copy resolves the completion via `onError` instead of hanging or terminating. The bridge-touching side effects (`onResult`, `hasSubscribers()`/`publishResult`, and the `pendingCalls()` decrement) are gated on the `_liveness` token, checked before any runs, so a completion resolving after `~Bridge()` skips them instead of touching the dangling `Bridge`. Increments `pendingCalls()` once per call before dispatch (never for the synchronous "handler not bound" early return); decrements it exactly once, from whichever of the two mutually-exclusive resolution continuations actually fires. |
-| `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context. |
+| `setDefaultSession` | `void setDefaultSession(session::Context)` | Installs default session context; also pushes it to the active backend via `IBackend::setSession` so control envelopes (register/attach/assign/deregister) carry it too, not only `execute`. |
 | `defaultSession` | `session::Context defaultSession() const` | Returns snapshot of default session. |
 | `setPrincipal` | `void setPrincipal(session::Principal)` | Installs the verified `Principal`, readable outside a dispatch. Pass `Principal{}` to clear (sign-out). |
 | `currentPrincipal` | `session::Principal currentPrincipal() const` | Returns a snapshot of the installed `Principal`; default-constructed if none was ever set. |

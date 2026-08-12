@@ -132,9 +132,11 @@ public:
     ::morph::exec::detail::ModelId registerModel(
         const std::string& typeId,
         std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> /*factory*/) override {
+        auto env = ::morph::wire::makeRegister(typeId);
+        env.session = currentSession();
         std::string replyJson;
         try {
-            replyJson = sendSync(::morph::wire::encode(::morph::wire::makeRegister(typeId)));
+            replyJson = sendSync(::morph::wire::encode(env));
         } catch (const std::exception& exc) {
             throw std::runtime_error(std::string{"register failed: "} + exc.what());
         }
@@ -160,9 +162,10 @@ public:
         if (identity.primary.empty()) {
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        return sendControlForId(::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
-                                                                 std::string{identity.contextKey}),
-                                "register");
+        auto env = ::morph::wire::makeRegisterShared(typeId, std::string{identity.primary},
+                                                       std::string{identity.contextKey});
+        env.session = currentSession();
+        return sendControlForId(env, "register");
     }
 
     /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
@@ -181,9 +184,10 @@ public:
             }
             return registerModelWithContext(typeId, std::move(factory), identity.contextKey);
         }
-        return sendControlForId(
-            ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v, std::string{identity.contextKey}),
-            "attach");
+        auto env = ::morph::wire::makeAttach(typeId, std::string{identity.primary}, current.v,
+                                              std::string{identity.contextKey});
+        env.session = currentSession();
+        return sendControlForId(env, "attach");
     }
 
     /// @brief Files a live server-side instance under @p primary.
@@ -195,7 +199,9 @@ public:
         if (primary.empty() || mid.v == 0U) {
             return;
         }
-        (void)sendControlForId(::morph::wire::makeAssign(typeId, std::string{primary}, mid.v), "assign");
+        auto env = ::morph::wire::makeAssign(typeId, std::string{primary}, mid.v);
+        env.session = currentSession();
+        (void)sendControlForId(env, "assign");
     }
 
     /// @brief Asks the server for the live shared primary keys of @p typeId.
@@ -225,8 +231,9 @@ public:
     void deregisterModel(::morph::exec::detail::ModelId mid) override {
         if (_connected.load()) {
             try {
-                sendFrame(::morph::net::detail::WsOpcode::kText,
-                          ::morph::wire::encode(::morph::wire::makeDeregister(mid.v)));
+                auto env = ::morph::wire::makeDeregister(mid.v);
+                env.session = currentSession();
+                sendFrame(::morph::net::detail::WsOpcode::kText, ::morph::wire::encode(env));
             } catch (const std::exception&) {
                 // Fire-and-forget: same documented trade-off as
                 // QtWebSocketBackend — a failed send just leaks the model on
@@ -321,7 +328,22 @@ public:
         _reconnectHandler = handler;
     }
 
+    /// @brief Installs the session stamped onto every control envelope this
+    ///        backend subsequently builds (`register`, `registerShared`,
+    ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
+    /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
+    void setSession(::morph::session::Context session) override {
+        std::scoped_lock lock{_sessionMtx};
+        _session = std::move(session);
+    }
+
 private:
+    /// @brief Returns a copy of the session last installed via `setSession`.
+    [[nodiscard]] ::morph::session::Context currentSession() const {
+        std::scoped_lock lock{_sessionMtx};
+        return _session;
+    }
+
     struct PendingExecute {
         std::shared_ptr<::morph::async::detail::CompletionState<std::shared_ptr<void>>> state;
         std::function<std::shared_ptr<void>(std::string_view)> deserialize;
@@ -623,6 +645,9 @@ private:
 
     std::mutex _reconnectHandlerMtx;
     std::function<void()> _reconnectHandler;
+
+    mutable std::mutex _sessionMtx;
+    ::morph::session::Context _session;
 
     std::mutex _handlerMtx;
     std::condition_variable _handlerCv;

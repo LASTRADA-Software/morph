@@ -318,6 +318,12 @@ public:
     ///                drops. Pass `nullptr` to clear.
     void setDisconnectHandler(const std::function<void()>& handler) override;
 
+    /// @brief Installs the session stamped onto every control envelope this
+    ///        backend subsequently builds (`register`, `registerShared`,
+    ///        `attach`, `assign`, `deregister`). See `IBackend::setSession`.
+    /// @param session Session to stamp; typically pushed by `Bridge::setDefaultSession()`.
+    void setSession(::morph::session::Context session) override;
+
 private:
     /// @brief Sends @p msg synchronously by blocking the Qt thread via a nested event loop.
     std::string sendSync(const std::string& msg);
@@ -357,6 +363,7 @@ private:
     std::function<void()> _reconnectHandler;
     std::function<void()> _connectHandler;
     std::function<void()> _disconnectHandler;
+    ::morph::session::Context _session;
 
     std::string _pendingReply;
     QEventLoop* _syncLoop{nullptr};

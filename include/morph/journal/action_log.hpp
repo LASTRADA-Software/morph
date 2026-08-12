@@ -134,6 +134,25 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
     }
 }
 
+/// @brief Write options that escape ASCII control bytes as `\\uXXXX` sequences.
+///
+/// glaze 7.4 leaves control bytes (0x00-0x1F) unescaped by default, which
+/// breaks a `LogEntry` carrying one in `entityKey`/`payload`/`error`/`principal`/
+/// `idempotencyKey` two ways: RFC 8259 requires those bytes escaped, so the raw
+/// byte alone yields JSON `fromJson`'s `glz::read` throws on; worse, once the
+/// same string also contains an escaped `\` or `"`, glaze's chunked writer path
+/// silently rewrites the control byte as two 0x00 bytes, corrupting the payload
+/// before it ever reaches disk. This mirrors `morph::wire::detail::EscapingWriteOpts`
+/// (`core/wire.hpp`) exactly; duplicated here (rather than shared) so this header
+/// stays free of a `core/` dependency for `MORPH_CLIENT_ONLY`-style consumers
+/// that only want the journal. Escaping is lossless, so any such byte still
+/// round-trips through `fromJson` unchanged.
+struct EscapingWriteOpts : glz::opts {
+    /// @brief Emit control bytes as `\\uXXXX` rather than raw.
+    // NOLINTNEXTLINE(readability-identifier-naming) — glaze's option name, matched by name.
+    bool escape_control_characters = true;
+};
+
 }  // namespace detail
 
 /// @brief Encodes @p entry as JSON.
@@ -144,11 +163,16 @@ inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view co
 /// field is `Outcome`, which does have a `glz::meta` — see above — so it reads
 /// back as `"Succeeded"`/`"Failed"`, not `0`/`1`.) Used by sinks that need an
 /// opaque string representation (`FileActionLog`).
+///
+/// Writes with `detail::EscapingWriteOpts` so a raw ASCII control byte in any
+/// string field (`entityKey`, `payload`, `error`, `principal`, `idempotencyKey`)
+/// round-trips through `fromJson` instead of producing invalid or silently
+/// corrupted JSON — see that struct's doc comment.
 /// @throws SerializationError on encode failure (see `detail::throwOnGlazeError`
 ///         for why this is not realistically reachable for `LogEntry`).
 inline std::string toJson(const LogEntry& entry) {
     std::string out;
-    detail::throwOnGlazeError(glz::write_json(entry, out), out);
+    detail::throwOnGlazeError(glz::write<detail::EscapingWriteOpts{}>(entry, out), out);
     return out;
 }
 

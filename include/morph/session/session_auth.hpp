@@ -312,6 +312,53 @@ enum class AuthError : std::uint8_t {
     NotYetValid,   ///< `issuedAtMs` is set and more than `kClockSkewMs` in the future.
 };
 
+/// @brief Thrown by `TokenIssuer::issue` if serialising the claims fails.
+///
+/// Not realistically reachable for `SessionToken` (a flat aggregate of
+/// strings/integers, same as `journal::LogEntry`/`FileQueueRecord`), but
+/// routing through a throwing helper rather than discarding the error keeps
+/// this writer consistent with its two sibling writers
+/// (`journal::toJson`/`offline::detail::toJson`), instead of silently
+/// serialising a claims blob that later fails to decode.
+struct TokenIssuanceError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
+namespace detail {
+
+/// @brief Converts a Glaze error into a `TokenIssuanceError`, or does nothing
+///        if @p errCode reports success. See `journal::detail::throwOnGlazeError`
+///        for the identical pattern in the sibling writer.
+/// @param errCode Result of a `glz::write` call.
+/// @param context Buffer passed to `glz::format_error` for the message.
+inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view context) {
+    if (errCode) {
+        throw TokenIssuanceError{glz::format_error(errCode, context)};
+    }
+}
+
+/// @brief Write options that escape ASCII control bytes as `\\uXXXX` sequences.
+///
+/// glaze 7.4 leaves control bytes (0x00-0x1F) unescaped by default, which
+/// breaks a `SessionToken` carrying one in `principal`/`roles` two ways: RFC
+/// 8259 requires those bytes escaped, so the raw byte alone yields JSON this
+/// morph's own `TokenVerifier` cannot decode — a signed token that fails to
+/// verify, a silent issue-succeeds/verify-fails asymmetry; worse, once the
+/// same string also contains an escaped `\` or `"`, glaze's chunked writer
+/// path silently rewrites the control byte as two 0x00 bytes, corrupting the
+/// claims before they are ever signed. Mirrors
+/// `morph::wire::detail::EscapingWriteOpts` (`core/wire.hpp`) exactly;
+/// duplicated here (rather than shared) so this header stays free of a
+/// `core/` dependency. Escaping is lossless, so any such byte still
+/// round-trips through `TokenVerifier::verify` unchanged.
+struct EscapingWriteOpts : glz::opts {
+    /// @brief Emit control bytes as `\\uXXXX` rather than raw.
+    // NOLINTNEXTLINE(readability-identifier-naming) — glaze's option name, matched by name.
+    bool escape_control_characters = true;
+};
+
+}  // namespace detail
+
 /// @brief Mints signed bearer tokens from claims using a shared secret.
 ///
 /// Wire format: `base64url(claimsJson) "." base64url(mac(secret, payload))`.
@@ -337,13 +384,18 @@ public:
 #endif
 
     /// @brief Serialises @p claims and returns a signed token string.
+    ///
+    /// Writes with `detail::EscapingWriteOpts` so a raw ASCII control byte in
+    /// `principal`/`roles` round-trips through `TokenVerifier::verify` instead
+    /// of producing invalid JSON (or, alongside an escaped `\`/`"`, silently
+    /// corrupted JSON) — see that struct's doc comment.
     /// @param claims Claims to embed and sign.
     /// @return The signed `payload.sig` token.
+    /// @throws TokenIssuanceError on encode failure (see `detail::throwOnGlazeError`
+    ///         for why this is not realistically reachable for `SessionToken`).
     [[nodiscard]] std::string issue(const SessionToken& claims) const {
         std::string json;
-        // `SessionToken` is a flat aggregate, so writing it into a `std::string`
-        // cannot fail — the result is unconditional.
-        (void)glz::write_json(claims, json);
+        detail::throwOnGlazeError(glz::write<detail::EscapingWriteOpts{}>(claims, json), json);
         const std::string payload = detail::base64UrlEncode(json);
         const std::string sig = detail::base64UrlEncode(_mac(_secret, payload));
         return payload + "." + sig;
