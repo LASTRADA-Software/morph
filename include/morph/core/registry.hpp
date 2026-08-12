@@ -397,8 +397,9 @@ public:
     void registerModel(std::string_view modelId, Factory factory) {
         _factories.insert_or_assign(std::string{modelId}, [factory = std::move(factory)]() mutable {
             std::unique_ptr<IModelHolder> holder{factory()};
-            assert(!holder || holder->type() == std::type_index(typeid(Model))
-                   && "registerModel<Model>(modelId, factory): factory returned a holder for a different type");
+            assert(!holder
+                   || (holder->type() == std::type_index(typeid(Model))
+                       && "registerModel<Model>(modelId, factory): factory returned a holder for a different type"));
             return holder;
         });
     }
