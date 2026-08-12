@@ -89,6 +89,20 @@ target_link_libraries(morph_tests
 
 apply_warnings(morph_tests)
 
+# Several individual test files (schema/rule template instantiation over many
+# action/form types, e.g. test_quantity_forms.cpp) have independently pushed
+# their .obj's COFF section count past the 32-bit SN_LOFF format's limit
+# under MSVC Debug (no /Og folding, full /Zi debug info), aborting with C1128
+# ("number of sections exceeded object file format limit") -- three separate
+# unrelated branches hit this on that one file alone, each adding only a
+# little more template-instantiation weight. Rather than chase this file by
+# file as it recurs, /bigobj is applied to the whole target: harmless on
+# Release and on other compilers, and it costs nothing on the files that
+# don't need it.
+target_compile_options(morph_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
+)
+
 # Forwards CMakeLists.txt's project(VERSION ...) into tests/test_version.cpp
 # so it can static_assert the checked-in include/morph/version.hpp constants
 # never drift from the build system's declared version.
