@@ -175,9 +175,10 @@ public:
     /// with a call-id assigned at that point, not now — the moment `connected`
     /// fires next (first connect included), in FIFO order. If the socket never
     /// connects at all and the backend is torn down first, the queued entry is
-    /// dropped without invoking either callback (`~QtWebSocketBackend` clears
-    /// the queue; there is nothing to cancel because no call-id was ever
-    /// assigned).
+    /// still resolved: `~QtWebSocketBackend` calls `cancelPending`, which drains
+    /// `_queuedRegistrations` too and invokes @p onError exactly once for each —
+    /// no call-id was ever assigned, but the callback still fires, the same
+    /// guarantee an already-sent (call-id-bearing) registration gets.
     ///
     /// @param typeId       String type-id of the model to instantiate.
     /// @param factory      Unused — this backend holds no local model to construct;
