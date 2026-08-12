@@ -107,7 +107,7 @@ misdelivering it).
 | `onError` registered before ready | Appended to `onErr`; every stored handler fires, in order, when `setException` lands |
 | `onError` on an already-**error** state | Fired immediately (posted to `cbExec`), for that one handler only |
 | `onError` on an already-value state | Silent no-op — no error exists |
-| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again, this handler only). **What it delivers depends on how the value was first consumed:** if any `then` was attached *before* the state settled, `setValue` copied the value into every handler but the last and moved it only into the final one — the stored `value` itself is untouched by that dispatch, so a later `attachThen` fire-now still reads an intact `*value` and gets a fresh copy |
+| Second `then` after a value settled | Re-fires immediately via the fire-now path (posts to `cbExec` again, this handler only). **What it delivers depends on how the value was first consumed:** if any `then` was attached *before* the state settled, `setValue` moved the stored `value` out into the dispatch closure (copying it into every handler but the last, moving only into the final one) — the stored `value` itself is left moved-from by that dispatch, so a later `attachThen` fire-now copies from that now moved-from `*value`. Only when every `then` was attached *after* settling does each receive a copy of the original value |
 | Second `onError` after an error settled | Re-fires immediately with the stored `exception_ptr` (same fire-now path, this handler only) |
 | Second `then`/`onError` registered **before** ready | Appended alongside the first — both fire when the result lands, in attachment order; neither is discarded |
 
