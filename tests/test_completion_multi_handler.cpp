@@ -138,6 +138,25 @@ TEST_CASE("Completion: a throwing then handler does not prevent later handlers f
     REQUIRE(thirdFired);
 }
 
+TEST_CASE("Completion: a throwing last then handler is isolated the same as a non-last one",
+          "[completion][issue-59]") {
+    // Regression: the final handler runs outside the non-last loop (it's the
+    // one that receives the moved-from value), with its own separate
+    // try/catch -- exercise that path specifically, not just a non-last
+    // handler throwing.
+    LogGuard guard;
+    SyncExecutor exec;
+    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
+    morph::async::Completion<int> comp{state, &exec};
+
+    bool firstFired = false;
+    comp.then([&](int) { firstFired = true; });
+    comp.then([&](int) { throw std::runtime_error{"handler blew up"}; });
+
+    REQUIRE_NOTHROW(state->setValue(1));
+    REQUIRE(firstFired);
+}
+
 TEST_CASE("Completion: mismatched attach (onError on a value-ready state) is still a no-op for all handlers",
           "[completion][issue-59]") {
     SyncExecutor exec;
