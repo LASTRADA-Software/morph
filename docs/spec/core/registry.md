@@ -12,6 +12,7 @@ without knowing their concrete types.
 - [Customisation traits](#customisation-traits)
   - [ModelTraits](#modeltraits)
   - [ActionTraits](#actiontraits)
+    - [Control bytes in action and result bodies](#control-bytes-in-action-and-result-bodies)
 - [Validation and logging policy](#validation-and-logging-policy)
   - [ActionValidator](#actionvalidator)
   - [ValidationError](#validationerror)
@@ -172,6 +173,32 @@ struct ActionTraits;  // forward — specialize or use BRIDGE_REGISTER_ACTION
 
 All four JSON functions throw `detail::ParseError` (a `std::runtime_error`
 subclass) on glaze encode/decode failure.
+
+#### Control bytes in action and result bodies
+
+`toJson`/`resultToJson` write with `detail::EscapingWriteOpts`, a `glz::opts`
+refinement that turns on glaze's `escape_control_characters` — the same
+treatment, and for the same two reasons, that `wire::encode` already applies
+to the envelope (see wire.md, "Control bytes in string fields"). With the
+option off, an ASCII control byte (U+0000–U+001F) in any caller-supplied
+string field of an action or result:
+
+- **produces invalid output** — RFC 8259 requires those code points to be
+  escaped, and glaze's own reader enforces it, so the peer's `fromJson` throws
+  a `ParseError` on a body its own peer just wrote; and
+- **can be silently corrupted** — with a `\` or `"` earlier in the same
+  string, glaze's chunked fast path writes such a byte out as two `0x00`
+  bytes, and the result still decodes.
+
+Action bodies are pure caller data (a paste's content, a chat message, a
+filename), so this is at least as exposed as the envelope was. Escaping is
+lossless in both directions; the read side needs no counterpart, since glaze's
+reader already accepts `\uXXXX`.
+
+`morph::model::detail::EscapingWriteOpts` deliberately duplicates
+`morph::wire::detail::EscapingWriteOpts` rather than reusing it: the action
+codec belongs to the model layer and must not acquire a dependency on the
+transport layer's header to share a four-line option struct.
 
 ## Validation and logging policy
 
@@ -583,7 +610,9 @@ Expands to:
   `static constexpr std::string_view typeId()` (no `noexcept`, unlike
   `ModelTraits::typeId()`), a `static constexpr Loggable loggable`, and four JSON
   codec functions (each throwing `detail::ParseError` on failure): `toJson`/
-  `resultToJson` use `glz::write_json`; `fromJson`/`resultFromJson` use
+  `resultToJson` use `glz::write<detail::EscapingWriteOpts{}>` (see
+  ["Control bytes in action and result bodies"](#control-bytes-in-action-and-result-bodies));
+  `fromJson`/`resultFromJson` use
   `glz::read<glz::opts{.error_on_unknown_keys = false}>` — the same
   forward-compatibility convention `wire::decode` uses (see wire.md,
   "Action-evolution policy") — so an older-compiled action struct silently

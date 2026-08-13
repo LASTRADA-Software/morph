@@ -102,9 +102,11 @@ public:
     /// @param serverUrl   `ws://` or `wss://` URL of the remote `RemoteServer`.
     /// @param dispatcher  Action dispatcher (defaults to the process-level singleton).
     /// @param registry    Model registry (defaults to the process-level singleton).
+#ifndef QT_NO_SSL
     /// @param tls         If non-null, enables TLS and applies this configuration. Not
     ///                    declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see
     ///                    the class doc comment's "SSL-less Qt builds" section.
+#endif
     /// @param cfg         Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
     explicit QtWebSocketBackend(
         QUrl serverUrl,
@@ -204,6 +206,31 @@ public:
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         ::morph::backend::detail::InstanceIdentity identity) override;
 
+    /// @brief Sends a shared (register-or-attach) `register` and, if async
+    ///        registration is enabled, returns without blocking.
+    ///
+    /// The non-blocking counterpart to `registerModelShared`, matching
+    /// `registerModelAsync`'s shape exactly (same `callId` counter, same
+    /// `_pendingRegistrations` map, same verb-agnostic reply routing in
+    /// `onTextMessage`). An empty `identity.primary` degrades to the private
+    /// path, i.e. to `registerModelAsync`, mirroring the synchronous
+    /// `registerModelShared`'s own degrade-to-private behaviour.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Ignored — model construction is delegated to the server.
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @param onRegistered Invoked with the assigned `ModelId` on success.
+    /// @param onError    Invoked with a diagnostic message on failure.
+    /// @return `true` if `asyncRegistrationEnabled` is set (see
+    ///         `QtWebSocketBackendConfig`) and the request was sent;
+    ///         `false` otherwise, falling back to the synchronous
+    ///         `registerModelShared`.
+    bool registerModelSharedAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                                  ::morph::backend::detail::InstanceIdentity identity,
+                                  std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) override;
+
     /// @brief Sends an `attach` and blocks for the reply, re-pointing from @p current.
     /// @param typeId   String type-id of the model.
     /// @param factory  Ignored — model construction is delegated to the server.
@@ -214,6 +241,30 @@ public:
     ::morph::exec::detail::ModelId attachModel(
         const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
         ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override;
+
+    /// @brief Sends an `attach` and, if async registration is enabled,
+    ///        returns without blocking.
+    ///
+    /// The non-blocking counterpart to `attachModel`; see
+    /// `registerModelSharedAsync` immediately above for the shared shape. An
+    /// empty `identity.primary` releases @p current and degrades to a private
+    /// async registration, mirroring the synchronous `attachModel`'s own
+    /// empty-primary branch.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Ignored — model construction is delegated to the server.
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @param current    Instance currently held, or `ModelId{0}` if none.
+    /// @param onRegistered Invoked with the `ModelId` now attached to, on success.
+    /// @param onError    Invoked with a diagnostic message on failure.
+    /// @return `true` if `asyncRegistrationEnabled` is set and the request
+    ///         was sent; `false` otherwise, falling back to the synchronous
+    ///         `attachModel`.
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                          ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current,
+                          std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> onError) override;
 
     /// @brief Files a live server-side instance under @p primary.
     /// @param mid     Live instance to promote.

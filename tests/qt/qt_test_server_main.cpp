@@ -70,10 +70,10 @@ int main(int argc, char* argv[]) {
     std::cout.flush();
 
     // Watch stdin for a "quit" command so the test can shut us down cleanly.
-#ifdef _MSC_VER
-    // MSVC flags the POSIX `fileno` name itself (C4996) even though the
-    // symbol it names is the one actually deprecated; `_fileno` is its
-    // ISO-conformant replacement on this toolchain only.
+#ifdef _WIN32
+    // MSVC (and other Windows toolchains) flag the POSIX `fileno` name itself
+    // (C4996) even though the symbol it names is the one actually deprecated;
+    // `_fileno` is the ISO-conformant replacement on Windows.
     auto* stdinWatcher = new QSocketNotifier(_fileno(stdin), QSocketNotifier::Read, &app);
 #else
     auto* stdinWatcher = new QSocketNotifier(fileno(stdin), QSocketNotifier::Read, &app);

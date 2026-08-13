@@ -125,9 +125,22 @@ regression cases under `tests/fuzz/findings/`:
   log-bound text, and a raw `0x1B` in it would carry an ANSI escape into the
   reader's terminal.
 
+  That fix, in turn, covered the *envelope* only. An execute envelope's `body`
+  is not written by `wire::encode` at all — it is produced separately by
+  `ActionTraits<A>::toJson` / `resultToJson` (registry.hpp's
+  `BRIDGE_REGISTER_ACTION` macro), which wrote with plain `glz::write_json` and
+  so reproduced the identical gap for every string field of every action and
+  result. Action bodies are pure caller data (a paste's content, a chat
+  message, a filename), so this is at least as exposed as the envelope was.
+  Found from the other end — by the application ladder's rung 1 (pastebin)
+  replaying `tests/fuzz/findings/` as *paste content*, which is the round trip
+  its README's "hostile content" requirement asks for — and fixed with the same
+  instrument one layer down, `model::detail::EscapingWriteOpts` (see
+  docs/spec/core/registry.md, "Control bytes in action and result bodies").
+
 These fixes are covered by dedicated regression tests in
-`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D"/"Bug E"/"Bug F") in addition to
-the `fuzz_*_replay` findings above.
+`tests/test_wire_hardening.cpp` ("Bug C"/"Bug D"/"Bug E"/"Bug F"/"Bug G") in
+addition to the `fuzz_*_replay` findings above.
 
 ## Soak tests (`tests/soak/`)
 

@@ -191,6 +191,32 @@ struct ParseError : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
+/// @brief Write options for an action's/result's own JSON body: identical to
+///        `morph::wire::detail::EscapingWriteOpts`, applied one layer down.
+///
+/// The envelope codec already escapes ASCII control bytes (see
+/// `docs/spec/core/wire.md`, "Control bytes in string fields"); the action and
+/// result bodies it carries are serialized here, separately, and need exactly
+/// the same treatment for exactly the same two reasons. With the option off,
+/// a raw `0x00`–`0x1F` in any caller-supplied string field of an action makes
+/// the body invalid JSON that the peer's own reader rejects — and, when the
+/// same string also contains an escaped character, glaze's chunked fast path
+/// silently rewrites such a byte as two `0x00`s, destroying the payload in a
+/// way that still decodes. Action bodies are pure caller data (a paste's
+/// content, a message, a filename), so this is if anything more exposed than
+/// the envelope was.
+///
+/// Deliberately duplicated rather than reused from `morph::wire`: the action
+/// codec belongs to the model layer and must not acquire a dependency on the
+/// transport layer's header just to share a four-line option struct.
+///
+/// Applies to writing only — glaze's reader already accepts `\\uXXXX`.
+struct EscapingWriteOpts : glz::opts {
+    /// @brief Emit control bytes as `\\uXXXX` rather than raw.
+    // NOLINTNEXTLINE(readability-identifier-naming) — the name is glaze's, not ours; the option is matched by name.
+    bool escape_control_characters = true;
+};
+
 // Forward declarations so instance() methods inside the classes can reference them.
 inline class ActionDispatcher& defaultDispatcher();
 inline class ModelRegistryFactory& defaultRegistry();
@@ -698,7 +724,11 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
         static std::string toJson(const A& action) {                                                           \
             std::string out;                                                                                   \
-            if (auto errCode = glz::write_json(action, out)) {                                                 \
+            /* EscapingWriteOpts, not write_json: a raw control byte in any     */                             \
+            /* caller-supplied string field would otherwise produce a body the  */                             \
+            /* peer's reader rejects, or be silently mangled by glaze's chunked */                             \
+            /* fast path — see its doc comment in registry.hpp.                 */                             \
+            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(action, out)) {         \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \
@@ -716,7 +746,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \
             std::string out;                                                                                   \
-            if (auto errCode = glz::write_json(result, out)) {                                                 \
+            /* EscapingWriteOpts: see toJson() above — a result body carries    */                             \
+            /* caller data back (a paste's content, a fetched record) and needs */                             \
+            /* the identical treatment.                                          */                            \
+            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(result, out)) {         \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \

@@ -186,11 +186,10 @@ re-registration loop already gave the binding a fresh id on the new backend,
 which a stale reply must not overwrite).
 
 **Scope.** Only the plain (non-shared) registration path uses this — a
-`BridgeHandler`'s initial construction. `registerModelShared`/`attachModel`
-(shared/keyed handlers) and the re-registration `switchBackend()`/the
-reconnect handler perform after a backend swap remain synchronous; giving
-those an async path too is a larger change to `Bridge`'s locking model, left
-for a future issue if it proves necessary.
+`BridgeHandler`'s initial construction. The re-registration `switchBackend()`
+and the reconnect handler perform after a backend swap remains synchronous;
+giving that an async path too is a larger change to `Bridge`'s locking model,
+left for a future issue if it proves necessary.
 
 `QtWebSocketBackend` is the one backend that currently overrides this, gated
 by `QtWebSocketBackendConfig::asyncRegistrationEnabled` (default `false` — see
@@ -209,9 +208,44 @@ queue is drained by `cancelPending`, which still invokes each queued request's
 `onError` exactly once, exactly like an in-flight (already-sent) registration
 would. See `QtWebSocketBackend`'s own section below.
 
+### Shared/keyed registration — `registerModelSharedAsync` / `attachModelAsync`
+
+`registerModelShared` and `attachModel` have the same problem for the same
+reason, reached by a different route: a keyed screen's first payload-keyed
+`execute()` attaches, and on a wire backend that attach blocks in `sendSync`,
+which aborts a WASM main thread. Both therefore have an optional non-blocking
+counterpart with `registerModelAsync`'s exact shape and contract —
+`false` by default, `true` plus exactly one later callback when a backend opts
+in:
+
+| Virtual | Synchronous counterpart | Preferred by |
+|---|---|---|
+| `registerModelSharedAsync(typeId, factory, identity, onRegistered, onError)` | `registerModelShared` | `Bridge::ensureBoundAsync` |
+| `attachModelAsync(typeId, factory, identity, current, onRegistered, onError)` | `attachModel` | `Bridge::attachHandlerAsync` |
+
+`QtWebSocketBackend` implements both behind the same
+`asyncRegistrationEnabled` flag, reusing the same `callId`-keyed pending map
+(reply routing is verb-agnostic — a `register`, a shared `register`, and an
+`attach` all reply the same way). An empty `identity.primary` degrades to
+`registerModelAsync`, mirroring the synchronous methods' degrade-to-private
+behaviour.
+
+Unlike the synchronous `attachModel`'s default implementation,
+`attachModelAsync` does **not** release `current` itself: an overriding backend
+is behind a wire protocol whose single `attach` request re-points server-side,
+leaving nothing to deregister — the same division of responsibility
+`QtWebSocketBackend::attachModel` already follows for a non-empty primary.
+
+`BridgeHandler::execute()`'s public signature and contract are unchanged; see
+[shared_instances.md](shared_instances.md), "Async register-or-attach and
+attach", for the caller-visible story and the `_attachMtx` locking rule these
+two `Bridge` methods must obey.
+
 ## Error types
 
-Four exception types are thrown into in-flight `Completion`s:
+Five exception types are thrown into in-flight `Completion`s. The first four are
+raised by a backend; `ClientTimeoutError` is raised by `Bridge` itself, but is
+declared alongside them so callers catch every dispatch failure from one header:
 
 | Type | Trigger | Purpose |
 |---|---|---|
@@ -219,6 +253,7 @@ Four exception types are thrown into in-flight `Completion`s:
 | `BridgeDestroyedError` | `Bridge` is destroyed | In-flight completions are cancelled because the bridge is gone. |
 | `DisconnectedError` | Transport drops mid-call (e.g. WebSocket disconnect) | Framework retries the call on reconnect if the backend supports it; otherwise the GUI's `.onError(...)` runs. |
 | `TimeoutError` | Server-side `LimitPolicy::executeTimeout` elapses | Distinguishes a bounded-wait timeout from any other `err` reply, so callers can retry or surface a specific "request timed out" message. |
+| `ClientTimeoutError` | Client-side `Bridge::setExecuteDeadline` elapses with *no* reply of any kind | Bounds the caller's wait when nothing comes back at all (a dropped frame, a hung server). Unlike `TimeoutError` it carries no evidence the server ever saw the request — see [`completion.md`](completion.md), "Client-side execute deadline". |
 
 ## `LocalBackend` — in-process execution
 
@@ -430,11 +465,15 @@ A server-side execute timeout surfaces to a caller as `morph::backend::TimeoutEr
 than a generic `std::runtime_error`, on both `SimulatedRemoteBackend` and
 `QtWebSocketBackend`.
 
-The background timer that enforces `executeTimeout` is `detail::TimeoutScheduler` —
-a single dedicated thread per `RemoteServer` (mirroring `NetworkMonitor`'s
+The background timer that enforces `executeTimeout` is
+`morph::async::detail::TimeoutScheduler` (`include/morph/core/timeout_scheduler.hpp`)
+— a single dedicated thread per `RemoteServer` (mirroring `NetworkMonitor`'s
 condition-variable wait loop), lazily started by `setLimitPolicy` the first time
 `executeTimeout` is configured, so a server that never uses the feature pays no
-extra thread.
+extra thread. The class lives in `morph::async::detail` rather than
+`morph::backend::detail` because `Bridge` uses the same primitive for the
+*client*-side `setExecuteDeadline` — see [`completion.md`](completion.md),
+"Client-side execute deadline".
 
 ### Connection scopes
 
@@ -1202,6 +1241,7 @@ thread to marshal onto.
 | `BridgeDestroyedError` | `std::runtime_error` | `"bridge destroyed before completion resolved"` |
 | `DisconnectedError` | `std::runtime_error` | `"transport disconnected before completion resolved"` |
 | `TimeoutError` | `std::runtime_error` | `"execute timed out on the server"` |
+| `ClientTimeoutError` | `std::runtime_error` | `"execute timed out waiting for any reply"` |
 
 ### `LocalBackend`
 
@@ -1361,7 +1401,7 @@ not a behavior change to the existing loopback-only default.
 | Reconnect handler skipped on first connect | Fired only when `_everConnected` was already true | The initial handler registration is driven by `BridgeHandler` constructors; firing the reconnect handler on the very first connect would double-register. |
 | No reconnect for never-connected sockets | `disconnected` schedules a retry only if `_everConnected` | A socket that never reached the server (bad URL / refused) fails fast via `waitForConnected` returning false, rather than backing off forever. |
 | Server reply marshalled to the Qt thread | `QMetaObject::invokeMethod(..., QueuedConnection)` with a `QPointer` | `RemoteServer::handle` produces the reply on a pool thread, but `QWebSocket::sendTextMessage` must run on the Qt thread; the weak `QPointer` drops the reply cleanly if the client disconnected meanwhile. |
-| `executeTimeout` implementation | A dedicated, lazily-started background thread (`detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
+| `executeTimeout` implementation | A dedicated, lazily-started background thread (`morph::async::detail::TimeoutScheduler`) per `RemoteServer`, not a per-call thread | `IExecutor` has no delayed-post primitive and `RemoteServer` is transport-agnostic (cannot assume Qt's `QTimer`). One thread amortizes across every timed call; it is only started the first time `executeTimeout` is actually configured, so a server that never uses the feature pays no cost. |
 | `messagesPerSecond` algorithm | Per-connection token bucket, capacity = rate, continuous refill, drop (not close) on empty | Simplest correct rate limiter; allows a legitimate one-second burst without penalizing an otherwise well-behaved client. Dropping (vs. closing) keeps a transient burst from taking down the connection — pair with `LimitPolicy::executeTimeout` if bounded caller-side waiting is also needed. |
 | Graceful shutdown drains via a shared in-flight counter, not a new `IExecutor::waitIdle` | `RemoteServer` counts its own accepted-but-unreplied executes rather than adding a general drain API to `IExecutor`/`StrandExecutor` | The drain condition morph can define precisely — "every accepted execute has replied" — lives at the server layer, where the work is counted; executor.md's "no graceful drain / `waitIdle`" limitation is deliberately left as-is for raw executor users. |
 | Backend-change-awareness captured at registration | `IModelHolder::isBackendChangeAware()` (compile-time answer per model type) + `LocalBackend::_changeAware`, maintained by `registerModel`/`deregisterModel` | Replaces a per-`notifyBackendChanged`-call `dynamic_cast` sweep over every live model with a virtual query done once at registration, and a lookup restricted to the models that actually opted in. No RTTI dependency; cost is O(change-aware models) instead of O(all models) under `_regMtx`. No change to the model-facing contract (`IBackendChangedSink`, `BackendChangedMixin`) or to when/where `onBackendChanged()` runs. |

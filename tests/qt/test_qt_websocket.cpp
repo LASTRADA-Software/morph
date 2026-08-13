@@ -287,6 +287,156 @@ TEST_CASE(
     CHECK(binding->currentId.load() == 0U);  // onRegistered never fired; still safely unbound
 }
 
+// ── The shared/keyed async wire methods ──────────────────────────────────────
+// Same opt-in gate and same callId-keyed reply routing as registerModelAsync
+// above; these drive them against a real RemoteServer, end to end.
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync registers-or-attaches without blocking",
+          "[qt][ws][issue26][shared-instances]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    std::atomic<uint64_t> registered{0};
+    std::string failure;
+    REQUIRE(backend.registerModelSharedAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
+        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+
+    // Returned true without waiting for the reply: nothing has arrived yet.
+    CHECK(registered.load() == 0U);
+
+    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    REQUIRE(registered.load() != 0U);
+
+    // It really went out as a *shared* register, not a private one: the key is
+    // now in the server's instance directory.
+    auto const keys = backend.listInstances("WsEchoModel");
+    REQUIRE(keys.size() == 1);
+    CHECK(keys.front() == "acct-1");
+
+    // A second shared register for the same key joins the same instance rather
+    // than creating a second one -- the register-or-attach half of the name.
+    std::atomic<uint64_t> second{0};
+    REQUIRE(backend.registerModelSharedAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
+        [&](morph::exec::detail::ModelId mid) { second.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+    pumpUntil([&] { return second.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    CHECK(second.load() == registered.load());
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync joins the existing shared instance without blocking",
+          "[qt][ws][issue26][shared-instances]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    // Seed the directory synchronously, so the async attach below has something
+    // to join and its reply can be compared against a known id.
+    auto const seeded =
+        backend.registerModelShared("WsEchoModel", nullptr, {.contextKey = "acct-7", .primary = "acct-7"});
+    REQUIRE(seeded.v != 0U);
+
+    std::atomic<uint64_t> attached{0};
+    std::string failure;
+    REQUIRE(backend.attachModelAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-7", .primary = "acct-7"}, morph::exec::detail::ModelId{0},
+        [&](morph::exec::detail::ModelId mid) { attached.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+    CHECK(attached.load() == 0U);  // the reply has not arrived yet
+
+    pumpUntil([&] { return attached.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    CHECK(attached.load() == seeded.v);
+
+    // Re-pointing to a different key gets a different instance, still async.
+    std::atomic<uint64_t> repointed{0};
+    REQUIRE(backend.attachModelAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-8", .primary = "acct-8"},
+        morph::exec::detail::ModelId{attached.load()},
+        [&](morph::exec::detail::ModelId mid) { repointed.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+    pumpUntil([&] { return repointed.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    REQUIRE(repointed.load() != 0U);
+    CHECK(repointed.load() != seeded.v);
+}
+
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST_CASE("morph::qt::QtWebSocketBackend: attachModelAsync with an empty primary degrades to a private registration",
+          "[qt][ws][issue26][shared-instances]") {
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE(backend.waitForConnected());
+
+    std::atomic<uint64_t> registered{0};
+    std::string failure;
+    REQUIRE(backend.attachModelAsync(
+        "WsEchoModel", nullptr, {.contextKey = "ctx", .primary = ""}, morph::exec::detail::ModelId{0},
+        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+
+    pumpUntil([&] { return registered.load() != 0U || !failure.empty(); });
+    CHECK(failure.empty());
+    REQUIRE(registered.load() != 0U);
+    // Private, exactly like the synchronous attachModel's own empty-primary
+    // branch: nothing was filed in the shared directory.
+    CHECK(backend.listInstances("WsEchoModel").empty());
+}
+
+TEST_CASE("morph::qt::QtWebSocketBackend: registerModelSharedAsync on a never-connected socket reports onError",
+          "[qt][ws][issue26][shared-instances][disconnect]") {
+    ensureApp();
+    // Port 1 is reserved and never listening — the socket never reaches Connected.
+    QUrl url{QString("ws://127.0.0.1:1")};
+    morph::qt::QtWebSocketBackend backend{url, morph::model::detail::defaultDispatcher(),
+                                          morph::model::detail::defaultRegistry(), std::nullopt,
+                                          morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true}};
+    REQUIRE_FALSE(backend.waitForConnected(200));
+
+    std::string failure;
+    std::atomic<uint64_t> registered{0};
+    // Accepts the request (returns true) and reports the failure through
+    // onError rather than blocking or throwing. Bridge::ensureBoundAsync
+    // tolerates this firing inline, from inside the call itself.
+    REQUIRE(backend.registerModelSharedAsync(
+        "WsEchoModel", nullptr, {.contextKey = "acct-1", .primary = "acct-1"},
+        [&](morph::exec::detail::ModelId mid) { registered.store(mid.v); },
+        [&](const std::string& message) { failure = message; }));
+    CHECK(registered.load() == 0U);
+    CHECK(failure == "disconnected");
+}
+
 TEST_CASE(
     "morph::qt::QtWebSocketBackend: registerModelAsync called before the socket connects queues and retries once "
     "connected fires",

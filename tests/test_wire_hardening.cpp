@@ -35,6 +35,17 @@
 //   for a different reason now (see Bug E): an err message is log-bound text,
 //   and a raw 0x1B in it would carry an ANSI escape into the reader's terminal.
 //
+// Bug G (control bytes in the action/result codec): the Bug E gap, one layer
+//   down. An execute envelope's `body` is not written by `wire::encode` at all
+//   — it is produced by `ActionTraits<A>::toJson` / `resultToJson`
+//   (registry.hpp's BRIDGE_REGISTER_ACTION macro), which wrote with plain
+//   `glz::write_json` and so reproduced Bug E exactly for every string field
+//   of every action and result. Action bodies are pure caller data (a paste's
+//   content, a chat message, a filename), so this is at least as exposed as
+//   the envelope was. Found by pastebin (ladder rung 1) replaying
+//   tests/fuzz/findings/ as paste content; fixed with the same instrument,
+//   `model::detail::EscapingWriteOpts`.
+//
 // Bug E (control bytes in the remaining string fields): the same writer gap
 //   applies to every `Envelope` string, not just `message` — `body`,
 //   `modelType`, `actionType`, `contextKey`, `typeId`, and the session's
@@ -50,6 +61,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
 #include <memory>
+#include <morph/core/bridge.hpp>
 #include <morph/core/wire.hpp>
 #include <string>
 #include <string_view>
@@ -288,4 +300,71 @@ TEST_CASE("wire::detail::peekCallId cannot be spoofed from an earlier string fie
     env.kind = R"(x","callId":424242,"z":")";
     env.callId = 5U;
     CHECK(morph::wire::detail::peekCallId(encode(env)) == 5U);
+}
+
+// ── Bug G: the same writer gap, one layer down, in the action/result codec ───
+//
+// `wire::encode` escapes control bytes in the *envelope*, but an execute
+// envelope's `body` is produced separately, by `ActionTraits<A>::toJson` /
+// `resultToJson` (registry.hpp's BRIDGE_REGISTER_ACTION macro). Those wrote
+// with plain `glz::write_json` and so reproduced Bug E exactly: an action
+// carrying a raw control byte in any of its string fields serialized to a body
+// its own peer's `fromJson` then rejected — and, alongside an escaped
+// character, was silently rewritten into two 0x00 bytes. Action bodies are
+// pure caller data (a paste's content, a chat message, a filename), so this is
+// at least as exposed as the envelope was. Found by pastebin (ladder rung 1)
+// replaying tests/fuzz/findings/ as paste content; fixed with the same
+// instrument, `model::detail::EscapingWriteOpts`. See docs/spec/core/registry.md,
+// "Control bytes in action and result bodies".
+
+// Namespace scope, not anonymous: glaze's reflection needs external linkage on
+// the reflected type (see test_backend_rig.cpp's identical note).
+struct WireCtlAction {
+    std::string text;
+};
+struct WireCtlResult {
+    std::string text;
+};
+struct WireCtlModel {
+    WireCtlResult execute(WireCtlAction action) { return WireCtlResult{.text = action.text}; }
+};
+
+BRIDGE_REGISTER_MODEL(WireCtlModel, "WireCtlModel")
+BRIDGE_REGISTER_ACTION(WireCtlModel, WireCtlAction, "WireCtlAction")
+
+TEST_CASE("ActionTraits::toJson escapes control bytes so the action body re-decodes", "[wire][hardening]") {
+    const std::string payload = ctl();
+    const auto json = morph::model::ActionTraits<WireCtlAction>::toJson(WireCtlAction{.text = payload});
+    CHECK(morph::model::ActionTraits<WireCtlAction>::fromJson(json).text == payload);
+}
+
+TEST_CASE("ActionTraits::resultToJson escapes control bytes so the result body re-decodes",
+          "[wire][hardening]") {
+    const std::string payload = ctl();
+    const auto json = morph::model::ActionTraits<WireCtlAction>::resultToJson(WireCtlResult{.text = payload});
+    CHECK(morph::model::ActionTraits<WireCtlAction>::resultFromJson(json).text == payload);
+}
+
+TEST_CASE("ActionTraits preserves the whole control range byte-for-byte", "[wire][hardening]") {
+    std::string all;
+    for (int byte = 0x00; byte < 0x20; ++byte) {
+        all.push_back(static_cast<char>(byte));
+    }
+    const auto json = morph::model::ActionTraits<WireCtlAction>::toJson(WireCtlAction{.text = all});
+    const auto back = morph::model::ActionTraits<WireCtlAction>::fromJson(json);
+    CHECK(back.text == all);
+    CHECK(back.text.size() == 32U);
+}
+
+TEST_CASE("ActionTraits survives a control byte alongside an escaped character", "[wire][hardening]") {
+    // The corrupting half of the failure mode, not merely the invalid-output
+    // half — see the identical sweep for `encode` above. The value comparison,
+    // not the absence of a throw, is the assertion that matters.
+    for (std::size_t pad = 0; pad <= 40; ++pad) {
+        std::string payload = "\\" + std::string(pad, 'x');
+        payload.push_back(static_cast<char>(0x0B));
+        payload += "\"tail";
+        const auto json = morph::model::ActionTraits<WireCtlAction>::toJson(WireCtlAction{.text = payload});
+        CHECK(morph::model::ActionTraits<WireCtlAction>::fromJson(json).text == payload);
+    }
 }

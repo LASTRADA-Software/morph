@@ -1,3 +1,22 @@
+include(CheckCXXCompilerFlag)
+
+# Probed once per configure (CMake caches each check_cxx_compiler_flag() result
+# in CMakeCache.txt keyed by the result variable, regardless of how many
+# targets call apply_warnings()) rather than unconditionally listed below:
+# these three are recent enough additions to Clang's -Weverything set that
+# Emscripten's bundled clang (pinned to an older release than the Linux/
+# Windows Clang this project otherwise builds with — see
+# .github/workflows/wasm-ladder.yml's EMSDK_VERSION) rejects them outright
+# under -Werror with "unknown warning option", turning a *suppression* flag
+# into the very error it exists to silence. A version-number cutoff would be
+# equally correct but more fragile (would need updating every time either
+# toolchain's version changes); probing the actual compiler is the standard,
+# self-maintaining way to make -Weverything portable across Clang releases.
+check_cxx_compiler_flag(-Wno-nrvo MORPH_CLANG_HAS_WNO_NRVO)
+check_cxx_compiler_flag(-Wno-unsafe-buffer-usage-in-libc-call MORPH_CLANG_HAS_WNO_UNSAFE_BUFFER_USAGE_IN_LIBC_CALL)
+check_cxx_compiler_flag(-Wno-c2y-extensions MORPH_CLANG_HAS_WNO_C2Y_EXTENSIONS)
+check_cxx_compiler_flag(-Wno-missing-designated-field-initializers MORPH_CLANG_HAS_WNO_MISSING_DESIGNATED_FIELD_INITIALIZERS)
+
 function(apply_warnings target)
     target_compile_options(${target} PRIVATE
         # ── MSVC ──────────────────────────────────────────────────────────────
@@ -35,6 +54,14 @@ function(apply_warnings target)
         $<$<CXX_COMPILER_ID:GNU>:
             -Wall
             -Wextra
+            # GCC's -Wextra implies -Wmissing-field-initializers, which (unlike
+            # Clang's narrower -Wmissing-designated-field-initializers, already
+            # suppressed above for the identical reason) fires on every field a
+            # designated initializer leaves unset -- flagging the same
+            # deliberately-partial DTO/config-style construction
+            # (morph::session::Context{.principal = ...} and its many
+            # siblings) as a defect, one diagnostic per omitted field.
+            -Wno-missing-field-initializers
             -Wpedantic
             -Wshadow
             -Wnon-virtual-dtor
@@ -66,24 +93,51 @@ function(apply_warnings target)
             -Wno-pre-c++17-compat-pedantic
             -Wno-pre-c++20-compat
             -Wno-pre-c++20-compat-pedantic
+            # -Wc++20-compat is the sibling of -Wpre-c++20-compat for a
+            # narrower set of syntax (consteval, implicit `typename` in alias
+            # templates) that only some Clang builds separate out from the
+            # pre-c++20-compat umbrella above — same "we target C++23"
+            # rationale, added once the WASM leg's Emscripten-bundled clang
+            # (older than the Linux/Windows clang this project otherwise
+            # builds with) was the first to actually split it out and fire it
+            # on model_key.hpp/quantity.hpp/forms.hpp/bridge.hpp.
+            -Wno-c++20-compat
             # (b) Inherent to a header-only, templated library.
             -Wno-weak-vtables               # vtable emitted per TU for inline-virtual classes
             -Wno-ctad-maybe-unsupported     # CTAD on types without explicit deduction guides
             -Wno-padded                     # struct tail/inter-member padding
             -Wno-exit-time-destructors      # function-local statics with non-trivial dtors
             -Wno-global-constructors        # non-trivial namespace-scope initializers
+            # Emscripten's sysroot stdio.h defines `#define stderr (stderr)`
+            # (a legal, intentional self-referential object-like macro used
+            # to make `stderr` a valid preprocessor token while still
+            # resolving to the libc symbol) -- logger.hpp's
+            # std::println(stderr, ...) call trips -Wdisabled-macro-expansion
+            # on that expansion. Not fixable in logger.hpp itself: the macro
+            # is the *platform's*, not this codebase's, and every other
+            # target's libc either doesn't define stderr as a macro at all or
+            # doesn't self-reference it this way.
+            -Wno-disabled-macro-expansion
             # (c) Stylistic / opinionated noise, not defects.
             -Wno-missing-noreturn
-            -Wno-nrvo                       # not eliding a trivial-type copy on return
+            # Deliberately-partial designated initialization of DTO/config-
+            # style aggregates (morph::session::Context{.principal = ...}
+            # and its many siblings across the ladder rungs) is this
+            # codebase's normal way to construct one with everything else
+            # left at its member default -- not an oversight this warning
+            # should flag. Probed like the other recent-Clang-only flags
+            # above: not every Clang release has this diagnostic yet.
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_MISSING_DESIGNATED_FIELD_INITIALIZERS}>:-Wno-missing-designated-field-initializers>
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_NRVO}>:-Wno-nrvo>  # not eliding a trivial-type copy on return
             -Wno-shadow-uncaptured-local    # lambda param shadowing an uncaptured local
             -Wno-documentation-unknown-command
             -Wno-unsafe-buffer-usage        # flags all pointer arithmetic; needs a hardened API
-            -Wno-unsafe-buffer-usage-in-libc-call
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_UNSAFE_BUFFER_USAGE_IN_LIBC_CALL}>:-Wno-unsafe-buffer-usage-in-libc-call>
             -Wno-float-equal                # exact == is intentional in the value/rational tests
             # (d) Conflicts with a warning we deliberately keep.
             -Wno-covered-switch-default     # collides with -Wswitch-enum + -Wswitch-default
             # (e) Third-party test macros.
-            -Wno-c2y-extensions             # Catch2 TEST_CASE expands __COUNTER__
+            $<$<BOOL:${MORPH_CLANG_HAS_WNO_C2Y_EXTENSIONS}>:-Wno-c2y-extensions>  # Catch2 TEST_CASE expands __COUNTER__
             -Wno-unused-member-function     # Catch2/test-fixture helper members
             -Wno-unneeded-member-function
             # (f) Clang 22 (Homebrew, macOS libc++) added thread-safety-analysis

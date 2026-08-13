@@ -131,10 +131,12 @@ struct IBackend {
     ///
     /// @note Scope: only `Bridge::registerHandler()`'s plain (non-shared)
     ///       registration path — a `BridgeHandler`'s initial construction —
-    ///       uses this. Shared/keyed registration (`registerModelShared`,
-    ///       `attachModel`) and the re-registration `switchBackend()`/the
-    ///       reconnect handler perform after a backend swap remain
-    ///       synchronous; see docs/spec/core/backend.md.
+    ///       uses this. Shared/keyed registration has its own opt-in async
+    ///       pair, `registerModelSharedAsync`/`attachModelAsync` below,
+    ///       preferred by `Bridge::ensureBoundAsync`/`attachHandlerAsync`.
+    ///       The re-registration `switchBackend()`/the reconnect handler
+    ///       perform after a backend swap remains synchronous; see
+    ///       docs/spec/core/backend.md.
     /// @param typeId       String type-id of the model to instantiate.
     /// @param factory      Callable that constructs the `IModelHolder` (local path only).
     /// @param contextKey   Stable identity of the new instance; empty if none.
@@ -154,6 +156,46 @@ struct IBackend {
         (void)onError;
         return false;
     }
+
+    /// @brief Optional non-blocking counterpart to `registerModelShared`.
+    ///
+    /// Same rationale and shape as `registerModelAsync` (see its doc comment
+    /// immediately above): `registerModelShared`'s synchronous default
+    /// implementations block the calling thread until a reply arrives, which
+    /// aborts a WASM main thread the moment a shared/keyed handler makes its
+    /// first attach. A backend that overrides this sends the request and
+    /// returns `true` immediately, then invokes exactly one of
+    /// @p onRegistered / @p onError once the reply arrives, on the backend's
+    /// own thread (unless the backend is destroyed first, in which case
+    /// neither fires).
+    ///
+    /// The default implementation offers no async path and returns `false`
+    /// without calling either callback — the caller (`Bridge::ensureBoundAsync`)
+    /// falls back to the synchronous `registerModelShared` in that case,
+    /// matching every caller's behavior before this method existed.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @param onRegistered Invoked with the assigned/attached `ModelId` on success.
+    /// @param onError    Invoked with a diagnostic message on failure.
+    /// @return `true` if this backend accepted the request and will invoke
+    ///         exactly one callback later; `false` if it has no async path.
+    // NOLINTBEGIN(performance-unnecessary-value-param) — by-value matches
+    // registerModelAsync's signature exactly; overriding backends move the
+    // callbacks into their pending-reply map.
+    virtual bool registerModelSharedAsync(
+        const std::string& typeId, std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+        InstanceIdentity identity, std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+        std::function<void(const std::string&)> onError) {
+        (void)typeId;
+        (void)factory;
+        (void)identity;
+        (void)onRegistered;
+        (void)onError;
+        return false;
+    }
+    // NOLINTEND(performance-unnecessary-value-param)
 
     /// @brief Registers or attaches to the shared instance holding @p primary.
     ///
@@ -217,6 +259,44 @@ struct IBackend {
         }
         return next;
     }
+
+    /// @brief Optional non-blocking counterpart to `attachModel`.
+    ///
+    /// Same rationale and shape as `registerModelSharedAsync` immediately
+    /// above (itself mirroring `registerModelAsync`) — see that doc comment
+    /// for the full opt-in/fallback contract.
+    ///
+    /// @note Unlike the synchronous `attachModel` default above, this method
+    ///       does *not* release @p current itself: an overriding backend is
+    ///       behind a wire protocol, whose single `attach` request re-points
+    ///       server-side and therefore leaves nothing to deregister — exactly
+    ///       the division of responsibility `QtWebSocketBackend::attachModel`
+    ///       already follows for a non-empty `identity.primary`. @p current is
+    ///       passed so that request can name what it is re-pointing from.
+    ///
+    /// @param typeId     String type-id of the model.
+    /// @param factory    Callable that constructs the `IModelHolder` (local path only).
+    /// @param identity   Entity key for the action log plus the directory primary key.
+    /// @param current    Instance currently held, or `ModelId{0}` if none.
+    /// @param onRegistered Invoked with the `ModelId` now attached to, on success.
+    /// @param onError    Invoked with a diagnostic message on failure.
+    /// @return `true` if this backend accepted the request and will invoke
+    ///         exactly one callback later; `false` if it has no async path.
+    // NOLINTBEGIN(performance-unnecessary-value-param) — see registerModelSharedAsync above.
+    virtual bool attachModelAsync(const std::string& typeId,
+                                  std::function<std::unique_ptr<::morph::model::detail::IModelHolder>()> factory,
+                                  InstanceIdentity identity, ::morph::exec::detail::ModelId current,
+                                  std::function<void(::morph::exec::detail::ModelId)> onRegistered,
+                                  std::function<void(const std::string&)> onError) {
+        (void)typeId;
+        (void)factory;
+        (void)identity;
+        (void)current;
+        (void)onRegistered;
+        (void)onError;
+        return false;
+    }
+    // NOLINTEND(performance-unnecessary-value-param)
 
     /// @brief Enters an already-live instance into the directory under @p primary.
     ///
@@ -457,6 +537,22 @@ struct DisconnectedError : std::runtime_error {
 struct TimeoutError : std::runtime_error {
     /// @brief Constructs the error with a canned diagnostic message.
     TimeoutError() : std::runtime_error{"execute timed out on the server"} {}
+};
+
+/// @brief Thrown to a pending `Completion` when `Bridge::setExecuteDeadline`'s
+///        duration elapses before any reply arrives — a frame silently
+///        dropped by `QtWebSocketServerConfig::messagesPerSecond`, or a
+///        genuinely hung server, either way.
+///
+/// Distinct from `TimeoutError`: that type means the *server* explicitly
+/// replied that it hit `LimitPolicy::executeTimeout` while the action was
+/// still running. `ClientTimeoutError` means the client gave up waiting —
+/// no reply of any kind arrived, so whether the server ever received the
+/// request, is still processing it, or replied to a connection that had
+/// already dropped is unknown. See `docs/spec/core/completion.md`.
+struct ClientTimeoutError : std::runtime_error {
+    /// @brief Constructs the error with a canned diagnostic message.
+    ClientTimeoutError() : std::runtime_error{"execute timed out waiting for any reply"} {}
 };
 
 /// @brief In-process backend that executes model actions on a thread pool strand.
