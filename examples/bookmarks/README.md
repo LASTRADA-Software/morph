@@ -140,8 +140,11 @@ Actions, in build order:
   poll: this rung's DoD includes a **minimal `GetChangesSince` poll action**
   as the event-pattern preview (rung 3 formalizes the full event-queue
   design) — there is no existing polling/event-sequencing precedent
-  anywhere in the framework to reuse; this rung builds it from a bare
-  `Timestamp`-cursor query, deliberately minimal.
+  anywhere in the framework to reuse; this rung builds it from a
+  `ChangesCursor` query (a millisecond timestamp paired with a same-instant
+  id tie-break, not a bare `Timestamp` — issue #43's fix for the boundary
+  case a timestamp-only cursor can silently drop), deliberately minimal
+  otherwise.
 - **Journal**: tag renames and bulk edits give the first multi-row entries.
   Two separate decisions, both resolved:
   (a) **store/log atomicity — split by blast radius.** `BulkEdit` and tag

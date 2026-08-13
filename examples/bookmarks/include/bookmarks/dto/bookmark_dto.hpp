@@ -169,7 +169,7 @@ struct ListBookmarksResult {
 ///        preview): every bookmark this owner touched (created, edited,
 ///        archived/unarchived, or metadata-recorded) since @p since.
 struct GetChangesSince {
-    ::morph::time::Timestamp since;  // empty = every bookmark ever (first poll)
+    ChangesCursor since;  // empty = every bookmark ever (first poll)
 
     static constexpr std::array<std::string_view, 1> optionalFields{"since"};
 
@@ -178,10 +178,14 @@ struct GetChangesSince {
 
 struct GetChangesSinceResult {
     std::vector<BookmarkSummary> changed;
-    /// @brief The instant this query ran, captured *before* the query
+    /// @brief The boundary this poll ran to, captured *before* the query
     ///        itself (`BookmarkModel::execute`'s own doc comment, Task 7,
     ///        has the full argument for why) — the next poll's `since`.
-    ::morph::time::Timestamp asOf;
+    ///        `ChangesCursor` (issue #43), not a bare `Timestamp`: a
+    ///        millisecond-resolution timestamp alone cannot distinguish a
+    ///        write that lands in the exact same millisecond as this
+    ///        instant from one that happened strictly before it.
+    ChangesCursor asOf;
 };
 
 /// @brief Internal-only: the metadata-fetch worker's write-back

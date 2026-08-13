@@ -91,14 +91,17 @@ runs on.
    single-row action in rung 2 used) but is orthogonal to undo.
 4. **`GetEventsSince` is genuinely new work, not a `GetChangesSince` port.**
    Rung 2's `GetChangesSince` is a timestamp-diffed-current-state view
-   (`WHERE updatedAtMs > since`, returning full current rows) — not the
-   Zulip append-only event-log pattern this rung's own "morph subsystems
-   exercised" section correctly calls for. **Resolved shape**: a genuine
-   `poll_events` table (sequence id + payload per mutation), with a
-   **table-wide monotonic autoincrement sequence id, not a timestamp** —
-   rung 2's `BulkEdit`/`MergeTags` idempotency-key fix rounds (Tasks 8/9)
-   both hit millisecond-collision bugs from timestamp-keyed uniqueness;
-   an autoincrement primary key sidesteps that class of bug entirely, and
+   (`WHERE updatedAtMs > since OR (updatedAtMs = since AND id > lastId)` —
+   the `id` tie-break is issue #43's fix for the millisecond-boundary case a
+   bare `updatedAtMs > since` can silently drop; still a current-state view,
+   returning full current rows, not a log) — not the Zulip append-only
+   event-log pattern this rung's own "morph subsystems exercised" section
+   correctly calls for. **Resolved shape**: a genuine `poll_events` table
+   (sequence id + payload per mutation), with a **table-wide monotonic
+   autoincrement sequence id, not a timestamp** — rung 2's
+   `BulkEdit`/`MergeTags` idempotency-key fix rounds (Tasks 8/9) both hit
+   millisecond-collision bugs from timestamp-keyed uniqueness; an
+   autoincrement primary key sidesteps that class of bug entirely, and
    the README's own requirement ("a client holding `lastEventId=42`... sees
    nothing new forever, silently") is exactly what a durable, never-reused
    sequence id guarantees. **The "and/or epoch token" alternative the

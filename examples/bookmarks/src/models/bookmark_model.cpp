@@ -412,16 +412,45 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
     // why a later capture would let a racing write be lost across two
     // consecutive polls instead of merely duplicated across them.
     const auto asOf = nowMs();
-    const std::int64_t since = action.since.hasValue() ? (*action.since).value.time_since_epoch().count() : 0;
+    const std::int64_t sinceMs =
+        action.since.timestampMs.hasValue() ? (*action.since.timestampMs).value.time_since_epoch().count() : 0;
+    const std::uint64_t sinceLastId = static_cast<std::uint64_t>(action.since.lastId.value_or(0));
 
+    // See ChangesCursor's doc comment (issue #43): a strict `updatedAtMs >
+    // sinceMs` alone drops a write landing in the exact same millisecond as
+    // `sinceMs`. The id tie-break recovers it without over-including: any
+    // row strictly after sinceMs qualifies outright; a row *at* sinceMs
+    // qualifies only if its id is past the last one already delivered at
+    // that same instant.
     auto rows = mapper()
                     .Query<db::BookmarkRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::ownerPrincipal>, "=", owner)
-                    .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, ">", since)
+                    .Where([&](auto& q) {
+                        return q.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, ">", sinceMs)
+                            .OrWhere([&](auto& q2) {
+                                return q2.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>, "=",
+                                                sinceMs)
+                                    .Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>, ">", sinceLastId);
+                            });
+                    })
+                    .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::updatedAtMs>)
+                    .OrderBy(::Lightweight::FieldNameOf<&db::BookmarkRecord::id>)
                     .All();
 
     GetChangesSinceResult result;
-    result.asOf = fromEpochMs(asOf);
+    result.asOf.timestampMs = fromEpochMs(asOf);
+    // The next cursor's tie-break is the highest id delivered *at exactly
+    // asOf* -- a row strictly before asOf needs no tie-break (already
+    // excluded outright by the next poll's `>` on its own), and no row can
+    // exist strictly after asOf, since asOf was captured before this query
+    // ran. Rows are ordered (updatedAtMs, id) ascending above, so the last
+    // row sharing asOf's timestamp, if any, is found from the back.
+    for (auto it = rows.rbegin(); it != rows.rend(); ++it) {
+        if (static_cast<std::int64_t>(it->updatedAtMs.Value()) == asOf) {
+            result.asOf.lastId = static_cast<std::int64_t>(it->id.Value());
+            break;
+        }
+    }
     for (const auto& rec : rows) {
         BookmarkSummary summary;
         summary.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};

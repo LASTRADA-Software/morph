@@ -248,6 +248,60 @@ TEST_CASE("GetChangesSince returns only bookmarks touched after the given instan
     (void) id1;
 }
 
+TEST_CASE("GetChangesSince does not miss a write landing in the same millisecond as the cursor",
+          "[bookmarks][model]") {
+    // Regression test for issue #43: a cursor that compares only on
+    // updated_at_ms with strict `>` can silently drop a write whose
+    // timestamp equals the previous poll's asOf (same millisecond -- a
+    // plausible timing window on a fast machine or a loaded CI runner, not
+    // a contrived one). Frozen to a single instant, like the analogous
+    // same-millisecond BulkEdit regression test above, so the race is
+    // deterministic rather than relying on incidental timing.
+    DbFixture fixture;
+    bookmarks::BookmarkModel model;
+    const ScopedPrincipal alice{"alice"};
+
+    const auto frozenAt = *morph::ladder::now();
+    const morph::ladder::ScopedClockOverride clock{frozenAt};
+
+    // First poll: nothing exists yet. Its asOf is frozenAt with no
+    // tie-break id (nothing at that instant to break a tie against).
+    const auto cursor = model.execute(bookmarks::GetChangesSince{}).asOf;
+
+    // A write lands in the *same* frozen millisecond as the cursor just
+    // captured -- still under the same ScopedClockOverride, so
+    // updated_at_ms for this row is bit-for-bit equal to cursor's instant.
+    const auto id = model.execute(makeCreate("https://same-ms.example")).id;
+
+    // The strict `>` bug would exclude this row: updated_at_ms == since,
+    // not >. The fix must still return it via the id tie-break.
+    const auto changes = model.execute(bookmarks::GetChangesSince{.since = cursor});
+    REQUIRE(changes.changed.size() == 1);
+    CHECK(*changes.changed.front().id == *id);
+}
+
+TEST_CASE("GetChangesSince's same-millisecond tie-break never re-delivers an already-seen write",
+          "[bookmarks][model]") {
+    // Companion to the test above: the id tie-break must be a strict `>`
+    // on id, not `>=` -- otherwise the write that established the cursor
+    // would be re-delivered forever on every subsequent poll at the same
+    // frozen instant.
+    DbFixture fixture;
+    bookmarks::BookmarkModel model;
+    const ScopedPrincipal alice{"alice"};
+
+    const auto frozenAt = *morph::ladder::now();
+    const morph::ladder::ScopedClockOverride clock{frozenAt};
+
+    (void) model.execute(makeCreate("https://first.example"));
+    const auto cursor = model.execute(bookmarks::GetChangesSince{}).asOf;
+
+    // No further writes -- polling again with the cursor that already
+    // covers the one write above must come back empty.
+    const auto changes = model.execute(bookmarks::GetChangesSince{.since = cursor});
+    CHECK(changes.changed.empty());
+}
+
 TEST_CASE("BulkEdit archives every listed bookmark and adds/removes tags atomically",
           "[bookmarks][model]") {
     DbFixture fixture;
