@@ -131,6 +131,27 @@ static int waitInt(auto completion) {
     return result.load();
 }
 
+// ── Helper: poll until onBackendChanged has actually run ─────────────────────
+//
+// switchBackend() dispatches the new model's construction and its
+// onBackendChanged() call (which drains the offline queue) onto the new
+// backend's own thread pool, asynchronously -- there is no signal the caller
+// can block on directly. A fixed sleep_for() guessing "surely long enough"
+// is exactly the failure mode this helper replaces: it polls the model's own
+// notifyCount via OrderQueryAction (read-only, safe to call repeatedly)
+// until it reaches 1, the real signal that onBackendChanged has completed
+// -- and therefore that the queue drain it performs has too. Bounded, not
+// unbounded: returns false (rather than hanging) if the count never reaches 1.
+static bool waitForBackendChanged(morph::bridge::BridgeHandler<OrderModel>& handler) {
+    for (int i = 0; i < 200; ++i) {
+        if (waitInt(handler.execute(OrderQueryAction{})) >= 1) {
+            return true;
+        }
+        std::this_thread::sleep_for(10ms);
+    }
+    return false;
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBackend", "[conflict]") {
@@ -151,7 +172,7 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    std::this_thread::sleep_for(80ms);  // let notifyBackendChanged complete
+    REQUIRE(waitForBackendChanged(handler));
 
     // All items removed from queue after clean replay.
     REQUIRE(queue.drain().empty());
@@ -178,7 +199,7 @@ TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns 
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    std::this_thread::sleep_for(80ms);
+    REQUIRE(waitForBackendChanged(handler));
 
     // All three items removed regardless of outcome (discard also calls markDone).
     REQUIRE(queue.drain().empty());
@@ -202,7 +223,7 @@ TEST_CASE("ConflictResolution: conflicting items merged  -  resolver returns non
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    std::this_thread::sleep_for(80ms);
+    REQUIRE(waitForBackendChanged(handler));
 
     // All three items processed and removed.
     REQUIRE(queue.drain().empty());
@@ -228,18 +249,16 @@ TEST_CASE("ConflictResolution: framework fires onBackendChanged exactly once per
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     // Switch once  -  new model instance created, notifyCount becomes 1.
+    // waitInt's own poll loop is the wait here: no separate fixed sleep needed.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    std::this_thread::sleep_for(80ms);
     REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
 
     // Switch again  -  another fresh instance, again notifyCount == 1.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool3));
-    std::this_thread::sleep_for(80ms);
     REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
 
     // Third switch.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool4));
-    std::this_thread::sleep_for(80ms);
     REQUIRE(waitInt(handler.execute(OrderQueryAction{})) == 1);
 }
 
@@ -277,7 +296,7 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
 
     // Simulate reconnection  -  switch to remote backend.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
-    std::this_thread::sleep_for(80ms);
+    REQUIRE(waitForBackendChanged(handler));
 
     // Queue fully drained: 2 clean replays + 1 merge = 3 markDone calls.
     REQUIRE(queue.drain().empty());
