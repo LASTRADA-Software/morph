@@ -241,6 +241,17 @@ leaving nothing to deregister — the same division of responsibility
 attach", for the caller-visible story and the `_attachMtx` locking rule these
 two `Bridge` methods must obey.
 
+A backend may invoke either callback **inline**, from inside the dispatch call
+itself — `QtWebSocketBackend`'s `!_connected` branch does exactly that, and
+this pair's contract does not forbid it on the success path either.
+`Bridge::attachHandlerAsync`/`ensureBoundAsync` handle that case explicitly
+(they defer the outcome out of the dispatch frame rather than acting on it
+under `_attachMtx`), so an inline completion is legal, not merely tolerated.
+
+`assignPrimary` — the *promote* half of a result-keyed action — has **no**
+async counterpart and is not covered here: it is still synchronous on every
+backend, so a result-keyed creating action still blocks at that step.
+
 ## Error types
 
 Five exception types are thrown into in-flight `Completion`s. The first four are

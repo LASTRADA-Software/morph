@@ -1,0 +1,149 @@
+name: WASM ladder gate
+
+# Compile gate for the application ladder's WebAssembly clients — the one
+# examples/TESTING.md's CI tiering promises ("the WASM compile gate for the
+# affected rungs") and the only thing in this repository that can actually
+# verify them: no Emscripten toolchain was available where rung 0's WASM-remote
+# spike (examples/common/wasm_spike) or rung 1's WASM client
+# (examples/pastebin/gui_wasm) were authored, so both shipped structurally
+# complete and never compiled. Until this job runs green, treat every WASM
+# target here as unverified.
+#
+# Deliberately separate from wasm-demo.yml (bank's WASM GUI): different sources,
+# different path filter, and nothing here is deployed anywhere — this builds and
+# stops. Single-threaded Qt-for-WASM, same as that workflow.
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'examples/common/**'
+      - 'examples/pastebin/**'
+      - 'examples/bookmarks/**'
+      - 'examples/polls/**'
+      - 'examples/kanban/**'
+      - 'examples/CMakeLists.txt'
+      - 'cmake/**'
+      - 'include/morph/**'
+      - 'src/qt/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/wasm-ladder.yml'
+  pull_request:
+    branches:
+      - master
+    paths:
+      - 'examples/common/**'
+      - 'examples/pastebin/**'
+      - 'examples/bookmarks/**'
+      - 'examples/polls/**'
+      - 'examples/kanban/**'
+      - 'examples/CMakeLists.txt'
+      - 'cmake/**'
+      - 'include/morph/**'
+      - 'src/qt/**'
+      - 'CMakeLists.txt'
+      - '.github/workflows/wasm-ladder.yml'
+
+concurrency:
+  group: wasm-ladder-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  QT_VERSION: 6.8.3
+  EMSDK_VERSION: 3.1.56   # the emscripten Qt 6.8 was built against
+
+jobs:
+  build-ladder-wasm:
+    name: Build the ladder's WASM clients
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y ninja-build
+
+      # aqtinstall gives a matched host + wasm Qt pair (same cmake glue), so no
+      # host/target version skew. qtwebsockets on *both*: morph::qt links
+      # Qt6::WebSockets, and a ladder WASM client is a remote client by rule
+      # (examples/IMPLEMENTATION.md rule 4's WASM clause), so the transport is
+      # not optional here the way it is for bank's local-only demo.
+      - name: Install Qt (host desktop)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtwebsockets
+          dir: ${{ runner.temp }}/qt
+
+      - name: Install Qt (wasm, single-threaded)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: all_os
+          target: wasm
+          arch: wasm_singlethread
+          modules: qtwebsockets
+          dir: ${{ runner.temp }}/qt
+
+      - name: Set up emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-ladder-cache
+
+      # MORPH_CLIENT_ONLY is mandatory, not a tuning knob: a rung's presenters
+      # are BridgeHandler<Model> templates, so the client names its model type
+      # even though it never hosts one — and without this option morph still
+      # emits the registrars that closure over that model's ODBC-backed
+      # execute() bodies, which cannot link in a browser
+      # (docs/spec/core/registry.md). morph_add_rung() fails the configure with
+      # that explanation if it is missing.
+      #
+      # MORPH_BUILD_TESTS=OFF: Catch2 binaries are not browser artifacts, and
+      # examples/common/CMakeLists.txt returns before its Catch2/Lightweight
+      # section under Emscripten for exactly that reason.
+      - name: Configure
+        run: |
+          export EM_CACHE="$PWD/.emcache"
+          mkdir -p "$EM_CACHE"
+          HOST=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/gcc_64
+          WASM=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/wasm_singlethread
+          # The all_os/wasm package extracts its scripts without the exec bit.
+          chmod +x "$WASM"/bin/* || true
+          "$WASM/bin/qt-cmake" -S . -B build-wasm-ladder -G Ninja \
+            -DQT_HOST_PATH="$HOST" \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_FORMS_QML=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
+            -DMORPH_CLIENT_ONLY=ON \
+            -DMORPH_BUILD_TESTS=OFF \
+            -DMORPH_BUILD_EXAMPLES=OFF
+
+      # The rung-0 spike and rungs 1-3's clients, built by name so a target
+      # that silently stops being generated (morph_add_rung() skips a rung's
+      # gui_wasm when its prerequisites are missing, announcing why) fails this
+      # job instead of passing it vacuously. The plain build that follows
+      # covers any further rung automatically, so this file does not need
+      # editing again just to add another named target.
+      - name: Build the WASM-remote spike and every rung's WASM client
+        run: |
+          export EM_CACHE="$PWD/.emcache"
+          cmake --build build-wasm-ladder --target morph_ladder_wasm_spike
+          cmake --build build-wasm-ladder --target ladder_pastebin_gui_wasm
+          cmake --build build-wasm-ladder --target ladder_bookmarks_gui_wasm
+          cmake --build build-wasm-ladder --target ladder_polls_gui_wasm
+          # Catches any further rung's WASM client too, without editing this
+          # file again -- closing the gap rung 1's own final review flagged.
+          cmake --build build-wasm-ladder
+
+      # Informational: the build steps above are the gate. Listed rather than
+      # asserted by path, since where Qt drops a wasm bundle is Qt's business.
+      - name: Show the produced artifacts
+        run: find build-wasm-ladder -name '*.wasm' -o -name '*.html' | sort

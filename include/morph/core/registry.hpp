@@ -671,7 +671,11 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
         static std::string toJson(const A& action) {                                                           \
             std::string out;                                                                                   \
-            if (auto errCode = glz::write_json(action, out)) {                                                 \
+            /* EscapingWriteOpts, not write_json: a raw control byte in any     */                             \
+            /* caller-supplied string field would otherwise produce a body the  */                             \
+            /* peer's reader rejects, or be silently mangled by glaze's chunked */                             \
+            /* fast path — see its doc comment in registry.hpp.                 */                             \
+            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(action, out)) {         \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \
@@ -689,7 +693,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         }                                                                                                      \
         static std::string resultToJson(const Result& result) {                                                \
             std::string out;                                                                                   \
-            if (auto errCode = glz::write_json(result, out)) {                                                 \
+            /* EscapingWriteOpts: see toJson() above — a result body carries    */                             \
+            /* caller data back (a paste's content, a fetched record) and needs */                             \
+            /* the identical treatment.                                          */                            \
+            if (auto errCode = glz::write<::morph::model::detail::EscapingWriteOpts{}>(result, out)) {         \
                 throw morph::model::detail::ParseError{glz::format_error(errCode, out)};                       \
             }                                                                                                  \
             return out;                                                                                        \

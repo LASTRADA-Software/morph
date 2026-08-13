@@ -15,10 +15,56 @@ TEST_EXE="$OUT/tests/morph_tests"
 MERGED="$OUT/merged.profdata"
 REPORT_DIR="$OUT/html"
 
-# Restrict coverage to the library headers. Test files, demo src/, system
-# headers and fetched dependencies are excluded by passing this as the
-# positional source filter to llvm-cov.
-SOURCES="include/morph"
+# Second binary, only present when this configure also built the ladder
+# (MORPH_BUILD_LADDER=ON — see the "coverage leg only" Qt install step in
+# ci.yml). llvm-cov takes one binary positionally and every additional one
+# via -object; OBJECT_ARGS stays empty (and every ${OBJECT_ARGS[@]}
+# expansion below a no-op) when the ladder wasn't built, so this script
+# still works unchanged for a plain `cmake --preset clang-coverage` with no
+# -DMORPH_BUILD_LADDER=ON.
+LADDER_TEST_EXE="$OUT/examples/common/ladder_common_tests"
+OBJECT_ARGS=()
+if [ -x "$LADDER_TEST_EXE" ]; then
+    OBJECT_ARGS+=(-object "$LADDER_TEST_EXE")
+fi
+
+# Per-rung test binaries, added on exactly the same "only if it was built"
+# terms. Each rung's models are what examples/IMPLEMENTATION.md rule 5's
+# 100% bar actually names, so a rung that ships models must contribute its
+# profile data or the gate below measures nothing. A rung that hasn't been
+# built (or doesn't exist yet) simply contributes nothing, so this list can
+# grow one line per rung with no other change.
+PASTEBIN_TEST_EXE="$OUT/examples/pastebin/ladder_pastebin_tests"
+if [ -x "$PASTEBIN_TEST_EXE" ]; then
+    OBJECT_ARGS+=(-object "$PASTEBIN_TEST_EXE")
+fi
+
+# Positional source-path filters to llvm-cov: include/morph is the library
+# proper; examples/common is the ladder's hand-written GUI/testkit code
+# (examples/IMPLEMENTATION.md rule 5 — presenter/BackendRig/etc. logic is
+# real coverage of morph's own client stack, per examples/TESTING.md's
+# "round-7 T4 reframe"). examples/pastebin (rung 1) adds the first real rung
+# models — the sole subject of rule 5's own 100% bar — plus its hand-written
+# presenter/QML-adapter layer, held to the same bar as examples/common's for
+# the same reason. AUTOMOC's generated
+# mocs_compilation.cpp lives under $OUT (the build tree), never under a
+# source-tree path named here, so moc output is excluded automatically —
+# no separate exclusion mechanism needed. Test files, demo src/, system
+# headers and fetched dependencies are excluded the same way.
+SOURCES=(include/morph)
+if [ -x "$LADDER_TEST_EXE" ]; then
+    SOURCES+=(examples/common)
+fi
+if [ -x "$PASTEBIN_TEST_EXE" ]; then
+    # include/ + src/ are the rung's DTOs and models (rule 5's own 100% bar);
+    # gui_lib/ is its hand-written presenter/adapter code, held to the same bar
+    # for the same reason examples/common/gui is — it is real coverage of
+    # morph's own client stack, not app-specific domain logic. gui/ and
+    # gui_wasm/ are deliberately absent: those are `main()` shells (engine
+    # setup, argv parsing, setInitialProperties) with no unit-testable seam,
+    # exercised only by the offscreen QML smoke test and by hand.
+    SOURCES+=(examples/pastebin/include examples/pastebin/src examples/pastebin/gui_lib)
+fi
 
 PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
 if [ -z "$PROFILES" ]; then
@@ -31,21 +77,24 @@ ${LLVM_PROFDATA} merge -sparse $PROFILES -o "$MERGED"
 
 mkdir -p "$REPORT_DIR"
 ${LLVM_COV} show "$TEST_EXE" \
+    "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -format=html \
     -output-dir="$REPORT_DIR" \
-    "$SOURCES"
+    "${SOURCES[@]}"
 
 echo "Coverage report: $REPORT_DIR/index.html"
 
 ${LLVM_COV} report "$TEST_EXE" \
+    "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
-    "$SOURCES"
+    "${SOURCES[@]}"
 
 ${LLVM_COV} export "$TEST_EXE" \
+    "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
     -format=lcov \
-    "$SOURCES" \
+    "${SOURCES[@]}" \
     > "$OUT/coverage.lcov.raw"
 
 # llvm-cov emits branch (BRDA) records once per template instantiation, so a
@@ -55,8 +104,9 @@ ${LLVM_COV} export "$TEST_EXE" \
 # matching the aggregate that `llvm-cov report` already prints above. Branch
 # coverage is preserved (not skipped); only the per-instantiation noise is removed.
 ${LLVM_COV} export "$TEST_EXE" \
+    "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
-    "$SOURCES" \
+    "${SOURCES[@]}" \
     > "$OUT/coverage.json"
 
 python3 scripts/aggregate_lcov_branches.py \
