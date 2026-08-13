@@ -664,3 +664,22 @@ jobs:
 
       - name: Check [[deprecated]] markers cite a replacement and removal version
         run: bash scripts/check_deprecated_markers.sh include/morph
+
+  # ── Test file-scope type name collision lint ───────────────────────────
+  test-type-name-lint:
+    name: Test file-scope type name collisions
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_test_type_names.sh's own comment: a lint gate
+      # nobody tests reports green whether or not it still detects anything.
+      - name: Self-test the test-type-name checker
+        run: bash scripts/test_check_test_type_names.sh
+
+      # Catches issue #84's bug class: two file-scope (external-linkage)
+      # struct/class declarations with the same name in different test
+      # files is an ODR violation that neither the compiler nor the linker
+      # diagnoses, and which resolves link-order-dependently per build.
+      - name: Check for file-scope struct/class name collisions across tests/
+        run: bash scripts/check_test_type_names.sh
