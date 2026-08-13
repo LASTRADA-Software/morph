@@ -56,8 +56,8 @@ class TagPresenter : public ::morph::ladder::gui::Presenter {
 
   private:
     /// @brief Shared error-display body passed as every `track()` call's
-    ///        third argument below — see `pastebin::gui::PastePresenter::reportError`'s
-    ///        doc comment for the full rationale (finding 023).
+    ///        third argument below — see `Presenter::track()`'s doc comment
+    ///        (`examples/common/gui/presenter.hpp`) for why.
     void reportError(const std::exception_ptr& err);
 
     ::morph::bridge::BridgeHandler<TagModel> _handler;

@@ -10,8 +10,9 @@
 /// @file
 /// See `pastebin::db::WithMapper`'s file comment
 /// (`examples/pastebin/include/pastebin/db/db_model.hpp`) for the full
-/// rationale this mixin reuses verbatim — the WASM header-vs-link
-/// dependency finding (025) applies identically to this rung's three models.
+/// rationale this mixin reuses verbatim, including why
+/// `BRIDGE_REGISTER_ACTION_FOR_CLIENT`'s header-avoidance seam applies
+/// identically to this rung's three models but is not adopted here either.
 
 namespace bookmarks::db {
 

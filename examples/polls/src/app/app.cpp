@@ -22,14 +22,16 @@ namespace {
 
 /// @brief Live-instance cap this server installs.
 ///
-/// Registration cannot be gated on identity
-/// (`docs/findings/027-register-envelope-carries-no-session.md`), so an
-/// unauthenticated client *can* make the server create model instances even
-/// though `PollModel::execute()`'s own admin/participant checks still gate
-/// every state-changing call on them -- `auth::PollsAuthorizer` leaves both
-/// `authorize()` and its two instance-lifecycle hooks permissive by design
-/// (see that file's own `@file` comment). `maxLiveModels` is the
-/// framework's own answer to that shape of churn: past the cap a
+/// This rung's `authorizeRegister` is unconditionally permissive by design
+/// (the framework can now gate registration on identity -- register/attach
+/// envelopes carry the caller's session -- but polls' attach-by-id model
+/// deliberately doesn't use it), so an unauthenticated client *can* make the
+/// server create model instances even though `PollModel::execute()`'s own
+/// admin/participant checks still gate every state-changing call on them --
+/// `auth::PollsAuthorizer` leaves both `authorize()` and its two
+/// instance-lifecycle hooks permissive by design (see that file's own
+/// `@file` comment). `maxLiveModels` is the framework's own answer to that
+/// shape of churn: past the cap a
 /// `register`/keyed-attach is answered `err "too many models"` and no
 /// instance is constructed.
 ///

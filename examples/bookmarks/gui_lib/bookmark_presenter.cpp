@@ -5,7 +5,9 @@ namespace bookmarks::gui {
 
 BookmarkPresenter::BookmarkPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
                                      QObject* parent)
-    : Presenter{parent}, _handler{bridge, executor} {}
+    : Presenter{parent}, _handler{bridge, executor} {
+    trackBound(_handler.whenBound());
+}
 
 void BookmarkPresenter::reportError(const std::exception_ptr& err) {
     try {

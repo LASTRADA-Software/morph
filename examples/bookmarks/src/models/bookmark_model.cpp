@@ -526,14 +526,17 @@ Ack BookmarkModel::execute(const RecordMetadata& action) {
     //
     // What replaces the owner check is a *caller* check, and it has to live
     // here rather than in the authorizer: `authorizeInstance`'s
-    // owner-vs-principal comparison -- the natural home for it -- is inert,
-    // because RemoteServer records an empty owner for every instance a
-    // Bridge client registers (finding 027). Without this line any
-    // authenticated user could dispatch RecordMetadata against any other
-    // user's bookmark id and overwrite its title and favicon, since this is
-    // the one action that does not scope its query to the caller. Rule 1
-    // ("models must re-check their own authorization") is exactly the
-    // instruction being followed.
+    // owner-vs-principal comparison would not fit here even with a real
+    // recorded owner (which register envelopes now carry). The worker
+    // dispatches through its OWN plain-registered instance -- an instance it
+    // legitimately owns -- to touch a *row* some other user owns.
+    // authorizeInstance compares instance ownership, not row ownership, so
+    // it has nothing to object to: the worker's own instance is exactly what
+    // it is authorized to use. Without this line any authenticated user
+    // could dispatch RecordMetadata against any other user's bookmark id and
+    // overwrite its title and favicon, since this is the one action that
+    // does not scope its query to the caller. Rule 1 ("models must re-check
+    // their own authorization") is exactly the instruction being followed.
     if (requireOwner() != auth::kMetadataFetcherPrincipal) {
         throw Forbidden{"RecordMetadata is dispatched only by the metadata-fetch service principal"};
     }

@@ -1382,16 +1382,24 @@ private:
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
 
-    // ── Per-model execute-ordering gate (finding 035) ───────────────────────
+    // ── Per-model execute-ordering gate ──────────────────────────────────────
     // `handle()`'s two overloads dispatch to `_pool`, a multi-worker
     // ThreadPoolExecutor: two `execute` envelopes for the *same* model,
     // posted back-to-back, can have their pre-strand work (decode, authorize,
     // authenticate, registry lookup) finish on two different pool threads in
     // either order -- so without this gate, whichever one finishes first
     // reaches `_strand.post(mid, ...)` first, even if the client sent the
-    // other one first. See docs/findings/035-remote-server-execute-reordering.md
-    // for the full writeup, including a reverted first attempt at this fix
-    // and why it broke a different, pre-existing guarantee.
+    // other one first (`tests/test_remote_execute_ordering.cpp` reproduces
+    // this deterministically). A first attempt strand-routed the *entire*
+    // dispatch pipeline for a known `modelId`, which closed the race but
+    // broke `test_remote_connection_scope.cpp`'s "an in-flight execute
+    // completes safely across a disconnect" guarantee: a lookup against a
+    // since-reclaimed `modelId` must resolve immediately without waiting on
+    // some other, still-blocked model's strand, and moving the whole
+    // pipeline onto the strand collapsed that fast-reject path into the same
+    // queue as the slow model's in-flight work. The ticket gate below fixes
+    // only the ordering of the `_strand.post()` call itself, leaving the
+    // fast-reject path exactly as fast as it always was.
     //
     // The gate orders only the *moment of the `_strand.post()` call itself*,
     // not the pipeline before it: a ticket is handed out synchronously in

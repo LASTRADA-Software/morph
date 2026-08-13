@@ -121,7 +121,10 @@ struct PollEventRecord {
 
 #else
 // Client-only (WASM) build: entity shapes are never instantiated, only
-// referenced by type in code that never runs there. See finding 025.
+// referenced by type in code that never runs there -- this stub-mixin
+// pattern is what a WASM client falls back on since PollModel's own header
+// (unlike a declaration-only facade) still pulls this file in transitively;
+// see db_model.hpp's file comment.
 struct PollRecord {};
 struct OptionRecord {};
 struct VoteRecord {};

@@ -63,9 +63,12 @@ QProcess client harness, the Qt-owning Catch2 `main()`), the pump helpers in
    themselves.** `Remote` is asynchronously connected and exposes
    `ready()`/`onReady(cb)`: presenters (which build `BridgeHandler`s, and a
    `BridgeHandler` constructor registers) **must** be constructed from inside
-   `onReady`. Registering before the socket connects fails permanently, with
-   no retry — see
-   [`017-async-registration-fails-before-connect.md`](../docs/findings/017-async-registration-fails-before-connect.md).
+   `onReady`. `QtWebSocketBackend::registerModelAsync()` queues a
+   registration issued before the socket connects and retries it once the
+   connection comes up (`docs/spec/core/backend.md`, "Asynchronous
+   registration"), so this is no longer the correctness hazard it once was
+   — but building presenters/`BridgeHandler`s from inside `onReady` stays the
+   simpler ordering to reason about, and is what every rung does.
    `Local` is ready on construction and runs `onReady` inline, so mode-blind
    code can always route through `onReady`.
 3. **Observable quiescence.** A common `Presenter` base tracks in-flight
@@ -165,30 +168,37 @@ DoD):
 | `client_pool.hpp`, `convergence.hpp` | rung 3 |
 | `action_driver.hpp`, `process_pool.hpp`, `offline_rig.hpp` | rung 4 |
 
-- `db_fault_fixture.hpp` — a failing ODBC-level driver for exercising
-  store-error branches (`SQLITE_BUSY`, constraint violations, rollback)
-  that the 100%-coverage rule requires (see
-  [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 5); wire-level faults are
-  the proxy's job, database faults are this fixture's. **As shipped in rung
-  0 this promise is not yet satisfiable**: the fixture holds a real
-  `SqlScopedLock` on a second connection, so it can only fault code that
-  takes the same named advisory lock — not an ordinary `DataMapper`
-  `Create`/`Update`/`Query` or a `SqlTransaction`. Closing that gap (extend
-  the fixture, or narrow this promise) is
-  [`018-db-fault-fixture-cannot-fault-datamapper.md`](../docs/findings/018-db-fault-fixture-cannot-fault-datamapper.md),
-  owned by whichever rung first needs store-error branch coverage.
-- `db_busy_fixture.hpp` — rung 1's answer to the paragraph above, for the
-  `SQLITE_BUSY` class specifically: a genuine, uncommitted `BEGIN IMMEDIATE`
-  write transaction held open on a second `SqlConnection`, so a concurrent
-  write from the connection under test collides for real. **Store-error
-  coverage is obtained per failure class, through the real schema, by
-  whichever fixture can genuinely provoke that class** — not from one failing
-  driver. Constraint violations and mid-transaction rollback still have no
-  general fixture. Finding 018 is triaged `documented-limitation` on exactly
-  that reading; its closing section is the authoritative account of what
-  shipped, and the two `db_fault_fixture` promises (here and in
-  [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 5) are the part now known to
-  be inaccurate.
+- `db_fault_fixture.hpp` — holds a real `Lightweight::SqlScopedLock` on a
+  second, independent `SqlConnection` to the shared test database, producing
+  genuine cross-session contention for code that itself takes the *same
+  named* advisory lock on a different connection. **This is not a failing
+  ODBC-level driver, and cannot fault an ordinary `DataMapper` call**:
+  `Create`/`Update`/`Query`/`Delete` and a plain `SqlTransaction` commit sit
+  entirely outside the advisory-lock protocol, so this fixture is
+  transparent to them — no `SQLITE_BUSY`, no constraint violation, no
+  rollback. There is no injectable seam between Lightweight's `DataMapper`
+  and the ODBC driver (no `SqlConnection` interface to substitute, no
+  statement hook to fail), so a driver-level fault fixture is not on offer;
+  see `IMPLEMENTATION.md` rule 5 for what the 100%-coverage rule actually
+  requires instead.
+- `db_busy_fixture.hpp` — the `SQLITE_BUSY` answer: a genuine, uncommitted
+  `BEGIN IMMEDIATE` write transaction held open on a second `SqlConnection`,
+  so a concurrent write from the connection under test collides for real
+  and SQLite returns a real `SQLITE_BUSY` — no mock driver, the failure
+  happens in the same call path production takes. Two empirically-verified
+  gotchas its own doc comment records: `BEGIN IMMEDIATE` is required (a
+  plain `Lightweight::SqlTransaction` only flips `SQL_ATTR_AUTOCOMMIT` and
+  defers lock acquisition, producing no contention), and Lightweight's
+  unconditional `PRAGMA busy_timeout = 60000` in `PostConnect()` means the
+  *other* connection must re-issue a small timeout of its own or the
+  "failure" is a sixty-second block instead of an immediate error.
+  **Store-error coverage is obtained per failure class, through the real
+  schema, by whichever fixture can genuinely provoke that class** — not from
+  one failing driver. Constraint violations and mid-transaction rollback
+  still have no general fixture; extending `db_busy_fixture.hpp`'s pattern
+  (a conflicting row for a `UNIQUE`/FK violation, a dropped table for a
+  query error) is the next step whenever a rung's model needs that
+  coverage.
 
 - `db_fixture.hpp` — one real, on-disk database shared per test *binary*
   (`morph_ladder_test.db` in the binary's working directory, or
@@ -350,8 +360,11 @@ root `CMakeLists.txt` — don't repeat that eight times):
   so any attempt to reach a database from a browser build is a compile error.
   That is a two-branch mixin inside the file that already owns the ODBC
   dependency — not a shadow header tree, and not a second copy of any model,
-  DTO, presenter or QML file. See
-  [`../docs/findings/025-client-only-still-needs-model-persistence-headers.md`](../docs/findings/025-client-only-still-needs-model-persistence-headers.md).
+  DTO, presenter or QML file. `include/morph/core/registry.hpp`'s
+  `BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)` closes the
+  header dependency itself, for a client willing to make `M` a
+  declaration-only facade type instead — no rung has adopted that shape, so
+  every rung still needs the stub-mixin pattern above.
 - **Coverage wiring (proven by rung 0, on `examples/common`; the same
   recipe applies to every future rung's `src/models/`/`include/<rung>/models/`
   per [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 5).** The `clang-coverage`

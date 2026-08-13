@@ -121,22 +121,22 @@
 /// what `AppContext` already provides.
 ///
 /// More interestingly: this is also the first ladder WASM client with
-/// *no hand-rolled retry timer anywhere in its QML*, and that is not an
-/// oversight — `gui/qml/VoteView.qml`'s `Component.onCompleted` fires
-/// `pollBridge.openPoll(pollId)` exactly once, unconditionally, with nothing
-/// resembling pastebin's `Main.qml`/bookmarks' `BookmarkListView.qml`
-/// bootstrap-retry `Timer` (both covering docs/findings/024, "the handler
-/// not bound window that opens on connect and closes when registration
-/// settles"). Read `include/morph/core/bridge.hpp` to confirm this is
+/// *no `bound`-gated (or hand-rolled retry-timer) bootstrap dispatch anywhere
+/// in its QML*, and that is not an oversight — `gui/qml/VoteView.qml`'s
+/// `Component.onCompleted` fires `pollBridge.openPoll(pollId)` exactly once,
+/// unconditionally, with nothing resembling pastebin's `PasteBridge::bound`/
+/// bookmarks' `BookmarkBridge::bound` gating (both covering the "handler not
+/// bound" window that opens on connect and closes when registration
+/// settles). Read `include/morph/core/bridge.hpp` to confirm this is
 /// actually safe rather than assuming this rung's `EventPoller` quietly
 /// papers over a real gap:
 ///  - Pastebin's/bookmarks' plain (`NoSharing`) handlers each call
 ///    `Bridge::registerHandler(binding)` at construction, which — via
 ///    `registerHandlerImpl` — issues a real `registerModelAsync` round trip
-///    to the backend. Until that reply lands, `binding->currentId` stays `0`
-///    and any call through the handler fails "handler not bound"; that
-///    window is exactly finding 024, and why those two rungs' `Main.qml`
-///    equivalents retry the first dispatch on a short timer.
+///    to the backend. Until that reply lands, any call through the handler
+///    fails "handler not bound"; that window is exactly why those two
+///    rungs' bridges expose a `bound` signal their QML gates the first
+///    dispatch on.
 ///  - `PollFormsController`'s handler (`BridgeHandler<PollModel,
 ///    AllowShared>`) is built via `Bridge::registerSharedHandler<Model>()`
 ///    instead (`bridge.hpp`'s `BridgeHandler::makeBinding`, `kShared`
@@ -150,8 +150,8 @@
 ///    constructed, which this file only ever does from inside
 ///    `ctx.onReady()` (below), by which point the socket is already
 ///    connected (finding 017's window is closed) and there is no *second*,
-///    separate registration step left to still be pending (finding 024's
-///    window never opens in the first place). This is the exact keyed-attach
+///    separate registration step left to still be pending (that window
+///    never opens in the first place). This is the exact keyed-attach
 ///    async path `docs/superpowers/plans/2026-08-07-ladder-rung3-framework-prereqs.md`
 ///    closed finding 032 for, and this file is the first real WASM binary
 ///    to actually dispatch through it.

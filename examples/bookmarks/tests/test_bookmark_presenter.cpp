@@ -13,13 +13,14 @@
 // "translates and routes only" contract bookmark_presenter.hpp's own doc
 // comment states (examples/IMPLEMENTATION.md rule 2).
 //
-// Every mode needs a real signed token: every action in this rung requires
-// one (finding 027's in-rung workaround — see bookmarks_authorizer.hpp's
-// @file comment), so even Local/LocalSingleThread mode (which runs no real
-// authorizer) still needs `session::current()->principal` populated for a
-// model's own scoping to succeed — `Bridge::setDefaultSession` supplies the
-// per-call Context every mode dispatches through, exactly the recipe
-// test_bookmark_model.cpp's own backend-mode-matrix case uses.
+// Every mode needs a real signed token: `BookmarksAuthorizer::authorize()`
+// requires one on every single execute, unconditionally (see
+// bookmarks_authorizer.hpp's own doc comment), so even Local/LocalSingleThread
+// mode (which runs no real authorizer) still needs `session::current()->
+// principal` populated for a model's own scoping to succeed —
+// `Bridge::setDefaultSession` supplies the per-call Context every mode
+// dispatches through, exactly the recipe test_bookmark_model.cpp's own
+// backend-mode-matrix case uses.
 
 #include "bookmark_presenter.hpp"
 #include "testkit/backend_rig.hpp"
@@ -384,11 +385,11 @@ TEST_CASE("BookmarkPresenter::importChunk then exportAll round-trips bookmarks, 
 
 TEST_CASE("Every BookmarkPresenter validation-driven action routes its failure to failed(), not just create()",
           "[bookmarks][presenter]") {
-    // Not a completeness ritual: `track()`'s third argument is attached
-    // per-call, and `Completion<T>::onError` keeps only the *last* handler
-    // attached (docs/findings/023), so a mis-wired `onErr` on one action is
-    // invisible from every other action's tests. See
-    // pastebin::gui::PastePresenter's identical test for the full rationale.
+    // Not a completeness ritual: each action's `reportError` is wired
+    // independently at its own `track()` call site (`bookmark_presenter.cpp`),
+    // so a passing test for one action says nothing about whether another
+    // action's wiring is correct. See pastebin::gui::PastePresenter's
+    // identical test for the same rationale.
     DbFixture fixture;
     auto rig = makeAuthedRig(Mode::Local, "presenter-fail-secret", "alice");
     bookmarks::gui::BookmarkPresenter presenter{rig->bridge(0), rig->executor()};

@@ -13,10 +13,10 @@
 /// (include/morph/forms/widget_hints.hpp) — the closest existing
 /// hasValue()-capable newtype template — but wraps std::optional<std::string>,
 /// not a bounded arithmetic value, so it carries its own glz::meta rather than
-/// reusing Ranged's. First real consumer of the eventual Tagged<T,"Name">
-/// gap (docs/findings/009); do not promote this into a generic helper here
-/// — the promotion rule (examples/IMPLEMENTATION.md) triggers on a third
-/// consumer, not the first.
+/// reusing Ranged's. morph has since grown Tagged<T, "Name">
+/// (include/morph/util/tagged.hpp), a generic newtype helper this type
+/// predates; not migrated onto it here, since nothing forces the change and
+/// this file's own glz::meta already does the same job.
 
 namespace pastebin {
 

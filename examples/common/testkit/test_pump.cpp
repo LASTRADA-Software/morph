@@ -44,32 +44,32 @@ TEST_CASE("computeDeadlineScale is 1.0 for an unparseable value, not a crash", "
 }
 
 // morph::async::Completion<T> is consumer-facing only (then()/onError()); it has
-// no resolve()/fail() of its own. The producer side — confirmed by reading
-// include/morph/core/completion.hpp and cross-checked against how the core test
-// suite builds completions (e.g. tests/test_completion.cpp) — is a
-// std::shared_ptr<morph::async::detail::CompletionState<T>> passed alongside an
-// morph::exec::IExecutor* to the Completion constructor; setValue()/setException()
-// on that shared state are what a producer calls. Here we use morph::qt::QtExecutor
-// (already linked in via morph::qt) as the executor, since it delivers callbacks
-// through the Qt event loop exactly as pumpUntil expects to pump them.
+// no resolve()/fail() of its own. The producer side is Completion<T>::
+// makeSettleable(execPtr) (issue #55's public "settleable promise" seam,
+// docs/spec/core/completion.md), which returns a {Completion<T>, Promise}
+// pair sharing one state -- the Promise exposes resolve()/reject() without
+// ever naming morph::async::detail::CompletionState<T>. Here we use
+// morph::qt::QtExecutor (already linked in via morph::qt) as the executor,
+// since it delivers callbacks through the Qt event loop exactly as
+// pumpUntil expects to pump them.
 
 TEST_CASE("awaitQt resolves a Completion<T> and returns its value", "[ladder][testkit][pump]") {
     morph::qt::QtExecutor executor;
-    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
-    morph::async::Completion<int> completion{state, &executor};
-    QTimer::singleShot(10, [state] { state->setValue(42); });
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&executor);
+    auto sharedPromise = std::make_shared<morph::async::Completion<int>::Promise>(std::move(promise));
+    QTimer::singleShot(10, [sharedPromise] { sharedPromise->resolve(42); });
     REQUIRE(morph::ladder::testkit::awaitQt(std::move(completion)) == 42);
 }
 
 TEST_CASE("awaitQt rethrows the completion's error", "[ladder][testkit][pump]") {
     morph::qt::QtExecutor executor;
-    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
-    morph::async::Completion<int> completion{state, &executor};
-    QTimer::singleShot(10, [state] {
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&executor);
+    auto sharedPromise = std::make_shared<morph::async::Completion<int>::Promise>(std::move(promise));
+    QTimer::singleShot(10, [sharedPromise] {
         try {
             throw std::runtime_error("boom");
         } catch (...) {
-            state->setException(std::current_exception());
+            sharedPromise->reject(std::current_exception());
         }
     });
     REQUIRE_THROWS_AS(morph::ladder::testkit::awaitQt(std::move(completion)), std::runtime_error);
@@ -92,20 +92,20 @@ TEST_CASE("awaitQt rethrows the completion's error", "[ladder][testkit][pump]") 
 // its value is proving the process doesn't crash/corrupt under a sanitizer.
 TEST_CASE("awaitQt timeout does not leave dangling references for a late-firing callback", "[ladder][testkit][pump]") {
     morph::qt::QtExecutor executor;
-    auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
-    morph::async::Completion<int> completion{state, &executor};
+    auto [completion, promise] = morph::async::Completion<int>::makeSettleable(&executor);
+    auto sharedPromise = std::make_shared<morph::async::Completion<int>::Promise>(std::move(promise));
 
     // Nothing ever resolves this completion before the deadline, so awaitQt
     // times out and throws while its then()/onError() handlers are still
-    // attached to `state`.
+    // attached to the shared state behind `sharedPromise`.
     REQUIRE_THROWS_AS(morph::ladder::testkit::awaitQt(std::move(completion), std::chrono::milliseconds{50}),
                        std::runtime_error);
 
-    // awaitQt's frame is gone, but `state` (held here, as a backend's
-    // pending-call map would hold it) is still alive and still holds the
-    // handlers awaitQt installed. Resolve it now and pump so the posted
-    // callback actually runs.
-    state->setValue(42);
+    // awaitQt's frame is gone, but `sharedPromise` (held here, as a backend's
+    // pending-call map would hold the underlying state) is still alive and
+    // its paired Completion still holds the handlers awaitQt installed.
+    // Resolve it now and pump so the posted callback actually runs.
+    sharedPromise->resolve(42);
     // Deliberately discarded: the predicate is `false` by construction, so
     // this is "pump for 50ms", not a wait — the timeout *is* the point.
     (void)morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50});

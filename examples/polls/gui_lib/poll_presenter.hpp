@@ -144,12 +144,10 @@ class PollPresenter : public ::morph::ladder::gui::Presenter {
 
   private:
     /// @brief Shared error-display body passed as every `track()` call's
-    ///        third argument below — see `pastebin::gui::PastePresenter::reportError`'s
-    ///        doc comment (`examples/pastebin/gui_lib/paste_presenter.hpp`) for the
-    ///        full rationale (finding 023: `Completion<T>::onError` keeps only
-    ///        the single most-recently-attached handler, so this must be
-    ///        passed as `track()`'s `onErr` parameter, never attached via a
-    ///        separate `.onError()` call beforehand).
+    ///        third argument below — see `Presenter::track()`'s doc comment
+    ///        (`examples/common/gui/presenter.hpp`) for why it is passed as
+    ///        `track()`'s `onErr` parameter rather than attached via a
+    ///        separate `.onError()` call beforehand.
     void reportError(const std::exception_ptr& err);
 
     ::morph::bridge::BridgeHandler<PollModel> _creator;

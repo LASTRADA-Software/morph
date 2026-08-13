@@ -100,12 +100,12 @@ must both work unchanged.
     (`include/morph/core/model.hpp:145`) is called only by the two
     built-in dispatch runners, for the one action actually dispatched —
     there is no seam for a model to author a second, independent
-    `LogEntry` from inside its own `execute()`, and the one workaround
-    that exists (`Bridge::modelFactory` constructor injection) only
-    reaches `Local`-mode registration, not `Socket`-mode's
-    registry-constructed models. Filed as
-    [finding 020](../../docs/findings/020-registry-constructed-models-have-no-di-seam.md)
-    (generalizes finding 003 beyond the clock). **Consequence, accepted
+    `LogEntry` from inside its own `execute()`. `Bridge::modelFactory`
+    constructor injection only reaches `Local`-mode registration; morph
+    has since grown `ModelRegistryFactory::registerModel<Model>(modelId,
+    factory)` (`include/morph/core/registry.hpp`) as the equivalent seam
+    for `Socket`-mode's registry-constructed models, but this rung
+    predates it and has not adopted it. **Consequence, accepted
     and documented, not worked around:** replaying `GetPaste`'s entry
     re-runs the real burn/read-count logic against whatever row state
     exists at replay time — for a burn-after-read paste this can
@@ -166,10 +166,9 @@ must both work unchanged.
     no ladder rung has shipped yet. Framework growth this rung proposes
     instead of assuming: (1) a documented, opt-in "replay-safe" trait or
     marker distinguishing pure/in-memory models from DB-backed ones, so
-    `replay()` can refuse (or clearly warn) against the latter; (2) the
-    DI seam [finding 020](../../docs/findings/020-registry-constructed-models-have-no-di-seam.md)
-    asks for, which — had it existed — would have let `GetPaste` be split
-    as originally hoped.
+    `replay()` can refuse (or clearly warn) against the latter; (2)
+    adopting the DI seam noted above, which would let `GetPaste` be split
+    as originally hoped — not done in this rung.
 - **Shared vs. unshared instance — the burn-atomicity decision. Resolved:
   SQL-atomicity, not a shared keyed instance.** `PasteModel` is registered
   plain (no `BRIDGE_MODEL_KEY`/`AllowShared`), matching bank's
@@ -181,12 +180,14 @@ must both work unchanged.
   [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md) § sanctioned escape tier.
   **As shipped this is the transaction-wrapped two-statement form, not the
   single-statement `… RETURNING …` one originally written here.** The
-  mandatory finding is filed:
-  [finding 022](../../docs/findings/022-sqliteodbc-update-returning-no-cursor.md)
-  — the sqliteodbc driver accepts `UPDATE … RETURNING`, applies it, and
-  reports the returned column count, but the first `FetchRow()` throws
-  SQLSTATE 24000 "Invalid cursor state"; it never opens a cursor over the
-  returned rows. `PasteModel::execute(const GetPaste&)` therefore runs a
+  sqliteodbc driver accepts `UPDATE … RETURNING`, applies it, and reports
+  the returned column count, but the first `FetchRow()` throws SQLSTATE
+  24000 "Invalid cursor state"; it never opens a cursor over the returned
+  rows — filed upstream as
+  [`LASTRADA-Software/Lightweight#545`](https://github.com/LASTRADA-Software/Lightweight/issues/545),
+  tracked morph-side as
+  [`LASTRADA-Software/morph#58`](https://github.com/LASTRADA-Software/morph/issues/58).
+  `PasteModel::execute(const GetPaste&)` therefore runs a
   `SqlTransaction` around (1) the identical conditional `UPDATE` minus its
   `RETURNING` clause, dispatched on `NumRowsAffected()`, and (2) an ordinary
   `DataMapper` read-back by primary key. **The atomicity argument is
@@ -204,14 +205,16 @@ must both work unchanged.
   DTO ⇄ entity ⇄ `DataMapper` loop of [`../IMPLEMENTATION.md`](../IMPLEMENTATION.md)
   proven on a one-entity schema before the bigger rungs depend on it.
 
-**Custom-GUI-element justification (`../IMPLEMENTATION.md` rule 2):** the
-shipped `morph::qt::forms::FormsControllerCore<Model>` hardcodes its own
-`Bridge`/`LocalBackend`/executor internally, with no way to compose it over
-`AppContext`'s `Bridge&`/`IExecutor*` — a direct conflict with
-[`../TESTING.md`](../TESTING.md)'s "never construct executors or backends
-themselves" presenter rule, and silently untestable in `Socket` mode. Filed
-as
-[finding 021](../../docs/findings/021-forms-controller-core-hardcodes-localbackend.md).
+**Custom-GUI-element justification (`../IMPLEMENTATION.md` rule 2):** at the
+time this rung was built, the shipped `morph::qt::forms::FormsControllerCore
+<Model>` hardcoded its own `Bridge`/`LocalBackend`/executor internally, with
+no way to compose it over `AppContext`'s `Bridge&`/`IExecutor*` — a direct
+conflict with [`../TESTING.md`](../TESTING.md)'s "never construct executors
+or backends themselves" presenter rule, and silently untestable in `Socket`
+mode. The shipped core's own `(Bridge&, IExecutor*, schemasJson)` constructor
+now supports this composition directly, closing the gap framework-side;
+`gui_lib/paste_forms_controller.hpp` still owns a thin controller of its own
+(this rung predates that constructor).
 Pastebin's GUI still renders exclusively from `morph::forms::schemaJson<A>()`
 through the real `MorphForms` QML module (justification (b): pure glue, no
 domain logic, no hand-rolled widget) — only the backend-wiring seam is
@@ -246,22 +249,20 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   documentation of `docs/spec/security.md`; it also owns the `hello`
   protocol-version-negotiation test — no example exercises negotiation
   today.
-- **Store-error branch coverage partly resolves
-  [finding 018](../../docs/findings/018-db-fault-fixture-cannot-fault-datamapper.md)**:
-  as shipped, `db_fault_fixture.hpp`'s `SqlScopedLock`-based contention
-  cannot fault an ordinary `DataMapper` call or the raw conditional update
-  above. This rung is finding 018's designated owner; the resolution shipped
-  is its "real failures through the schema" option, but only for two of the
-  three failure classes — `db_busy_fixture.hpp` holds a competing write
-  transaction open on a second connection to force a genuine `SQLITE_BUSY`,
-  and (for the raw conditional update specifically) a row already at
+- **Store-error branch coverage, per failure class, through the real
+  schema — not through one failing driver.** `db_fault_fixture.hpp`'s
+  `SqlScopedLock`-based contention cannot fault an ordinary `DataMapper`
+  call or the raw conditional update above (there is no injectable seam
+  between `DataMapper` and the ODBC driver — see `examples/TESTING.md`'s
+  testkit section). This rung provokes two of the three failure classes for
+  real instead: `db_busy_fixture.hpp` holds a competing write transaction
+  open on a second connection to force a genuine `SQLITE_BUSY`, and (for the
+  raw conditional update specifically) a row already at
   `read_count == burn_after_reads` forces the zero-rows-affected branch.
   **Constraint violations are not covered this way**: no fixture forces a
-  genuine `UNIQUE`/FK violation through the schema, so 018 is triaged
-  `documented-limitation`, not resolved — read its closing section for the
-  exact accounting. `IMPLEMENTATION.md` rule 5's per-line exclusion tag is
-  reserved for whatever, after this, still provably can't be reached this
-  way.
+  genuine `UNIQUE`/FK violation through the schema yet.
+  `IMPLEMENTATION.md` rule 5's per-line exclusion tag is reserved for
+  whatever, after this, still provably can't be reached this way.
 
 ## Expected strain points
 
@@ -307,20 +308,15 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   corpus replay, size limits, duplicate create, id collisions, the fail-open
   security delta and `hello` version negotiation.
 - [x] **Findings filed rather than worked around** — this rung's actual
-  product:
-  [018](../../docs/findings/018-db-fault-fixture-cannot-fault-datamapper.md)
-  (this rung was its designated owner; the `SQLITE_BUSY` class is now reached
-  through the schema with `DbBusyFixture`, so 018 is triaged
-  `documented-limitation` — the *promise* it quotes, a failing ODBC-level
-  `db_fault_fixture` covering all three failure classes, is still not what
-  exists; read its closing section for exactly what did and did not change),
-  [020](../../docs/findings/020-registry-constructed-models-have-no-di-seam.md),
-  [021](../../docs/findings/021-forms-controller-core-hardcodes-localbackend.md),
-  [022](../../docs/findings/022-sqliteodbc-update-returning-no-cursor.md),
-  [023](../../docs/findings/023-completion-onerror-single-slot-overwrite.md),
-  [024](../../docs/findings/024-no-registration-settled-seam.md),
-  [025](../../docs/findings/025-client-only-still-needs-model-persistence-headers.md),
-  [026](../../docs/findings/026-control-byte-escaping-missing-in-three-sibling-writers.md).
+  product: ten in total, spanning rung 0 through this rung. Eight have since
+  been fixed framework-side; their gaps and fixes are described inline
+  throughout this README and this rung's own source comments, not
+  re-listed here. Two genuine, still-current limitations remain:
+  `db_fault_fixture.hpp`'s `SqlScopedLock`-based contention cannot fault an
+  ordinary `DataMapper` call (see "Store-error branch coverage" above), and
+  the SQLite ODBC driver's `UPDATE ... RETURNING`/`SQLFetch` combination —
+  see "Burn-atomicity" above and this rung's `Lightweight` issue tracking it
+  upstream.
   Three framework/testkit bugs found on the way were *fixed*, not merely
   filed: JSON control-byte escaping in the action/result codecs, an
   executor-lifetime bug in the shared testkit, and — found by this rung's own
@@ -329,60 +325,38 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   `GENERATE` iteration later and aborted the process
   (`examples/common/testkit/backend_rig.hpp`, with a regression case in
   `test_backend_rig.cpp`). A fourth bug, `Completion::onError`'s single-slot
-  overwrite, was *worked around* rather than fixed: `gui/presenter.hpp`'s
-  `track()` folds a subclass's error-display callback and the busy-counter
-  decrement into the one `.onError()` slot `Completion` actually keeps,
-  instead of composing two separate calls. The underlying single-slot
-  behavior is unchanged in `morph/core/completion.hpp`; finding 023 tracks it
-  and remains open.
-  Finding 026 is the unfinished half of the first of those: the same missing
-  escaping survives in three sibling writers (`journal/action_log.hpp`,
-  `offline/file_offline_queue.hpp`, `session/session_auth.hpp`), recorded
-  rather than quietly patched from a rung.
+  overwrite (finding 023), was *worked around* at the time rather than fixed:
+  `gui/presenter.hpp`'s `track()` folded a subclass's error-display callback
+  and the busy-counter decrement into the one `.onError()` slot `Completion`
+  then kept, instead of composing two separate calls. `Completion`'s
+  `onOk`/`onErr` are now vectors of handlers (multiple `.then()`/`.onError()`
+  attaches fan out instead of overwriting), so `track()`'s fold is no longer
+  load-bearing — kept as-is since it still works and nothing forces the
+  change.
+  Finding 026, the sibling-writer half of the first bug above, is also fixed:
+  the same missing control-byte escaping in `journal/action_log.hpp`,
+  `offline/file_offline_queue.hpp` and `session/session_auth.hpp` was closed
+  framework-side.
 
 ### Known gaps, stated rather than smoothed over
 
-- **This rung is *shipped*, not *exited*.** Those are different words on
-  purpose. [`../FINDINGS.md`](../FINDINGS.md)'s "Rung exit criteria" makes a
-  rung done when (1) its README's design questions are resolved in writing,
-  (2) every named strain test exists — passing or filed as a finding, and
-  (3) **its findings are triaged (no `open` dispositions left)**. (1) and (2)
-  are met above. (3) is not: of the ten findings this rung owns or inherited,
-  **nine are still `disposition: open`** —
-  [017](../../docs/findings/017-async-registration-fails-before-connect.md),
-  [019](../../docs/findings/019-testkit-reaches-into-four-detail-namespaces.md),
-  [020](../../docs/findings/020-registry-constructed-models-have-no-di-seam.md),
-  [021](../../docs/findings/021-forms-controller-core-hardcodes-localbackend.md),
-  [022](../../docs/findings/022-sqliteodbc-update-returning-no-cursor.md),
-  [023](../../docs/findings/023-completion-onerror-single-slot-overwrite.md),
-  [024](../../docs/findings/024-no-registration-settled-seam.md),
-  [025](../../docs/findings/025-client-only-still-needs-model-persistence-headers.md)
-  and [026](../../docs/findings/026-control-byte-escaping-missing-in-three-sibling-writers.md),
-  the last of them filed by this rung's own closing review. Only
-  [018](../../docs/findings/018-db-fault-fixture-cannot-fault-datamapper.md)
-  carries a final disposition, and only because it named *this rung* as its
-  designated resolver and its own text prescribed the resolution that
-  shipped. The rest need a **repo-owner triage pass**, which `FINDINGS.md`
-  reserves explicitly: "the repo owner decides; the ladder never
-  self-triages." Until that pass happens, nothing here should be read as this
-  rung having formally exited — "shipped" and "implemented" are accurate,
-  "exited" is not.
-- **The full CI matrix has *not* been demoted, on purpose and in that
-  order.** `FINDINGS.md`'s demotion policy fires "once a rung exits": its
-  per-PR CI drops to compile-only plus one smoke test, its full matrix moves
-  to the weekly tier, and its coverage gate freezes at the exit commit. None
-  of that has been applied. Today this rung still costs, on every relevant
-  framework PR: the `ladder-tests` job's path-filtered run, `linux-all-features`
-  building the whole ladder on every push, `codecov.yml`'s **blocking**
-  `pastebin` component, and `wasm-ladder.yml`'s broad path filter. That is a
-  deliberate sequencing decision, not an oversight: demotion is gated on rung
-  exit, and exit is gated on the findings triage above. Applying it now would
-  jump ahead of this rung's own exit criteria and freeze a coverage gate at a
-  commit the owner has not yet accepted as the exit. Whoever completes the
-  triage pass should do the demotion in the same change — that is the moment
-  it becomes correct, and `FINDINGS.md`'s closing line ("the instrument built
-  to motivate framework change must never become the reason a framework fix
-  is too expensive to land") is why it should not be forgotten then.
+- **Findings triage complete.** [`../FINDINGS.md`](../FINDINGS.md)'s "Rung
+  exit criteria" makes a rung done when (1) its README's design questions are
+  resolved in writing, (2) every named strain test exists — passing or filed
+  as a finding, and (3) its findings are triaged (no `open` dispositions
+  left). All three are now met: of the ten findings this rung owned or
+  inherited, eight have since been fixed framework-side (the framework fixes
+  are described inline throughout this README and this rung's own source
+  comments, not re-listed here). `db_fault_fixture.hpp`'s store-error
+  coverage gap (see "Store-error branch coverage" above) is a genuine,
+  still-current limitation, documented there and in
+  `examples/TESTING.md`/`IMPLEMENTATION.md` directly rather than as a
+  standalone finding. The sqliteodbc `RETURNING`/`SQLFetch` gap (see
+  "Burn-atomicity" above) is filed upstream against
+  [`Lightweight`](https://github.com/LASTRADA-Software/Lightweight/issues/545)
+  and tracked morph-side as
+  [`morph#58`](https://github.com/LASTRADA-Software/morph/issues/58) — a
+  genuine third-party ODBC driver limitation, not fixable in morph source.
 - The WASM client's verification status, above.
 - **`ladder-tests` still builds no GUI.** That job's distro Qt is 6.4.2, below
   the 6.5 floor `MORPH_BUILD_FORMS_QML` requires, so it configures without the
@@ -391,13 +365,12 @@ the `BridgeHandler<PasteModel>` `AppContext::onReady()` hands it.
   `linux-all-features` job now enables `MORPH_BUILD_LADDER` alongside
   `MORPH_BUILD_FORMS_QML` (it already installs Qt 6.8), so that is where those
   targets are built and that test runs.
-- **Registration timing**
-  ([finding 024](../../docs/findings/024-no-registration-settled-seam.md)):
-  both clients open with a bounded retry `Timer` in `Main.qml`, because morph
-  exposes no "registration settled" seam. It is bounded by success, not by an
-  attempt cap, so a server that never answers leaves the client retrying at
-  ~6.7 Hz with no terminal error — and `Remote` mode has no connect timeout at
-  all.
+- **Registration timing.** `PasteBridge` exposes a `bound` signal
+  (`Presenter::trackBound()`, backed by `Bridge::whenBound()`) that settles
+  once the registration round trip lands; both clients' `Main.qml` gates its
+  bootstrap `refresh()` on it instead of retrying on a timer. `Remote` mode
+  still has no connect timeout, so a server that never answers leaves `bound`
+  simply never firing and the list pane empty with no terminal error.
 - Deferred by design: the convergence assertion (needs rung 3's
   `poll()`/`lastEventId()`), the full hostile-content corpus (a representative
   subset ships), true reply-frame loss (rung 4's fault-injection proxy), file

@@ -28,8 +28,9 @@
 /// reasons:
 ///
 /// - `CreatePoll` — `options` is `std::vector<CreatePollOption>`, a JSON
-///   `array` field `DynamicForm` has no control for (finding 031, discovered
-///   during rung 2's own GUI shell). Mirrors rung 2's `BulkEdit` workaround:
+///   array of *objects*, not the array-of-strings `DynamicForm`'s
+///   array-field control supports (a gap first hit during rung 2's own GUI
+///   shell). Mirrors rung 2's `BulkEdit` workaround:
 ///   excluded here, driven by a hand-written QML list editor in
 ///   `gui/qml/CreatePollView.qml` instead, which calls
 ///   `PollBridge::createPoll(title, optionLabels)` directly rather than
@@ -43,18 +44,21 @@
 ///   `OpenPoll`/`AddComment`/... use, just not the same *path* (see that
 ///   class's own doc comment for why routing must stay on one handler here).
 /// - `OpenPoll`/`GetPollState`/`GetEventsSince` — `OpenPoll` is this rung's
-///   one `BRIDGE_MODEL_KEY`-registered (payload-keyed) action. Dispatching a
-///   payload-keyed action through `BridgeHandler::executeJson` on an
-///   `AllowShared` handler silently skips the attach step entirely
-///   (`ActionExecuteRegistry::registerAction`'s stored executor closes over
-///   the *plain* `BridgeHandler<Model>` overload of `execute<Action>()`, not
-///   the `AllowShared` one actually installed — `kShared` resolves `false`
-///   at that call site regardless of the real handler's type, so the
-///   payload-keyed attach branch never runs; see
-///   `docs/findings/034-executejson-skips-payload-keyed-attach-for-allowshared-handlers.md`).
-///   `OpenPoll` is therefore dispatched only via
+///   one `BRIDGE_MODEL_KEY`-registered (payload-keyed) action. At the time
+///   this class was built, dispatching a payload-keyed action through
+///   `BridgeHandler::executeJson` on an `AllowShared` handler silently
+///   skipped the attach step entirely — `ActionExecuteRegistry::
+///   registerAction`'s stored executor closed over the *plain*
+///   `BridgeHandler<Model>` overload of `execute<Action>()` regardless of
+///   the real handler's `Sharing` policy, so the payload-keyed attach branch
+///   never ran. `registerAction` now builds one executor per `Sharing`
+///   policy and `executeJson` dispatches through the handler's own real
+///   policy, so this specific mis-dispatch is closed framework-side.
+///   `OpenPoll` is still dispatched only via
 ///   `PollFormsController::openPoll(pollId)`, which calls the templated
-///   `BridgeHandler<PollModel, AllowShared>::execute<OpenPoll>()` directly.
+///   `BridgeHandler<PollModel, AllowShared>::execute<OpenPoll>()` directly
+///   — this rung was never migrated to route it through the now-fixed
+///   generic path instead.
 ///   `GetPollState`/`GetEventsSince` take no user-entered fields at all (a
 ///   refresh and a polling tick, not something a person fills in), so both
 ///   are exposed as plain typed methods instead of schema forms — `Login`'s

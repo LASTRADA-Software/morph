@@ -235,9 +235,12 @@ TEST_CASE("AppContext{Remote} defers readiness to the first connect",
     morph::ladder::gui::AppContext ctx{morph::ladder::gui::Remote{rig.url()}};
 
     // Not ready the line after construction: QWebSocket::open() is
-    // asynchronous and no event-loop turn has run yet. Constructing a
-    // BridgeHandler here is exactly the permanent registration failure
-    // docs/findings/017-async-registration-fails-before-connect.md describes.
+    // asynchronous and no event-loop turn has run yet. A BridgeHandler
+    // constructed here would queue its registration and retry once the
+    // socket connects (registerModelAsync's queueing, docs/spec/core/
+    // backend.md), rather than failing -- but ctx.ready() still reflects
+    // socket-connect timing, not registration settlement, so it is false
+    // regardless.
     REQUIRE_FALSE(ctx.ready());
 
     int fired = 0;

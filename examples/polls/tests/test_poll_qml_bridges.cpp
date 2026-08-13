@@ -402,15 +402,20 @@ TEST_CASE("PollBridge threads openPoll's attach through every later action on th
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// submitIfValid's allow-list (finding 034's guard)
+// submitIfValid's allow-list
 // ═════════════════════════════════════════════════════════════════════════
 
 TEST_CASE("PollBridge::submitIfValid refuses an action outside the schema document instead of mis-dispatching it",
           "[polls][gui][qml-bridges]") {
-    // OpenPoll in particular: dispatching it through executeJson on an
-    // AllowShared handler silently skips the payload-keyed attach step
-    // (docs/findings/034) -- PollFormsController::submitIfValid refuses it
-    // by name before that path is ever reached.
+    // OpenPoll in particular: PollFormsController::submitIfValid refuses it
+    // by name rather than routing it through executeJson --
+    // ActionExecuteRegistry::registerAction now builds a Sharing-aware
+    // executor, so executeJson itself no longer mis-dispatches OpenPoll's
+    // payload-keyed attach the way it once did, but this rung's own
+    // PollFormsController was never migrated to rely on that fix; OpenPoll
+    // still goes through openPoll()'s own execute<OpenPoll>() call, and this
+    // guard is what keeps a caller from reaching submitIfValid's generic
+    // path for it instead.
     DbFixture fixture;
     auto rig = makeRig();
     polls::gui::PollBridge bridge{rig->bridge(0), rig->executor()};

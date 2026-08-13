@@ -93,10 +93,13 @@ Actions, in build order:
   the ordinary path). `authorizeRegister`/`authorizeInstance` were intended
   to be exercised for real (see "Design decisions" below), with
   `tests/test_policy_hardening.cpp`'s `OwnershipAuthorizer` as the framework
-  precedent for per-user instance ownership — **neither turned out to be
-  reachable from an application; see the "Corrected by finding 027" bullet
-  under "Design decisions"**. What *is* wired end-to-end and genuinely
-  exercised is the part that matters most: signed tokens minted by the
+  precedent for per-user instance ownership. `authorizeInstance` is now
+  genuinely reachable and enforcing — see the "Instance-level ownership is
+  now real, but is not the layer that protects a user's data" bullet under
+  "Design decisions" for exactly what it does and does not catch.
+  `authorizeRegister` remains unconditionally permissive by choice. What is
+  wired end-to-end and genuinely exercised regardless is the part that
+  matters most: signed tokens minted by the
   server, verified on every single `execute`, with the verified principal
   made authoritative before any model runs. The local backend genuinely
   never authorizes (`LocalBackend::registerModel`/`registerModelShared`
@@ -215,35 +218,42 @@ resolve in writing:
   gate. Ownership is enforced twice regardless, per rule 1: server-side via
   the authorizer, and again inside the model itself against
   `Context::principal`, since the local backend enforces neither.
-- **Corrected by finding 027 (task 12): the two authorizer hooks above are
-  not reachable from an application, and the model's own re-check is what
-  carries per-user ownership.** The bullet above is right about *which*
-  registration path records an owner (plain, not shared) and right about the
-  code it cites — but `RemoteServer` stamps `_owners[mid]` from
-  `env.session.principal`, and no `Bridge` client ever puts a session on a
-  `register` envelope: `wire::makeRegister` does not carry one and
-  `IBackend`'s registration surface has no parameter for one, so `Bridge`'s
-  default session reaches `execute` and nothing else
-  (`docs/findings/027-register-envelope-carries-no-session.md`). Two
-  consequences, both verified against a real `RemoteServer` while wiring
-  `App`: (1) an `authorizeRegister` that requires a non-empty principal —
-  what this rung originally shipped, copied from the framework's own
-  `tests/test_register_authorization.cpp` — rejects *every* client's very
-  first `BridgeHandler` construction, valid token or not, so it is now
-  documented as unconditionally permissive; and (2) the recorded owner is
-  always empty, so `authorizeInstance`'s ownership comparison never denies
-  anything and is retained only against a future fix. **Nothing about this
-  rung's user isolation depends on either.** Every `execute` still goes
+- **Instance-level ownership is now real, but is not the layer that
+  protects a user's data.** `register`/`attach`/`assign`/`deregister`
+  envelopes carry the caller's authenticated session, so `RemoteServer`
+  records a real, non-empty owner for each of `BookmarkModel`/`TagModel`'s
+  plain-registered instances, and `authorizeInstance`'s ownership comparison
+  genuinely denies a different principal's `execute`/`deregister` naming
+  that instance's `modelId` directly — confirmed empirically (a test
+  authorizer logged `ctx.principal`/`ownerPrincipal` for both alice's and
+  mallory's own instances during development). `authorizeRegister` stays
+  unconditionally permissive, by choice rather than necessity (see its own
+  doc comment).
+  **What this does not do is protect one user's row from another's**, and it
+  never could, fixed or not: `BridgeHandler<Model>` (this rung's only
+  shipped client) never names another connection's `modelId` — each client
+  only ever dispatches through its own registered instance — so a normal
+  client's cross-user access attempt (`GetBookmark{id}` naming another
+  user's row through the caller's *own*, legitimately-owned instance) never
+  touches `authorizeInstance`'s check at all; it would pass regardless. That
+  is caught only by the model's own row-level re-check
+  (`tests/test_bookmark_model.cpp`'s "denied by the model's own ownership
+  re-check ... not by authorizeInstance" case, confirmed by the propagated
+  error message: `"bookmark belongs to a different principal"`, not
+  `authorizeInstance`'s `"unauthorized"`). Every `execute` also still goes
   through `SigningAuthorizer::authorize()` (a real signature and expiry
-  check, on a token an unauthenticated caller cannot produce), `RemoteServer`
-  still overwrites `Context::principal` with the verified identity before the
-  model runs, and every model still scopes its own queries to that principal
-  per rule 1 — which the bullet above already called the second of two
-  enforcement points and is now simply the only one. The one action that
-  deliberately does not scope by row owner, `RecordMetadata`, checks in its
-  own body that the caller *is* the metadata-fetch service principal, and
-  `AuthModel` refuses to mint a token in the reserved `system:` namespace, so
-  that authority cannot be requested from outside.
+  check, on a token an unauthenticated caller cannot produce), and
+  `RemoteServer` still overwrites `Context::principal` with the verified
+  identity before the model runs. Three layers in total, each catching a
+  different thing: token validity (`authorize`), instance ownership
+  (`authorizeInstance`, real but narrow), and row ownership (the model
+  itself, the one that actually matters for user isolation). The one action
+  that deliberately does not scope by row owner, `RecordMetadata`, checks in
+  its own body that the caller *is* the metadata-fetch service principal —
+  `authorizeInstance` cannot express that either, since the worker's own
+  instance is exactly what it is authorized to use — and `AuthModel` refuses
+  to mint a token in the reserved `system:` namespace, so that authority
+  cannot be requested from outside.
 - **Bookmark↔tag many-to-many.** Lightweight's `DataMapper` ships
   `HasManyThrough<ReferencedRecord, ThroughRecord>`
   (`.../DataMapper/HasManyThrough.hpp`), but it cannot be used as an embedded
@@ -317,14 +327,17 @@ source and test entities, alongside the `examples/pastebin`/
   originally read "specifically via the shipped `authorizeRegister` and
   `authorizeInstance` hooks … not only model-level checks", on the reasoning
   that leaving them untested here means they stay untested forever. Task 12
-  did exercise them against a real `RemoteServer` and that is precisely how
-  finding 027 was found: neither hook can see a caller's identity, because
-  `register` envelopes carry no session. The criterion therefore reads:
-  server-side enforcement via `SigningAuthorizer::authorize()` on every
-  action plus the models' own verified-principal scoping, **with the two
-  instance hooks' unreachability filed as a finding** — which is a better
-  outcome for the ladder's actual product (findings) than a hook that
-  silently allowed everything would have been.
+  exercised them against a real `RemoteServer` and found that neither hook
+  could see a caller's identity, because `register` envelopes carried no
+  session — filed as a finding, since fixed: envelopes now carry the
+  caller's authenticated session, and `authorizeInstance` is genuinely
+  enforcing for plain-registered instances (see "Instance-level ownership is
+  now real" above). The criterion reads: server-side enforcement via
+  `SigningAuthorizer::authorize()` on every action, `authorizeInstance`'s
+  now-real instance-ownership check, and the models' own verified-principal,
+  row-level scoping — three layers, with the last doing the work that
+  actually protects one user's data from another's, since instance-level
+  ownership alone was never the layer that could.
 - Metadata auto-fetch demonstrably running as a background job: bookmark
   appears immediately; title/favicon arrive via the minimal
   `GetChangesSince` poll (the rung-3 preview).
@@ -394,11 +407,13 @@ pure glue with no domain logic" clause:
 
 - `gui::BookmarkFormsController` — this rung's copy of
   `morph::qt::forms::FormsControllerCore`, composed over an injected
-  `Bridge&`/`IExecutor*` rather than constructing its own `LocalBackend`
-  ([finding 021](../../docs/findings/021-forms-controller-core-hardcodes-localbackend.md);
-  the same justification `pastebin::gui::PasteFormsController` carries, plus
-  one genuinely new part — routing an action-type string to whichever of the
-  three form-serving models owns it).
+  `Bridge&`/`IExecutor*` rather than constructing its own `LocalBackend`. The
+  shipped core's own composing constructor now supports this directly (the
+  same justification `pastebin::gui::PasteFormsController` carries), plus
+  one genuinely new part this rung's own controller still owns — routing an
+  action-type string to whichever of the three form-serving models owns it,
+  which the shipped core (templated over a single model) has no equivalent
+  for.
 - `gui::FormsBridge::onLoginSucceeded` — installs the token the server
   returned as the shared `Bridge`'s default session, so every subsequent
   action carries it. Infrastructure wiring, not business logic: it decides
@@ -407,27 +422,23 @@ pure glue with no domain logic" clause:
 
 Known gaps:
 
-- **`DynamicForm` has no control for a JSON `array` field.**
-  `CreateBookmark::tags`/`EditBookmark::tags` are `std::vector<std::string>`
-  and reach the renderer as `{"type":"array","items":{"type":"string"}}`, for
-  which it falls back to a plain text field whose contents encode as a JSON
-  *string* — which the server then rejects with a decode error. Both members
-  are optional, so leaving them blank is well defined and the rest of each
-  form works; the failure is loud, not silent. The practical consequence:
-  **tagging is not reachable from the shipped GUI at all**, on either create
-  or edit. The protocol itself is fine — a client that assembles the body
-  itself sends `"tags":["work","home"]` and the model creates both tags, which
-  is how the end-to-end run exercised tag creation, rename and merge — so this
-  is purely a renderer limitation. Filed as
-  [finding 031](../../docs/findings/031-dynamicform-has-no-array-field-control.md),
-  which is stricter about it than this section originally was: the review
-  concluded this is not a missing feature that degrades gracefully but a
-  **silent-wrong-render defect** — a normal, enabled, apparently-functional
-  text input a user can type into and submit, producing a body the server is
-  guaranteed to reject every time, with nothing in the UI saying why. The
-  finding names the entry point for a fix
-  (`src/qt/forms/qml/DynamicForm.qml`'s `fields` descriptor around
-  lines 160-213, plus the matching arm in `fieldJsonLiteral`).
+- ~~`DynamicForm` has no control for a JSON `array` field.`~~ **Fixed
+  framework-side.** `CreateBookmark::tags`/`EditBookmark::tags` are
+  `std::vector<std::string>`, reaching the renderer as
+  `{"type":"array","items":{"type":"string"}}`. `DynamicForm` now renders a
+  dedicated comma-separated-with-validation control for exactly this shape
+  (`src/qt/forms/qml/DynamicForm.qml`'s `isArray` field descriptor and
+  `fieldJsonLiteral`/`arrayJsonLiteral`, covered by
+  `src/qt/forms/tests/tst_DynamicFormArrayField.qml`) and encodes it as a
+  genuine JSON array literal, not a stringified one — the server-rejection
+  failure mode this bullet used to describe no longer applies. Neither
+  `createForm` nor `editForm` in `BookmarkListView.qml` special-cases `tags`
+  (both render every field the schema declares), so tagging from the create
+  and edit forms works without any change on this rung's side — the fix
+  landed transparently underneath it. Not independently re-verified end to
+  end against this rung's own `MORPH_BUILD_FORMS_QML` build (not enabled in
+  every configuration), but the schema shape is identical to the one the
+  framework test above exercises and this rung's forms apply no exclusion.
 - **`BulkEdit` is not a form**, for that reason: its one required member is
   `std::vector<BookmarkId>`. The GUI drives it from the list's own
   multi-selection through `BookmarkBridge::bulkArchive` instead, where no
@@ -441,16 +452,16 @@ Known gaps:
   classes take `(Bridge&, IExecutor*)` by presenter rule 2, so sharing one
   handler between them is not expressible today. At the 256 cap that is ~42
   concurrent clients rather than ~64.
-- **Registration timing**
-  ([finding 024](../../docs/findings/024-no-registration-settled-seam.md)):
-  `BookmarkListView` opens with a bounded retry `Timer`, bounded by success
-  rather than by an attempt cap, exactly as rung 1's client does. The login
-  submit has no such retry, because it is user-initiated: a click that lands
-  before registration settles reports "handler not bound" and the next click
-  works. Measured against a real server, registration settles well inside the
-  time it takes to type a username, so this was never observed in practice —
-  but it is reachable, and a server that never answers leaves both the retry
-  timer spinning at ~6.7 Hz and the login button failing forever, since
+- **Registration timing.** `BookmarkListView`'s three list controllers each
+  expose a `bound` signal (`Presenter::trackBound()`, backed by
+  `Bridge::whenBound()`) that settles once their registration round trip
+  lands; the view gates its bootstrap `refresh()` calls on it instead of
+  retrying on a timer. The login submit has no such gate, because it is
+  user-initiated: a click that lands before registration settles reports
+  "handler not bound" and the next click works. Measured against a real
+  server, registration settles well inside the time it takes to type a
+  username, so this was never observed in practice — but it is reachable, and
+  a server that never answers leaves the login button failing forever, since
   `Remote` mode has no connect timeout at all.
 - **No `--seed`.** `LADDER.md` asks every rung for one; this rung's server
   ships none, deliberately — see `src/server/main.cpp`'s file comment for the

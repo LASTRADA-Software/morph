@@ -143,11 +143,10 @@ constexpr std::size_t kPageSize = 20;
 ///
 /// **Not** `... RETURNING`: the sqliteodbc driver this rung runs against
 /// reports the RETURNING column count but then fails `SQLFetch` with SQLSTATE
-/// 24000 ("Invalid cursor state") — see
-/// `docs/findings/022-sqliteodbc-update-returning-no-cursor.md`. The row is
-/// read back by a second statement inside the same transaction instead; the
-/// atomicity argument is unchanged because the guard still lives in the
-/// `UPDATE` itself.
+/// 24000 ("Invalid cursor state") — filed upstream as
+/// `LASTRADA-Software/Lightweight#545`. The row is read back by a second
+/// statement inside the same transaction instead; the atomicity argument is
+/// unchanged because the guard still lives in the `UPDATE` itself.
 constexpr std::string_view kConsumeReadSql = R"(UPDATE pastes
        SET read_count = read_count + 1
      WHERE id = ?

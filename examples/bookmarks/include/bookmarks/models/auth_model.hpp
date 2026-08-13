@@ -16,11 +16,12 @@ namespace bookmarks {
 /// Stateless: no database, so no `db::WithMapper` base and nothing to
 /// persist. The secret it signs with comes from the process-global
 /// `auth::tokenIssuer()` slot, which `app::App` installs at startup with the
-/// *same* secret it hands its `auth::BookmarksAuthorizer` — registry-
-/// constructed models are always default-constructed
-/// (`docs/findings/003`, `docs/findings/020`), so there is no
-/// constructor-injection seam to pass it through, exactly as
-/// `morph::journal::setActionLog` already works around for action logs.
+/// *same* secret it hands its `auth::BookmarksAuthorizer` — this model is
+/// registered via the plain `BRIDGE_REGISTER_MODEL` default-construction
+/// path rather than `ModelRegistryFactory`'s per-instance construction-hook
+/// seam (`include/morph/core/registry.hpp`), so a process-global slot passes
+/// the secret through instead, exactly as `morph::journal::setActionLog`
+/// already works around for action logs.
 class AuthModel {
   public:
     /// @brief Verifies @p action's username and mints a token for it.

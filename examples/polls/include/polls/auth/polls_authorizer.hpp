@@ -23,8 +23,10 @@
 ///
 /// @par How this relates to `BookmarksAuthorizer`, precisely
 /// The two share one idea -- both leave `authorizeRegister`/
-/// `authorizeInstance` unconditionally permissive because finding 027 makes
-/// any identity check there unenforceable -- and nothing else. They are not
+/// `authorizeInstance` unconditionally permissive, by design rather than
+/// necessity (the framework can gate both on identity now that `register`/
+/// `attach` envelopes carry the caller's session; neither authorizer chooses
+/// to) -- and nothing else. They are not
 /// structurally alike: `BookmarksAuthorizer` derives from
 /// `SigningAuthorizer`, overrides `authorize()` with a real carve-out on top
 /// of genuine signed-token verification, ships principal-validation helpers,
@@ -36,23 +38,23 @@
 /// type as "reaches the same conclusion about those two hooks", never as
 /// "is the same shape".
 ///
-/// @warning Both of those two hooks are limited by
-/// `docs/findings/027-register-envelope-carries-no-session.md`, exactly as
-/// `BookmarksAuthorizer`'s own `@file` comment documents: morph's
-/// `register` envelope carries no session, so `RemoteServer` sees an empty,
-/// unauthenticated `Context` on every registration a `Bridge` client makes.
-/// The rung README's resolved design decision 2 extends that finding's
-/// scope explicitly to `registerModelShared`/`attachModel` (the keyed
-/// `OpenPoll{pollId}` attach `PollModel` uses): `wire::makeRegisterShared`
-/// carries no session either, exactly like plain `wire::makeRegister`, so
-/// `authorizeRegister` cannot gate a poll attach by admin/participant token
-/// -- and is not meant to; attaching to a poll by id is meant to be as open
-/// as knowing the shareable link, by this rung's own design. What actually
+/// `register`/`attach`/`assign`/`deregister` envelopes now carry the
+/// caller's authenticated session (both plain `wire::makeRegister` and
+/// `wire::makeRegisterShared`, the keyed `OpenPoll{pollId}` attach
+/// `PollModel` uses), so `authorizeRegister` *could* gate a poll attach by
+/// admin/participant identity -- but this rung chooses not to: attaching to
+/// a poll by id is meant to be as open as knowing the shareable link, by
+/// design (the rung README's resolved design decision 2). What actually
 /// enforces admin-vs-participant is entirely inside `PollModel::execute()`:
 /// `FinalizePoll` -- the model's *only* token-gated action -- calls
 /// `requireAdmin()` itself, re-checking the caller's token against the
-/// poll row's own stored column on every dispatch, mirroring rung 2's
-/// "`authorizeInstance` is inert, the model re-checks ownership" pattern.
+/// poll row's own stored column on every dispatch. This mirrors rung 2's
+/// shape for a different reason, though: bookmarks' `authorizeInstance` is
+/// now genuinely enforcing but checks *instance* ownership, which
+/// `PollModel` has no equivalent of at all (its instances are shared/keyed
+/// by pollId, not owned by a caller) -- so the model's own re-check is not
+/// standing in for a defeated framework hook, it is simply the only layer
+/// that could ever express this rung's admin-vs-participant distinction.
 
 namespace polls::auth {
 
@@ -63,28 +65,29 @@ class PollsAuthorizer : public ::morph::session::AllowAllAuthorizer {
   public:
     using AllowAllAuthorizer::AllowAllAuthorizer;
 
-    /// @brief Admits every registration -- the only decision finding 027
-    ///        (extended to shared/keyed registration by this rung's own
-    ///        design decision 2) leaves this hook able to make.
+    /// @brief Admits every registration, by this rung's own design -- not
+    ///        because identity is unavailable to gate on.
     ///
-    /// Same reasoning as `BookmarksAuthorizer::authorizeRegister` (not the
+    /// Same conclusion as `BookmarksAuthorizer::authorizeRegister` (not the
     /// same shape -- see this file's `@file` comment), extended: this covers
     /// not only a plain `PollModel` registration but also the keyed
     /// `OpenPoll` attach path (`registerModelShared`/`attachModel`'s wire
-    /// form, which is still a session-less `register` envelope per design
-    /// decision 2). Admitting an unauthenticated attach gives away exactly
-    /// what knowing the `pollId` already gives away, which by this rung's
-    /// design is everything except finalizing: `FinalizePoll` is the one
-    /// action that re-checks a token (`PollModel::requireAdmin()`, against
-    /// the poll row's own `adminToken` column), and every other action is
-    /// ungated on purpose -- see `poll_model.hpp`'s "What is actually gated"
-    /// section for the full, exact statement. Requiring an identity that
-    /// cannot be presented (finding 027's `ctx.principal` is always empty here) would
-    /// not be security, it would be an outage that rejects every real
-    /// client's first `BridgeHandler` construction -- including one that
-    /// goes on to present a perfectly valid admin token to `FinalizePoll`.
-    /// @param ctx       Per-call session for the register envelope. Empty
-    ///                  in practice -- see this file's `@file` warning.
+    /// form, which now carries a session too, exactly like plain
+    /// `wire::makeRegister`). Admitting an unauthenticated attach gives away
+    /// exactly what knowing the `pollId` already gives away, which by this
+    /// rung's design is everything except finalizing: `FinalizePoll` is the
+    /// one action that re-checks a token (`PollModel::requireAdmin()`,
+    /// against the poll row's own `adminToken` column), and every other
+    /// action is ungated on purpose -- see `poll_model.hpp`'s "What is
+    /// actually gated" section for the full, exact statement. This hook
+    /// stays permissive regardless of whether @p ctx carries a real
+    /// principal or not, since attaching to a poll by id is meant to be as
+    /// open as knowing the shareable link -- gating it now would change this
+    /// rung's own product decision, not merely close a framework gap.
+    /// @param ctx       Per-call session for the register envelope.
+    ///                  Populated with the caller's verified principal when
+    ///                  it holds a valid session, empty otherwise; ignored
+    ///                  either way -- see above.
     /// @param modelType Target model type id. `RemoteServer` has already
     ///                  rejected a type its registry does not know by the
     ///                  time this runs.
@@ -96,19 +99,24 @@ class PollsAuthorizer : public ::morph::session::AllowAllAuthorizer {
     ///        principal to check against here.
     ///
     /// `BookmarksAuthorizer::authorizeInstance` compares a recorded owner
-    /// principal against `ctx.principal`; that comparison presumes a
-    /// registration-time identity finding 027 never actually supplies (see
-    /// its own `@warning`). This rung does not even attempt it: `PollModel`
-    /// instances are shared/keyed by `pollId` (`BRIDGE_MODEL_KEY`, not
-    /// per-caller ownership), so there is no "owner" concept for this hook
-    /// to enforce in the first place -- the admin-vs-participant boundary
-    /// this rung actually has lives entirely inside `PollModel::execute()`,
-    /// not at the instance-ownership layer.
+    /// principal against `ctx.principal`, and is now genuinely enforcing for
+    /// bookmarks' plain-registered models. That comparison presumes a
+    /// per-caller owner concept `PollModel` never has in the first place:
+    /// its instances are exclusively shared/keyed by `pollId`
+    /// (`BRIDGE_MODEL_KEY`), which `RemoteServer` records ownerless by
+    /// design (there is no single owning caller for a shared instance) --
+    /// independent of, and unaffected by, whether register envelopes carry
+    /// a session. This rung does not even attempt the comparison: the
+    /// admin-vs-participant boundary this rung actually has lives entirely
+    /// inside `PollModel::execute()`, not at the instance-ownership layer.
     /// @param ctx            Per-call session. Ignored -- see above.
     /// @param modelType      Ignored: the same rule applies to every model.
     /// @param actionType     Ignored.
     /// @param modelId        Ignored: there is no per-instance owner to key on.
-    /// @param ownerPrincipal Ignored -- always empty in practice (finding 027).
+    /// @param ownerPrincipal Ignored -- always empty in practice: `PollModel`
+    ///                       instances are exclusively shared/keyed, and
+    ///                       shared instances are recorded ownerless by
+    ///                       design, not because owners can't be tracked.
     /// @return `true`, always -- see this function's own doc comment.
     [[nodiscard]] bool authorizeInstance([[maybe_unused]] const ::morph::session::Context& ctx,
                                          [[maybe_unused]] std::string_view modelType,

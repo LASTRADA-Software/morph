@@ -56,12 +56,6 @@ Item {
     property string status: ""
     property bool statusIsError: false
 
-    /// True once each list has answered at least once, including with an
-    /// empty page. Gates the bootstrap timer below; see it for why.
-    property bool listedOnce: false
-    property bool tagsListedOnce: false
-    property bool feedListedOnce: false
-
     function report(message, isError) {
         page.status = message
         page.statusIsError = isError
@@ -98,37 +92,23 @@ Item {
     // The first listing cannot simply be requested once on completion. In
     // Remote mode AppContext::onReady() fires when the *socket* connects,
     // which is when gui/main.cpp builds the adapters — but a BridgeHandler's
-    // registration is a round trip, and until its reply lands the handler's
-    // `currentId` is still 0 and every dispatch through it fails fast with
-    // "handler not bound" (morph/core/bridge.hpp). morph exposes no
-    // "registration settled" seam to wait on today
-    // (docs/findings/024-no-registration-settled-seam.md), so the view layer
-    // retries — which is where a timer belongs anyway (examples/TESTING.md
-    // presenter rule 4). Bounded by *success*, not by an attempt cap: the
-    // first reply from each of the three lists, empty or not, stops it
-    // forever. Local mode registers synchronously, so its first tick always
-    // succeeds. This is the identical mitigation pastebin's own Main.qml
-    // carries, for the identical reason.
-    Timer {
-        interval: 150
-        repeat: true
-        triggeredOnStart: true
-        running: page.bookmarkController !== null
-                 && !(page.listedOnce && page.tagsListedOnce && page.feedListedOnce)
-        onTriggered: page.refreshAll()
-    }
-
+    // registration is a round trip, and until its reply lands every dispatch
+    // through it fails fast with "handler not bound" (morph/core/bridge.hpp).
+    // `bound` (backed by `Bridge::whenBound()`) is each controller's own
+    // settlement signal for that round trip — Local mode's handlers are
+    // already bound by construction, so all three fire synchronously there.
+    // This is the identical mitigation pastebin's own Main.qml carries, for
+    // the identical reason.
     Connections {
         target: page.bookmarkController
 
+        function onBound() {
+            page.refreshBookmarks()
+        }
+
         function onListed(rows) {
             page.rows = rows
-            if (!page.listedOnce) {
-                page.listedOnce = true
-                // Drop whatever the bootstrap retries above provoked; anything
-                // the user caused is older than this reply and equally stale.
-                page.report("", false)
-            }
+            page.report("", false)
         }
 
         function onLoaded(bookmark) {
@@ -166,9 +146,12 @@ Item {
     Connections {
         target: page.tagController
 
+        function onBound() {
+            page.tagController.refresh()
+        }
+
         function onListed(rows) {
             page.tagRows = rows
-            page.tagsListedOnce = true
         }
 
         function onFailed(message) {
@@ -179,9 +162,12 @@ Item {
     Connections {
         target: page.feedController
 
+        function onBound() {
+            page.feedController.refresh()
+        }
+
         function onListed(rows) {
             page.feedRows = rows
-            page.feedListedOnce = true
         }
 
         function onFailed(message) {

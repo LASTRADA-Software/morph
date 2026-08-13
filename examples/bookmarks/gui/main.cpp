@@ -113,11 +113,16 @@ int main(int argc, char** argv) {
         // All four adapters — and therefore all six `BridgeHandler`s they own
         // between them — are built here, once, and live until the process
         // exits. Nothing is torn down and rebuilt around login: login only
-        // installs a session on the shared `Bridge`. That is deliberate, and
-        // docs/findings/030-deregister-reply-races-sync-register-callid-zero.md
-        // is why — a handler destroyed and a different one constructed on the
-        // same connection immediately after can permanently zero the new
-        // binding's model id.
+        // installs a session on the shared `Bridge`. That is deliberate:
+        // `QtWebSocketBackend::deregisterModel` now assigns its fire-and-
+        // forget `deregister` envelope a real, tracked callId rather than
+        // sharing the `callId == 0` sentinel a subsequent synchronous
+        // register/attach/assign call also used to, closing a race that used
+        // to be able to permanently zero a freshly constructed handler's
+        // model id if it was built on the same connection right after an
+        // older one was torn down — but this shape (build once, never rebuild)
+        // was never the shape that race needed in the first place, so it
+        // stays regardless.
         formsBridge = std::make_unique<bookmarks::gui::FormsBridge>(ctx.bridge(), ctx.executor());
         bookmarkBridge = std::make_unique<bookmarks::gui::BookmarkBridge>(ctx.bridge(), ctx.executor());
         tagBridge = std::make_unique<bookmarks::gui::TagBridge>(ctx.bridge(), ctx.executor());

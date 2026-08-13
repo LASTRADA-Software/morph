@@ -36,17 +36,16 @@
 ///
 /// Note what is *not* here: no `asyncRegistrationEnabled` flag, no
 /// `setConnectHandler`, no hand-rolled wait-for-binding timer. The
-/// `examples/common/wasm_spike/main_wasm.cpp` spike had to hand-roll all
-/// three; `AppContext` (`examples/common/gui/app_context.hpp`) now owns the
-/// first two generically for every client, native or browser, and
-/// `Main.qml`'s bootstrap-retry `Timer` — shared, like the rest of the QML —
-/// covers the third (`docs/findings/024`, the "handler not bound" window that
-/// opens on connect and closes when registration settles; it is a *remote*
-/// mode gap, so this client hits exactly the same one the desktop client does
-/// in `--server` mode, and is covered by exactly the same mitigation).
-/// Confirmed by reading pastebin's own `gui_wasm/main_wasm.cpp`, which
-/// carries the identical note rather than a hand-rolled retry timer — this
-/// file follows the same pattern rather than reintroducing one.
+/// `examples/common/wasm_spike/main_wasm.cpp` spike had to hand-roll both;
+/// `AppContext` (`examples/common/gui/app_context.hpp`) now owns them
+/// generically for every client, native or browser. This rung hits the same
+/// "handler not bound" window pastebin's own `--server`/WASM clients do (the
+/// registration round trip that opens on connect and closes once it lands),
+/// but needs no `whenBound()`-gated bootstrap dispatch of its own the way
+/// `pastebin::gui::PasteBridge::bound` gates `Main.qml`'s first `refresh()`:
+/// nothing in this rung's `Main.qml` dispatches on `Component.onCompleted`,
+/// so the window closes before a user can click anything, not before a
+/// bootstrap call needs to land.
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten
@@ -83,13 +82,13 @@ int main(int argc, char** argv) {
     std::unique_ptr<bookmarks::gui::TagBridge> tagBridge;
     std::unique_ptr<bookmarks::gui::SharedFeedBridge> feedBridge;
 
-    // Every handler is built from inside onReady(), never before it: a Remote
-    // context is not usable the line after its constructor returns, and a
-    // registration issued before the socket is up fails permanently with no
-    // retry (docs/findings/017). Identical to gui/main.cpp's --server path,
-    // including building all four adapters up front rather than tearing one
-    // down and rebuilding it around login
-    // (docs/findings/030-deregister-reply-races-sync-register-callid-zero.md).
+    // Every handler is built from inside onReady(), never before it -- a
+    // Remote context is not usable the line after its constructor returns,
+    // per AppContext's own readiness contract. Identical to gui/main.cpp's
+    // --server path, including building all four adapters up front rather
+    // than tearing one down and rebuilding it around login -- see that
+    // file's identical comment for why (a since-fixed deregister-callId
+    // race this shape was never actually exposed to anyway).
     ctx.onReady([&] {
         formsBridge = std::make_unique<bookmarks::gui::FormsBridge>(ctx.bridge(), ctx.executor());
         bookmarkBridge = std::make_unique<bookmarks::gui::BookmarkBridge>(ctx.bridge(), ctx.executor());

@@ -205,6 +205,13 @@ class BookmarkBridge : public QObject {
     Q_INVOKABLE void bulkArchive(const QVariantList& ids, bool archive);
 
   signals:
+    /// @brief Emitted once the wrapped presenter's registration round trip
+    ///        settles — successfully or not (`Presenter::bound()`,
+    ///        `morph/core/bridge.hpp`'s `whenBound()`). `BookmarkListView.qml`
+    ///        gates its bootstrap `refresh()` on this instead of retrying on a
+    ///        `Timer`.
+    void bound();
+
     /// @brief One page of `ListBookmarks` rows, each an
     ///        `{id, url, title, tags, createdAt, updatedAt, readState,
     ///        archiveState, visibility}` map.
@@ -251,6 +258,9 @@ class TagBridge : public QObject {
     Q_INVOKABLE void refresh();
 
   signals:
+    /// @brief Emitted once the wrapped presenter's registration round trip
+    ///        settles — see `BookmarkBridge::bound`'s identical doc comment.
+    void bound();
     /// @brief Every tag the caller owns, each an `{id, name, bookmarkCount}` map.
     /// @param rows The tag rows.
     void listed(const QVariantList& rows);
@@ -283,6 +293,9 @@ class SharedFeedBridge : public QObject {
     Q_INVOKABLE void refresh();
 
   signals:
+    /// @brief Emitted once the wrapped presenter's registration round trip
+    ///        settles — see `BookmarkBridge::bound`'s identical doc comment.
+    void bound();
     /// @brief One page of the shared feed, in `BookmarkBridge::listed`'s row shape.
     /// @param rows The page's rows.
     void listed(const QVariantList& rows);

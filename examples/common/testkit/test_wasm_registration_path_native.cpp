@@ -5,7 +5,6 @@
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
-#include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/qt/qt_executor.hpp>
 #include <morph/qt/qt_websocket_backend.hpp>
@@ -13,6 +12,7 @@
 
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <utility>
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
@@ -35,18 +35,21 @@ BRIDGE_REGISTER_MODEL(WasmSpikeProbeModel, "WasmSpikeProbeModel")
 BRIDGE_REGISTER_ACTION(WasmSpikeProbeModel, WasmSpikeProbeAction, "WasmSpikeProbeAction")
 
 // The brief's original draft for this test (and main_wasm.cpp's first draft)
-// called `bridge.registerHandler(binding)` unconditionally, immediately after
+// constructed a `BridgeHandler` unconditionally, immediately after
 // constructing the Bridge -- before any Qt event-loop turn had a chance to
 // run, so the QWebSocket was guaranteed to still be unconnected at that
 // point. `QtWebSocketBackend::registerModelAsync()` now queues a
 // pre-connect registration and retries it once the socket connects (see
 // tests/qt/test_qt_websocket.cpp's "registerModelAsync called before the
-// socket connects queues and retries once connected fires"), closing the
-// gap docs/findings/017-async-registration-fails-before-connect.md
-// originally documented -- so this call sequence now resolves natively,
-// with no need for the deferred-registerHandler workaround the test below
-// demonstrates (which remains a valid, simpler-still sequence, just no
-// longer the only correct one).
+// socket connects queues and retries once connected fires",
+// docs/spec/core/backend.md's "Asynchronous registration") -- so this call
+// sequence now resolves natively, with no need for the deferred-construction
+// workaround the test below demonstrates (which remains a valid,
+// simpler-still sequence, just no longer the only correct one).
+// `BridgeHandler::whenBound()`/`isBound()` observe the same settlement
+// `binding->currentId` used to be polled for directly, without this test
+// ever naming
+// `morph::bridge::detail::HandlerBinding`.
 TEST_CASE("registerHandler() called immediately after Bridge construction, before any event-loop turn, resolves "
           "once the socket connects -- see finding 017",
           "[ladder][testkit][wasm-spike]") {
@@ -57,26 +60,27 @@ TEST_CASE("registerHandler() called immediately after Bridge construction, befor
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
-        morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
 
     morph::qt::QtExecutor qtExec;
     morph::bridge::Bridge bridge{std::move(backendPtr)};
 
-    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
-    binding->typeId = "WasmSpikeProbeModel";
-    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WasmSpikeProbeModel>(); };
-    bridge.registerHandler(binding);  // called before the socket is connected -- see finding 017
+    // Constructing the handler registers immediately -- before the socket is
+    // connected -- see finding 017.
+    morph::bridge::BridgeHandler<WasmSpikeProbeModel> handler{bridge, &qtExec};
 
-    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return binding->currentId.load() != 0U; }));
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return handler.isBound(); }));
 }
 
-// The corrected, still fully WASM-safe sequence: defer `registerHandler()`
-// until `setConnectHandler`'s callback has actually fired at least once --
-// no `waitForConnected()` (which would nest an event loop and abort a WASM
-// page), just ordering the same non-blocking calls correctly. main_wasm.cpp
-// uses this exact corrected sequence (see its file comment for the same
-// explanation).
+// The corrected, still fully WASM-safe sequence: defer constructing the
+// `BridgeHandler` (whose constructor registers) until `setConnectHandler`'s
+// callback has actually fired at least once -- no `waitForConnected()`
+// (which would nest an event loop and abort a WASM page), just ordering the
+// same non-blocking calls correctly. main_wasm.cpp uses this exact corrected
+// sequence (see its file comment for the same explanation), including the
+// `std::optional<BridgeHandler<Model>>` deferred-construction idiom, since a
+// handler cannot be built before there is somewhere to register it into yet
+// must still exist afterward to `execute()` against.
 TEST_CASE("The WASM spike's registration call sequence resolves natively when registerHandler() is deferred to "
           "setConnectHandler's callback (asyncRegistrationEnabled + setConnectHandler)",
           "[ladder][testkit][wasm-spike]") {
@@ -87,25 +91,20 @@ TEST_CASE("The WASM spike's registration call sequence resolves natively when re
 
     QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
     auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
-        url, morph::model::detail::defaultDispatcher(), morph::model::detail::defaultRegistry(), std::nullopt,
-        morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
     auto* rawBackend = backendPtr.get();  // stays valid: bridge below co-owns the same object
-
-    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
-    binding->typeId = "WasmSpikeProbeModel";
-    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WasmSpikeProbeModel>(); };
 
     morph::qt::QtExecutor qtExec;
     morph::bridge::Bridge bridge{std::move(backendPtr)};
 
+    std::optional<morph::bridge::BridgeHandler<WasmSpikeProbeModel>> handler;
     // Installed after Bridge takes ownership (via the raw pointer captured
     // above) but before any event-loop turn runs, so it cannot miss the
     // connect signal -- identical pattern to main_wasm.cpp.
-    rawBackend->setConnectHandler([&bridge, binding] { bridge.registerHandler(binding); });
+    rawBackend->setConnectHandler([&bridge, &qtExec, &handler] { handler.emplace(bridge, &qtExec); });
 
-    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return binding->currentId.load() != 0U; }));
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return handler.has_value() && handler->isBound(); }));
 
-    morph::bridge::BridgeHandler<WasmSpikeProbeModel> handler{bridge, &qtExec, binding};
-    auto result = morph::ladder::testkit::awaitQt(handler.execute(WasmSpikeProbeAction{99}));
+    auto result = morph::ladder::testkit::awaitQt(handler->execute(WasmSpikeProbeAction{99}));
     REQUIRE(result == 99);
 }

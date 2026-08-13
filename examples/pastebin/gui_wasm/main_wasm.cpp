@@ -33,11 +33,12 @@
 /// `setConnectHandler`, no hand-rolled wait-for-binding timer. The spike had
 /// to hand-roll all three; `AppContext` (`examples/common/gui/app_context.hpp`)
 /// now owns the first two generically for every client, native or browser, and
-/// `Main.qml`'s bootstrap-retry `Timer` — shared, like the rest of the QML —
-/// covers the third (`docs/findings/024`, the "handler not bound" window that
-/// opens on connect and closes when registration settles; it is a *remote*
-/// mode gap, so this client hits exactly the same one the desktop client does
-/// in `--server` mode, and is covered by exactly the same mitigation).
+/// `PasteBridge::bound` — backed by `Bridge::whenBound()`, shared like the
+/// rest of the QML adapters — covers the third (the "handler not bound"
+/// window that opens on connect and closes when registration settles; it is
+/// a *remote* mode gap, so this client hits exactly the same one the desktop
+/// client does in `--server` mode, and `Main.qml` gates its bootstrap
+/// `refresh()` on the same signal in both).
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten

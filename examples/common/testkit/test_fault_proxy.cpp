@@ -77,8 +77,7 @@ struct ProxyRig {
         const QUrl proxyUrl = proxy->start();
 
         auto backendPtr = std::make_unique<::morph::qt::QtWebSocketBackend>(
-            proxyUrl, ::morph::model::detail::defaultDispatcher(), ::morph::model::detail::defaultRegistry(),
-            std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
+            proxyUrl, std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
         backend = backendPtr.get();
         if (!backendPtr->waitForConnected()) {
             throw std::runtime_error("ProxyRig: client failed to connect through the proxy");
@@ -272,8 +271,7 @@ TEST_CASE("FaultProxy: a second client connection replaces the first, still work
     // killAfter takes (a fresh connection replacing an aborted one); this test
     // doesn't need killAfter to reach it, just two connections in sequence.
     auto secondBackend = std::make_unique<::morph::qt::QtWebSocketBackend>(
-        rig.proxy->url(), ::morph::model::detail::defaultDispatcher(), ::morph::model::detail::defaultRegistry(),
-        std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
+        rig.proxy->url(), std::nullopt, ::morph::qt::QtWebSocketBackend::Config{.reconnectEnabled = false});
     REQUIRE(secondBackend->waitForConnected());
     ::morph::bridge::Bridge secondBridge{std::move(secondBackend)};
     ::morph::bridge::BridgeHandler<FaultProbeCounter> secondHandler{secondBridge, &rig.qtExec};

@@ -43,8 +43,7 @@ struct Local {
 ///
 /// @warning Asynchronously connected. A `Remote` context is **not** usable
 ///          the line after its constructor returns — see `AppContext`'s
-///          readiness contract (`ready()`/`onReady()`) and
-///          `docs/findings/017-async-registration-fails-before-connect.md`.
+///          readiness contract (`ready()`/`onReady()`) below.
 struct Remote {
     QUrl url;
 };
@@ -53,29 +52,24 @@ struct Remote {
 ///        declared in reverse), everything a presenter set needs and nothing
 ///        a presenter should construct itself.
 ///
-/// @par Readiness contract (why `Remote` mode is not usable immediately)
+/// @par Readiness contract (why `Remote` mode still defers registration)
 /// `Local` mode has no network dependency: `ready()` is `true` the moment the
 /// constructor returns and `onReady()` invokes its callback synchronously.
 ///
-/// `Remote` mode is different, and getting it wrong fails *silently and
-/// permanently*. The context builds its `QtWebSocketBackend` with
+/// `Remote` mode builds its `QtWebSocketBackend` with
 /// `Config{.asyncRegistrationEnabled = true}` (the plain synchronous
 /// `registerModel` nests a `QEventLoop` and aborts a WASM page —
-/// examples/TESTING.md, "WASM reality"), and
-/// `QtWebSocketBackend::registerModelAsync()` **fails immediately, with no
-/// retry and no queueing, if it is called before the socket has finished
-/// connecting** (`docs/findings/017-async-registration-fails-before-connect.md`).
-/// Constructing a `BridgeHandler` — whose constructor registers — is exactly
-/// such a call. Since `_socket.open()` is asynchronous, a handler built
-/// straight after this constructor returns is *guaranteed* to register before
-/// the connection is up: `binding->currentId` stays `0` forever, every
-/// `execute()` through that handler fails "handler not bound", and nothing
-/// throws to say why.
+/// examples/TESTING.md, "WASM reality"). `QtWebSocketBackend::
+/// registerModelAsync()` queues a registration issued before the socket
+/// has finished connecting and retries it once the connection comes up
+/// (`docs/spec/core/backend.md`, "Asynchronous registration"), so
+/// building a `BridgeHandler` immediately after this constructor returns is
+/// no longer the correctness hazard it once was.
 ///
-/// So this class detects readiness with `setConnectHandler` — not
+/// This class still detects readiness with `setConnectHandler` — not
 /// `waitForConnected()`, which nests an event loop and hangs a WASM page —
-/// and callers **must** build their presenters (and therefore their
-/// `BridgeHandler`s) from inside `onReady()`:
+/// and callers build their presenters (and therefore their `BridgeHandler`s)
+/// from inside `onReady()`:
 ///
 /// ```cpp
 /// AppContext ctx{Remote{url}};
@@ -83,9 +77,9 @@ struct Remote {
 /// ```
 ///
 /// This is the same ordering `examples/common/wasm_spike/main_wasm.cpp`
-/// demonstrates end-to-end. When finding 017 is fixed framework-side (by
-/// queueing a pre-connect registration until the socket comes up), the
-/// requirement relaxes to a convenience — but until then it is load-bearing.
+/// demonstrates end-to-end — deferring to `onReady()` is simpler to reason
+/// about than relying on the pre-connect queue, not a requirement for
+/// correctness.
 class AppContext {
   public:
     using Mode = std::variant<Local, Remote>;

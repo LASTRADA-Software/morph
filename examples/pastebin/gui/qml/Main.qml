@@ -38,10 +38,6 @@ ApplicationWindow {
     property string status: ""
     property bool statusIsError: false
 
-    /// True once *any* ListPastes reply has arrived — including an empty one.
-    /// Gates the bootstrap timer below; see it for why this exists.
-    property bool listedOnce: false
-
     function report(message, isError) {
         root.status = message
         root.statusIsError = isError
@@ -50,37 +46,24 @@ ApplicationWindow {
     // The first listing cannot simply be requested from Component.onCompleted.
     // In Remote mode AppContext::onReady() fires when the *socket* connects,
     // which is when gui/main.cpp builds the presenters — but a BridgeHandler's
-    // registration is a round trip, and until its reply lands the handler's
-    // `currentId` is still 0 and every dispatch through it fails fast with
-    // "handler not bound" (morph/core/bridge.hpp). Verified, not theorised:
-    // an unconditional refresh() on completion reliably reported exactly that
-    // error and left the list empty on every launch against a real server.
-    // morph exposes no "registration settled" seam to wait on today (the
-    // neighbouring half of docs/findings/017), so the view layer retries —
-    // which is where a timer belongs anyway (examples/TESTING.md presenter
-    // rule 4). Bounded, not a poll loop: the very first reply, empty or not,
-    // stops it forever. Local mode registers synchronously, so its first tick
-    // always succeeds.
-    Timer {
-        interval: 150
-        repeat: true
-        running: root.pasteController !== null && !root.listedOnce
-        triggeredOnStart: true
-        onTriggered: root.pasteController.refresh()
-    }
-
+    // registration is a round trip, and until its reply lands every dispatch
+    // through it fails fast with "handler not bound" (morph/core/bridge.hpp).
+    // Verified, not theorised: an unconditional refresh() on completion
+    // reliably reported exactly that error and left the list empty on every
+    // launch against a real server. `PasteBridge::bound` (backed by
+    // `Bridge::whenBound()`) is that round trip's settlement signal — Local
+    // mode's handler is already bound by construction, so this fires
+    // synchronously there.
     Connections {
         target: root.pasteController
 
+        function onBound() {
+            root.pasteController.refresh()
+        }
+
         function onListed(rows) {
             root.rows = rows
-            if (!root.listedOnce) {
-                root.listedOnce = true
-                // Drop the "handler not bound" the bootstrap retries above
-                // provoked; anything the user caused is older than this reply
-                // and equally stale.
-                root.report("", false)
-            }
+            root.report("", false)
         }
 
         function onLoaded(paste) {

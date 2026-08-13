@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "gui/app_context.hpp"
 
-#include <morph/core/registry.hpp>
 #include <morph/session/session.hpp>
 
 #include <optional>
@@ -26,11 +25,13 @@ AppContext::AppContext(Mode mode) {
     auto& remote = std::get<Remote>(mode);
     // asyncRegistrationEnabled: the synchronous registerModel path nests a
     // QEventLoop, which aborts a WASM page outright (examples/TESTING.md,
-    // "WASM reality"). Opting in is what makes the readiness contract in this
-    // class's doc comment necessary — an async registration issued before the
-    // socket connects fails permanently (finding 017).
+    // "WASM reality"). Registering before the socket connects now queues and
+    // retries once it does (finding 017), but this class still defers via
+    // setConnectHandler below rather than registering immediately — simpler
+    // to reason about than relying on the queue, and what makes the
+    // readiness contract in this class's doc comment necessary.
     auto backend = std::make_unique<::morph::qt::QtWebSocketBackend>(
-        remote.url, ::morph::model::detail::defaultDispatcher(), ::morph::model::detail::defaultRegistry(),
+        remote.url,
 #ifndef QT_NO_SSL
         std::nullopt,
 #endif

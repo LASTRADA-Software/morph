@@ -54,10 +54,9 @@ TEST_CASE("isValidPrincipal rejects the empty string, control bytes, and overlon
           "[bookmarks][auth]") {
     // Empty: never a valid identity to register as.
     CHECK_FALSE(isValidPrincipal(""));
-    // A raw control byte -- exactly the class of input finding 026 says
-    // TokenIssuer::issue()'s unescaped glz::write_json can corrupt. Rejected
-    // here, at this rung's own boundary, regardless of whether core is ever
-    // fixed.
+    // A raw control byte -- the class of input TokenIssuer::issue()'s
+    // glz::write_json now escapes correctly, but rejected here too, at this
+    // rung's own boundary, as an independent line of defense regardless.
     // Split into two adjacent string-literal tokens: `\x` escapes consume
     // every following hex digit, and `c`/`e` are valid hex digits, so an
     // unsplit "ali\x01ce" is parsed as the single out-of-range escape
@@ -123,16 +122,17 @@ TEST_CASE("BookmarksAuthorizer rejects a tampered or expired token", "[bookmarks
     CHECK_FALSE(authz.authorize(noTokenCtx, "BookmarkModel", "CreateBookmark"));
 }
 
-TEST_CASE("BookmarksAuthorizer::authorizeRegister admits an anonymous register, because "
-          "finding 027 leaves it nothing to gate on",
+TEST_CASE("BookmarksAuthorizer::authorizeRegister admits an anonymous register, by choice "
+          "rather than necessity",
           "[bookmarks][auth]") {
     const BookmarksAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
 
-    // `anonymous` is not a hypothetical: it is what RemoteServer *always*
-    // passes here, for every client, because `wire::makeRegister` carries no
-    // session (docs/findings/027-register-envelope-carries-no-session.md).
-    // The earlier `!ctx.principal.empty()` rule rejected 100% of real
-    // registrations, which is why it is gone.
+    // `anonymous` is a real, reachable input -- an unauthenticated client's
+    // first construction -- but no longer the *only* one now that
+    // `register`/`attach`/`assign`/`deregister` envelopes carry the caller's
+    // session: an authenticated caller's `ctx.principal` is populated here
+    // too. This hook stays unconditionally permissive regardless of which
+    // one it sees -- see authorizeRegister's own doc comment for why.
     Context anonymous;
     CHECK(authz.authorizeRegister(anonymous, "BookmarkModel"));
     CHECK(authz.authorizeRegister(anonymous, "TagModel"));
@@ -176,12 +176,12 @@ TEST_CASE("Registering is not authorizing: an anonymous caller's execute is stil
 TEST_CASE("BookmarksAuthorizer::authorizeInstance enforces real ownership for a "
           "plain-registered instance, and passes through an ownerless (shared) one",
           "[bookmarks][auth]") {
-    // Unit-level only: finding 027 means RemoteServer never actually hands
-    // this a non-empty `ownerPrincipal` today, so the first two CHECKs below
-    // describe the behaviour this function *will* exhibit once registers
-    // carry a session, and the third describes the only branch currently
-    // reachable in production. Kept deliberately -- see the function's own
-    // doc comment.
+    // `register` envelopes now carry the caller's session, so RemoteServer
+    // records a real, non-empty `ownerPrincipal` for a plain-registered
+    // instance -- all three CHECKs below are reachable in production
+    // (against a real `RemoteServer`, not just at this unit level), not
+    // merely illustrations of hypothetical future behavior. See the
+    // function's own doc comment for what this does and does not protect.
     const BookmarksAuthorizer authz{std::string{kSecret}, morph::session::hmacSha256};
 
     Context asAlice;

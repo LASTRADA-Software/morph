@@ -88,8 +88,9 @@ struct Login {
     ///
     /// Reuses `auth::isValidPrincipal`: a username this rejects could never
     /// be used as an `ownerPrincipal` anywhere else in this rung anyway, and
-    /// rejecting it here keeps a control byte out of the token payload
-    /// (finding 026, cited in that function's own doc comment). Declared
+    /// rejecting it here keeps a control byte out of the token payload as a
+    /// second, independent line of defense (see that function's own doc
+    /// comment). Declared
     /// rather than defined inline because the check lives in
     /// `bookmarks/auth/bookmarks_authorizer.hpp`, and including that here
     /// would pull `morph/session/session_auth.hpp` — and, transitively, its

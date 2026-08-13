@@ -19,11 +19,13 @@ namespace bookmarks::gui {
 ///        `morph::qt::forms::FormsControllerCore<Model>`
 ///        (`schemasJson()`/`submitIfValid()`), composed over an injected
 ///        `Bridge&`/`IExecutor*` instead of constructing its own
-///        `LocalBackend` — the shipped core cannot do this
-///        (`docs/findings/021-forms-controller-core-hardcodes-localbackend.md`),
-///        and `examples/TESTING.md`'s presenter rule 2 forbids GUI code from
-///        constructing its own backend/executor, so this rung owns a thin,
-///        otherwise-identical controller instead. Pure glue, no domain logic
+///        `LocalBackend`. The shipped core's own `(Bridge&, IExecutor*,
+///        schemasJson)` constructor now supports this directly, but this
+///        rung still owns a thin controller of its own: it is templated
+///        over a *single* model, and this rung's forms span three
+///        (`AuthModel`/`BookmarkModel`/`TagModel`, see "The one thing that
+///        is genuinely new here" below) — `dispatch()`'s routing has no
+///        equivalent on the shipped core. Pure glue, no domain logic
 ///        (`examples/IMPLEMENTATION.md` rule 2 justification (b)) — the
 ///        schema/validation/rendering machinery is untouched; only the
 ///        backend-wiring seam differs. Verbatim in shape from
@@ -45,14 +47,18 @@ namespace bookmarks::gui {
 /// @par Handler lifetime, and why all three are constructed together
 /// All three `BridgeHandler`s are members, so they are constructed together
 /// (three registrations, no deregistrations) and destroyed together at
-/// shutdown. That is deliberate:
-/// `docs/findings/030-deregister-reply-races-sync-register-callid-zero.md`
-/// shows that destroying one handler and constructing a different one on the
-/// same connection immediately after can permanently corrupt the new
-/// binding — precisely the shape a "build the auth handler, log in, tear it
-/// down, then build the real handlers" login flow would have. Nothing in
-/// this rung's client does that: the whole handler set outlives login, and
-/// login only installs a session on the shared `Bridge`.
+/// shutdown. That is deliberate: `QtWebSocketBackend::deregisterModel` now
+/// assigns its fire-and-forget `deregister` envelope a real, tracked callId
+/// rather than the `callId == 0` sentinel a subsequent synchronous
+/// register/attach/assign call also used to use — closing a race that used
+/// to be able to corrupt a freshly constructed handler's binding if it was
+/// built on the same connection right after an older one was torn down. This
+/// rung's handler-lifetime shape (all three built together, never rebuilt
+/// mid-session) predates that fix and was never the shape the race needed
+/// anyway: nothing in this rung's client destroys one handler and
+/// constructs a different one on the same connection — the whole handler
+/// set outlives login, and login only installs a session on the shared
+/// `Bridge`.
 ///
 /// @par No `fetchOptions()`
 /// Deliberately absent, exactly as in `PasteFormsController`: it exists on

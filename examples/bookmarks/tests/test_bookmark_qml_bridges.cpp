@@ -335,10 +335,11 @@ TEST_CASE("BookmarkBridge exposes exactly the surface BookmarkListView.qml binds
     REQUIRE(meta->indexOfMethod("remove(qlonglong)") >= 0);
     REQUIRE(meta->indexOfMethod("bulkArchive(QVariantList,bool)") >= 0);
 
-    // `function onListed(rows)` / `onLoaded(bookmark)` / `onArchived()` /
-    // `onUnarchived()` / `onRemoved()` / `onBulkEdited(affected)` /
-    // `onFailed(message)` — BookmarkListView.qml:116, :126, :131, :136, :141,
-    // :147, :153.
+    // `function onBound()` / `onListed(rows)` / `onLoaded(bookmark)` /
+    // `onArchived()` / `onUnarchived()` / `onRemoved()` / `onBulkEdited(affected)` /
+    // `onFailed(message)` — BookmarkListView.qml:105, :109, :114, :119, :124, :129,
+    // :135, :141.
+    REQUIRE(meta->indexOfSignal("bound()") >= 0);
     REQUIRE(meta->indexOfSignal("listed(QVariantList)") >= 0);
     REQUIRE(meta->indexOfSignal("loaded(QVariantMap)") >= 0);
     REQUIRE(meta->indexOfSignal("archived()") >= 0);
@@ -347,7 +348,7 @@ TEST_CASE("BookmarkBridge exposes exactly the surface BookmarkListView.qml binds
     REQUIRE(meta->indexOfSignal("bulkEdited(QString)") >= 0);
     REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
 
-    CHECK(ownMethodCount(meta) == 14);
+    CHECK(ownMethodCount(meta) == 15);
     // `bulkEdited` carries an already-rendered *string*, not a number:
     // BookmarkListView.qml:148 concatenates it straight into a status line.
     const int bulkEdited = meta->indexOfSignal("bulkEdited(QString)");
@@ -363,21 +364,24 @@ TEST_CASE("TagBridge and SharedFeedBridge expose exactly the surface BookmarkLis
     bookmarks::gui::SharedFeedBridge feed{rig->bridge(0), rig->executor()};
 
     // `page.tagController.refresh()` (BookmarkListView.qml:74) and
-    // `function onListed(rows)` / `onFailed(message)` (:161, :166).
+    // `function onBound()` / `onListed(rows)` / `onFailed(message)` (:149,
+    // :153, :157).
     const QMetaObject* tagMeta = tags.metaObject();
     REQUIRE(tagMeta->indexOfMethod("refresh()") >= 0);
+    REQUIRE(tagMeta->indexOfSignal("bound()") >= 0);
     REQUIRE(tagMeta->indexOfSignal("listed(QVariantList)") >= 0);
     REQUIRE(tagMeta->indexOfSignal("failed(QString)") >= 0);
-    CHECK(ownMethodCount(tagMeta) == 3);
+    CHECK(ownMethodCount(tagMeta) == 4);
 
-    // `page.feedController.refresh()` (:76) and the same two signals (:174,
-    // :179). Same surface, deliberately: the feed pane is the bookmark list's
-    // read-only twin.
+    // `page.feedController.refresh()` (:76) and the same three signals (:165,
+    // :169, :173). Same surface, deliberately: the feed pane is the bookmark
+    // list's read-only twin.
     const QMetaObject* feedMeta = feed.metaObject();
     REQUIRE(feedMeta->indexOfMethod("refresh()") >= 0);
+    REQUIRE(feedMeta->indexOfSignal("bound()") >= 0);
     REQUIRE(feedMeta->indexOfSignal("listed(QVariantList)") >= 0);
     REQUIRE(feedMeta->indexOfSignal("failed(QString)") >= 0);
-    CHECK(ownMethodCount(feedMeta) == 3);
+    CHECK(ownMethodCount(feedMeta) == 4);
 }
 
 // ═════════════════════════════════════════════════════════════════════════

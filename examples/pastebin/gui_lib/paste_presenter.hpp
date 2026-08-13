@@ -78,17 +78,14 @@ class PastePresenter : public ::morph::ladder::gui::Presenter {
     /// @brief Shared error-display body passed as every `track()` call's
     ///        third argument below: rethrows @p err to recover the concrete
     ///        message and emits `failed`. Passed as `track<T>`'s `onErr`
-    ///        parameter rather than attached via `.onError(...)` directly on
-    ///        the `Completion<T>` beforehand — `Completion<T>::onError`
-    ///        keeps only the single most-recently-attached handler
-    ///        (`morph::async::detail::CompletionState::attachOnError`), so a
-    ///        handler attached before `track()` would be silently replaced
-    ///        by `track()`'s own (busy-counter-only) `.onError()`, never
-    ///        firing; see docs/findings/023. Factored out (rather than
-    ///        duplicated per action) since it does not depend on the
-    ///        action's result type `T` — only on the `std::exception_ptr`
-    ///        every `onErr` callback receives — so it stays a plain member
-    ///        function, not a template.
+    ///        parameter — see `Presenter::track()`'s doc comment
+    ///        (`examples/common/gui/presenter.hpp`) for why that, rather
+    ///        than a separate `.onError(...)` attached directly on the
+    ///        `Completion<T>` beforehand, is where this belongs. Factored
+    ///        out (rather than duplicated per action) since it does not
+    ///        depend on the action's result type `T` — only on the
+    ///        `std::exception_ptr` every `onErr` callback receives — so it
+    ///        stays a plain member function, not a template.
     void reportError(const std::exception_ptr& err);
 
     ::morph::bridge::BridgeHandler<PasteModel> _handler;

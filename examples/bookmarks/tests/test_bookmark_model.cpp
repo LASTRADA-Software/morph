@@ -364,9 +364,13 @@ TEST_CASE("RecordMetadata updates another principal's bookmark when the service 
 
 TEST_CASE("RecordMetadata refuses any principal other than the metadata-fetch service principal",
           "[bookmarks][model]") {
-    // The check that replaces authorizeInstance's inert ownership comparison
-    // (docs/findings/027-register-envelope-carries-no-session.md). Without
-    // it, `mallory` below would silently overwrite alice's title.
+    // The check that stands in because authorizeInstance can't express this:
+    // it compares instance ownership, not row ownership, and this action
+    // deliberately touches rows the calling principal (the service worker)
+    // doesn't own -- an instance-level check has nothing to object to when
+    // the worker dispatches through its own, legitimately-owned instance.
+    // Without this model-level check, `mallory` below would silently
+    // overwrite alice's title.
     DbFixture fixture;
     bookmarks::BookmarkModel model;
     bookmarks::BookmarkId id;
@@ -602,14 +606,15 @@ TEST_CASE("BookmarkModel over the full backend-mode matrix: create, list, get ro
     // Local/LocalSingleThread/Socket via BackendRig, authenticated with a
     // real signed token verified by a real BookmarksAuthorizer. Socket mode
     // is the one that actually matters here -- authorizeRegister is
-    // unconditionally permissive (finding 027: a `register` envelope carries
-    // no session, so there is no identity to gate registration on), so this
-    // case does not prove anything about registration being gated. What it
-    // does prove is that SigningAuthorizer::authorize(), which sees the
-    // token on every subsequent execute(), correctly admits a validly signed
-    // token end to end through the real RemoteServer/QtWebSocketServer
-    // wiring -- the boundary that is genuinely enforced (see
-    // bookmarks_authorizer.hpp's @file comment).
+    // unconditionally permissive by this rung's own design choice (not a
+    // framework limitation -- the register envelope now carries the
+    // caller's identity), so this case does not prove anything about
+    // registration being gated. What it does prove is that
+    // SigningAuthorizer::authorize(), which sees the token on every
+    // subsequent execute(), correctly admits a validly signed token end to
+    // end through the real RemoteServer/QtWebSocketServer wiring -- the
+    // boundary that is genuinely enforced (see bookmarks_authorizer.hpp's
+    // @file comment).
     const auto mode = GENERATE(Mode::Local, Mode::LocalSingleThread, Mode::Socket);
     CAPTURE(mode);
     DbFixture fixture;
@@ -726,30 +731,31 @@ TEST_CASE("BackendRig::Socket: a second principal's GetBookmark is denied by the
     // does not own.
     //
     // This is deliberately NOT titled "authorizeInstance denies ..." --
-    // finding 027 (docs/findings/027-register-envelope-carries-no-session.md)
-    // already established that `register` envelopes carry no session, so
-    // RemoteServer records an empty owner (`_owners[mid]`) for EVERY
-    // instance a Bridge client registers, plain or shared alike. Given that,
-    // `authorizeInstance`'s policy shape
-    // (`ownerPrincipal.empty() || ownerPrincipal == ctx.principal`,
-    // bookmarks_authorizer.hpp) always takes the empty-owner branch and
-    // returns true for every caller on every instance -- it is inert here,
-    // exactly as that file's own @file warning documents. Separately,
-    // alice's and mallory's BookmarkModel below are each their OWN
-    // plain-registered instance (not a shared one), so there is not even a
-    // single shared instance for the hook to arbitrate between the two of
-    // them.
+    // register envelopes now carry a session, so RemoteServer records a
+    // real, non-empty owner for each of alice's and mallory's own
+    // plain-registered BookmarkModel instances (confirmed empirically:
+    // authorizeInstance runs with ctx.principal == ownerPrincipal == the
+    // dispatching principal's own name for both). But `authorizeInstance`
+    // checks instance ownership, not row ownership -- mallory dispatches
+    // GetBookmark through her OWN instance, which she legitimately owns, and
+    // the id she names in the action payload is alice's bookmark. An
+    // instance-ownership check has no way to see that mismatch; it would
+    // pass for any row id mallory happened to name, since the check never
+    // looks past which instance is making the call.
     //
     // What actually denies mallory's call is
     // BookmarkModel::execute(const GetBookmark&)'s own loadOwned()/
     // requireOwner() re-check: the row's real `ownerPrincipal` DB column
-    // (a column on the bookmarks table itself, unrelated to RemoteServer's
-    // inert `_owners` map) does not match mallory's server-verified
-    // principal, so the model itself throws Forbidden. This is exactly the
-    // mechanism the README's DoD section names as what is genuinely
-    // enforced today -- `SigningAuthorizer::authorize()` on every action
-    // plus the models' own verified-principal scoping -- "with the two
-    // instance hooks' unreachability filed as a finding."
+    // (a column on the bookmarks table itself, keyed by the row's id, not
+    // the calling instance) does not match mallory's server-verified
+    // principal, so the model itself throws Forbidden -- confirmed
+    // empirically (the propagated error message is "bookmark belongs to a
+    // different principal", not authorizeInstance's "unauthorized"). This is
+    // exactly the mechanism the README's DoD section names as what is
+    // genuinely enforced today -- `SigningAuthorizer::authorize()` on every
+    // action plus the models' own verified-principal, per-row scoping --
+    // and it is the *only* layer that could ever catch this specific
+    // mismatch, regardless of instance-ownership tracking.
     DbFixture fixture;
     constexpr std::string_view kSecret = "cross-user-secret";
     const auto authorizer =
@@ -790,12 +796,15 @@ TEST_CASE("BackendRig::Socket: a token signed with a different secret is rejecte
     // alongside this task's own cross-user case above -- same
     // BackendRig::Socket setup, one more BridgeHandler.
     //
-    // Registration itself is unaffected by the wrong secret: authorizeRegister
-    // is unconditionally permissive (finding 027) and the register envelope
-    // carries no session to check regardless. The rejection below can
-    // therefore only come from the per-execute() check --
-    // SigningAuthorizer::authorize() verifying the token's signature against
-    // the server's real secret on every action.
+    // Registration itself is unaffected by the wrong secret, for a different
+    // reason than "no session to check": a wrong-secret token fails
+    // authenticate(), so env.session.principal is cleared before
+    // authorizeRegister ever runs -- but authorizeRegister is unconditionally
+    // permissive here regardless of principal, by this rung's own design
+    // (see its own doc comment). The rejection below can therefore only come
+    // from the per-execute() check -- SigningAuthorizer::authorize()
+    // verifying the token's signature against the server's real secret on
+    // every action.
     DbFixture fixture;
     constexpr std::string_view kServerSecret = "socket-negauth-server-secret";
     constexpr std::string_view kWrongSecret = "socket-negauth-wrong-secret";

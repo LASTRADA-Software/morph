@@ -4,9 +4,11 @@
 // pushes this behind its nativeClient gate) — see examples/polls/README.md's
 // resolved design decision 6.
 //
-// CreatePoll::options is a JSON array field DynamicForm has no control for
-// (finding 031) — this whole screen is therefore driven by hand, not by a
-// DynamicForm at all, exactly like rung 2's BulkEdit workaround: a plain
+// CreatePoll::options is std::vector<CreatePollOption> -- a JSON array of
+// *objects*, not the array-of-strings DynamicForm's array-field control
+// (src/qt/forms/qml/DynamicForm.qml's arrayJsonLiteral) supports — this
+// whole screen is therefore driven by hand, not by a DynamicForm at all,
+// exactly like rung 2's BulkEdit workaround: a plain
 // title TextField plus a small hand-written option-label list editor (add/
 // remove rows), submitted via PollBridge::createPoll(title, optionLabels)
 // directly. See poll_schemas.hpp's own doc comment.

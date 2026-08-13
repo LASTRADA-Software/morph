@@ -16,13 +16,15 @@ namespace pastebin::gui {
 ///        `morph::qt::forms::FormsControllerCore<PasteModel>`
 ///        (`schemasJson()`/`submitIfValid()`), composed over an injected
 ///        `Bridge&`/`IExecutor*` instead of constructing its own
-///        `LocalBackend` — the shipped core cannot do this (finding 021),
-///        and `TESTING.md`'s presenter rule 2 forbids GUI code from
-///        constructing its own backend/executor, so this rung owns a thin,
-///        otherwise-identical controller instead. Pure glue, no domain
-///        logic (`IMPLEMENTATION.md` rule 2 justification (b)) — the
-///        schema/validation/rendering machinery is untouched; only the
-///        backend-wiring seam differs.
+///        `LocalBackend`. The shipped core's own `(Bridge&, IExecutor*,
+///        schemasJson)` constructor now supports this directly (finding
+///        021), but this rung still owns a thin controller of its own —
+///        `TESTING.md`'s presenter rule 2 forbids GUI code from
+///        constructing its own backend/executor regardless, and this
+///        controller predates the shipped core gaining that overload. Pure
+///        glue, no domain logic (`IMPLEMENTATION.md` rule 2 justification
+///        (b)) — the schema/validation/rendering machinery is untouched;
+///        only the backend-wiring seam differs.
 ///
 /// `fetchOptions()` is deliberately not present: it exists on the shipped
 /// `FormsControllerCore` to serve a `morph::forms::Choice<T,...>` field's

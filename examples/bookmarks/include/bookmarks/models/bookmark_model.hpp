@@ -22,28 +22,30 @@ namespace bookmarks {
 ///        `bookmarks`/`bookmark_tags` tables, scoped to the authenticated
 ///        caller's own collection.
 ///
-/// Registered **plain** — no `BRIDGE_MODEL_KEY`, no `AllowShared`. The
-/// original reason was that only plain registration records a real instance
-/// owner (a *shared* instance is recorded with an empty owner, defeating
-/// `authorizeInstance`'s per-instance ownership check). That reason no
-/// longer carries any weight:
-/// `docs/findings/027-register-envelope-carries-no-session.md` established
-/// that a `register` envelope carries no session at all, so `RemoteServer`
-/// records an empty owner for *every* instance, plain or shared, and
-/// `authorizeInstance` therefore denies nothing in practice. Plain
-/// registration is retained because it is the simpler shape and because the
-/// hook is expected to become real once finding 027 is closed — not because
-/// it is currently enforcing anything.
+/// Registered **plain** — no `BRIDGE_MODEL_KEY`, no `AllowShared`. Only
+/// plain registration records a real instance owner (a *shared* instance is
+/// recorded with an empty owner by design), so this is what makes
+/// `BookmarksAuthorizer::authorizeInstance`'s per-instance ownership check
+/// genuinely enforcing for this model: `register` envelopes now carry the
+/// caller's authenticated session, so each client's own instance is recorded
+/// under that client's real principal.
 ///
-/// What actually carries per-user ownership is this model itself: every
-/// `execute()` reads `session::current()->principal` fresh (`requireOwner()`)
-/// and uses it both as the query filter and, via `loadOwned()`, as the
-/// authorization check on any row it touches. `IMPLEMENTATION.md` rule 1
-/// requires that re-check regardless (the local backend enforces nothing at
-/// all); after finding 027 it is simply the only enforcement point there is,
-/// on top of `SigningAuthorizer::authorize()`'s per-`execute` token check.
-/// See `bookmarks/auth/bookmarks_authorizer.hpp` and the rung README's
-/// "Corrected by finding 027" bullet for the full story.
+/// That instance-level check alone is not what keeps one user out of
+/// another's bookmarks, though — `BridgeHandler<Model>` (this rung's only
+/// shipped client) never names another connection's `modelId`, so a normal
+/// client's cross-user access attempt (`GetBookmark{id}` naming another
+/// user's row through the caller's *own* instance) never triggers
+/// `authorizeInstance` at all; see that function's own doc comment for why.
+/// What actually carries per-user, per-*row* ownership is this model
+/// itself: every `execute()` reads `session::current()->principal` fresh
+/// (`requireOwner()`) and uses it both as the query filter and, via
+/// `loadOwned()`, as the authorization check on any row it touches.
+/// `IMPLEMENTATION.md` rule 1 requires that re-check regardless (the local
+/// backend enforces nothing at all), and it is the only layer that could
+/// ever catch a row-level mismatch, on top of `SigningAuthorizer::
+/// authorize()`'s per-`execute` token check and `authorizeInstance`'s
+/// instance-level check. See `bookmarks/auth/bookmarks_authorizer.hpp` for
+/// the full story.
 class BookmarkModel : private db::WithMapper {
 public:
     CreateBookmarkResult execute(const CreateBookmark& action);

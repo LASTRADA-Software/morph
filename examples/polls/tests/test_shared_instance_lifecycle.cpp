@@ -135,14 +135,17 @@ TEST_CASE("N shared handlers on one pollId observe each other's writes, and inst
     // reply to whichever sendSync happens to be parked, so a still-in-flight
     // deregister ack can be misdelivered as the instances() reply, corrupting
     // it. A genuinely fresh connection never had a deregister in flight, so
-    // it cannot race one. This is finding 030's exact mechanism
-    // (docs/findings/030-deregister-reply-races-sync-register-callid-zero.md
-    // -- filed against a sync *register* racing a deregister; a sync
+    // it cannot race one. This is the exact mechanism a since-fixed finding
+    // was filed against -- a sync *register* racing a deregister; a sync
     // *instances()* call is the identical hazard, since both are ordinary
-    // sendSync callers competing for the same callId-0 bucket) -- a third
+    // sendSync callers competing for the same callId-0 bucket -- a third
     // independent reproduction site, after rung 2's own Task 17 discovery
-    // and the finding's own note that QtWebSocketBackend::attachModel's
-    // empty-key path hits it too.
+    // and QtWebSocketBackend::attachModel's empty-key path hitting it too.
+    // QtWebSocketBackend::deregisterModel now assigns a real, tracked callId
+    // rather than sharing the zero sentinel, closing the race framework-side;
+    // this test's own connection-isolation setup (5 clients, not 4) is kept
+    // regardless, since it costs nothing and this test still exercises the
+    // same call shape.
     BackendRig rig{Mode::Socket, 5, std::make_shared<polls::auth::PollsAuthorizer>()};
 
     // Client 0's plain handler creates the poll -- CreatePoll carries no key.

@@ -46,16 +46,22 @@ namespace polls::gui {
 ///
 /// @par Why `openPoll`/`submitVotes`/`updateVotes`/`getEventsSince` are not schema-driven
 /// - `openPoll`: `OpenPoll` is this rung's one payload-keyed action.
-///   Dispatching a payload-keyed action via the generic
-///   `BridgeHandler::executeJson` path silently skips the attach step
-///   entirely on an `AllowShared` handler — see
-///   `docs/findings/034-executejson-skips-payload-keyed-attach-for-allowshared-handlers.md`,
-///   found while building this class. `openPoll()` below calls the
-///   templated `execute<OpenPoll>()` directly instead, which resolves the
-///   real `AllowShared` attach branch at compile time.
+///   `openPoll()` below calls the templated `execute<OpenPoll>()` directly
+///   rather than going through the generic `submitIfValid`/`executeJson`
+///   path other actions use — a workaround for a gap found while building
+///   this class: `executeJson` used to silently skip the payload-keyed
+///   attach step entirely on an `AllowShared` handler.
+///   `ActionExecuteRegistry::registerAction` now builds one executor per
+///   `Sharing` policy and `executeJson` dispatches through the handler's own
+///   real `Sharing` parameter, so this specific gap is closed — but this
+///   class was never migrated to route `OpenPoll` through the generic path,
+///   and `submitIfValid` below still refuses `OpenPoll` unconditionally
+///   (see its own doc comment's allow-list) rather than relying on the
+///   now-fixed `executeJson`.
 /// - `submitVotes`/`updateVotes`: `SubmitVotes::votes`/`UpdateVotes::votes`
-///   are `std::vector<OneVote>` — a JSON `array` field `DynamicForm` cannot
-///   render (finding 031). `gui/qml/VoteView.qml` drives these from a
+///   are `std::vector<OneVote>` — a JSON array of *objects*, not the
+///   array-of-strings `DynamicForm`'s array-field control supports.
+///   `gui/qml/VoteView.qml` drives these from a
 ///   hand-rolled picker; the two methods below give that picker's C++-side
 ///   adapter (`PollBridge`) a `Completion`-returning call to attach its own
 ///   `.then()`/`.onError()` to, on the same attached `_handler`.
@@ -103,8 +109,10 @@ class PollFormsController {
     /// `FinalizePoll`, `UndoLastVoteChange`) — every other `PollModel` action
     /// is still registered on `_handler` (every action shares one model's
     /// handler here) but is deliberately refused by this method rather than
-    /// silently mis-dispatched: `OpenPoll` in particular would hit finding
-    /// 034 if it ever reached `executeJson` by mistake.
+    /// dispatched: `OpenPoll` still goes through `openPoll()`'s own
+    /// `execute<OpenPoll>()` call instead of this generic path (see this
+    /// class's own doc comment for why that split still exists even though
+    /// `executeJson` itself no longer mis-dispatches a payload-keyed action).
     ///
     /// @tparam OnReply Callable invoked with the result JSON (`std::string`) on success.
     /// @tparam OnError Callable invoked with the `std::exception_ptr` on failure.

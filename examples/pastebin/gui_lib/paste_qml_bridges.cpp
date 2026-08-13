@@ -94,6 +94,7 @@ PasteBridge::PasteBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     : QObject{parent}, _presenter{bridge, executor} {
     // Direct (same-thread) connections throughout — see this header's
     // "Threading" note for why no meta-type registration is involved.
+    connect(&_presenter, &PastePresenter::bound, this, &PasteBridge::bound);
     connect(&_presenter, &PastePresenter::listed, this, [this](const pastebin::ListPastesResult& result) {
         QVariantList rows;
         rows.reserve(static_cast<qsizetype>(result.pastes.size()));

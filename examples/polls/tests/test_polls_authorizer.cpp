@@ -25,15 +25,15 @@ TEST_CASE("PollsAuthorizer::authorize admits every call -- there is no signed to
     CHECK(authorizer.authorize(withToken, "PollModel", "FinalizePoll"));
 }
 
-TEST_CASE("PollsAuthorizer::authorizeRegister admits every register, per finding 027's shared-registration scope",
+TEST_CASE("PollsAuthorizer::authorizeRegister admits every register, by this rung's own design",
           "[polls][auth]") {
     const PollsAuthorizer authorizer;
 
-    // `anonymous` is not hypothetical: it is what RemoteServer always passes
-    // here, for every client, because wire::makeRegister/wire::makeRegisterShared
-    // both carry no session (docs/findings/027-register-envelope-carries-no-session.md,
-    // extended to the keyed/shared path by this rung's own README design
-    // decision 2).
+    // `anonymous` is one real input among others now that
+    // wire::makeRegister/wire::makeRegisterShared both carry the caller's
+    // session; authorizeRegister here stays permissive by choice, not
+    // because there is no identity to check (see the header's own @file
+    // comment and the rung README's design decision 2).
     const Context anonymous;
     CHECK(authorizer.authorizeRegister(anonymous, "PollModel"));
 
@@ -52,7 +52,9 @@ TEST_CASE("PollsAuthorizer::authorizeInstance admits every instance operation --
         return ctx;
     }();
 
-    // No recorded owner (the only case finding 027 ever actually produces)...
+    // No recorded owner -- the only case reachable here, since PollModel is
+    // always shared/keyed by pollId, which the framework records ownerless
+    // by design (unrelated to whether register envelopes carry a session)...
     CHECK(authorizer.authorizeInstance(asAlice, "PollModel", "FinalizePoll", 1, ""));
     // ...and even a non-empty ownerPrincipal (hypothetical -- see the header's
     // own doc comment: PollModel has no per-caller ownership concept at all,

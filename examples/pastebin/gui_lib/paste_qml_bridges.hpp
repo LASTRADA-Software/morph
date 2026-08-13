@@ -139,6 +139,16 @@ public:
     Q_INVOKABLE void remove(const QString& id);
 
 signals:
+    /// @brief Emitted once the wrapped presenter's registration round trip
+    ///        settles — successfully or not (`Presenter::bound()`,
+    ///        `morph/core/bridge.hpp`'s `whenBound()`). `Remote` mode's first
+    ///        dispatch attempt fails fast with "handler not bound" until this
+    ///        fires; `Local` mode fires it synchronously from this
+    ///        constructor, since its handler is already bound by
+    ///        construction. QML's `Main.qml` gates its bootstrap `refresh()`
+    ///        on this instead of retrying on a `Timer`.
+    void bound();
+
     /// @brief One page of `ListPastes` rows, each a `{id, syntax, createdAt, visibility}` map.
     /// @param rows The page's rows.
     void listed(const QVariantList& rows);

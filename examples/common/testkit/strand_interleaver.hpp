@@ -16,6 +16,18 @@
 /// MoveTaskPosition centerpiece) are probabilistic stress runs rather than
 /// reproducible interleavings. Sits underneath a StrandExecutor as its `base`
 /// IExecutor so a test controls exactly which posted task runs next.
+///
+/// `test_strand_interleaver.cpp`'s own tests place this class underneath a
+/// real `morph::exec::detail::StrandExecutor` keyed by real
+/// `morph::exec::detail::ModelId`s and name both directly — the production
+/// components whose per-key ordering guarantee is the point of this harness.
+/// A stand-in would prove nothing here: unlike `morph::testing::StepExecutor`
+/// (issue #55's public seam, used elsewhere to interleave `RemoteServer`
+/// dispatch *without* naming `StrandExecutor`), these particular tests exist
+/// to test `StrandExecutor` itself. This is a deliberate, accepted
+/// testkit-layer reach-in into a `detail::` namespace, not a gap awaiting a
+/// public seam — see the historical discussion in
+/// https://github.com/LASTRADA-Software/morph/issues/55.
 
 namespace morph::ladder::testkit {
 

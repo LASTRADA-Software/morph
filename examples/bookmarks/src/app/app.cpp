@@ -49,8 +49,10 @@ constexpr std::int64_t kServiceTokenExpiresAtMs = 4102444800000;  // 2100-01-01T
 
 /// @brief Live-instance cap this server installs.
 ///
-/// Registration cannot be gated on identity
-/// (`docs/findings/027-register-envelope-carries-no-session.md`), so an
+/// This rung's `authorizeRegister` is unconditionally permissive by choice
+/// (`bookmarks/auth/bookmarks_authorizer.hpp` — the framework can gate
+/// registration on identity now that `register` envelopes carry the
+/// caller's session, this rung's authorizer just doesn't), so an
 /// unauthenticated client *can* make the server create model instances even
 /// though it can never execute anything on them. `maxLiveModels` is the
 /// framework's own answer to that shape of churn: past the cap a `register`

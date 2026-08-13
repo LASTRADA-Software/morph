@@ -201,6 +201,7 @@ BookmarkBridge::BookmarkBridge(::morph::bridge::Bridge& bridge, ::morph::exec::I
     // Direct (same-thread) connections throughout — see
     // paste_qml_bridges.hpp's "Threading" note for why no meta-type
     // registration is involved.
+    connect(&_presenter, &BookmarkPresenter::bound, this, &BookmarkBridge::bound);
     connect(&_presenter, &BookmarkPresenter::listed, this,
             [this](const ListBookmarksResult& result) { emit listed(toVariantList(result.bookmarks)); });
     connect(&_presenter, &BookmarkPresenter::loaded, this,
@@ -256,6 +257,7 @@ void BookmarkBridge::bulkArchive(const QVariantList& ids, bool archive) {
 
 TagBridge::TagBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
+    connect(&_presenter, &TagPresenter::bound, this, &TagBridge::bound);
     connect(&_presenter, &TagPresenter::listed, this,
             [this](const ListTagsResult& result) { emit listed(toVariantList(result.tags)); });
     connect(&_presenter, &TagPresenter::failed, this, &TagBridge::failed);
@@ -270,6 +272,7 @@ void TagBridge::refresh() {
 SharedFeedBridge::SharedFeedBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor,
                                     QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
+    connect(&_presenter, &SharedFeedPresenter::bound, this, &SharedFeedBridge::bound);
     connect(&_presenter, &SharedFeedPresenter::listed, this,
             [this](const ListSharedFeedResult& result) { emit listed(toVariantList(result.bookmarks)); });
     connect(&_presenter, &SharedFeedPresenter::failed, this, &SharedFeedBridge::failed);

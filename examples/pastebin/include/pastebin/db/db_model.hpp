@@ -26,9 +26,16 @@
 /// header) is on the WASM client's include path even though no line of model
 /// implementation is compiled there. `MORPH_CLIENT_ONLY`
 /// (`docs/spec/core/registry.md`) removes the *link* dependency on the model's
-/// constructor and `execute()` bodies for exactly this case, but nothing
-/// removes the *header* dependency this mixin's Lightweight include creates —
-/// see `docs/findings/025-client-only-still-needs-model-persistence-headers.md`.
+/// constructor and `execute()` bodies for exactly this case; morph has since
+/// grown `BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)`
+/// (`include/morph/core/registry.hpp`), which also removes the *header*
+/// dependency by letting a client name `M`'s result type explicitly instead
+/// of deducing it from a complete `M::execute(A)` — but only if `M` itself is
+/// a declaration-only facade the client's `BridgeHandler<M>` never completes.
+/// This rung's `PasteModel` is the real model, not a facade, so this WASM
+/// client still pulls in this header transitively; adopting the facade
+/// pattern to drop that dependency would be a rung-shape change, not done
+/// here.
 ///
 /// So under Emscripten this mixin becomes an empty base: same class, same
 /// name, same models, no ODBC. `mapper()` is deliberately **absent** rather

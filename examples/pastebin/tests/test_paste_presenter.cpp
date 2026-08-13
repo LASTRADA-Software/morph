@@ -198,13 +198,11 @@ TEST_CASE("PastePresenter::list returns the pastes just created, all three backe
 TEST_CASE("Every PastePresenter action routes its failure to failed(), not just get()",
           "[pastebin][presenter]") {
     // `get`'s error path has its own case below; this covers the other four.
-    // Not a completeness ritual: `track()`'s third argument is attached
-    // per-call, and `Completion<T>::onError` keeps only the *last* handler
-    // attached (docs/findings/023), so a mis-wired `onErr` on one action is
-    // invisible from every other action's tests — the busy counter still
-    // clears (that is `track()`'s own surviving handler) and the error simply
-    // vanishes. That is precisely the failure mode finding 023 describes, and
-    // it can only be caught per action.
+    // Not a completeness ritual: each action's `reportError` is wired
+    // independently at its own `track()` call site (`paste_presenter.cpp`),
+    // so a mis-wired one action's `onErr` argument is a mistake only that
+    // action's own test can catch — a passing test for one action says
+    // nothing about whether another action's wiring is correct.
     DbFixture fixture;
     BackendRig rig{Mode::Local, 1};
     pastebin::gui::PastePresenter presenter{rig.bridge(0), rig.executor()};
@@ -238,10 +236,11 @@ TEST_CASE("Every PastePresenter action routes its failure to failed(), not just 
 
     // list: the one action with no validation failure at all — every
     // `ListPastes` is well-formed. Its error path is reachable only through a
-    // genuine store error, so provoke one the way docs/findings/018's
-    // resolution line prescribes (a real failure through the schema, not a
-    // mock): drop the table out from under the query. `DbFixture` re-creates
-    // the schema for the next test case, so this is contained.
+    // genuine store error, so provoke one for real, through the schema, not
+    // through a mock (there is no injectable seam between DataMapper and the
+    // ODBC driver — see examples/TESTING.md's testkit section): drop the
+    // table out from under the query. `DbFixture` re-creates the schema for
+    // the next test case, so this is contained.
     {
         ::Lightweight::SqlStatement stmt;
         (void) stmt.ExecuteDirect("DROP TABLE pastes");

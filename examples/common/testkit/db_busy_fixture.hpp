@@ -9,15 +9,16 @@
 #include <string>
 
 /// @file
-/// Resolves docs/findings/018 (db_fault_fixture cannot fault an ordinary
-/// DataMapper call) for the SQLITE_BUSY failure class specifically: holds a
-/// genuine, uncommitted write transaction open on a second SqlConnection to
-/// the shared test database, for the fixture's lifetime, so a concurrent
-/// write from the code under test's own connection collides for real — no
-/// mock, no simulated driver. See `DbBusyFixture`'s doc comment for the
-/// verified locking recipe and test_db_busy_fixture.cpp for the observed
-/// exception this produces and how the *other* connection (the one under
-/// test) must shorten its own busy-timeout to fail fast.
+/// The SQLITE_BUSY-provoking counterpart to `db_fault_fixture.hpp`'s
+/// advisory-lock contention, which cannot fault an ordinary `DataMapper`
+/// call (see `examples/TESTING.md`'s testkit section): holds a genuine,
+/// uncommitted write transaction open on a second SqlConnection to the
+/// shared test database, for the fixture's lifetime, so a concurrent write
+/// from the code under test's own connection collides for real — no mock,
+/// no simulated driver. See `DbBusyFixture`'s doc comment for the verified
+/// locking recipe and test_db_busy_fixture.cpp for the observed exception
+/// this produces and how the *other* connection (the one under test) must
+/// shorten its own busy-timeout to fail fast.
 
 namespace morph::ladder::testkit {
 

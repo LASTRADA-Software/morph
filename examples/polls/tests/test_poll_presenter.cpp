@@ -432,11 +432,11 @@ TEST_CASE("PollPresenter::getEventsSince returns every event recorded on this ha
 
 TEST_CASE("Every PollPresenter validation-driven action routes its failure to failed(), not just createPoll()",
           "[polls][presenter]") {
-    // Not a completeness ritual: `track()`'s third argument is attached
-    // per-call, and `Completion<T>::onError` keeps only the *last* handler
-    // attached (docs/findings/023), so a mis-wired `onErr` on one action is
-    // invisible from every other action's tests. See
-    // test_bookmark_presenter.cpp's identical test for the full rationale.
+    // Not a completeness ritual: each action's `reportError` is wired
+    // independently at its own `track()` call site (`poll_presenter.cpp`),
+    // so a passing test for one action says nothing about whether another
+    // action's wiring is correct. See test_bookmark_presenter.cpp's
+    // identical test for the same rationale.
     // getPollState/getEventsSince are excluded here (both have
     // `validate() { return true; }` unconditionally -- their only reachable
     // failure is the genuine "never attached via openPoll" NotFound covered

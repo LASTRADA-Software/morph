@@ -4,7 +4,9 @@
 namespace pastebin::gui {
 
 PastePresenter::PastePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : Presenter{parent}, _handler{bridge, executor} {}
+    : Presenter{parent}, _handler{bridge, executor} {
+    trackBound(_handler.whenBound());
+}
 
 void PastePresenter::reportError(const std::exception_ptr& err) {
     try {

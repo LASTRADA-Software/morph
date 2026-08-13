@@ -88,8 +88,10 @@ class PollBridge : public QObject {
     ///        on error.
     /// @param title         The poll's title.
     /// @param optionLabels  Candidate option labels, in order — driven by
-    ///        `CreatePollView.qml`'s hand-written list editor (finding 031's
-    ///        workaround; see `poll_schemas.hpp`).
+    ///        `CreatePollView.qml`'s hand-written list editor, a workaround
+    ///        for `DynamicForm`'s array-field control only handling
+    ///        arrays of strings, not `CreatePollOption` objects; see
+    ///        `poll_schemas.hpp`.
     Q_INVOKABLE void createPoll(const QString& title, const QVariantList& optionLabels);
 
     /// @brief Attaches to the poll named by @p pollId and starts the

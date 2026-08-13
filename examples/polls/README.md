@@ -55,22 +55,26 @@ runs on.
    earlier draft carried a `PollModel::requireParticipant()` helper with no
    call sites; it was removed rather than left implying a check that does
    not happen.
-2. **Finding 027 applies to shared/keyed registration, not just plain
-   registration.** `registerModelShared`/`attachModel`'s wire form is still
-   a `register` envelope (`docs/spec/core/shared_instances.md`: "`register`
-   grows `primary` and `shared`" — additive, same envelope kind), and
-   `wire::makeRegisterShared` carries no session, exactly like plain
-   `wire::makeRegister`. So `authorizeRegister` cannot gate `OpenPoll{pollId}`
-   (the keyed attach) by admin/participant token either — the same
-   structural gap rung 2 found and worked around. **Resolved shape**:
-   `authorizeRegister` stays unconditionally permissive for `PollModel`
-   (attaching to a poll by id is meant to be as open as knowing the link,
-   by design — this is not a regression), and the one action that must
-   distinguish admin from participant (`FinalizePoll` — in the shipped rung,
-   the only one that does) re-checks the caller's token against the poll
-   row's own `adminToken` column inside `PollModel::execute()`, mirroring
-   rung 2's `authorizeInstance`-is-inert, model-re-checks-ownership pattern
-   exactly.
+2. **Registration identity applies to shared/keyed registration too, not
+   just plain registration.** `registerModelShared`/`attachModel`'s wire
+   form is still a `register` envelope (`docs/spec/core/shared_instances.md`:
+   "`register` grows `primary` and `shared`" — additive, same envelope
+   kind), and `wire::makeRegisterShared` carries the caller's session, just
+   like plain `wire::makeRegister` now does. So `authorizeRegister` *could*
+   gate `OpenPoll{pollId}` (the keyed attach) by admin/participant identity
+   — this rung deliberately doesn't. **Resolved shape**: `authorizeRegister`
+   stays unconditionally permissive for `PollModel` (attaching to a poll by
+   id is meant to be as open as knowing the link, by design — this is not a
+   regression, and not something the framework forces), and the one action
+   that must distinguish admin from participant (`FinalizePoll` — in the
+   shipped rung, the only one that does) re-checks the caller's token
+   against the poll row's own `adminToken` column inside
+   `PollModel::execute()`. This mirrors rung 2's shape for a different
+   reason than it originally did: bookmarks' `authorizeInstance` is now
+   genuinely enforcing but checks *instance* ownership, which `PollModel`
+   (shared/keyed, not per-caller-owned) has no equivalent of at all — so the
+   model's own re-check was never standing in for a defeated hook, it is
+   simply the only layer that could ever express this distinction.
 3. **Undo is entirely app-level; the framework journal contributes nothing
    to it.** `SessionLog::undoLast()` (`docs/spec/journal/journal.md`) "pops
    the most recent entry and replays the remainder against a fresh,

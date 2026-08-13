@@ -51,8 +51,13 @@ namespace bookmarks::app {
 /// `BookmarkModel::execute(const RecordMetadata&)`'s own check that the
 /// dispatching principal *is* the service principal, plus
 /// `AuthModel`'s refusal to mint a token in the reserved `system:` namespace
-/// on request. `authorizeInstance` could not have done that job here — see
-/// `bookmarks/auth/bookmarks_authorizer.hpp` and finding 027.
+/// on request. `authorizeInstance` could not have done that job here even
+/// with the worker's instance recording a real owner (which register
+/// envelopes now carry, unlike when this was first written): it compares
+/// instance ownership, not row ownership, and the worker's own instance is
+/// exactly what it is authorized to use — see
+/// `bookmarks/auth/bookmarks_authorizer.hpp`'s `authorizeInstance` doc
+/// comment.
 class App : public QObject {
     Q_OBJECT
   public:

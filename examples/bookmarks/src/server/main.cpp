@@ -22,12 +22,15 @@
 /// action in this rung is scoped to `session::current()->principal`, so
 /// seeding by calling a model directly — the shape rung 1 used — would have
 /// to install a thread-local session itself, i.e. reach into
-/// `morph::session::detail::ScopedContext`. That is exactly the
-/// detail-namespace reach `docs/findings/019-testkit-reaches-into-four-detail-namespaces.md`
-/// already objects to, and adding a fifth site from an *example* would make
-/// that finding harder to close, not easier. The alternative — an internal
-/// client with a minted service token, the shape `App`'s own metadata worker
-/// uses — is real infrastructure that `LADDER.md` already assigns to rung 4's
+/// `morph::session::detail::ScopedContext`, a `detail::` namespace with no
+/// public seam for this — exactly the class of reach-in
+/// `examples/common/testkit` migrated away from onto public seams
+/// (`Completion<T>::makeSettleable()`, `BridgeHandler::whenBound()`, the
+/// `QtWebSocketBackend(url, tls, cfg)` overload) once #55's public seams
+/// existed; adding a new one here from an *example* would be a step
+/// backward, not forward. The alternative — an internal client with a
+/// minted service token, the shape `App`'s own metadata worker uses — is
+/// real infrastructure that `LADDER.md` already assigns to rung 4's
 /// `action_driver` generators. Demo data is therefore created through the
 /// client, which also exercises the path a user actually takes.
 

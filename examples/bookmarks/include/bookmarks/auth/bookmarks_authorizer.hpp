@@ -17,16 +17,18 @@
 /// `SigningAuthorizer` leaves at their allow-all defaults:
 /// `authorizeRegister` and `authorizeInstance`.
 ///
-/// @warning Both of those two hooks are limited by
-/// `docs/findings/027-register-envelope-carries-no-session.md`: morph's
-/// `register` envelope carries no session, so `RemoteServer` sees an empty,
-/// unauthenticated `Context` on every registration a `Bridge` client makes
-/// and records an empty owner principal for the resulting instance. Neither
-/// hook can therefore key on identity today. What that leaves genuinely
-/// enforced -- and it *is* the whole trust boundary this rung claims -- is:
-/// `SigningAuthorizer::authorize()` verifying a real signed token on **every
-/// `execute`**, `RemoteServer` overwriting `Context::principal` with the
-/// verified identity before the model runs, and each model re-reading
+/// `register`/`attach`/`assign`/`deregister` envelopes now carry the
+/// client's authenticated session, so `RemoteServer` records a real,
+/// non-empty owner principal for a plain-registered instance and both hooks
+/// below can key on identity for it (shared/keyed instances remain recorded
+/// ownerless, by a separate, deliberate design choice unrelated to session
+/// plumbing — see `authorizeInstance`'s own doc comment). This rung's
+/// `authorizeRegister` stays unconditionally permissive anyway (see its own
+/// doc comment for why), so what is genuinely enforced -- and it *is* the
+/// whole trust boundary this rung claims -- is: `SigningAuthorizer::
+/// authorize()` verifying a real signed token on **every `execute`**,
+/// `RemoteServer` overwriting `Context::principal` with the verified
+/// identity before the model runs, and each model re-reading
 /// `session::current()->principal` and scoping its own queries to it
 /// (`examples/IMPLEMENTATION.md` rule 1: "models must re-check their own
 /// preconditions and authorization"). An unauthenticated caller can create a
@@ -58,15 +60,14 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
 /// @brief Whether @p principal is acceptable as a login/registration
 ///        identity for this rung.
 ///
-/// Defense-in-depth against finding 026
-/// (`docs/findings/026-control-byte-escaping-missing-in-three-sibling-writers.md`):
-/// `morph::session::TokenIssuer::issue()` writes `SessionToken::principal`
-/// through a plain `glz::write_json` with no control-byte escaping
-/// (`session_auth.hpp:346`). A principal containing a raw control byte would
-/// corrupt the token's JSON payload on the way in. This rung does not fix
-/// that shared code -- the finding is `disposition: open`, not this rung's
-/// to close -- but nothing requires accepting hostile input at its own
-/// boundary while waiting for it. The bound is deliberately ASCII-only and
+/// Defense-in-depth, kept even though the gap it originally guarded against
+/// is now closed framework-side: `morph::session::TokenIssuer::issue()`
+/// writes `SessionToken::principal` via `glz::write_json` with
+/// `escape_control_characters = true` (`session_auth.hpp`), so a principal
+/// containing a raw control byte no longer corrupts the token's JSON payload
+/// on the way in. This validator still rejects such input at this rung's own
+/// boundary regardless -- a second, independent line of defense costs
+/// nothing to keep. The bound is deliberately ASCII-only and
 /// short: this is a *username*, not free text, so `[A-Za-z0-9._:-]` covers
 /// every reasonable login identity without needing Unicode normalization
 /// decisions (contrast tag names, Task 6, which are free text and do need
@@ -115,9 +116,10 @@ inline constexpr std::size_t kMaxPrincipalBytes = 64;
 
 /// @brief This rung's `IAuthorizer`: real signed-token auth
 ///        (`SigningAuthorizer`'s inherited `authorize`/`authenticate`), plus
-///        overrides of the two instance-lifecycle hooks — both of which
-///        finding 027 currently renders unable to key on identity, so read
-///        this file's `@file` warning before relying on either.
+///        overrides of the two instance-lifecycle hooks — `authorizeRegister`
+///        stays permissive by choice, `authorizeInstance` is genuinely
+///        enforcing for plain-registered instances; see each hook's own doc
+///        comment.
 class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
   public:
     using SigningAuthorizer::SigningAuthorizer;
@@ -175,32 +177,32 @@ class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
     }
 
     /// @brief Admits every registration of a type this server actually
-    ///        serves — the only decision this hook can make today.
+    ///        serves, regardless of caller identity — a deliberate choice,
+    ///        not a framework limitation.
     ///
     /// This was originally written as "only an authenticated caller may
     /// create an instance", copying the shape the framework's own suite
     /// documents (`tests/test_register_authorization.cpp`'s
-    /// `AuthenticatedOnlyRegisterAuthorizer`). That override is unreachable
-    /// from an application: finding 027 (see this file's `@file` block)
-    /// showed `ctx.principal` is *always* empty here, because
-    /// `wire::makeRegister` never carries the `Bridge`'s session, so the
-    /// gate rejected every client's very first `BridgeHandler` construction
-    /// — including one holding a perfectly valid token, and including the
-    /// `AuthModel` handler exempted below. Requiring an identity that
-    /// cannot be presented is not security, it is an outage, so the rule is
-    /// stated as what it can genuinely promise instead of what the
-    /// unreachable version would have.
-    ///
-    /// Nothing an unauthenticated caller registers is usable: every
-    /// subsequent `execute` on the instance goes through the inherited
-    /// `SigningAuthorizer::authorize()`, which requires a validly signed,
-    /// unexpired token, and then through the model's own
+    /// `AuthenticatedOnlyRegisterAuthorizer`), back when `register`
+    /// envelopes carried no session at all and @p ctx was therefore always
+    /// empty here — including for a client holding a perfectly valid token,
+    /// and including the `AuthModel` handler exempted below, so that rule
+    /// rejected every client's very first `BridgeHandler` construction.
+    /// `register`/`attach`/`assign`/`deregister` envelopes now carry the
+    /// caller's authenticated session, so @p ctx is populated when the
+    /// caller holds one — but this hook stays unconditionally permissive
+    /// anyway, since gating registration by identity buys nothing extra:
+    /// every subsequent `execute` on the instance still goes through the
+    /// inherited `SigningAuthorizer::authorize()`, which requires a validly
+    /// signed, unexpired token, and then through the model's own
     /// `session::current()->principal` scoping. The `modelType` parameter
     /// stays in the signature (and the `"AuthModel"` mention stays in this
     /// comment) because the *type*-keyed half of this hook — refusing a
-    /// model type outright — remains perfectly enforceable if this rung ever
-    /// needs it; it is only the identity-keyed half that finding 027 blocks.
-    /// @param ctx       Per-call session. Empty in practice — see above.
+    /// model type outright — remains available if this rung ever needs it;
+    /// the identity-keyed half is a choice not to gate, not an inability to.
+    /// @param ctx       Per-call session. Populated with the caller's
+    ///                  verified principal when it holds a valid token,
+    ///                  empty otherwise; ignored either way (see above).
     /// @param modelType Target model type id. `RemoteServer` has already
     ///                  rejected a type its registry does not know by the
     ///                  time this runs, so every value reaching here is one
@@ -218,20 +220,32 @@ class BookmarksAuthorizer : public ::morph::session::SigningAuthorizer {
     /// time. See `tests/test_policy_hardening.cpp`'s `OwnershipAuthorizer`
     /// for the identical one-line shape this mirrors.
     ///
-    /// @warning **Inert in this rung today**, and deliberately kept anyway.
-    /// Finding 027 (see this file's `@file` block): `RemoteServer` records
-    /// the owner from the same session-less `register` envelope, so
-    /// `ownerPrincipal` is *always* empty and the empty-owner branch below
-    /// always wins. This function is therefore correct but never decisive —
-    /// it is retained, rather than deleted, because it becomes decisive the
-    /// moment finding 027 is fixed, with no change here. Nothing in this
-    /// rung's isolation depends on it in the meantime: each model scopes
-    /// every query to `session::current()->principal` itself
-    /// (`examples/IMPLEMENTATION.md` rule 1), and the one action that
-    /// deliberately does *not* scope by row owner
-    /// (`BookmarkModel::execute(const RecordMetadata&)`, dispatched by the
-    /// internal metadata worker on an arbitrary user's row) checks the
-    /// service principal in its own body for exactly this reason.
+    /// Genuinely enforcing today, for every plain-registered `BookmarkModel`/
+    /// `TagModel`/`AuthModel` instance: `register` envelopes now carry the
+    /// caller's authenticated session, so `RemoteServer` records that
+    /// caller's real principal as the instance's owner, and this function
+    /// denies a different principal's `execute`/`deregister` naming that
+    /// instance's `modelId` directly. `SharedFeedModel` (this rung's only
+    /// shared instance) still falls through the `ownerPrincipal.empty()`
+    /// branch — shared instances are recorded ownerless by separate,
+    /// deliberate design (there is no single owning user for a cross-user
+    /// feed), not because ownership can't be tracked.
+    ///
+    /// What this does *not* catch, and cannot: `BridgeHandler<Model>` (this
+    /// rung's only shipped client) never names another connection's
+    /// `modelId` — each client only ever dispatches through its own
+    /// registered instance — so a normal client's cross-user `GetBookmark{id}`
+    /// (naming *another user's row* through the caller's *own* instance) is
+    /// invisible to this instance-level check entirely; it would pass
+    /// regardless, since it never touches an instance this caller doesn't
+    /// own. That case is caught only by `BookmarkModel::execute`'s own
+    /// row-level re-check (see `tests/test_bookmark_model.cpp`'s "denied by
+    /// the model's own ownership re-check" case), which is the *only* layer
+    /// that could ever catch it — a per-instance check has no way to express
+    /// a per-row constraint. This function's real target is a client that
+    /// does not go through `BridgeHandler` at all: a raw wire client crafting
+    /// an `execute`/`deregister` envelope naming a `modelId` it learned or
+    /// guessed, belonging to an instance it never registered.
     /// @param ctx            Per-call session; `principal` is the verified identity.
     /// @param modelType      Ignored: the same rule applies to every model.
     /// @param actionType     Ignored.
@@ -268,11 +282,12 @@ namespace detail {
 }  // namespace detail
 
 /// @brief Installs @p issuer as the process-global `TokenIssuer`, mirroring
-///        `morph::journal::setActionLog`'s identical shape — the same
-///        answer to the same "registry-constructed models are always
-///        default-constructed" problem (docs/findings/003, docs/findings/020):
-///        `AuthModel` (Task 12) has no constructor-injection seam for the
-///        secret it needs to mint tokens. `App` calls this once at startup,
+///        `morph::journal::setActionLog`'s identical shape — the same answer
+///        `AuthModel` (Task 12) reaches for since it is registered via the
+///        plain `BRIDGE_REGISTER_MODEL` default-construction path rather
+///        than `ModelRegistryFactory`'s per-instance construction-hook seam
+///        (`include/morph/core/registry.hpp`): a process-global slot passes
+///        the secret through instead. `App` calls this once at startup,
 ///        with the *same* secret it hands to `BookmarksAuthorizer`, so a
 ///        token `AuthModel::execute(const Login&)` mints verifies against
 ///        the very authorizer that will check every subsequent call.

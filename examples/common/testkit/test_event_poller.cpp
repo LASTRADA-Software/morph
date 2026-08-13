@@ -84,13 +84,15 @@ struct FeedControl {
 };
 
 /// @brief Backing model for these tests. `control` is static (process-wide)
-///        rather than an instance field because registry-constructed models
-///        are always default-constructed (docs/findings/003/020 -- the same
-///        reason morph::ladder::now()'s ScopedClockOverride is a
-///        process-global slot, examples/common/clock.hpp): there is no
-///        constructor-injection seam a test could use to hand a fresh
-///        FeedModel instance its own fixture data. Reset with
-///        `resetFeedControl()` at the top of every TEST_CASE that touches it.
+///        rather than an instance field because this test relies on the
+///        plain `BRIDGE_REGISTER_MODEL` default-construction path — the same
+///        choice `morph::ladder::now()`'s `ScopedClockOverride` process-global
+///        slot makes (`examples/common/clock.hpp`) — rather than adopting
+///        `ModelRegistryFactory`'s per-instance construction-hook seam
+///        (`include/morph/core/registry.hpp`) that would let a fresh
+///        `FeedModel` instance receive its own fixture data directly. Reset
+///        with `resetFeedControl()` at the top of every TEST_CASE that
+///        touches it.
 struct FeedModel {
     static inline FeedControl control{};
 

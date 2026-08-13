@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The vote view: OpenPoll (on load) + SubmitVotes/UpdateVotes (hand-rolled —
-// OneVote's `votes` array hits the same DynamicForm gap CreatePoll::options
-// does, finding 031) + AddComment/FinalizePoll/UndoLastVoteChange (genuinely
-// schema-driven, via DynamicForm) + the live, event-driven results display
+// OneVote's `votes` array of objects hits the same DynamicForm array-of-
+// strings-only gap CreatePoll::options does) + AddComment/FinalizePoll/
+// UndoLastVoteChange (genuinely schema-driven, via DynamicForm) + the live,
+// event-driven results display
 // wired to Task 15's EventPoller (through PollBridge — see
 // poll_qml_bridges.hpp's own doc comment for the wiring).
 //

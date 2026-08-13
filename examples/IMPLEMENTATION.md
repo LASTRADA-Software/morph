@@ -173,18 +173,14 @@ code itself.**
   code. **The store-error half is covered honestly, not excluded**
   (round-7 T3): branches reachable only through database failure
   (`SQLITE_BUSY`, constraint violations, `SqlTransaction` rollback) are
-  exercised via the testkit's **`db_fault_fixture`** (a failing ODBC-level
-  driver, part of the rung-0 testkit — see [`TESTING.md`](TESTING.md));
-  only a branch that fixture provably cannot reach may carry a reviewed
-  per-line exclusion tag with a comment naming why. **Correction, from rung
-  1's resolution of
-  [finding 018](../docs/findings/018-db-fault-fixture-cannot-fault-datamapper.md):
-  no such failing ODBC-level driver exists or is planned** — there is no
-  injectable seam between Lightweight's `DataMapper` and the driver. What
-  this rule actually requires is that each failure class be provoked *for
-  real, through the schema*, by whichever fixture can produce it:
-  `db_busy_fixture.hpp` for `SQLITE_BUSY`, a conflicting row or a dropped
-  table for the rest. The escape hatch is unchanged and still narrow — a
+  exercised by provoking each failure class *for real, through the schema*
+  — `db_busy_fixture.hpp` for `SQLITE_BUSY` (a genuine, uncommitted `BEGIN
+  IMMEDIATE` write transaction on a second connection), a conflicting row
+  or a dropped table for the rest (see [`TESTING.md`](TESTING.md)'s testkit
+  section). There is no injectable seam between Lightweight's `DataMapper`
+  and the ODBC driver, so a mock failing driver is not on offer and not
+  planned — only a real, schema-level failure counts. The escape hatch is
+  unchanged and still narrow — a
   per-line exclusion tag is legitimate only for a branch no such fixture can
   provably reach, which is the outcome round-7 T3 rejected being reopened by
   the back door.

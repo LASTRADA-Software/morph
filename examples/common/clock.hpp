@@ -10,13 +10,17 @@
 
 /// @file
 /// The ladder-wide injectable "now" (examples/TESTING.md's framework-gaps
-/// item 6; examples/LADDER.md framework prerequisite 3). Registry-constructed
-/// models are always default-constructed (docs/findings/003,
-/// docs/findings/020), so there is no constructor-injection seam for a
-/// clock — every rung's time-dependent model logic reads
-/// `morph::ladder::now()` instead of `Timestamp::now()`/`DateTime::now()`
-/// directly, and a test overrides the process-global provider for the span
-/// it needs.
+/// item 6; examples/LADDER.md framework prerequisite 3). `morph`'s registry
+/// now has a per-instance construction-hook seam
+/// (`ModelRegistryFactory::registerModel<Model>(modelId, factory)`,
+/// `include/morph/core/registry.hpp`) that a caller could use to inject a
+/// clock per instance, but adopting it means bypassing
+/// `BRIDGE_REGISTER_MODEL`'s default-construction auto-registration in favor
+/// of a manual `registerModel` call at startup — no rung has made that
+/// switch. Every rung's time-dependent model logic instead reads
+/// `morph::ladder::now()` (this process-global provider) rather than
+/// `Timestamp::now()`/`DateTime::now()` directly, and a test overrides the
+/// provider for the span it needs.
 
 namespace morph::ladder {
 
