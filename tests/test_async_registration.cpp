@@ -1764,3 +1764,61 @@ TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires i
     CHECK(result.load() == 6);
     CHECK(handler.primary().value_or(-1) == 21);
 }
+
+TEST_CASE("attachHandlerAsync's out-of-frame success callback is a genuine no-op once the binding itself is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    // The other attachHandlerAsync/ensureBoundAsync "binding is gone" tests
+    // above go through BridgeHandler::execute, whose own dispatch closure
+    // captures the binding by value -- so the binding never actually dies
+    // while that dispatch is in flight (see those tests' comments). Calling
+    // attachHandlerAsync directly, with an onDone that captures nothing
+    // binding-related, removes that hidden strong reference: dropping the
+    // test's own shared_ptr before completing the reply is what actually
+    // exercises weakBinding.lock() failing.
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    std::weak_ptr<morph::bridge::detail::HandlerBinding> weakBinding;
+    {
+        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        binding->typeId = "AR_KeyedModel";
+        binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARKeyedModel>(); };
+        weakBinding = binding;
+
+        std::atomic<bool> onDoneFired{false};
+        bridge.template attachHandlerAsync<ARKeyedModel>(binding, "13",
+                                                         [&onDoneFired](std::exception_ptr) { onDoneFired.store(true); });
+        REQUIRE(rawBackend->pendingCount() == 1);
+        // `binding` (the only remaining strong reference, now that onDone
+        // captures none) goes out of scope at the end of this block.
+    }
+    REQUIRE(weakBinding.expired());
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+    SUCCEED("completing an attach reply after the binding itself is gone did not crash");
+}
+
+TEST_CASE("ensureBoundAsync's out-of-frame success callback is a genuine no-op once the binding itself is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    // Mirrors attachHandlerAsync's identical direct-call test above.
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    std::weak_ptr<morph::bridge::detail::HandlerBinding> weakBinding;
+    {
+        auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+        binding->typeId = "AR_KeyedModel";
+        binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARKeyedModel>(); };
+        weakBinding = binding;
+
+        std::atomic<bool> onDoneFired{false};
+        bridge.ensureBoundAsync(binding, [&onDoneFired](std::exception_ptr) { onDoneFired.store(true); });
+        REQUIRE(rawBackend->pendingCount() == 1);
+    }
+    REQUIRE(weakBinding.expired());
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+    SUCCEED("completing a registerModelSharedAsync reply after the binding itself is gone did not crash");
+}
