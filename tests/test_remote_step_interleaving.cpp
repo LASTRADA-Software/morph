@@ -16,19 +16,29 @@
 
 #include "test_support.hpp"
 
-struct OrderAction {
+// Named StepILOrder* (not the more obvious OrderAction/OrderModel) because
+// test_conflict_resolution.cpp already declares its own, unrelated OrderModel
+// at external linkage -- two same-named external-linkage types with different
+// definitions is an ODR violation the linker does not diagnose, and which
+// definition the linker keeps is compiler/link-order dependent (confirmed:
+// this silently made OrderModel not backend-change-aware in some builds,
+// since the type actually linked into some translation units was this file's
+// bare struct, not test_conflict_resolution.cpp's onBackendChanged()-bearing
+// one -- see that file's own history for the resulting flaky-then-hard
+// failure this caused before the collision was found and fixed).
+struct StepILOrderAction {
     int tag = 0;
 };
-struct OrderModel {
-    int execute(const OrderAction& action) { return action.tag; }
+struct StepILOrderModel {
+    int execute(const StepILOrderAction& action) { return action.tag; }
 };
 
-BRIDGE_REGISTER_MODEL(OrderModel, "StepIL_OrderModel")
-BRIDGE_REGISTER_ACTION(OrderModel, OrderAction, "StepIL_OrderAction")
+BRIDGE_REGISTER_MODEL(StepILOrderModel, "StepIL_OrderModel")
+BRIDGE_REGISTER_ACTION(StepILOrderModel, StepILOrderAction, "StepIL_OrderAction")
 
 namespace {
 
-/// @brief Registers a fresh `OrderModel` instance and returns the
+/// @brief Registers a fresh `StepILOrderModel` instance and returns the
 ///        server-assigned model id as a plain `uint64_t` -- the wire's own
 ///        vocabulary, never `morph::exec::detail::ModelId`.
 uint64_t registerModel(const std::shared_ptr<morph::backend::RemoteServer>& server, morph::testing::StepExecutor& exec) {
