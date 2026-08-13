@@ -14,6 +14,7 @@ add_executable(morph_tests
     test_completion.cpp
     test_completion_extra.cpp
     test_completion_multi_handler.cpp
+    test_completion_promise.cpp
     test_model.cpp
     test_logger.cpp
     test_observability.cpp
@@ -26,8 +27,10 @@ add_executable(morph_tests
     test_bridge_remote.cpp
     test_bridge_pending_calls.cpp
     test_bridge_execute_json.cpp
+    test_bridge_pending_calls.cpp
     test_remote_extra.cpp
     test_remote_connection_scope.cpp
+    test_remote_step_interleaving.cpp
     test_action_validation.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp

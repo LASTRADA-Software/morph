@@ -117,6 +117,45 @@ public:
 #endif
         Config cfg = Config{});
 
+    /// @brief Constructs the backend without naming the dispatcher/registry pair.
+    ///
+    /// `QtWebSocketBackend` never actually uses its `dispatcher`/`registry`
+    /// constructor parameters (model construction is delegated to the server —
+    /// see `registerModel()`'s doc comment); the main constructor still accepts
+    /// them, positioned before `tls`/`cfg`, purely for API-shape parity with
+    /// other backends. That forces a caller who only wants to set `cfg` (e.g.
+    /// `Config::asyncRegistrationEnabled`) to spell out
+    /// `morph::model::detail::defaultDispatcher()`/`defaultRegistry()` explicitly
+    /// to reach the parameters after them — reaching into a `detail::` namespace
+    /// for no functional reason. This overload skips straight to `tls`/`cfg`.
+    /// @param serverUrl `ws://` or `wss://` URL of the remote `RemoteServer`.
+    /// @param tls       If non-null, enables TLS and applies this configuration. Not
+    ///                  declared at all on an SSL-less Qt build (`QT_NO_SSL`) — see
+    ///                  the class doc comment's "SSL-less Qt builds" section.
+    /// @param cfg       Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
+#ifndef QT_NO_SSL
+    explicit QtWebSocketBackend(QUrl serverUrl, std::optional<QSslConfiguration> tls, Config cfg = Config{})
+        : QtWebSocketBackend(std::move(serverUrl), ::morph::model::detail::defaultDispatcher(),
+                             ::morph::model::detail::defaultRegistry(), std::move(tls), cfg) {}
+#endif
+
+    /// @brief Constructs the backend without naming the dispatcher/registry pair or TLS.
+    ///
+    /// See the `(serverUrl, tls, cfg)` overload's doc comment for why this
+    /// exists. Equivalent to that overload with `tls = std::nullopt` on an
+    /// SSL-enabled Qt build, or to the main constructor's defaults on an
+    /// SSL-less (`QT_NO_SSL`) build, where there is no `tls` parameter to skip.
+    /// @param serverUrl `ws://` or `wss://` URL of the remote `RemoteServer`.
+    /// @param cfg       Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff.
+    explicit QtWebSocketBackend(QUrl serverUrl, Config cfg)
+        : QtWebSocketBackend(std::move(serverUrl), ::morph::model::detail::defaultDispatcher(),
+                             ::morph::model::detail::defaultRegistry(),
+#ifndef QT_NO_SSL
+                             std::nullopt,
+#endif
+                             cfg) {
+    }
+
     /// @brief Closes the socket and cleans up pending operations.
     ~QtWebSocketBackend() override;
 

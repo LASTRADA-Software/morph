@@ -131,20 +131,26 @@ static int waitInt(auto completion) {
     return result.load();
 }
 
-// ── Helper: poll until onBackendChanged has actually run ─────────────────────
+// ── Helper: poll until the queue is actually drained ──────────────────────────
 //
 // switchBackend() dispatches the new model's construction and its
 // onBackendChanged() call (which drains the offline queue) onto the new
 // backend's own thread pool, asynchronously -- there is no signal the caller
-// can block on directly. A fixed sleep_for() guessing "surely long enough"
-// is exactly the failure mode this helper replaces: it polls the model's own
-// notifyCount via OrderQueryAction (read-only, safe to call repeatedly)
-// until it reaches 1, the real signal that onBackendChanged has completed
-// -- and therefore that the queue drain it performs has too. Bounded, not
-// unbounded: returns false (rather than hanging) if the count never reaches 1.
-static bool waitForBackendChanged(morph::bridge::BridgeHandler<OrderModel>& handler) {
+// can block on directly. A fixed sleep_for() guessing "surely long enough" is
+// exactly the failure mode this helper replaces.
+//
+// notifyCount is NOT the right signal to poll here: onBackendChanged()
+// increments it *before* draining the queue (see OrderModel::onBackendChanged),
+// so notifyCount reaching 1 only proves the call started, not that the drain
+// finished -- polling on it raced the drain itself and intermittently observed
+// a non-empty queue right after. drain() itself is the correct signal: it is
+// a thread-safe, non-destructive snapshot read on InMemoryOfflineQueue (see its
+// own doc comment), so polling it repeatedly is safe and it becomes empty at
+// the exact moment every item has been handled and markDone'd. Bounded, not
+// unbounded: returns false (rather than hanging) if it never empties.
+static bool waitForQueueDrained(morph::offline::InMemoryOfflineQueue& queue) {
     for (int i = 0; i < 200; ++i) {
-        if (waitInt(handler.execute(OrderQueryAction{})) >= 1) {
+        if (queue.drain().empty()) {
             return true;
         }
         std::this_thread::sleep_for(10ms);
@@ -172,7 +178,7 @@ TEST_CASE("ConflictResolution: no conflicts  -  all items markDone on switchBack
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    REQUIRE(waitForBackendChanged(handler));
+    REQUIRE(waitForQueueDrained(queue));
 
     // All items removed from queue after clean replay.
     REQUIRE(queue.drain().empty());
@@ -199,7 +205,7 @@ TEST_CASE("ConflictResolution: conflicting items discarded  -  resolver returns 
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    REQUIRE(waitForBackendChanged(handler));
+    REQUIRE(waitForQueueDrained(queue));
 
     // All three items removed regardless of outcome (discard also calls markDone).
     REQUIRE(queue.drain().empty());
@@ -223,7 +229,7 @@ TEST_CASE("ConflictResolution: conflicting items merged  -  resolver returns non
     morph::bridge::BridgeHandler<OrderModel> handler{bridge, &cbExec, binding};
 
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(pool2));
-    REQUIRE(waitForBackendChanged(handler));
+    REQUIRE(waitForQueueDrained(queue));
 
     // All three items processed and removed.
     REQUIRE(queue.drain().empty());
@@ -296,7 +302,7 @@ TEST_CASE("ConflictResolution: full offline scenario  -  accumulate offline, syn
 
     // Simulate reconnection  -  switch to remote backend.
     bridge.switchBackend(std::make_unique<morph::backend::LocalBackend>(remotePool));
-    REQUIRE(waitForBackendChanged(handler));
+    REQUIRE(waitForQueueDrained(queue));
 
     // Queue fully drained: 2 clean replays + 1 merge = 3 markDone calls.
     REQUIRE(queue.drain().empty());
