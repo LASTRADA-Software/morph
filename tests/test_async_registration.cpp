@@ -341,6 +341,29 @@ private:
     std::optional<std::string> _failInline;
 };
 
+// A backend whose async dispatch call itself throws synchronously, before
+// returning -- e.g. QtWebSocketBackend::attachModelAsync's wire::encode()
+// failing before send. Bridge::attachHandlerAsync/ensureBoundAsync must
+// report this through onDone (matching execute()'s documented never-throws
+// contract) rather than letting it escape.
+class ThrowingDispatchBackend : public AsyncRegisterBackend {
+public:
+    bool attachModelAsync(const std::string&, std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
+                          morph::backend::detail::InstanceIdentity, morph::exec::detail::ModelId,
+                          std::function<void(morph::exec::detail::ModelId)>,
+                          std::function<void(const std::string&)>) override {
+        throw std::runtime_error("attachModelAsync dispatch failed");
+    }
+
+    bool registerModelSharedAsync(const std::string&,
+                                  std::function<std::unique_ptr<morph::model::detail::IModelHolder>()>,
+                                  morph::backend::detail::InstanceIdentity,
+                                  std::function<void(morph::exec::detail::ModelId)>,
+                                  std::function<void(const std::string&)>) override {
+        throw std::runtime_error("registerModelSharedAsync dispatch failed");
+    }
+};
+
 // Shim so a Bridge (which takes ownership of a unique_ptr) can hold a backend
 // the test also keeps a shared_ptr to -- making it co-owned / able to outlive
 // the Bridge (see test_bridge_lifetime.cpp's identical BackendShim). Also lets
@@ -1447,4 +1470,132 @@ TEST_CASE("ensureBoundAsync mirrors the same three cases for a result-keyed (cre
         CHECK_FALSE(succeeded.load());
         CHECK_FALSE(handler.primary().has_value());
     }
+}
+
+TEST_CASE("attachHandlerAsync reports a synchronously-throwing dispatch call through onDone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<ThrowingDispatchBackend>()};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::string message;
+    std::atomic<bool> succeeded{false};
+    REQUIRE_NOTHROW(handler.execute(ARTouch{.id = 9, .amount = 1})
+                        .then([&](int) { succeeded.store(true); })
+                        .onError([&](const std::exception_ptr& err) {
+                            try {
+                                std::rethrow_exception(err);
+                            } catch (const std::exception& exc) {
+                                message = exc.what();
+                            }
+                        }));
+
+    CHECK(message == "attachModelAsync dispatch failed");
+    CHECK_FALSE(succeeded.load());
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE("ensureBoundAsync reports a synchronously-throwing dispatch call through onDone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<ThrowingDispatchBackend>()};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::string message;
+    std::atomic<bool> succeeded{false};
+    REQUIRE_NOTHROW(handler.execute(ARKeyedCreate{.initial = 3})
+                        .then([&](ARKeyedCreated) { succeeded.store(true); })
+                        .onError([&](const std::exception_ptr& err) {
+                            try {
+                                std::rethrow_exception(err);
+                            } catch (const std::exception& exc) {
+                                message = exc.what();
+                            }
+                        }));
+
+    CHECK(message == "registerModelSharedAsync dispatch failed");
+    CHECK_FALSE(succeeded.load());
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE("attachHandlerAsync's out-of-frame success callback is a no-op once the Bridge is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    // The backend must outlive the Bridge for this test to complete the reply
+    // after destroying it, so it is co-owned via AsyncBackendShim (the same
+    // pattern test_bridge_lifetime.cpp uses) rather than owned solely by the
+    // Bridge's unique_ptr.
+    auto sharedBackend = std::make_shared<AsyncRegisterBackend>();
+    auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<AsyncBackendShim>(sharedBackend));
+    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARKeyedModel, AllowShared>>(*bridge, &cbExec);
+
+    REQUIRE_NOTHROW(handler->execute(ARTouch{.id = 11, .amount = 4}));
+    REQUIRE(sharedBackend->pendingCount() == 1);
+
+    // Destroy the handler and the Bridge itself before the deferred reply
+    // lands: attachHandlerAsync's success callback holds only weak references
+    // to both, so completing it now must be a quiet no-op rather than
+    // dereferencing freed memory.
+    handler.reset();
+    bridge.reset();
+
+    REQUIRE_NOTHROW(sharedBackend->completeNext());
+    SUCCEED("completing an attach reply after the Bridge and handler are both gone did not crash");
+}
+
+TEST_CASE("attachHandlerAsync's out-of-frame success callback is a no-op once only the binding is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARKeyedModel, AllowShared>>(bridge, &cbExec);
+
+    REQUIRE_NOTHROW(handler->execute(ARTouch{.id = 12, .amount = 4}));
+    REQUIRE(rawBackend->pendingCount() == 1);
+
+    // Destroy only the handler (and, with it, the binding's last strong
+    // reference); the Bridge itself stays alive. attachHandlerAsync's success
+    // callback holds only a weak_ptr to the binding, so completing the reply
+    // now must be a no-op rather than dereferencing a freed HandlerBinding.
+    handler.reset();
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+    SUCCEED("completing an attach reply after only the binding is gone did not crash");
+}
+
+TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once the Bridge is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    // See the identical attachHandlerAsync test above: the backend must
+    // outlive the Bridge, so it is co-owned via AsyncBackendShim.
+    auto sharedBackend = std::make_shared<AsyncRegisterBackend>();
+    auto bridge = std::make_unique<morph::bridge::Bridge>(std::make_unique<AsyncBackendShim>(sharedBackend));
+    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARKeyedModel, AllowShared>>(*bridge, &cbExec);
+
+    REQUIRE_NOTHROW(handler->execute(ARKeyedCreate{.initial = 6}));
+    REQUIRE(sharedBackend->pendingCount() == 1);
+
+    handler.reset();
+    bridge.reset();
+
+    REQUIRE_NOTHROW(sharedBackend->completeNext());
+    SUCCEED("completing a registerModelSharedAsync reply after the Bridge and handler are both gone did not crash");
+}
+
+TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once only the binding is gone",
+          "[bridge][registration][shared-instances][issue26]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<AsyncRegisterBackend>();
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    auto handler = std::make_unique<morph::bridge::BridgeHandler<ARKeyedModel, AllowShared>>(bridge, &cbExec);
+
+    REQUIRE_NOTHROW(handler->execute(ARKeyedCreate{.initial = 7}));
+    REQUIRE(rawBackend->pendingCount() == 1);
+
+    handler.reset();
+
+    REQUIRE_NOTHROW(rawBackend->completeNext());
+    SUCCEED("completing a registerModelSharedAsync reply after only the binding is gone did not crash");
 }
