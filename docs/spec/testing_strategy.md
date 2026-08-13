@@ -270,6 +270,40 @@ symbol is namespace-qualified (e.g. `namespace issue21::models { struct
 Report { ... }; }`, used for `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`
 per issue #21).
 
+**Why UndefinedBehaviorSanitizer (`clang-ubsan`, `cmake/compiler_options.cmake`'s
+`-fsanitize=undefined`) does not catch this.** UBSan instruments individual
+operations *within* a translation unit at compile time — signed overflow, an
+invalid enum load, a misaligned access, a bad `vptr` cast — and its runtime
+checks fire while that instrumented code executes. An ODR violation across
+two TUs has no such moment: each TU's own code is entirely well-formed and
+runs exactly as instrumented: `test_conflict_resolution.cpp`'s `OrderModel`
+calls its own real `onBackendChanged()` correctly when compiled and run
+alone, and `test_remote_step_interleaving.cpp`'s bare stub is equally
+well-formed on its own. The defect exists only in what the **linker** does
+across the two `.o` files — silently keeping one TU's definition of
+`BackendChangedNotifiable<OrderModel>` for both — which happens before any
+sanitizer runtime is even loaded. No sanitizer (ASan, UBSan, TSan, MSan) is
+designed to catch cross-TU ODR violations; this is a structural blind spot
+of the whole compile-time-instrumentation family, not a configuration gap.
+
+The linker's own ordinary duplicate-symbol diagnostics don't fire either,
+for a related reason: the affected symbol
+(`BackendChangedNotifiable<OrderModel>`, a template instantiation) is
+implicitly `inline`, and the linker treats multiple same-mangled-name
+`inline`/template definitions across TUs as expected COMDAT folding — the
+normal, correct case when two TUs instantiate the same template
+identically. It has no way to distinguish that from "two different
+definitions that happen to share a mangled name," which is exactly this bug,
+so it silently keeps one arbitrarily in both cases. (GNU gold's
+`--detect-odr-violations` is the closest built-in linker feature, but it is
+gold-specific, heuristic on this exact template-instantiation shape, and not
+wired into any preset here.)
+
+This is why the fix is a **source-level static check**
+(`scripts/check_test_type_names.sh`, above) rather than a build flag: it is
+the only layer that can see both TUs' declarations before they are ever
+compiled down to symbols a linker or sanitizer could reason about.
+
 **CI-enforced**: `scripts/check_test_type_names.sh` scans every
 `tests/**/*.cpp` file for file-scope `struct`/`class` declarations (template
 specializations, which qualify their own name and specialize an existing
