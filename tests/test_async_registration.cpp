@@ -67,6 +67,13 @@ struct ARKeyedCreate {
     int initial = 0;
 };
 
+/// Payload-keyed, like ARTouch, but its ActionKeyTraits::key() below throws --
+/// exercises execute()'s "key extraction is user code" guard (the try/catch
+/// around ActionKeyTraits<Action>::key(action), ahead of the attach dispatch).
+struct ARThrowingKeyTouch {
+    int amount = 0;
+};
+
 struct ARKeyedModel {
     int value = 0;
     int execute(const ARTouch& act) {
@@ -76,6 +83,10 @@ struct ARKeyedModel {
     ARKeyedCreated execute(const ARKeyedCreate& act) {
         value = act.initial;
         return {.id = 4242, .value = value};
+    }
+    int execute(const ARThrowingKeyTouch& act) {
+        value += act.amount;
+        return value;
     }
 };
 
@@ -122,6 +133,27 @@ struct morph::model::ActionTraits<ARKeyedCreate> {
 template <>
 struct morph::model::ModelTraits<ARKeyedModel> {
     static constexpr std::string_view typeId() { return "AR_KeyedModel"; }
+};
+
+template <>
+struct morph::model::ActionTraits<ARThrowingKeyTouch> {
+    using Result = int;
+    static constexpr std::string_view typeId() { return "AR_ThrowingKeyTouch"; }
+    static std::string toJson(const ARThrowingKeyTouch& act) { return R"({"amount":)" + std::to_string(act.amount) + "}"; }
+    static ARThrowingKeyTouch fromJson(std::string_view /*json*/) { return {}; }
+    static std::string resultToJson(const int& res) { return std::to_string(res); }
+    static int resultFromJson(std::string_view text) { return std::stoi(std::string{text}); }
+};
+
+// Written directly rather than via BRIDGE_KEY_FROM: that macro's generated
+// key() body cannot be made to throw, which is the entire point of this type.
+template <>
+struct morph::model::ActionKeyTraits<ARThrowingKeyTouch> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ARThrowingKeyTouch&) {
+        throw std::runtime_error("key extraction failed");
+    }
 };
 
 BRIDGE_MODEL_KEY(ARKeyedModel, ARTouch, &ARTouch::id);
@@ -361,6 +393,26 @@ public:
                                   std::function<void(morph::exec::detail::ModelId)>,
                                   std::function<void(const std::string&)>) override {
         throw std::runtime_error("registerModelSharedAsync dispatch failed");
+    }
+};
+
+// Violates IBackend's documented "exactly one callback per dispatch"
+// contract by invoking onRegistered twice, inline, from inside
+// attachModelAsync itself. Exercises detail::parkIfInFrame's own guard
+// against a second callback claiming an outcome that inline dispatch already
+// parked -- Bridge::attachHandlerAsync must still report exactly once.
+class DoubleFiringBackend : public AsyncRegisterBackend {
+public:
+    bool attachModelAsync(const std::string& typeId,
+                          std::function<std::unique_ptr<morph::model::detail::IModelHolder>()> factory,
+                          morph::backend::detail::InstanceIdentity /*identity*/,
+                          morph::exec::detail::ModelId /*current*/,
+                          std::function<void(morph::exec::detail::ModelId)> onRegistered,
+                          std::function<void(const std::string&)> /*onError*/) override {
+        auto mid = registerModel(typeId, std::move(factory));
+        onRegistered(mid);
+        onRegistered(mid);  // Contract violation: fires a second time inline.
+        return true;
     }
 };
 
@@ -1659,4 +1711,56 @@ TEST_CASE("ensureBoundAsync's onError path is a no-op once the dispatching frame
     CHECK(errorCount == 1);
     CHECK_FALSE(succeeded.load());
     CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE("execute() surfaces a throwing ActionKeyTraits::key() through onError instead of escaping",
+          "[bridge][registration][shared-instances][issue26]") {
+    // Key extraction runs ahead of the attach dispatch, on execute()'s own
+    // stack -- a throwing key() must resolve the returned Completion's
+    // onError, matching every other keyed-dispatch failure, rather than
+    // throwing out of execute() itself.
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<AsyncRegisterBackend>()};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::string message;
+    std::atomic<bool> succeeded{false};
+    REQUIRE_NOTHROW(handler.execute(ARThrowingKeyTouch{.amount = 1})
+                        .then([&](int) { succeeded.store(true); })
+                        .onError([&](const std::exception_ptr& err) {
+                            try {
+                                std::rethrow_exception(err);
+                            } catch (const std::exception& exc) {
+                                message = exc.what();
+                            }
+                        }));
+
+    CHECK(message == "key extraction failed");
+    CHECK_FALSE(succeeded.load());
+    CHECK_FALSE(handler.primary().has_value());
+}
+
+TEST_CASE("attachHandlerAsync reports exactly once even when the backend fires its callback twice inline",
+          "[bridge][registration][shared-instances][issue26]") {
+    // DoubleFiringBackend violates attachModelAsync's documented one-callback
+    // contract on purpose: detail::parkIfInFrame's `handoff.fired` guard must
+    // swallow the second, already-claimed callback rather than letting
+    // attachHandlerAsync invoke onDone (and, downstream, publish the binding)
+    // twice for a single dispatch.
+    SyncExec cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<DoubleFiringBackend>()};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    int completions = 0;
+    std::atomic<int> result{-1};
+    REQUIRE_NOTHROW(handler.execute(ARTouch{.id = 21, .amount = 6})
+                        .then([&](int val) {
+                            ++completions;
+                            result.store(val);
+                        })
+                        .onError([&](const std::exception_ptr&) { ++completions; }));
+
+    CHECK(completions == 1);
+    CHECK(result.load() == 6);
+    CHECK(handler.primary().value_or(-1) == 21);
 }
