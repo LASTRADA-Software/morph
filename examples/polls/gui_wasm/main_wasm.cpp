@@ -149,12 +149,11 @@
 ///    `Component.onCompleted` only ever calls after `PollBridge` has been
 ///    constructed, which this file only ever does from inside
 ///    `ctx.onReady()` (below), by which point the socket is already
-///    connected (finding 017's window is closed) and there is no *second*,
-///    separate registration step left to still be pending (that window
-///    never opens in the first place). This is the exact keyed-attach
-///    async path `docs/superpowers/plans/2026-08-07-ladder-rung3-framework-prereqs.md`
-///    closed finding 032 for, and this file is the first real WASM binary
-///    to actually dispatch through it.
+///    connected and there is no *second*, separate registration step left
+///    to still be pending (that window never opens in the first place).
+///    This is the exact keyed-attach async path a shared handler needs to
+///    get right, and this file is the first real WASM binary to actually
+///    dispatch through it.
 ///
 /// @par Verification status
 /// Structurally complete and reviewed, **never compiled**: no Emscripten
