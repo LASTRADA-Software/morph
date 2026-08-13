@@ -6,6 +6,7 @@ var hierarchy =
     [ "morph::app::MenuEntry&lt; Label, ScreenId &gt;", "dc/d5e/structmorph_1_1app_1_1MenuEntry.html", null ],
     [ "morph::app::WizardScreen&lt; Id, Wizard &gt;", "dc/d11/structmorph_1_1app_1_1WizardScreen.html", null ],
     [ "morph::async::Completion&lt; T &gt;", "dd/de7/classmorph_1_1async_1_1Completion.html", null ],
+    [ "morph::async::Completion&lt; T &gt;::Promise", "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html", null ],
     [ "morph::backend::detail::IBackend", null, [
       [ "morph::backend::LocalBackend", "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html", null ],
       [ "morph::backend::SimulatedRemoteBackend", "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html", null ],

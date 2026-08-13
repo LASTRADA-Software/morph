@@ -126,6 +126,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/de7/classmo
 
 <p><code>#include &lt;<a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>&gt;</code></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
+Classes</h2></td></tr>
+<tr class="memitem:Promise" id="r_Promise"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">Promise</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Producer-side handle paired with a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> by <span class="tt"><a class="el" href="#a84a09a2d546cb0983d1eca68b4fc97de" title="Constructs a Completion&lt;T&gt;/Promise&lt;T&gt; pair sharing one settleable state.">makeSettleable()</a></span>.  <a href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#details">More...</a><br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:ac3564b8c749d5672ec98acc3aa7d445e" id="r_ac3564b8c749d5672ec98acc3aa7d445e"><td class="memItemLeft"><a id="ac3564b8c749d5672ec98acc3aa7d445e" name="ac3564b8c749d5672ec98acc3aa7d445e"></a>
@@ -148,6 +153,11 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a3becd6006babdc54444b20d0b5b074a8"><td class="mdescLeft">&#160;</td><td class="mdescRight">Registers an error callback.  <br /></td></tr>
 <tr class="memitem:a49bb64dd60ef3d17baf9a36e7b5f1481" id="r_a49bb64dd60ef3d17baf9a36e7b5f1481"><td class="memItemLeft">std::shared_ptr&lt; detail::CompletionState&lt; T &gt; &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a49bb64dd60ef3d17baf9a36e7b5f1481">state</a> () const</td></tr>
 <tr class="memdesc:a49bb64dd60ef3d17baf9a36e7b5f1481"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the underlying shared state (for advanced / internal use).  <br /></td></tr>
+</table><table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-static-methods" class="groupheader"><a id="pub-static-methods" name="pub-static-methods"></a>
+Static Public Member Functions</h2></td></tr>
+<tr class="memitem:a84a09a2d546cb0983d1eca68b4fc97de" id="r_a84a09a2d546cb0983d1eca68b4fc97de"><td class="memItemLeft">static std::pair&lt; <a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a>&lt; T &gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">Promise</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a84a09a2d546cb0983d1eca68b4fc97de">makeSettleable</a> (<a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *execPtr)</td></tr>
+<tr class="memdesc:a84a09a2d546cb0983d1eca68b4fc97de"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span>/<span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>&lt;T&gt;</span> pair sharing one settleable state.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename T&gt;<br />
@@ -162,7 +172,7 @@ class morph::async::Completion&lt; T &gt;</div><p>Move-only handle representing 
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00190">190</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00191">191</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="ac7fe8818f9e79746106a776255a9a47d" name="ac7fe8818f9e79746106a776255a9a47d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#ac7fe8818f9e79746106a776255a9a47d">&#9670;&#160;</a></span>Completion()</h2>
@@ -202,7 +212,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00200">200</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00201">201</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -272,7 +282,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00223">223</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00224">224</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -311,7 +321,7 @@ template&lt;typename T&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">*this</span> for chaining. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00238">238</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00239">239</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +353,46 @@ template&lt;typename T&gt; </div>
 <p>Returns the underlying shared state (for advanced / internal use). </p>
 <dl class="section return"><dt>Returns</dt><dd>Shared pointer to the completion state, or <span class="tt">nullptr</span> for empty completions. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00247">247</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00248">248</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a84a09a2d546cb0983d1eca68b4fc97de" name="a84a09a2d546cb0983d1eca68b4fc97de"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a84a09a2d546cb0983d1eca68b4fc97de">&#9670;&#160;</a></span>makeSettleable()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename T&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::pair&lt; <a class="el" href="#ac3564b8c749d5672ec98acc3aa7d445e">Completion</a>&lt; T &gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html">Promise</a> &gt; <a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html">morph::async::Completion</a>&lt; T &gt;::makeSettleable </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>execPtr</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel static">static</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span>/<span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>&lt;T&gt;</span> pair sharing one settleable state. </p>
+<p>The public "settleable promise" seam (issue #55): lets a caller — typically test code — construct a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> it can resolve or reject on demand, without a full <span class="tt">Bridge</span>/<span class="tt">IBackend</span> round trip and without reaching into <span class="tt">morph::async::detail::CompletionState&lt;T&gt;</span>. Everything <span class="tt">Completion(state,
+executor)</span> already provided by hand is available through this factory instead: the returned <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> is exactly what <span class="tt"><a class="el" href="#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></span>/<span class="tt"><a class="el" href="#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span> observe; the returned <span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a></span> is exactly what settles it. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">execPtr</td><td>Executor callbacks are posted on; <span class="tt">nullptr</span> for a write-only completion (see the two-argument constructor). </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>A <span class="tt">{<a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;, <a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>}</span> pair sharing one <span class="tt">CompletionState&lt;T&gt;</span>. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

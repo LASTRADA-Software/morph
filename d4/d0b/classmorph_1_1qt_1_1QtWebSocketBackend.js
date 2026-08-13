@@ -2,6 +2,8 @@ var classmorph_1_1qt_1_1QtWebSocketBackend =
 [
     [ "Config", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#abb613465047676a5ca37e4c1962efc7c", null ],
     [ "QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a0d712428fa45193506db2c03b41793aa", null ],
+    [ "QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a2f431095fdb54604e0ff6a46edf2cab9", null ],
+    [ "QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a4042d6d10cde25328cce8bfc25e47694", null ],
     [ "~QtWebSocketBackend", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad3e402f437433e89a65dbe1ef056da84", null ],
     [ "waitForConnected", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a72f35dfcfcfb007b05d14185d8ed2f2f", null ],
     [ "negotiateProtocolVersion", "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad1a2a95d9fa055d297e3176ab981348b", null ],

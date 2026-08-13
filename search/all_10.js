@@ -16,9 +16,10 @@ var searchData=
   ['principal_13',['principal',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a0179dc557393efbb5572f4609b651b30',1,'morph::journal::LogEntry::principal'],['../dd/d85/structmorph_1_1session_1_1Context.html#a6f3f23e2695b3b2cbd6d85bf6a237c3f',1,'morph::session::Context::principal'],['../d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7',1,'morph::session::SessionToken::principal']]],
   ['probefunction_14',['ProbeFunction',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#a8c76a4cf471cef70d76876ac51bb8ff0',1,'morph::offline::NetworkMonitor']]],
   ['probeinterval_15',['probeInterval',['../d3/d96/structmorph_1_1offline_1_1NetworkMonitorConfig.html#a225ac62562becaaf45291961c7a1fde4',1,'morph::offline::NetworkMonitorConfig']]],
-  ['propagation_16',['Error propagation',['../index.html#error-propagation',1,'']]],
-  ['protocol_17',['Wire protocol',['../index.html#wire-protocol',1,'']]],
-  ['protocolrange_18',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
-  ['protocolversion_19',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
-  ['publishresult_20',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
+  ['promise_16',['Promise',['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html',1,'morph::async::Completion&lt; T &gt;::Promise'],['../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html#ab4bacd758d6d1b79b345260a76f4dd8b',1,'morph::async::Completion::Promise::Promise()']]],
+  ['propagation_17',['Error propagation',['../index.html#error-propagation',1,'']]],
+  ['protocol_18',['Wire protocol',['../index.html#wire-protocol',1,'']]],
+  ['protocolrange_19',['ProtocolRange',['../da/d37/structmorph_1_1wire_1_1ProtocolRange.html',1,'morph::wire']]],
+  ['protocolversion_20',['protocolVersion',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a6b9ae341d63a0f0e0c81fc6a8e342750',1,'morph::wire::Envelope']]],
+  ['publishresult_21',['publishResult',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#ac7e04ca5859b7a79df1760bd6c43f876',1,'morph::bridge::Bridge']]]
 ];

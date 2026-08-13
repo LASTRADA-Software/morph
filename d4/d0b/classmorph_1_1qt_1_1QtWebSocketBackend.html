@@ -141,6 +141,10 @@ Public Types</h2></td></tr>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a0d712428fa45193506db2c03b41793aa" id="r_a0d712428fa45193506db2c03b41793aa"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a0d712428fa45193506db2c03b41793aa">QtWebSocketBackend</a> (QUrl serverUrl, ::morph::model::detail::ActionDispatcher &amp;dispatcher=::morph::model::detail::defaultDispatcher(), ::morph::model::detail::ModelRegistryFactory &amp;registry=::morph::model::detail::defaultRegistry(), std::optional&lt; QSslConfiguration &gt; tls=std::nullopt, <a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a> cfg=<a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a>{})</td></tr>
 <tr class="memdesc:a0d712428fa45193506db2c03b41793aa"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend and opens a WebSocket connection to <code class="param">serverUrl</code>.  <br /></td></tr>
+<tr class="memitem:a2f431095fdb54604e0ff6a46edf2cab9" id="r_a2f431095fdb54604e0ff6a46edf2cab9"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a2f431095fdb54604e0ff6a46edf2cab9">QtWebSocketBackend</a> (QUrl serverUrl, std::optional&lt; QSslConfiguration &gt; tls, <a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a> cfg=<a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a>{})</td></tr>
+<tr class="memdesc:a2f431095fdb54604e0ff6a46edf2cab9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend without naming the dispatcher/registry pair.  <br /></td></tr>
+<tr class="memitem:a4042d6d10cde25328cce8bfc25e47694" id="r_a4042d6d10cde25328cce8bfc25e47694"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a4042d6d10cde25328cce8bfc25e47694">QtWebSocketBackend</a> (QUrl serverUrl, <a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a> cfg)</td></tr>
+<tr class="memdesc:a4042d6d10cde25328cce8bfc25e47694"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the backend without naming the dispatcher/registry pair or TLS.  <br /></td></tr>
 <tr class="memitem:ad3e402f437433e89a65dbe1ef056da84" id="r_ad3e402f437433e89a65dbe1ef056da84"><td class="memItemLeft"><a id="ad3e402f437433e89a65dbe1ef056da84" name="ad3e402f437433e89a65dbe1ef056da84"></a>
 &#160;</td><td class="memItemRight"><b>~QtWebSocketBackend</b> () override</td></tr>
 <tr class="memdesc:ad3e402f437433e89a65dbe1ef056da84"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the socket and cleans up pending operations. <br /></td></tr>
@@ -212,7 +216,7 @@ Public Member Functions</h2></td></tr>
 </div>
 <a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a0d712428fa45193506db2c03b41793aa" name="a0d712428fa45193506db2c03b41793aa"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a0d712428fa45193506db2c03b41793aa">&#9670;&#160;</a></span>QtWebSocketBackend()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a0d712428fa45193506db2c03b41793aa">&#9670;&#160;</a></span>QtWebSocketBackend() <span class="overload">[1/3]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -264,6 +268,92 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="a2f431095fdb54604e0ff6a46edf2cab9" name="a2f431095fdb54604e0ff6a46edf2cab9"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2f431095fdb54604e0ff6a46edf2cab9">&#9670;&#160;</a></span>QtWebSocketBackend() <span class="overload">[2/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::qt::QtWebSocketBackend::QtWebSocketBackend </td>
+          <td>(</td>
+          <td class="paramtype">QUrl</td>          <td class="paramname"><span class="paramname"><em>serverUrl</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::optional&lt; QSslConfiguration &gt;</td>          <td class="paramname"><span class="paramname"><em>tls</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a></td>          <td class="paramname"><span class="paramname"><em>cfg</em></span><span class="paramdefsep"> = </span><span class="paramdefval"><a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a>{}</span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs the backend without naming the dispatcher/registry pair. </p>
+<p><span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span> never actually uses its <span class="tt">dispatcher</span>/<span class="tt">registry</span> constructor parameters (model construction is delegated to the server — see <span class="tt"><a class="el" href="#a5b0bba2d347ea69930d4166c541528fd" title="Sends a register message to the server and blocks until the reply arrives.">registerModel()</a></span>'s doc comment); the main constructor still accepts them, positioned before <span class="tt">tls</span>/<span class="tt">cfg</span>, purely for API-shape parity with other backends. That forces a caller who only wants to set <span class="tt">cfg</span> (e.g. <span class="tt"><a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html#a6c56987caa7c301720c589d6de8ec7ac" title="Opt in to registerModelAsync (see its doc comment on IBackend).">Config::asyncRegistrationEnabled</a></span>) to spell out <span class="tt">morph::model::detail::defaultDispatcher()</span>/<span class="tt">defaultRegistry()</span> explicitly to reach the parameters after them — reaching into a <span class="tt">detail::</span> namespace for no functional reason. This overload skips straight to <span class="tt">tls</span>/<span class="tt">cfg</span>. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">serverUrl</td><td><span class="tt">ws://</span> or <span class="tt">wss://</span> URL of the remote <span class="tt">RemoteServer</span>. </td></tr>
+    <tr><td class="paramname">tls</td><td>If non-null, enables TLS and applies this configuration. Not declared at all on an SSL-less Qt build (<span class="tt">QT_NO_SSL</span>) — see the class doc comment's "SSL-less Qt builds" section. </td></tr>
+    <tr><td class="paramname">cfg</td><td>Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00137">137</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a4042d6d10cde25328cce8bfc25e47694" name="a4042d6d10cde25328cce8bfc25e47694"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a4042d6d10cde25328cce8bfc25e47694">&#9670;&#160;</a></span>QtWebSocketBackend() <span class="overload">[3/3]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">morph::qt::QtWebSocketBackend::QtWebSocketBackend </td>
+          <td>(</td>
+          <td class="paramtype">QUrl</td>          <td class="paramname"><span class="paramname"><em>serverUrl</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="#abb613465047676a5ca37e4c1962efc7c">Config</a></td>          <td class="paramname"><span class="paramname"><em>cfg</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel explicit">explicit</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs the backend without naming the dispatcher/registry pair or TLS. </p>
+<p>See the <span class="tt">(serverUrl, tls, cfg)</span> overload's doc comment for why this exists. Equivalent to that overload with <span class="tt">tls = std::nullopt</span> on an SSL-enabled Qt build, or to the main constructor's defaults on an SSL-less (<span class="tt">QT_NO_SSL</span>) build, where there is no <span class="tt">tls</span> parameter to skip. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">serverUrl</td><td><span class="tt">ws://</span> or <span class="tt">wss://</span> URL of the remote <span class="tt">RemoteServer</span>. </td></tr>
+    <tr><td class="paramname">cfg</td><td>Reconnect tuning. Default: enabled, 500ms initial / 30s cap, 2x backoff. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00150">150</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
@@ -904,7 +994,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00379">379</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>
