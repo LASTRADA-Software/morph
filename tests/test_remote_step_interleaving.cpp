@@ -10,6 +10,7 @@
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -111,4 +112,18 @@ TEST_CASE("morph::testing::StepExecutor: two different models' work can be inter
     REQUIRE(replyB.ready.load());
     REQUIRE(replyA.env.callId == 31U);
     REQUIRE(replyB.env.callId == 21U);
+}
+
+TEST_CASE("morph::testing::StepExecutor: runAll() throws instead of hanging on a task that reposts indefinitely",
+          "[step-executor]") {
+    // A task that always re-posts itself never leaves the queue empty, so an
+    // unbounded `while (runOne())` would spin forever with no assertion
+    // failure and no compile-time signal -- exactly the failure mode a
+    // hand-stepping harness must not have. runAll()'s maxSteps bound turns
+    // that into a loud, immediate exception instead.
+    morph::testing::StepExecutor exec;
+    std::function<void()> reArm = [&exec, &reArm] { exec.post(reArm); };
+    exec.post(reArm);
+
+    REQUIRE_THROWS_AS(exec.runAll(/*maxSteps=*/50), std::runtime_error);
 }
