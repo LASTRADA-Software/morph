@@ -292,6 +292,50 @@ TEST_CASE(
     REQUIRE(result.load() == 7);
 }
 
+#ifndef QT_NO_SSL
+TEST_CASE(
+    "morph::qt::QtWebSocketBackend: (serverUrl, tls, cfg) constructor overload omits the dispatcher/registry pair "
+    "(issue #55)",
+    "[qt][ws][issue55]") {
+    // The middle of the three constructor overloads: unlike the Config-only
+    // one above, this one also lets a caller pass a `tls` configuration
+    // without naming the dispatcher/registry pair. `tls = std::nullopt` here
+    // (a plain ws:// URL, no TLS) is enough to prove the overload itself
+    // resolves and delegates correctly -- TLS handshake behavior itself is
+    // exercised elsewhere in this file via the main constructor.
+    ensureApp();
+    morph::exec::ThreadPoolExecutor serverPool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(serverPool);
+    morph::qt::QtWebSocketServer wsServer{*server, 0};
+    REQUIRE(wsServer.listen());
+
+    QUrl url{QString("ws://127.0.0.1:%1").arg(wsServer.port())};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        url, std::optional<QSslConfiguration>{std::nullopt},
+        morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    REQUIRE(backendPtr->waitForConnected());
+
+    morph::qt::QtExecutor qtExec;
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "WsEchoModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<WsEchoModel>(); };
+    bridge.registerHandler(binding);
+    CHECK(binding->currentId.load() == 0U);  // async: still unbound immediately after registerHandler()
+
+    pumpUntil([&] { return binding->currentId.load() != 0U; });
+    REQUIRE(binding->currentId.load() != 0U);
+
+    morph::bridge::BridgeHandler<WsEchoModel> handler{bridge, &qtExec, binding};
+    std::atomic<int> result{-1};
+    handler.execute(WsEchoAction{11}).then([&](int val) { result.store(val); }).onError([](const std::exception_ptr&) {
+    });
+    pumpUntil([&] { return result.load() != -1; });
+    REQUIRE(result.load() == 11);
+}
+#endif
+
 TEST_CASE(
     "morph::qt::QtWebSocketBackend: registerModelAsync's pending registration is cancelled when the connection "
     "drops before a reply arrives",
