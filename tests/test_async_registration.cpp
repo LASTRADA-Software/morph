@@ -1543,7 +1543,7 @@ TEST_CASE("attachHandlerAsync's out-of-frame success callback is a no-op once th
     SUCCEED("completing an attach reply after the Bridge and handler are both gone did not crash");
 }
 
-TEST_CASE("attachHandlerAsync's out-of-frame success callback is a no-op once only the binding is gone",
+TEST_CASE("attachHandlerAsync's out-of-frame success callback tolerates the BridgeHandler being gone",
           "[bridge][registration][shared-instances][issue26]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
@@ -1554,14 +1554,17 @@ TEST_CASE("attachHandlerAsync's out-of-frame success callback is a no-op once on
     REQUIRE_NOTHROW(handler->execute(ARTouch{.id = 12, .amount = 4}));
     REQUIRE(rawBackend->pendingCount() == 1);
 
-    // Destroy only the handler (and, with it, the binding's last strong
-    // reference); the Bridge itself stays alive. attachHandlerAsync's success
-    // callback holds only a weak_ptr to the binding, so completing the reply
-    // now must be a no-op rather than dereferencing a freed HandlerBinding.
+    // Destroy only the handler; the Bridge itself stays alive. Note that the
+    // binding itself does *not* actually go away here: execute()'s dispatch
+    // copies `_binding` into a local held by this very completion's own
+    // onDone closure (see BridgeHandler::execute), so the pending dispatch
+    // keeps it alive independent of the BridgeHandler. This still exercises a
+    // real case worth having a test for -- a caller that drops its handler
+    // while a keyed attach is in flight must not crash when the reply lands.
     handler.reset();
 
     REQUIRE_NOTHROW(rawBackend->completeNext());
-    SUCCEED("completing an attach reply after only the binding is gone did not crash");
+    SUCCEED("completing an attach reply after the BridgeHandler is gone did not crash");
 }
 
 TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once the Bridge is gone",
@@ -1583,7 +1586,7 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once the 
     SUCCEED("completing a registerModelSharedAsync reply after the Bridge and handler are both gone did not crash");
 }
 
-TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once only the binding is gone",
+TEST_CASE("ensureBoundAsync's out-of-frame success callback tolerates the BridgeHandler being gone",
           "[bridge][registration][shared-instances][issue26]") {
     SyncExec cbExec;
     auto backend = std::make_unique<AsyncRegisterBackend>();
@@ -1594,8 +1597,66 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a no-op once only
     REQUIRE_NOTHROW(handler->execute(ARKeyedCreate{.initial = 7}));
     REQUIRE(rawBackend->pendingCount() == 1);
 
+    // See attachHandlerAsync's identical test above: the binding itself stays
+    // alive here (pinned by the pending dispatch's own onDone closure), but
+    // dropping the handler while the reply is still in flight is still a real
+    // case worth covering.
     handler.reset();
 
     REQUIRE_NOTHROW(rawBackend->completeNext());
-    SUCCEED("completing a registerModelSharedAsync reply after only the binding is gone did not crash");
+    SUCCEED("completing a registerModelSharedAsync reply after the BridgeHandler is gone did not crash");
+}
+
+TEST_CASE("ensureBound is a no-op when the binding already has an instance",
+          "[bridge][registration][shared-instances][issue26]") {
+    // Bridge::ensureBound is the synchronous counterpart to ensureBoundAsync,
+    // used directly (not through BridgeHandler::execute) when a caller wants
+    // to force-bind an anonymous instance ahead of time. Calling it twice on
+    // the same binding exercises its already-bound early-return: the second
+    // call must not register a second instance.
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_KeyedModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARKeyedModel>(); };
+
+    REQUIRE_NOTHROW(bridge.ensureBound(binding));
+    auto const firstId = binding->currentId.load();
+    REQUIRE(firstId != 0U);
+
+    REQUIRE_NOTHROW(bridge.ensureBound(binding));
+    CHECK(binding->currentId.load() == firstId);
+}
+
+TEST_CASE("ensureBoundAsync's onError path is a no-op once the dispatching frame already claimed the outcome",
+          "[bridge][registration][shared-instances][issue26]") {
+    // Mirrors attachModelAsync's identical inline-failure test above, for
+    // registerModelSharedAsync: onError invoked synchronously from inside the
+    // dispatch call (which then returns true) exercises the parkIfInFrame
+    // no-op inside ensureBoundAsync's error callback, not just its success one.
+    SyncExec cbExec;
+    auto backend = std::make_unique<InlineCompletingBackend>(std::optional<std::string>{"disconnected"});
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<ARKeyedModel, AllowShared> handler{bridge, &cbExec};
+
+    std::optional<morph::async::Completion<ARKeyedCreated>> pending;
+    REQUIRE_NOTHROW(pending.emplace(handler.execute(ARKeyedCreate{.initial = 8})));
+
+    std::string message;
+    int errorCount = 0;
+    std::atomic<bool> succeeded{false};
+    pending->then([&](ARKeyedCreated) { succeeded.store(true); }).onError([&](const std::exception_ptr& err) {
+        ++errorCount;
+        try {
+            std::rethrow_exception(err);
+        } catch (const std::exception& exc) {
+            message = exc.what();
+        }
+    });
+
+    CHECK(message == "disconnected");
+    CHECK(errorCount == 1);
+    CHECK_FALSE(succeeded.load());
+    CHECK_FALSE(handler.primary().has_value());
 }
