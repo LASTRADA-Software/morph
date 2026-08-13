@@ -28,12 +28,14 @@ var searchData=
   ['operator_3d_3d_25',['operator==',['../df/d52/structmorph_1_1detail_1_1FixedString.html#a178bff48b89383d6e9ac0992fa7d410b',1,'morph::detail::FixedString::operator==()'],['../df/d65/structmorph_1_1forms_1_1Choice.html#a05321a797a43374ea683f6ff314a7ed8',1,'morph::forms::Choice::operator==()'],['../dc/df3/structmorph_1_1forms_1_1Multiline.html#a026ef4468a19dfcc80d9955ecd2d72ca',1,'morph::forms::Multiline::operator==()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#ad9fdf3bc74dabc40b84ea70a684a0703',1,'morph::forms::Ranged::operator==()'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a86adea2d65bf10099eec1a4621ca5a37',1,'morph::math::Rational::operator==()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#ab4a2c6f908e386101f16f48cce769ea2',1,'morph::util::Tagged::operator==()'],['../d9/db8/quantity_8hpp.html#a0f5a3606dbca547af0c56e9aaa15e97f',1,'morph::units::operator==()']]],
   ['optionsaction_26',['optionsAction',['../df/d65/structmorph_1_1forms_1_1Choice.html#aeda34a0fd8b9af2c0b77f087255f7f6f',1,'morph::forms::Choice']]],
   ['optionsdependson_27',['optionsDependsOn',['../df/d65/structmorph_1_1forms_1_1Choice.html#a196b7154d865c605d481275ca90cf779',1,'morph::forms::Choice']]],
-  ['ordered_20coalescing_20identity_20aware_20execution_20history_28',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
-  ['ordered_20replayable_20action_20log_29',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
-  ['orphan_20log_30',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['outboxrelay_31',['OutboxRelay',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html',1,'morph::journal']]],
-  ['outboxrelayresult_32',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],
-  ['outcome_33',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
-  ['overflow_34',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
-  ['overview_35',['Overview',['../index.html#overview',1,'']]]
+  ['or_28',['Or',['../d4/d8d/structmorph_1_1forms_1_1Or.html',1,'morph::forms']]],
+  ['ordered_20coalescing_20identity_20aware_20execution_20history_29',['Action log — ordered, coalescing, identity-aware execution history',['../index.html#action-log--ordered-coalescing-identity-aware-execution-history',1,'']]],
+  ['ordered_20replayable_20action_20log_30',['&lt;span class=&quot;tt&quot;&gt;journal/&lt;/span&gt; — ordered, replayable action log',['../index.html#journal--ordered-replayable-action-log',1,'']]],
+  ['orof_31',['orOf',['../d4/d11/forms_8hpp.html#a335404d53a53c252e86326b3250c0acf',1,'morph::forms']]],
+  ['orphan_20log_32',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
+  ['outboxrelay_33',['OutboxRelay',['../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html',1,'morph::journal']]],
+  ['outboxrelayresult_34',['OutboxRelayResult',['../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html',1,'morph::journal']]],
+  ['outcome_35',['outcome',['../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353',1,'morph::journal::LogEntry']]],
+  ['overflow_36',['Overflow',['../d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3',1,'morph::math']]],
+  ['overview_37',['Overview',['../index.html#overview',1,'']]]
 ];

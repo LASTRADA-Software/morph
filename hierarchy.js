@@ -33,6 +33,7 @@ var hierarchy =
     [ "morph::flows::Wizard&lt; Title, Steps &gt;", "d6/d94/structmorph_1_1flows_1_1Wizard.html", null ],
     [ "morph::flows::WizardStep&lt; Action, Title, Binds &gt;", "d8/d94/structmorph_1_1flows_1_1WizardStep.html", null ],
     [ "morph::flows::WizardTraits&lt; W &gt;", "de/d61/structmorph_1_1flows_1_1WizardTraits.html", null ],
+    [ "morph::forms::And&lt; A, Conds &gt;", "d3/d81/structmorph_1_1forms_1_1And.html", null ],
     [ "morph::forms::AtLeastOneOf&lt; A, Vs &gt;", "de/d4f/structmorph_1_1forms_1_1AtLeastOneOf.html", null ],
     [ "morph::forms::Choice&lt; T, OptionsAction, ValueField, LabelField, DependsOn &gt;", "df/d65/structmorph_1_1forms_1_1Choice.html", null ],
     [ "morph::forms::Engaged&lt; V, A &gt;", "dd/d6b/structmorph_1_1forms_1_1Engaged.html", null ],
@@ -47,7 +48,9 @@ var hierarchy =
     [ "morph::forms::LessOrEqual&lt; V, A &gt;", "d3/d3c/structmorph_1_1forms_1_1LessOrEqual.html", null ],
     [ "morph::forms::Multiline", "dc/df3/structmorph_1_1forms_1_1Multiline.html", null ],
     [ "morph::forms::MutuallyExclusive&lt; A, Vs &gt;", "dc/d20/structmorph_1_1forms_1_1MutuallyExclusive.html", null ],
+    [ "morph::forms::Not&lt; A, Cond &gt;", "d1/db1/structmorph_1_1forms_1_1Not.html", null ],
     [ "morph::forms::NotEngaged&lt; V, A &gt;", "d9/d86/structmorph_1_1forms_1_1NotEngaged.html", null ],
+    [ "morph::forms::Or&lt; A, Conds &gt;", "d4/d8d/structmorph_1_1forms_1_1Or.html", null ],
     [ "morph::forms::Ranged&lt; Min, Max, Step &gt;", "d7/d6d/structmorph_1_1forms_1_1Ranged.html", null ],
     [ "morph::forms::ReadonlyWhen&lt; V, A, Cond &gt;", "dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html", null ],
     [ "morph::forms::RequiredWhen&lt; V, A, Cond &gt;", "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html", null ],
@@ -116,6 +119,7 @@ var hierarchy =
     [ "morph::units::Quantity&lt; U &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", [
       [ "morph::units::NamedQuantity< Name, U >", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", null ]
     ] ],
+    [ "morph::units::QuantityBounds", "df/dca/structmorph_1_1units_1_1QuantityBounds.html", null ],
     [ "morph::units::UnitAlternative&lt; E &gt;", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", null ],
     [ "morph::units::UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", null ],
     [ "morph::units::UnitRelation&lt; E &gt;", "da/d8f/structmorph_1_1units_1_1UnitRelation.html", null ],
@@ -136,8 +140,10 @@ var hierarchy =
       [ "std::runtime_error", null, [
         [ "morph::backend::BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", null ],
         [ "morph::backend::BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", null ],
+        [ "morph::backend::ClientTimeoutError", "d5/d8f/structmorph_1_1backend_1_1ClientTimeoutError.html", null ],
         [ "morph::backend::DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", null ],
         [ "morph::backend::TimeoutError", "d5/d80/structmorph_1_1backend_1_1TimeoutError.html", null ],
+        [ "morph::forms::QuantityDecodeError", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html", null ],
         [ "morph::journal::SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
         [ "morph::model::ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", null ],
         [ "morph::offline::FileOfflineQueueError", "d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.html", null ],

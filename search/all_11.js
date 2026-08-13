@@ -11,5 +11,7 @@ var searchData=
   ['quantity_2ehpp_8',['quantity.hpp',['../d9/db8/quantity_8hpp.html',1,'']]],
   ['quantity_3c_20u_20_3e_9',['Quantity&lt; U &gt;',['../d5/dda/structmorph_1_1units_1_1Quantity.html',1,'morph::units']]],
   ['quantity_5fequation_2ehpp_10',['quantity_equation.hpp',['../d4/dc4/quantity__equation_8hpp.html',1,'']]],
-  ['queueitem_11',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
+  ['quantitybounds_11',['QuantityBounds',['../df/dca/structmorph_1_1units_1_1QuantityBounds.html',1,'morph::units']]],
+  ['quantitydecodeerror_12',['QuantityDecodeError',['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html',1,'morph::forms::QuantityDecodeError'],['../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#acace8089d2ec9c984a06fd8a6b0a2313',1,'morph::forms::QuantityDecodeError::QuantityDecodeError()']]],
+  ['queueitem_13',['QueueItem',['../d0/df8/structmorph_1_1offline_1_1QueueItem.html',1,'morph::offline']]]
 ];

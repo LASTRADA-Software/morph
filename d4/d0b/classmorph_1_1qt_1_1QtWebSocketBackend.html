@@ -154,8 +154,12 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:ab85e641f3cdb1a912948481df77f3c53"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a <span class="tt">register</span> message and returns without blocking; the reply is matched later, asynchronously, by <span class="tt">callId</span>.  <br /></td></tr>
 <tr class="memitem:af7db92dbacfb0b4f1ce047f0930b3c73" id="r_af7db92dbacfb0b4f1ce047f0930b3c73"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#af7db92dbacfb0b4f1ce047f0930b3c73">registerModelShared</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity) override</td></tr>
 <tr class="memdesc:af7db92dbacfb0b4f1ce047f0930b3c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a shared (register-or-attach) <span class="tt">register</span> and blocks for the reply.  <br /></td></tr>
+<tr class="memitem:aac5c1bf91dcc71dfed8723be6617a40d" id="r_aac5c1bf91dcc71dfed8723be6617a40d"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aac5c1bf91dcc71dfed8723be6617a40d">registerModelSharedAsync</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity, std::function&lt; void(::morph::exec::detail::ModelId)&gt; onRegistered, std::function&lt; void(const std::string &amp;)&gt; onError) override</td></tr>
+<tr class="memdesc:aac5c1bf91dcc71dfed8723be6617a40d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends a shared (register-or-attach) <span class="tt">register</span> and, if async registration is enabled, returns without blocking.  <br /></td></tr>
 <tr class="memitem:a53075c01e7c657d63f9b2e50973d3a07" id="r_a53075c01e7c657d63f9b2e50973d3a07"><td class="memItemLeft">::morph::exec::detail::ModelId&#160;</td><td class="memItemRight"><a class="el" href="#a53075c01e7c657d63f9b2e50973d3a07">attachModel</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current) override</td></tr>
 <tr class="memdesc:a53075c01e7c657d63f9b2e50973d3a07"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">attach</span> and blocks for the reply, re-pointing from <code class="param">current</code>.  <br /></td></tr>
+<tr class="memitem:aef864a89d6a0a2e492fd4bb901fa8f48" id="r_aef864a89d6a0a2e492fd4bb901fa8f48"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aef864a89d6a0a2e492fd4bb901fa8f48">attachModelAsync</a> (const std::string &amp;typeId, std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt; factory, ::morph::backend::detail::InstanceIdentity identity, ::morph::exec::detail::ModelId current, std::function&lt; void(::morph::exec::detail::ModelId)&gt; onRegistered, std::function&lt; void(const std::string &amp;)&gt; onError) override</td></tr>
+<tr class="memdesc:aef864a89d6a0a2e492fd4bb901fa8f48"><td class="mdescLeft">&#160;</td><td class="mdescRight">Sends an <span class="tt">attach</span> and, if async registration is enabled, returns without blocking.  <br /></td></tr>
 <tr class="memitem:a2e72e36877b55424f38b5597a6562a6d" id="r_a2e72e36877b55424f38b5597a6562a6d"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2e72e36877b55424f38b5597a6562a6d">assignPrimary</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary) override</td></tr>
 <tr class="memdesc:a2e72e36877b55424f38b5597a6562a6d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Files a live server-side instance under <code class="param">primary</code>.  <br /></td></tr>
 <tr class="memitem:aa6b15f2bbb8154ddfb30406de340b8c0" id="r_aa6b15f2bbb8154ddfb30406de340b8c0"><td class="memItemLeft">bool&#160;</td><td class="memItemRight"><a class="el" href="#aa6b15f2bbb8154ddfb30406de340b8c0">assignPrimaryAsync</a> (::morph::exec::detail::ModelId mid, const std::string &amp;typeId, std::string_view primary, std::function&lt; void(::morph::exec::detail::ModelId)&gt; onRegistered, std::function&lt; void(const std::string &amp;)&gt; onError) override</td></tr>
@@ -473,6 +477,64 @@ Public Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="aac5c1bf91dcc71dfed8723be6617a40d" name="aac5c1bf91dcc71dfed8723be6617a40d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aac5c1bf91dcc71dfed8723be6617a40d">&#9670;&#160;</a></span>registerModelSharedAsync()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::qt::QtWebSocketBackend::registerModelSharedAsync </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::backend::detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(::morph::exec::detail::ModelId)&gt;</td>          <td class="paramname"><span class="paramname"><em>onRegistered</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(const std::string &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onError</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends a shared (register-or-attach) <span class="tt">register</span> and, if async registration is enabled, returns without blocking. </p>
+<p>The non-blocking counterpart to <span class="tt"><a class="el" href="#af7db92dbacfb0b4f1ce047f0930b3c73" title="Sends a shared (register-or-attach) register and blocks for the reply.">registerModelShared</a></span>, matching <span class="tt"><a class="el" href="#ab85e641f3cdb1a912948481df77f3c53" title="Sends a register message and returns without blocking; the reply is matched later,...">registerModelAsync</a></span>'s shape exactly (same <span class="tt">callId</span> counter, same <span class="tt">_pendingRegistrations</span> map, same verb-agnostic reply routing in <span class="tt">onTextMessage</span>). An empty <span class="tt">identity.primary</span> degrades to the private path, i.e. to <span class="tt"><a class="el" href="#ab85e641f3cdb1a912948481df77f3c53" title="Sends a register message and returns without blocking; the reply is matched later,...">registerModelAsync</a></span>, mirroring the synchronous <span class="tt"><a class="el" href="#af7db92dbacfb0b4f1ce047f0930b3c73" title="Sends a shared (register-or-attach) register and blocks for the reply.">registerModelShared</a></span>'s own degrade-to-private behaviour.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id of the model. </td></tr>
+    <tr><td class="paramname">factory</td><td>Ignored — model construction is delegated to the server. </td></tr>
+    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+    <tr><td class="paramname">onRegistered</td><td>Invoked with the assigned <span class="tt">ModelId</span> on success. </td></tr>
+    <tr><td class="paramname">onError</td><td>Invoked with a diagnostic message on failure. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">asyncRegistrationEnabled</span> is set (see <span class="tt"><a class="el" href="../../d1/d2f/structmorph_1_1qt_1_1QtWebSocketBackendConfig.html" title="Reconnect tuning for QtWebSocketBackend.">QtWebSocketBackendConfig</a></span>) and the request was sent; <span class="tt">false</span> otherwise, falling back to the synchronous <span class="tt"><a class="el" href="#af7db92dbacfb0b4f1ce047f0930b3c73" title="Sends a shared (register-or-attach) register and blocks for the reply.">registerModelShared</a></span>. </dd></dl>
+
+</div>
+</div>
 <a id="a53075c01e7c657d63f9b2e50973d3a07" name="a53075c01e7c657d63f9b2e50973d3a07"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a53075c01e7c657d63f9b2e50973d3a07">&#9670;&#160;</a></span>attachModel()</h2>
 
@@ -527,6 +589,70 @@ Public Member Functions</h2></td></tr>
   </table>
   </dd>
 </dl>
+
+</div>
+</div>
+<a id="aef864a89d6a0a2e492fd4bb901fa8f48" name="aef864a89d6a0a2e492fd4bb901fa8f48"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aef864a89d6a0a2e492fd4bb901fa8f48">&#9670;&#160;</a></span>attachModelAsync()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::qt::QtWebSocketBackend::attachModelAsync </td>
+          <td>(</td>
+          <td class="paramtype">const std::string &amp;</td>          <td class="paramname"><span class="paramname"><em>typeId</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; std::unique_ptr&lt;::morph::model::detail::IModelHolder &gt;()&gt;</td>          <td class="paramname"><span class="paramname"><em>factory</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::backend::detail::InstanceIdentity</td>          <td class="paramname"><span class="paramname"><em>identity</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">::morph::exec::detail::ModelId</td>          <td class="paramname"><span class="paramname"><em>current</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(::morph::exec::detail::ModelId)&gt;</td>          <td class="paramname"><span class="paramname"><em>onRegistered</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::function&lt; void(const std::string &amp;)&gt;</td>          <td class="paramname"><span class="paramname"><em>onError</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel override">override</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Sends an <span class="tt">attach</span> and, if async registration is enabled, returns without blocking. </p>
+<p>The non-blocking counterpart to <span class="tt"><a class="el" href="#a53075c01e7c657d63f9b2e50973d3a07" title="Sends an attach and blocks for the reply, re-pointing from current.">attachModel</a></span>; see <span class="tt"><a class="el" href="#aac5c1bf91dcc71dfed8723be6617a40d" title="Sends a shared (register-or-attach) register and, if async registration is enabled,...">registerModelSharedAsync</a></span> immediately above for the shared shape. An empty <span class="tt">identity.primary</span> releases <code class="param">current</code> and degrades to a private async registration, mirroring the synchronous <span class="tt"><a class="el" href="#a53075c01e7c657d63f9b2e50973d3a07" title="Sends an attach and blocks for the reply, re-pointing from current.">attachModel</a></span>'s own empty-primary branch.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">typeId</td><td>String type-id of the model. </td></tr>
+    <tr><td class="paramname">factory</td><td>Ignored — model construction is delegated to the server. </td></tr>
+    <tr><td class="paramname">identity</td><td>Entity key for the action log plus the directory primary key. </td></tr>
+    <tr><td class="paramname">current</td><td>Instance currently held, or <span class="tt">ModelId{0}</span> if none. </td></tr>
+    <tr><td class="paramname">onRegistered</td><td>Invoked with the <span class="tt">ModelId</span> now attached to, on success. </td></tr>
+    <tr><td class="paramname">onError</td><td>Invoked with a diagnostic message on failure. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if <span class="tt">asyncRegistrationEnabled</span> is set and the request was sent; <span class="tt">false</span> otherwise, falling back to the synchronous <span class="tt"><a class="el" href="#a53075c01e7c657d63f9b2e50973d3a07" title="Sends an attach and blocks for the reply, re-pointing from current.">attachModel</a></span>. </dd></dl>
 
 </div>
 </div>
@@ -778,7 +904,7 @@ Public Member Functions</h2></td></tr>
 
 <p>No-op — this backend holds no local model objects. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00289">289</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html#l00340">340</a> of file <a class="el" href="../../d8/dc3/qt__websocket__backend_8hpp_source.html">qt_websocket_backend.hpp</a>.</p>
 
 </div>
 </div>

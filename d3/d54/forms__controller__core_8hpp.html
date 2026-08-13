@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d54/forms__
 <code>#include &lt;morph/core/bridge.hpp&gt;</code><br />
 <code>#include &lt;morph/core/executor.hpp&gt;</code><br />
 <code>#include &lt;morph/qt/qt_executor.hpp&gt;</code><br />
+<code>#include &lt;optional&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;utility&gt;</code><br />
 </div>
@@ -133,10 +134,14 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d54/forms__
 <tr class="heading"><td colspan="2"><h2 id="header-nested-classes" class="groupheader"><a id="nested-classes" name="nested-classes"></a>
 Classes</h2></td></tr>
 <tr class="memitem:morph_3A_3Aqt_3A_3Aforms_3A_3AFormsControllerCore_3C_20Model_20_3E" id="r_morph_3A_3Aqt_3A_3Aforms_3A_3AFormsControllerCore_3C_20Model_20_3E"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore&lt; Model &gt;</a></td></tr>
-<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type.  <a href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#details">More...</a><br /></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type.  <a href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#details">More...</a><br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Model-agnostic core of the shipped Qt/QML forms renderer's controller: owns the Bridge/BridgeHandler/executor wiring <span class="tt">examples/forms/gui_qml</span>'s <span class="tt">FormsController</span> used to hardcode per-app, and exposes the two operations <span class="tt">DynamicForm.qml</span> needs &ndash; submit and options-fetch &ndash; generically over <span class="tt">BridgeHandler&lt;Model&gt;::executeJson</span>, so an app depends on this directly instead of re-deriving the wiring. A concrete <span class="tt">QObject</span>/<span class="tt">QML_ELEMENT</span> wrapper per app (Qt cannot register a class <em>template</em> for QML) forwards to this core and turns its callbacks into signals &ndash; see <span class="tt">examples/forms/gui_qml/FormsController.hpp</span> for the reference wrapper. </p>
+<div class="textblock"><p>Model-agnostic core of the shipped Qt/QML forms renderer's controller: owns (or composes over) the Bridge/BridgeHandler/executor wiring <span class="tt">examples/forms/gui_qml</span>'s <span class="tt">FormsController</span> used to hardcode per-app, and exposes the two operations <span class="tt">DynamicForm.qml</span> needs &ndash; submit and options-fetch &ndash; generically over <span class="tt">BridgeHandler&lt;Model&gt;::executeJson</span>, so an app depends on this directly instead of re-deriving the wiring. A concrete <span class="tt">QObject</span>/<span class="tt">QML_ELEMENT</span> wrapper per app (Qt cannot register a class <em>template</em> for QML) forwards to this core and turns its callbacks into signals &ndash; see <span class="tt">examples/forms/gui_qml/FormsController.hpp</span> for the reference wrapper.</p>
+<p>Two constructor overloads decide who owns the <span class="tt">Bridge</span>:</p><ul>
+<li>The single-argument (schema-only) constructor builds and owns a private <span class="tt">ThreadPoolExecutor</span> + <span class="tt">QtExecutor</span> + <span class="tt">Bridge</span> over a <span class="tt">LocalBackend</span>, exactly as before &ndash; the convenient default for a demo or an app that has no <span class="tt">Bridge</span> of its own.</li>
+<li>The <span class="tt">(Bridge&amp;, IExecutor*, schemasJson)</span> constructor composes over a caller-supplied <span class="tt">Bridge</span>/executor instead &ndash; the caller decides the deployment mode (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt">QtWebSocketBackend</span>, ...) and this core never builds a second, always- local <span class="tt">Bridge</span> of its own. The caller's <span class="tt">Bridge</span>/executor must outlive this core. </li>
+</ul>
 
 <p class="definition">Definition in file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 </div></div><!-- contents -->

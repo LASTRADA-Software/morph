@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d26/classmo
 </div><!--header-->
 <div class="contents">
 
-<p>Owns the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type.  
+<p>Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>&gt;</code></p>
@@ -129,8 +129,9 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d0/d26/classmo
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a7b6c4eacf300ebaa94a641847a7aaad5" id="r_a7b6c4eacf300ebaa94a641847a7aaad5"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a7b6c4eacf300ebaa94a641847a7aaad5">FormsControllerCore</a> (std::string schemasJson)</td></tr>
-<tr class="memdesc:a7b6c4eacf300ebaa94a641847a7aaad5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core with the app's pre-assembled <span class="tt">{actionType:
-       schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>).  <br /></td></tr>
+<tr class="memdesc:a7b6c4eacf300ebaa94a641847a7aaad5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core with its own private, always-local <span class="tt">Bridge</span> (<span class="tt">ThreadPoolExecutor</span> + <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> + <span class="tt">LocalBackend</span>), and the app's pre-assembled <span class="tt">{actionType: schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>).  <br /></td></tr>
+<tr class="memitem:a5fe9f97a355a83000e52e225d64c96ba" id="r_a5fe9f97a355a83000e52e225d64c96ba"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5fe9f97a355a83000e52e225d64c96ba">FormsControllerCore</a> (<a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a> &amp;bridge, <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *guiExec, std::string schemasJson)</td></tr>
+<tr class="memdesc:a5fe9f97a355a83000e52e225d64c96ba"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one.  <br /></td></tr>
 <tr class="memitem:a9d0ae1a3f274ce98ef9c5c0aa5bdc767" id="r_a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="memItemLeft">const std::string &amp;&#160;</td><td class="memItemRight"><a class="el" href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767">schemasJson</a> () const noexcept</td></tr>
 <tr class="memdesc:a9d0ae1a3f274ce98ef9c5c0aa5bdc767"><td class="mdescLeft">&#160;</td><td class="mdescRight">The <span class="tt">{actionType: schema}</span> JSON supplied at construction.  <br /></td></tr>
 <tr class="memitem:ad015e78d8fa026c904b8157d0e6f8a57" id="r_ad015e78d8fa026c904b8157d0e6f8a57"><td class="memTemplParams" colspan="2">template&lt;typename OnReply, typename OnError&gt; </td></tr>
@@ -142,7 +143,7 @@ Public Member Functions</h2></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><div class="compoundTemplParams">template&lt;typename Model&gt;<br />
-class morph::qt::forms::FormsControllerCore&lt; Model &gt;</div><p>Owns the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type. </p>
+class morph::qt::forms::FormsControllerCore&lt; Model &gt;</div><p>Owns, or composes over, the Bridge/BridgeHandler/executor plumbing behind a schema-driven QML forms controller, generic over the model type. </p>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">Model</td><td>The registered model type (<span class="tt">BRIDGE_REGISTER_MODEL</span>) whose actions the shipped <span class="tt">DynamicForm.qml</span> renders. </td></tr>
@@ -150,10 +151,10 @@ class morph::qt::forms::FormsControllerCore&lt; Model &gt;</div><p>Owns the Brid
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a7b6c4eacf300ebaa94a641847a7aaad5" name="a7b6c4eacf300ebaa94a641847a7aaad5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7b6c4eacf300ebaa94a641847a7aaad5">&#9670;&#160;</a></span>FormsControllerCore()</h2>
+<h2 class="memtitle"><span class="permalink"><a href="#a7b6c4eacf300ebaa94a641847a7aaad5">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[1/2]</span></h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -177,16 +178,64 @@ template&lt;typename Model&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Constructs the core with the app's pre-assembled <span class="tt">{actionType:
-       schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>). </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>Constructs the core with its own private, always-local <span class="tt">Bridge</span> (<span class="tt">ThreadPoolExecutor</span> + <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> + <span class="tt">LocalBackend</span>), and the app's pre-assembled <span class="tt">{actionType: schema}</span> JSON (e.g. hand-written like <span class="tt">lab::schemasJson()</span>). </p>
+<p>Use the <span class="tt">(Bridge&amp;, IExecutor*, <a class="el" href="#a9d0ae1a3f274ce98ef9c5c0aa5bdc767" title="The {actionType: schema} JSON supplied at construction.">schemasJson</a>)</span> overload instead when the app already has a <span class="tt">Bridge</span> (remote/socket mode, or one shared across multiple presenters) that this core should compose over rather than duplicate. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">schemasJson</td><td>The full schema set the QML renderer will parse. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00038">38</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00059">59</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5fe9f97a355a83000e52e225d64c96ba" name="a5fe9f97a355a83000e52e225d64c96ba"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5fe9f97a355a83000e52e225d64c96ba">&#9670;&#160;</a></span>FormsControllerCore() <span class="overload">[2/2]</span></h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;typename Model&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="../../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html">morph::qt::forms::FormsControllerCore</a>&lt; Model &gt;::FormsControllerCore </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../d0/ddc/classmorph_1_1bridge_1_1Bridge.html">morph::bridge::Bridge</a> &amp;</td>          <td class="paramname"><span class="paramname"><em>bridge</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html">::morph::exec::IExecutor</a> *</td>          <td class="paramname"><span class="paramname"><em>guiExec</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype">std::string</td>          <td class="paramname"><span class="paramname"><em>schemasJson</em></span>&#160;)</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Constructs the core over a caller-supplied <span class="tt">Bridge</span>/executor, instead of building a private, always-local one. </p>
+<p>The core registers a <span class="tt">BridgeHandler&lt;Model&gt;</span> on <code class="param">bridge</code> exactly as the owning constructor's internal one does, so <span class="tt"><a class="el" href="#ad015e78d8fa026c904b8157d0e6f8a57" title="Dispatches bodyJson as actionType&#39;s body via the generic executeJson path, invoking onReply / onError...">submitIfValid</a></span>/ <span class="tt"><a class="el" href="#accb54a2ee3b00d879f7351cd199be106" title="Executes optionsAction with bodyJson to fetch a Choice field&#39;s combo-box options, via the same generi...">fetchOptions</a></span> dispatch through whatever backend <code class="param">bridge</code> currently has installed (<span class="tt">LocalBackend</span>, <span class="tt">SimulatedRemoteBackend</span>, <span class="tt"><a class="el" href="../../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html" title="IBackend implementation that communicates with a RemoteServer over WebSocket.">QtWebSocketBackend</a></span>, ...) &ndash; including a backend <code class="param">bridge</code> switches to later via <span class="tt">Bridge::switchBackend</span>, since the registered handler re-registers itself automatically.</p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">bridge</td><td>The bridge to register this core's handler on. Must outlive this core. </td></tr>
+    <tr><td class="paramname">guiExec</td><td>Executor used to deliver <span class="tt">Completion</span> callbacks (e.g. a <span class="tt"><a class="el" href="../../d4/d30/classmorph_1_1qt_1_1QtExecutor.html" title="IExecutor implementation that posts tasks to a Qt event loop.">QtExecutor</a></span> for the GUI thread). Must outlive this core. </td></tr>
+    <tr><td class="paramname">schemasJson</td><td>The full schema set the QML renderer will parse. </td></tr>
+  </table>
+  </dd>
+</dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00079">79</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -219,7 +268,7 @@ template&lt;typename Model&gt; </div>
 <p>The <span class="tt">{actionType: schema}</span> JSON supplied at construction. </p>
 <dl class="section return"><dt>Returns</dt><dd>A reference to the cached schema-set JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00042">42</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00084">84</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +331,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00054">54</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>
@@ -345,7 +394,7 @@ template&lt;typename OnReply, typename OnError&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00075">75</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html#l00117">117</a> of file <a class="el" href="../../d3/d54/forms__controller__core_8hpp_source.html">forms_controller_core.hpp</a>.</p>
 
 </div>
 </div>

@@ -3,10 +3,12 @@ var quantity_8hpp =
     [ "morph::units::UnitMeta", "d8/dab/structmorph_1_1units_1_1UnitMeta.html", "d8/dab/structmorph_1_1units_1_1UnitMeta" ],
     [ "morph::units::UnitRelation&lt; E &gt;", "da/d8f/structmorph_1_1units_1_1UnitRelation.html", "da/d8f/structmorph_1_1units_1_1UnitRelation" ],
     [ "morph::units::UnitAlternative&lt; E &gt;", "d5/d23/structmorph_1_1units_1_1UnitAlternative.html", "d5/d23/structmorph_1_1units_1_1UnitAlternative" ],
+    [ "morph::units::QuantityBounds", "df/dca/structmorph_1_1units_1_1QuantityBounds.html", "df/dca/structmorph_1_1units_1_1QuantityBounds" ],
     [ "morph::units::Quantity&lt; U, DeclaredDecimals &gt;", "d5/dda/structmorph_1_1units_1_1Quantity.html", "d5/dda/structmorph_1_1units_1_1Quantity" ],
     [ "morph::units::NamedQuantity&lt; Name, U &gt;", "d1/d58/structmorph_1_1units_1_1NamedQuantity.html", "d1/d58/structmorph_1_1units_1_1NamedQuantity" ],
     [ "morph::units::UnitEnum", "d6/db7/conceptmorph_1_1units_1_1UnitEnum.html", null ],
     [ "morph::units::HasUnitRelations", "d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html", null ],
+    [ "morph::units::HasUnitBounds", "d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html", null ],
     [ "morph::units::RatioConvertible", "d5/d86/conceptmorph_1_1units_1_1RatioConvertible.html", null ],
     [ "morph::units::HasUserConvert", "d1/d6d/conceptmorph_1_1units_1_1HasUserConvert.html", null ],
     [ "morph::units::Convertible", "d3/deb/conceptmorph_1_1units_1_1Convertible.html", null ],
@@ -24,5 +26,6 @@ var quantity_8hpp =
     [ "morph::units::operator*", "d9/db8/quantity_8hpp.html#a4e4b8edd17603f30bcb664a318637456", null ],
     [ "morph::units::operator*", "d9/db8/quantity_8hpp.html#a799a5e7b348059e5ae185ff1e1438866", null ],
     [ "morph::units::operator/", "d9/db8/quantity_8hpp.html#aa271848c7005fad827a4f1379d1595be", null ],
+    [ "morph::units::toString", "d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14", null ],
     [ "morph::units::isQuantity", "d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69", null ]
 ];

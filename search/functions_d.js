@@ -20,5 +20,6 @@ var searchData=
   ['operator_3d_17',['operator=',['../dd/de7/classmorph_1_1async_1_1Completion.html#aafed4f34a7a3dd00849171db05731700',1,'morph::async::Completion']]],
   ['operator_3d_3d_18',['operator==',['../df/d65/structmorph_1_1forms_1_1Choice.html#a05321a797a43374ea683f6ff314a7ed8',1,'morph::forms::Choice::operator==()'],['../dc/df3/structmorph_1_1forms_1_1Multiline.html#a026ef4468a19dfcc80d9955ecd2d72ca',1,'morph::forms::Multiline::operator==()'],['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#ad9fdf3bc74dabc40b84ea70a684a0703',1,'morph::forms::Ranged::operator==()'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#a86adea2d65bf10099eec1a4621ca5a37',1,'morph::math::Rational::operator==()'],['../dc/d7a/structmorph_1_1util_1_1Tagged.html#ab4a2c6f908e386101f16f48cce769ea2',1,'morph::util::Tagged::operator==()'],['../d9/db8/quantity_8hpp.html#a0f5a3606dbca547af0c56e9aaa15e97f',1,'morph::units::operator==()']]],
   ['optionsaction_19',['optionsAction',['../df/d65/structmorph_1_1forms_1_1Choice.html#aeda34a0fd8b9af2c0b77f087255f7f6f',1,'morph::forms::Choice']]],
-  ['optionsdependson_20',['optionsDependsOn',['../df/d65/structmorph_1_1forms_1_1Choice.html#a196b7154d865c605d481275ca90cf779',1,'morph::forms::Choice']]]
+  ['optionsdependson_20',['optionsDependsOn',['../df/d65/structmorph_1_1forms_1_1Choice.html#a196b7154d865c605d481275ca90cf779',1,'morph::forms::Choice']]],
+  ['orof_21',['orOf',['../d4/d11/forms_8hpp.html#a335404d53a53c252e86326b3250c0acf',1,'morph::forms']]]
 ];

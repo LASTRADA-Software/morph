@@ -160,6 +160,8 @@ constexpr&#160;</td><td class="memItemRight"><b>Quantity</b> () noexcept=default
 <tr class="memdesc:a79fb7b381de1399ff0fe3ffba0bba7bd pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Converts from the same unit at another declared precision; the value, its runtime tag, and its derivation carry over unchanged.  <br /></td></tr>
 <tr class="memitem:afa91555763dd9e3d0dc557a4c45ac348 pub_methods_structmorph_1_1units_1_1Quantity" id="r_afa91555763dd9e3d0dc557a4c45ac348"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#afa91555763dd9e3d0dc557a4c45ac348">hasValue</a> () const noexcept</td></tr>
 <tr class="memdesc:afa91555763dd9e3d0dc557a4c45ac348 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether a value has been entered/measured.  <br /></td></tr>
+<tr class="memitem:a64cf21ec870fa8929edf4942421666f4 pub_methods_structmorph_1_1units_1_1Quantity" id="r_a64cf21ec870fa8929edf4942421666f4"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a64cf21ec870fa8929edf4942421666f4">withinDeclaredBounds</a> () const noexcept</td></tr>
+<tr class="memdesc:a64cf21ec870fa8929edf4942421666f4 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Pre-decode validation seam: whether the current payload falls within this field's unit-declared bounds (<span class="tt"><a class="el" href="../../de/d93/structmorph_1_1units_1_1UnitTraits.html" title="Customisation point: the application specialises this for its unit enum, returning a UnitMeta per enu...">UnitTraits</a>&lt;E&gt;::bounds</span>), when the unit declares any. An empty payload, or a unit with no declared <span class="tt">bounds()</span> (<span class="tt"><a class="el" href="../../d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html" title="Concept: UnitTraits&lt;E&gt; declares an optional static constexpr QuantityBounds bounds(E) — the pre-decod...">HasUnitBounds</a></span> not satisfied), is always within bounds — this is an <em>opt-in</em> check, not a new default restriction, so a unit system that declares no bounds behaves exactly as it did before this feature existed.  <br /></td></tr>
 <tr class="memitem:ac9ca2c6ed3aa728d47967c4b02135fee pub_methods_structmorph_1_1units_1_1Quantity" id="r_ac9ca2c6ed3aa728d47967c4b02135fee"><td class="memItemLeft">constexpr const std::optional&lt; <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &gt; &amp;&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee">value</a> () const noexcept</td></tr>
 <tr class="memdesc:ac9ca2c6ed3aa728d47967c4b02135fee pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">The payload, for pattern-matching / <span class="tt">-&gt;</span> access.  <br /></td></tr>
 <tr class="memitem:a30ae1b871898af3e6ff7c204c9cd2834 pub_methods_structmorph_1_1units_1_1Quantity" id="r_a30ae1b871898af3e6ff7c204c9cd2834"><td class="memItemLeft">constexpr <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834">value_or</a> (const <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &amp;fallback) const noexcept</td></tr>
@@ -217,7 +219,7 @@ struct morph::units::NamedQuantity&lt; Name, U &gt;</div><p>A <span class="tt"><
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00955">955</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01007">1007</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="af067a9bec5485a0e395856980ee0f598" name="af067a9bec5485a0e395856980ee0f598"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af067a9bec5485a0e395856980ee0f598">&#9670;&#160;</a></span>Base</h2>
@@ -235,7 +237,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>The plain base quantity type. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00957">957</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01009">1009</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -267,7 +269,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>Constructs empty, then names. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00960">960</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01012">1012</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -304,7 +306,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00964">964</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01016">1016</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -341,7 +343,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00968">968</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01020">1020</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -380,7 +382,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The named quantity. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00978">978</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01030">1030</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

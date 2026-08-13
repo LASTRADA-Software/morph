@@ -130,12 +130,12 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/df7/concept
 <div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html">EmptyCapableField</a> = <span class="keyword">requires</span>(<span class="keyword">const</span> T&amp; field) {</div>
 <div class="line">    { field.hasValue() } <span class="keyword">noexcept</span> -&gt; std::convertible_to&lt;bool&gt;;</div>
 <div class="line">}</div>
-<div class="ttc" id="aconceptmorph_1_1forms_1_1EmptyCapableField_html"><div class="ttname"><a href="../../d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html">morph::forms::EmptyCapableField</a></div><div class="ttdoc">Concept: a field type with an internal empty state (Quantity, Choice, Timestamp, or any user type exp...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00237">forms.hpp:237</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1EmptyCapableField_html"><div class="ttname"><a href="../../d7/df7/conceptmorph_1_1forms_1_1EmptyCapableField.html">morph::forms::EmptyCapableField</a></div><div class="ttdoc">Concept: a field type with an internal empty state (Quantity, Choice, Timestamp, or any user type exp...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00240">forms.hpp:240</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Concept: a field type with an internal empty state (<span class="tt">Quantity</span>, <span class="tt">Choice</span>, <span class="tt">Timestamp</span>, or any user type exposing <span class="tt">hasValue()</span>). </p>
 <p><span class="tt">hasValue()</span> must be <span class="tt">noexcept</span>: <span class="tt">allRequiredEngaged</span> is <span class="tt">noexcept</span> and calls it on every member, so a throwing <span class="tt">hasValue()</span> would cross a <span class="tt">noexcept</span> boundary and call <span class="tt">std::terminate</span>. Requiring it here turns that into a compile-time rejection instead — a user field with a throwing <span class="tt">hasValue()</span> simply does not satisfy the concept. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00237">237</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00240">240</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

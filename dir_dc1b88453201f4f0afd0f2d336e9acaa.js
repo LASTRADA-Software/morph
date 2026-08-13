@@ -11,5 +11,6 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
     [ "registry.hpp", "d1/da2/registry_8hpp_source.html", null ],
     [ "remote.hpp", "d0/dfc/remote_8hpp_source.html", null ],
     [ "strand.hpp", "de/dc1/strand_8hpp_source.html", null ],
+    [ "timeout_scheduler.hpp", "db/ddb/timeout__scheduler_8hpp.html", null ],
     [ "wire.hpp", "dc/de4/wire_8hpp_source.html", null ]
 ];

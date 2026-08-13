@@ -7,7 +7,8 @@ var searchData=
   ['normalizelocalenumber_4',['normalizeLocaleNumber',['../d8/d3a/locale__format_8hpp.html#a5447aae2448f6a892fe4a0202c224942',1,'morph::render']]],
   ['notengaged_5',['notEngaged',['../d4/d11/forms_8hpp.html#ac6c3d1449989868831d152b5d3e0ef6e',1,'morph::forms']]],
   ['notifybackendchanged_6',['notifyBackendChanged',['../d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#adaa4fa967c7321689e55514788800a91',1,'morph::backend::LocalBackend::notifyBackendChanged()'],['../d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec',1,'morph::backend::SimulatedRemoteBackend::notifyBackendChanged()'],['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#ae8e21983e5044036264ad910f43e40b6',1,'morph::net::SocketBackend::notifyBackendChanged()'],['../d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#a74433cc659e1bf91a8dcba58b6dec2b0',1,'morph::qt::QtWebSocketBackend::notifyBackendChanged()']]],
-  ['now_7',['now',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da',1,'morph::time::DateTime::now()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495',1,'morph::time::Timestamp::now()']]],
-  ['nowoverridestate_8',['nowOverrideState',['../d7/d4a/datetime_8hpp.html#a6bbe2fc294eab5234e9625f0f633993a',1,'morph::time::detail']]],
-  ['numerator_9',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator']]]
+  ['notof_7',['notOf',['../d4/d11/forms_8hpp.html#a77304d9ae165ca738ee00c42ce53c652',1,'morph::forms']]],
+  ['now_8',['now',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da',1,'morph::time::DateTime::now()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495',1,'morph::time::Timestamp::now()']]],
+  ['nowoverridestate_9',['nowOverrideState',['../d7/d4a/datetime_8hpp.html#a6bbe2fc294eab5234e9625f0f633993a',1,'morph::time::detail']]],
+  ['numerator_10',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator']]]
 ];

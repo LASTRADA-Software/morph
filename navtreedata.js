@@ -34,7 +34,7 @@ var NAVTREE =
       [ "Class Members", "functions.html", [
         [ "All", "functions.html", "functions_dup" ],
         [ "Functions", "functions_func.html", "functions_func" ],
-        [ "Variables", "functions_vars.html", null ],
+        [ "Variables", "functions_vars.html", "functions_vars" ],
         [ "Typedefs", "functions_type.html", null ],
         [ "Related Symbols", "functions_rela.html", null ]
       ] ]
@@ -52,9 +52,9 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087",
-"d9/db7/socket__backend_8hpp_source.html",
-"df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c"
+"d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#ae05332b7c26d6617e468f1c750431404",
+"d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#acace8089d2ec9c984a06fd8a6b0a2313",
+"de/dc7/structmorph_1_1backend_1_1LimitPolicy.html#a09c8fbe13521ee7cb17c7c42923a7641"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

@@ -5,6 +5,7 @@ var structmorph_1_1units_1_1Quantity =
     [ "Quantity", "d5/dda/structmorph_1_1units_1_1Quantity.html#a13518e1c2e0b9437066fb8670ee88832", null ],
     [ "Quantity", "d5/dda/structmorph_1_1units_1_1Quantity.html#a79fb7b381de1399ff0fe3ffba0bba7bd", null ],
     [ "hasValue", "d5/dda/structmorph_1_1units_1_1Quantity.html#afa91555763dd9e3d0dc557a4c45ac348", null ],
+    [ "withinDeclaredBounds", "d5/dda/structmorph_1_1units_1_1Quantity.html#a64cf21ec870fa8929edf4942421666f4", null ],
     [ "value", "d5/dda/structmorph_1_1units_1_1Quantity.html#ac9ca2c6ed3aa728d47967c4b02135fee", null ],
     [ "value_or", "d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834", null ],
     [ "operator*", "d5/dda/structmorph_1_1units_1_1Quantity.html#afe4db91f7aa2e40274ba8f34b7680845", null ],
