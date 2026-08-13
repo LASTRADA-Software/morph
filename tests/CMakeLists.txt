@@ -32,6 +32,7 @@ add_executable(morph_tests
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
     test_client_execute_deadline.cpp
+    test_timeout_scheduler.cpp
     test_dispatch_di.cpp
     test_handler_binding.cpp
     test_switch_backend.cpp
