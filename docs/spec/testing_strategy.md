@@ -244,6 +244,41 @@ that directly (an `err` reply mentioning `maxMessageBytes`), while scenarios
 2 and 4 (flood, stall) are not capped by default and this file asserts only
 that the server keeps functioning under them, not that they are rejected.
 
+## Test type naming: avoid file-scope name collisions
+
+`tests/**/*.cpp` files are written independently, and each is free to declare
+its own local model/action types (`OrderModel`, `Widget`, `Report`, …) for
+its scenario. A type declared at **file scope** — not inside an anonymous or
+named namespace — has external linkage. If two different test files declare
+a same-named, differently-defined type at file scope, that is a One
+Definition Rule (ODR) violation: undefined behavior that neither the
+compiler nor the linker diagnoses, since each translation unit only ever
+sees its own definition. Which definition the linker keeps for a given call
+site is link-order dependent, so the bug can pass locally and fail in CI (or
+the reverse), with no diagnostic pointing at the cause. This happened for
+real: see issue #84 — a bare `OrderModel` stub in one file silently won over
+another file's real `OrderModel` in some builds, so the real one's
+`onBackendChanged()` was never invoked and its offline queue never drained.
+
+**Convention**: wrap local model/action types in an anonymous namespace by
+default. Only lift a type to file scope when a macro that requires external
+linkage (`BRIDGE_REGISTER_MODEL`, `BRIDGE_REGISTER_ACTION`) needs it — and in
+that case, prefer a short, file/feature-specific prefix over a generic name
+(`StepILOrderModel`, not `OrderModel`; see `tests/test_remote_step_interleaving.cpp`).
+A type declared inside a *named* namespace is also safe, since its linker
+symbol is namespace-qualified (e.g. `namespace issue21::models { struct
+Report { ... }; }`, used for `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`
+per issue #21).
+
+**CI-enforced**: `scripts/check_test_type_names.sh` scans every
+`tests/**/*.cpp` file for file-scope `struct`/`class` declarations (template
+specializations, which qualify their own name and specialize an existing
+template rather than declaring a new one, are excluded) and fails if the
+same simple name appears at file scope in more than one file. Self-tested by
+`scripts/test_check_test_type_names.sh` against the fixtures in
+`tests/lint/test_type_names/` before the real scan runs, following the same
+"test the checker first" pattern as the deprecation-marker lint.
+
 ## Cross-references
 
 | Spec | Relationship |
