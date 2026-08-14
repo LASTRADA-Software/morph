@@ -132,13 +132,28 @@ jobs:
       # job instead of passing it vacuously. The plain build that follows
       # covers any further rung automatically, so this file does not need
       # editing again just to add another named target.
+      #
+      # Each named target is gated on its rung's directory actually existing
+      # in the checkout: rungs land as their own PRs against the shared
+      # foundation this workflow lives in (see LADDER.md/the PR history for
+      # why), so a foundation-only checkout has none of them yet -- that is
+      # the "no rung exists" case morph_add_rung.cmake's own header comment
+      # already documents as a silent, expected no-target outcome, not the
+      # regression this tripwire exists to catch. Once a rung's directory is
+      # present, the tripwire is back in force: morph_add_rung() skipping its
+      # gui_wasm target for any *other* reason (missing gui_lib, missing QML
+      # module, MORPH_BUILD_FORMS_QML off) still fails this job, unchanged.
       - name: Build the WASM-remote spike and every rung's WASM client
         run: |
           export EM_CACHE="$PWD/.emcache"
           cmake --build build-wasm-ladder --target morph_ladder_wasm_spike
-          cmake --build build-wasm-ladder --target ladder_pastebin_gui_wasm
-          cmake --build build-wasm-ladder --target ladder_bookmarks_gui_wasm
-          cmake --build build-wasm-ladder --target ladder_polls_gui_wasm
+          for rung in pastebin bookmarks polls; do
+            if [ -d "examples/$rung" ]; then
+              cmake --build build-wasm-ladder --target "ladder_${rung}_gui_wasm"
+            else
+              echo "::notice::examples/$rung not present in this checkout -- skipping ladder_${rung}_gui_wasm (expected on the rung-0 foundation PR; see wasm-ladder.yml's comment)"
+            fi
+          done
           # Catches any further rung's WASM client too, without editing this
           # file again -- closing the gap rung 1's own final review flagged.
           cmake --build build-wasm-ladder
