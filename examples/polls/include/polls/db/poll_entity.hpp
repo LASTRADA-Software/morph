@@ -121,10 +121,13 @@ struct PollEventRecord {
 
 #else
 // Client-only (WASM) build: entity shapes are never instantiated, only
-// referenced by type in code that never runs there -- this stub-mixin
-// pattern is what a WASM client falls back on since PollModel's own header
-// (unlike a declaration-only facade) still pulls this file in transitively;
-// see db_model.hpp's file comment.
+// referenced by type in code that never runs there -- this stub pattern is
+// what a WASM client falls back on since PollModel's own header (unlike a
+// declaration-only facade) still pulls this file in transitively, purely to
+// name these types (BridgeHandler<PollModel> is a template over the model
+// type, and PollModel's execute() signatures still name db::PollRecord et
+// al. even though poll_model.cpp -- the only place any of these types is
+// ever instantiated -- is never compiled for Emscripten at all).
 struct PollRecord {};
 struct OptionRecord {};
 struct VoteRecord {};

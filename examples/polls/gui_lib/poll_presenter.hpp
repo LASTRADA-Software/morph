@@ -10,12 +10,14 @@
 #include <string>
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
-// (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never
-// see morph/core/bridge.hpp or poll_model.hpp: poll_model.hpp pulls in
-// Lightweight's DataMapper machinery through polls/db/db_model.hpp, and
-// moc's parser (not a real C++ front end) mis-parses the nesting that
-// results, mistaking `namespace polls::gui { ... }` below for still being
-// nested inside a stray `Lightweight::` namespace.
+// (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
+// morph/core/bridge.hpp: its template machinery produces bogus moc output
+// the same way poll_model.hpp historically did when it transitively pulled
+// in Lightweight's DataMapper machinery through the since-removed
+// polls/db/db_model.hpp -- poll_model.hpp itself no longer has any
+// Lightweight/ODBC dependency at all, now that PollModel acquires a
+// connection per execute() call from Lightweight::GlobalDataMapperPool()
+// instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
 #include "polls/models/poll_model.hpp"
 

@@ -14,6 +14,7 @@
 #include <morph/session/session.hpp>
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 
 #include <glaze/glaze.hpp>
@@ -314,15 +315,16 @@ CreatePollResult PollModel::execute(const CreatePoll& action) {
     poll.title = action.title;
     poll.createdAtMs = nowMs();
 
-    ::Lightweight::SqlTransaction transaction{mapper().Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
-    mapper().Create(poll);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    mapper->Create(poll);
     std::int64_t order = 0;
     for (const auto& opt : action.options) {
         db::OptionRecord rec;
         rec.poll = poll;
         rec.label = opt.label;
         rec.sortOrder = order++;
-        mapper().Create(rec);
+        mapper->Create(rec);
     }
     transaction.Commit();
 
@@ -335,14 +337,15 @@ GetPollStateResult PollModel::execute(const OpenPoll& action) {
     if (!action.validate()) {
         throw ValidationError{"OpenPoll: pollId is required"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), action.pollId);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), action.pollId);
     // Cache the pollId once this handler has proven it names a real poll,
     // before dispatching to buildState() -- execute(GetPollState) below
     // reads this cache to re-derive which poll it is, since GetPollState
     // itself carries no pollId of its own (it is dispatched against an
     // already-OpenPoll-attached handler).
     _pollId = action.pollId;
-    return buildState(mapper(), poll);
+    return buildState(mapper.Get(), poll);
 }
 
 GetPollStateResult PollModel::execute(const GetPollState& /*action*/) {
@@ -353,7 +356,8 @@ GetPollStateResult PollModel::execute(const GetPollState& /*action*/) {
     if (!_pollId.has_value()) {
         throw NotFound{"GetPollState: handler was never attached via OpenPoll"};
     }
-    return buildState(mapper(), loadPollByPollId(mapper(), *_pollId));
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    return buildState(mapper.Get(), loadPollByPollId(mapper.Get(), *_pollId));
 }
 
 GetPollStateResult PollModel::applyVotes(const std::string& participantName, const std::vector<OneVote>& votes,
@@ -366,7 +370,12 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     if (!_pollId.has_value()) {
         throw NotFound{"applyVotes: handler was never attached via OpenPoll"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), *_pollId);
+    // One connection for this whole call: the pre-transaction reads below
+    // inform the transaction's own writes (the prior-votes read in
+    // particular must see the same data the delete-then-recreate loop
+    // deletes), so everything here runs against a single acquisition.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), *_pollId);
     if (poll.finalized.Value()) {
         // A vote in flight when FinalizePoll lands must dead-letter with a
         // user-visible outcome, not vanish -- Conflict IS that outcome,
@@ -381,12 +390,12 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     // entry. See requireOptionBelongsToPoll's own doc comment for why this
     // check exists at all (the DB's own FK is not enforced here).
     for (const auto& ov : votes) {
-        requireOptionBelongsToPoll(mapper(), poll, ov.optionId);
+        requireOptionBelongsToPoll(mapper.Get(), poll, ov.optionId);
     }
 
     const std::uint64_t pollDbId = poll.id.Value();
-    auto priorVotes = mapper()
-                           .Query<db::VoteRecord>()
+    auto priorVotes = mapper
+                           ->Query<db::VoteRecord>()
                            .Where(::Lightweight::FieldNameOf<&db::VoteRecord::poll>, "=", pollDbId)
                            .Where(::Lightweight::FieldNameOf<&db::VoteRecord::participantName>, "=", participantName)
                            .All();
@@ -401,7 +410,7 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     }
     const std::string previousVotesJson = encodeVotesJson(previousVotes);
 
-    ::Lightweight::SqlTransaction transaction{mapper().Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
     // Delete-then-recreate: replaces the participant's votes wholesale
     // rather than diffing old vs. new, so a retried SubmitVotes for the same
@@ -410,7 +419,7 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     // idx_votes_poll_participant_option's unique index as the last line of
     // defense, not the primary mechanism.
     for (auto& prior : priorVotes) {
-        mapper().Delete(prior);
+        mapper->Delete(prior);
     }
     for (const auto& ov : votes) {
         db::VoteRecord rec;
@@ -418,7 +427,7 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
         rec.option = static_cast<std::uint64_t>(ov.optionId.value);
         rec.participantName = participantName;
         rec.choice = static_cast<std::uint8_t>(ov.choice);
-        mapper().Create(rec);
+        mapper->Create(rec);
     }
 
     if (writeHistory == WriteHistory::Yes) {
@@ -427,7 +436,7 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
         history.participantName = participantName;
         history.previousVotesJson = previousVotesJson;
         history.createdAtMs = nowMs();
-        mapper().Create(history);
+        mapper->Create(history);
     }
 
     // Folded into this same transaction (not deleted by the caller
@@ -435,13 +444,13 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     // deletion commit together or not at all -- see this method's own doc
     // comment (poll_model.hpp) and execute(UndoLastVoteChange)'s call site.
     if (historyRowIdToDelete.has_value()) {
-        auto rowsToDelete = mapper()
-                                 .Query<db::VoteHistoryRecord>()
+        auto rowsToDelete = mapper
+                                 ->Query<db::VoteHistoryRecord>()
                                  .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::id>, "=",
                                         *historyRowIdToDelete)
                                  .All();
         for (auto& row : rowsToDelete) {
-            mapper().Delete(row);
+            mapper->Delete(row);
         }
     }
 
@@ -450,11 +459,11 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     event.kind = "vote";
     event.summary = participantName + " " + summaryVerb;
     event.createdAtMs = nowMs();
-    mapper().Create(event);
+    mapper->Create(event);
 
     transaction.Commit();
 
-    return buildState(mapper(), poll);
+    return buildState(mapper.Get(), poll);
 }
 
 GetPollStateResult PollModel::execute(const SubmitVotes& action) {
@@ -480,32 +489,33 @@ GetPollStateResult PollModel::execute(const AddComment& action) {
     if (!_pollId.has_value()) {
         throw NotFound{"AddComment: handler was never attached via OpenPoll"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), *_pollId);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), *_pollId);
     if (poll.finalized.Value()) {
         // FinalizePoll's own doc comment: finalizing makes the poll
         // read-only -- that applies to every write, not only votes.
         throw Conflict{"poll is finalized"};
     }
 
-    ::Lightweight::SqlTransaction transaction{mapper().Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
     db::CommentRecord comment;
     comment.poll = poll;
     comment.participantName = action.participantName;
     comment.body = action.body;
     comment.createdAtMs = nowMs();
-    mapper().Create(comment);
+    mapper->Create(comment);
 
     db::PollEventRecord event;
     event.poll = poll;
     event.kind = "comment";
     event.summary = action.participantName + " commented";
     event.createdAtMs = nowMs();
-    mapper().Create(event);
+    mapper->Create(event);
 
     transaction.Commit();
 
-    return buildState(mapper(), poll);
+    return buildState(mapper.Get(), poll);
 }
 
 GetPollStateResult PollModel::execute(const FinalizePoll& action) {
@@ -515,7 +525,8 @@ GetPollStateResult PollModel::execute(const FinalizePoll& action) {
     if (!_pollId.has_value()) {
         throw NotFound{"FinalizePoll: handler was never attached via OpenPoll"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), *_pollId);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), *_pollId);
 
     // Token check strictly before the already-finalized check: a caller who
     // does not hold the admin token must get the same Forbidden regardless
@@ -528,23 +539,23 @@ GetPollStateResult PollModel::execute(const FinalizePoll& action) {
     if (poll.finalized.Value()) {
         throw Conflict{"poll is already finalized"};
     }
-    requireOptionBelongsToPoll(mapper(), poll, action.optionId);
+    requireOptionBelongsToPoll(mapper.Get(), poll, action.optionId);
 
-    ::Lightweight::SqlTransaction transaction{mapper().Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     poll.finalized = true;
     poll.finalizedOptionId = *action.optionId;
-    mapper().Update(poll);
+    mapper->Update(poll);
 
     db::PollEventRecord event;
     event.poll = poll;
     event.kind = "finalize";
     event.summary = "poll finalized";
     event.createdAtMs = nowMs();
-    mapper().Create(event);
+    mapper->Create(event);
 
     transaction.Commit();
 
-    return buildState(mapper(), poll);
+    return buildState(mapper.Get(), poll);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,15 +576,20 @@ UndoLastVoteChangeResult PollModel::execute(const UndoLastVoteChange& action) {
     if (!_pollId.has_value()) {
         throw NotFound{"UndoLastVoteChange: handler was never attached via OpenPoll"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), *_pollId);
+    // Read-only lookup, its own single acquisition: only historyRowId (a
+    // plain integer) crosses into applyVotes() below, which does its own
+    // separate acquisition for the actual restore transaction -- nothing
+    // here depends on being on the same physical connection as that write.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), *_pollId);
     const std::uint64_t pollDbId = poll.id.Value();
 
     // "Most recent row for this participant" -- same OrderBy(...DESCENDING)
     // + First() shape buildState()'s own lastEvent lookup above uses for
     // "most recent PollEventRecord", the established precedent in this TU
     // for this exact query pattern.
-    auto history = mapper()
-                       .Query<db::VoteHistoryRecord>()
+    auto history = mapper
+                       ->Query<db::VoteHistoryRecord>()
                        .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::poll>, "=", pollDbId)
                        .Where(::Lightweight::FieldNameOf<&db::VoteHistoryRecord::participantName>, "=",
                               action.participantName)
@@ -634,7 +650,8 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     if (!_pollId.has_value()) {
         throw NotFound{"GetEventsSince: handler was never attached via OpenPoll"};
     }
-    db::PollRecord poll = loadPollByPollId(mapper(), *_pollId);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    db::PollRecord poll = loadPollByPollId(mapper.Get(), *_pollId);
     const std::uint64_t pollDbId = poll.id.Value();
 
     // Opposite direction and full-result-set counterpart of buildState()'s
@@ -644,8 +661,8 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     // is a ServerSideAutoIncrement primary key starting at 1, so
     // `id > 0` already matches every row -- "from the beginning" falls out of
     // this same query with no special-case branch.
-    auto rows = mapper()
-                    .Query<db::PollEventRecord>()
+    auto rows = mapper
+                    ->Query<db::PollEventRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::poll>, "=", pollDbId)
                     .Where(::Lightweight::FieldNameOf<&db::PollEventRecord::id>, ">",
                            static_cast<std::uint64_t>(*action.lastEventId))

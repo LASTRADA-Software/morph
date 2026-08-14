@@ -11,10 +11,8 @@
 
 // Guarded exactly like bookmark_qml_bridges.hpp's own includes: AUTOMOC runs
 // moc over this header, and moc must not be pointed at morph's template-heavy
-// bridge.hpp, event_poller.hpp or poll_model.hpp — see poll_presenter.hpp's
-// identical guard and doc comment for the full rationale (poll_model.hpp
-// pulls in Lightweight's DataMapper machinery through polls/db/db_model.hpp,
-// and moc's parser mis-parses the nesting that results).
+// bridge.hpp or event_poller.hpp — see poll_presenter.hpp's identical guard
+// and doc comment for the full rationale.
 #ifndef Q_MOC_RUN
 #include "gui/event_poller.hpp"
 #include "poll_forms_controller.hpp"

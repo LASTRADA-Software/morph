@@ -2,7 +2,6 @@
 #pragma once
 
 #include "polls/core/errors.hpp"
-#include "polls/db/db_model.hpp"
 #include "polls/dto/event_dto.hpp"
 #include "polls/dto/poll_dto.hpp"
 #include "polls/dto/vote_dto.hpp"
@@ -80,7 +79,15 @@ namespace polls {
 /// @brief One scheduling poll: its options, votes, comments, and event log,
 ///        backed by SQLite via Lightweight. Keyed by `pollId` -- see the
 ///        `BRIDGE_MODEL_KEY` declaration below.
-class PollModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning a connection for its own
+/// lifetime -- including while this instance is shared across every
+/// participant of the same poll (`AllowShared`, below): dispatched calls
+/// against a shared instance are still serialized one at a time on its own
+/// strand, so no two `execute()` calls ever contend for one acquisition.
+class PollModel {
   public:
     /// @brief Creates a poll with its candidate options.
     /// @param action Title and 2-20 bounded-label options.
