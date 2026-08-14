@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/card_dto.hpp"
 #include "bank/dto/common.hpp"
 
@@ -15,7 +14,11 @@
 namespace bank {
 
 /// @brief Issues and manages payment cards.
-class CardModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class CardModel {
 public:
     dto::CardInfo execute(const dto::IssueCard& action);
     dto::CommandResult execute(const dto::FreezeCard& action);

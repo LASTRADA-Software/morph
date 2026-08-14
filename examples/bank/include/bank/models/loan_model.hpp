@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/loan_dto.hpp"
 
 /// @file
@@ -16,7 +15,11 @@
 namespace bank {
 
 /// @brief Originates and services loans.
-class LoanModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class LoanModel {
 public:
     dto::LoanInfo execute(const dto::ApplyLoan& action);
     dto::LoanInfo execute(const dto::RepayLoan& action);

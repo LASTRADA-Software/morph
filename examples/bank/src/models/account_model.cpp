@@ -2,6 +2,7 @@
 
 #include "bank/models/account_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 #include <morph/core/registry.hpp>
 #include <string>
@@ -26,7 +27,8 @@ void AccountModel::hydrate(std::int64_t accountId) {
     if (_loadedId == accountId && _owner == owner && _seenVersion == current) {
         return;
     }
-    _row = db::loadOwned<db::AccountRecord>(mapper(), accountId, owner, "account");
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    _row = db::loadOwned<db::AccountRecord>(mapper.Get(), accountId, owner, "account");
     _owner = owner;
     _loadedId = accountId;
     _seenVersion = current;
@@ -39,17 +41,18 @@ dto::AccountInfo AccountModel::execute(const dto::GetAccount& action) {
 
 dto::CommandResult AccountModel::execute(const dto::CloseAccount& action) {
     hydrate(action.id);
-    // Best-effort zero-balance guard. The balance is read on this model's own
-    // connection, so a deposit committing on another model's connection between
-    // this read and the Update could leave a Closed account holding funds — the
-    // same cross-connection window documented in ledger_ops.hpp. A production
-    // ledger would close the account inside the same transaction that settles
-    // its balance, or gate on an atomic conditional update.
+    // Best-effort zero-balance guard. The balance is read from the cached
+    // `_row`, so a deposit committing on another model's connection (or
+    // even another acquisition of this same pool) between that read and the
+    // Update below could leave a Closed account holding funds — the same
+    // cross-connection window documented in ledger_ops.hpp. A production
+    // ledger would close the account inside the same transaction that
+    // settles its balance, or gate on an atomic conditional update.
     if (_row.balanceMinor.Value() != 0) {
         return dto::CommandResult{.ok = false, .message = "account balance must be zero before closing"};
     }
     _row.status = static_cast<int>(AccountStatus::Closed);
-    mapper().Update(_row);
+    ::Lightweight::GlobalDataMapperPool().Acquire()->Update(_row);
     // Write through, then publish the new version so any other cached holder of
     // this row re-hydrates rather than serving a stale status.
     db::bumpRowVersion(action.id);

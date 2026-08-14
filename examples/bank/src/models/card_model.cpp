@@ -2,6 +2,7 @@
 
 #include "bank/models/card_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <cstdint>
@@ -54,17 +55,18 @@ dto::CardInfo CardModel::execute(const dto::IssueCard& action) {
         throw Unauthorized{"no session principal"};
     }
     // Cards may only be issued against an open account the caller owns.
-    auto account = db::loadOwnedOpenAccount(mapper(), action.accountId, owner);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = db::loadOwnedOpenAccount(mapper.Get(), action.accountId, owner);
 
     db::CardRecord card;
     db::setReference(card.account, account.id.Value());
-    db::setReference(card.user, db::requireUserId(mapper(), owner));
+    db::setReference(card.user, db::requireUserId(mapper.Get(), owner));
     card.kind = action.kind;
     card.panLast4 = Light::SqlAnsiString<4>{randomLast4()};
     card.status = static_cast<int>(CardStatus::Active);
     card.dailyLimitMinor = action.dailyLimitMinor;
     card.pinHash = Light::SqlAnsiString<16>{hashPin("0000")};
-    mapper().Create(card);
+    mapper->Create(card);
     return toInfo(card, owner);
 }
 
@@ -78,26 +80,29 @@ db::CardRecord requireOwnedCard(Lightweight::DataMapper& mapper, std::int64_t ca
 }  // namespace
 
 dto::CommandResult CardModel::execute(const dto::FreezeCard& action) {
-    auto card = requireOwnedCard(mapper(), action.id);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto card = requireOwnedCard(mapper.Get(), action.id);
     card.status = static_cast<int>(CardStatus::Frozen);
-    mapper().Update(card);
+    mapper->Update(card);
     return dto::CommandResult{.ok = true, .message = "card frozen"};
 }
 
 dto::CommandResult CardModel::execute(const dto::UnfreezeCard& action) {
-    auto card = requireOwnedCard(mapper(), action.id);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto card = requireOwnedCard(mapper.Get(), action.id);
     if (card.status.Value() == static_cast<int>(CardStatus::Cancelled)) {
         throw ConflictError{"cancelled cards cannot be reactivated"};
     }
     card.status = static_cast<int>(CardStatus::Active);
-    mapper().Update(card);
+    mapper->Update(card);
     return dto::CommandResult{.ok = true, .message = "card active"};
 }
 
 dto::CommandResult CardModel::execute(const dto::CancelCard& action) {
-    auto card = requireOwnedCard(mapper(), action.id);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto card = requireOwnedCard(mapper.Get(), action.id);
     card.status = static_cast<int>(CardStatus::Cancelled);
-    mapper().Update(card);
+    mapper->Update(card);
     return dto::CommandResult{.ok = true, .message = "card cancelled"};
 }
 
@@ -105,9 +110,10 @@ dto::CommandResult CardModel::execute(const dto::SetCardLimit& action) {
     if (action.dailyLimitMinor < 0) {
         throw ValidationError{"limit must be non-negative"};
     }
-    auto card = requireOwnedCard(mapper(), action.id);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto card = requireOwnedCard(mapper.Get(), action.id);
     card.dailyLimitMinor = action.dailyLimitMinor;
-    mapper().Update(card);
+    mapper->Update(card);
     return dto::CommandResult{.ok = true, .message = "limit updated"};
 }
 
@@ -115,9 +121,10 @@ dto::CommandResult CardModel::execute(const dto::ChangePin& action) {
     if (!action.validate()) {
         throw ValidationError{"PIN must be exactly 4 digits"};
     }
-    auto card = requireOwnedCard(mapper(), action.id);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto card = requireOwnedCard(mapper.Get(), action.id);
     card.pinHash = Light::SqlAnsiString<16>{hashPin(action.newPin)};
-    mapper().Update(card);
+    mapper->Update(card);
     return dto::CommandResult{.ok = true, .message = "PIN changed"};
 }
 
@@ -126,9 +133,10 @@ dto::CardList CardModel::execute(const dto::ListCards& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::CardRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::CardRecord>()
                     .Where(Lightweight::FieldNameOf<&db::CardRecord::user>, "=", userId)
                     .All();
     dto::CardList out;

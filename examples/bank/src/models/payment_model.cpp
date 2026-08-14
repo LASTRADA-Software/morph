@@ -2,6 +2,7 @@
 
 #include "bank/models/payment_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 
@@ -56,12 +57,12 @@ dto::PaymentInfo PaymentModel::execute(const dto::PayBill& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    auto& dm = mapper();
-    auto account = requireOwnedAccount(dm, action.fromAccountId, owner);
-    requireOwnedPayee(dm, action.payeeId, owner);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = requireOwnedAccount(dm.Get(), action.fromAccountId, owner);
+    requireOwnedPayee(dm.Get(), action.payeeId, owner);
 
     db::PaymentRecord payment;
-    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.user, db::requireUserId(dm.Get(), owner));
     db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
     db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
@@ -72,9 +73,9 @@ dto::PaymentInfo PaymentModel::execute(const dto::PayBill& action) {
     payment.intervalDays = 0;
     payment.description = Light::SqlAnsiString<128>{action.description};
 
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::applyDebit(dm, account, action.amountMinor, TxnKind::Payment, action.payeeId, action.description);
-    dm.Create(payment);
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    db::applyDebit(dm.Get(), account, action.amountMinor, TxnKind::Payment, action.payeeId, action.description);
+    dm->Create(payment);
     tx.Commit();
 
     return toInfo(payment, owner);
@@ -85,12 +86,12 @@ dto::PaymentInfo PaymentModel::execute(const dto::SchedulePayment& action) {
         throw ValidationError{"invalid scheduled payment"};
     }
     const std::string owner = sessionPrincipal();
-    auto& dm = mapper();
-    auto account = requireOwnedAccount(dm, action.fromAccountId, owner);
-    requireOwnedPayee(dm, action.payeeId, owner);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = requireOwnedAccount(dm.Get(), action.fromAccountId, owner);
+    requireOwnedPayee(dm.Get(), action.payeeId, owner);
 
     db::PaymentRecord payment;
-    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.user, db::requireUserId(dm.Get(), owner));
     db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
     db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
@@ -100,7 +101,7 @@ dto::PaymentInfo PaymentModel::execute(const dto::SchedulePayment& action) {
     payment.dueAtMs = action.dueAtMs;
     payment.intervalDays = 0;
     payment.description = Light::SqlAnsiString<128>{action.description};
-    dm.Create(payment);
+    dm->Create(payment);
     return toInfo(payment, owner);
 }
 
@@ -109,12 +110,12 @@ dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
         throw ValidationError{"invalid standing order"};
     }
     const std::string owner = sessionPrincipal();
-    auto& dm = mapper();
-    auto account = requireOwnedAccount(dm, action.fromAccountId, owner);
-    requireOwnedPayee(dm, action.payeeId, owner);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = requireOwnedAccount(dm.Get(), action.fromAccountId, owner);
+    requireOwnedPayee(dm.Get(), action.payeeId, owner);
 
     db::PaymentRecord payment;
-    db::setReference(payment.user, db::requireUserId(dm, owner));
+    db::setReference(payment.user, db::requireUserId(dm.Get(), owner));
     db::setReference(payment.fromAccount, static_cast<std::uint64_t>(action.fromAccountId));
     db::setReference(payment.payee, static_cast<std::uint64_t>(action.payeeId));
     payment.amountMinor = action.amountMinor;
@@ -124,17 +125,18 @@ dto::PaymentInfo PaymentModel::execute(const dto::CreateStandingOrder& action) {
     payment.dueAtMs = action.firstDueAtMs;
     payment.intervalDays = action.intervalDays;
     payment.description = Light::SqlAnsiString<128>{action.description};
-    dm.Create(payment);
+    dm->Create(payment);
     return toInfo(payment, owner);
 }
 
 dto::CommandResult PaymentModel::execute(const dto::CancelPayment& action) {
-    auto payment = db::loadOwned<db::PaymentRecord>(mapper(), action.id, sessionPrincipal(), "payment");
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto payment = db::loadOwned<db::PaymentRecord>(mapper.Get(), action.id, sessionPrincipal(), "payment");
     if (payment.status.Value() != static_cast<int>(PaymentStatus::Pending)) {
         throw ConflictError{"only pending payments can be cancelled"};
     }
     payment.status = static_cast<int>(PaymentStatus::Cancelled);
-    mapper().Update(payment);
+    mapper->Update(payment);
     return dto::CommandResult{.ok = true, .message = "payment cancelled"};
 }
 
@@ -143,9 +145,10 @@ dto::PaymentList PaymentModel::execute(const dto::ListPayments& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::PaymentRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::PaymentRecord>()
                     .Where(Lightweight::FieldNameOf<&db::PaymentRecord::user>, "=", userId)
                     .All();
     dto::PaymentList out;

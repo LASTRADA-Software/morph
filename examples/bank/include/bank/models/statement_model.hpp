@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/statement_dto.hpp"
 
 /// @file
@@ -14,7 +13,11 @@
 namespace bank {
 
 /// @brief Produces date-ranged statements across an owner's accounts.
-class StatementModel : private db::WithMapper {
+///
+/// Holds no database state itself: `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class StatementModel {
 public:
     dto::Statement execute(const dto::GenerateStatement& action);
 };

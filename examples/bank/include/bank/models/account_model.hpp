@@ -7,7 +7,6 @@
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/db/entities.hpp"
 #include "bank/dto/account_dto.hpp"
 
@@ -30,7 +29,12 @@
 namespace bank {
 
 /// @brief One customer account: its row, cached, with reads served from memory.
-class AccountModel : private db::WithMapper {
+///
+/// Holds no database state itself beyond `_row`: `hydrate()` and
+/// `execute(CloseAccount&)` each acquire a `Lightweight::GlobalDataMapperPool()`
+/// connection for their own duration and return it before returning, rather
+/// than owning one for the whole model instance's lifetime.
+class AccountModel {
 public:
     /// @brief Returns the account, hydrating from SQLite only when needed.
     dto::AccountInfo execute(const dto::GetAccount& action);

@@ -2,6 +2,7 @@
 
 #include "bank/models/payee_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <cstdint>
@@ -40,18 +41,20 @@ dto::PayeeInfo PayeeModel::execute(const dto::AddPayee& action) {
         throw Unauthorized{"no session principal"};
     }
 
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     db::PayeeRecord rec;
-    db::setReference(rec.user, db::requireUserId(mapper(), owner));
+    db::setReference(rec.user, db::requireUserId(mapper.Get(), owner));
     rec.name = Light::SqlAnsiString<128>{action.name};
     rec.iban = Light::SqlAnsiString<34>{action.iban};
     rec.bankName = Light::SqlAnsiString<128>{action.bankName};
-    mapper().Create(rec);
+    mapper->Create(rec);
     return toInfo(rec, owner);
 }
 
 dto::CommandResult PayeeModel::execute(const dto::RemovePayee& action) {
-    auto rec = db::loadOwned<db::PayeeRecord>(mapper(), action.id, sessionPrincipal(), "payee");
-    mapper().Delete(rec);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rec = db::loadOwned<db::PayeeRecord>(mapper.Get(), action.id, sessionPrincipal(), "payee");
+    mapper->Delete(rec);
     return dto::CommandResult{.ok = true, .message = "payee removed"};
 }
 
@@ -62,9 +65,10 @@ dto::PayeeList PayeeModel::execute(const dto::ListPayees& action) {
     }
     // Fluent list query uses the relation-free `PayeeRow` projection (the
     // `PayeeRecord` aggregate carries a `HasMany` the fluent builder can't select).
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::PayeeRow>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::PayeeRow>()
                     .Where(Lightweight::FieldNameOf<&db::PayeeRow::user>, "=", userId)
                     .All();
     dto::PayeeList out;

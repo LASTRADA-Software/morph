@@ -2,6 +2,7 @@
 
 #include "bank/models/notification_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <cstdint>
@@ -37,13 +38,14 @@ dto::NotificationInfo NotificationModel::execute(const dto::Notify& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     db::NotificationRecord rec;
-    db::setReference(rec.user, db::requireUserId(mapper(), owner));
+    db::setReference(rec.user, db::requireUserId(mapper.Get(), owner));
     rec.severity = action.severity;
     rec.message = Light::SqlAnsiString<256>{action.message};
     rec.read = false;
     rec.createdAtMs = db::nowMillis();
-    mapper().Create(rec);
+    mapper->Create(rec);
     return toInfo(rec, owner);
 }
 
@@ -52,9 +54,10 @@ dto::NotificationList NotificationModel::execute(const dto::ListNotifications& a
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::NotificationRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::NotificationRecord>()
                     .Where(Lightweight::FieldNameOf<&db::NotificationRecord::user>, "=", userId)
                     .All();
     dto::NotificationList out;
@@ -71,9 +74,10 @@ dto::NotificationList NotificationModel::execute(const dto::ListNotifications& a
 }
 
 dto::CommandResult NotificationModel::execute(const dto::MarkRead& action) {
-    auto rec = db::loadOwned<db::NotificationRecord>(mapper(), action.id, sessionPrincipal(), "notification");
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rec = db::loadOwned<db::NotificationRecord>(mapper.Get(), action.id, sessionPrincipal(), "notification");
     rec.read = true;
-    mapper().Update(rec);
+    mapper->Update(rec);
     return dto::CommandResult{.ok = true, .message = "marked read"};
 }
 
@@ -84,16 +88,17 @@ dto::CommandResult NotificationModel::execute(const dto::MarkAllRead& action) {
     }
     // Only the unread rows need touching, so filter in the query rather than
     // scanning every notification and branching per row.
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::NotificationRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::NotificationRecord>()
                     .Where(Lightweight::FieldNameOf<&db::NotificationRecord::user>, "=", userId)
                     .Where(Lightweight::FieldNameOf<&db::NotificationRecord::read>, "=", false)
                     .All();
     int updated = 0;
     for (auto& rec : rows) {
         rec.read = true;
-        mapper().Update(rec);
+        mapper->Update(rec);
         ++updated;
     }
     return dto::CommandResult{.ok = true, .message = std::to_string(updated) + " marked read"};

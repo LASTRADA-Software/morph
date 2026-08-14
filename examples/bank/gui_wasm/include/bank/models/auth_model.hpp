@@ -3,8 +3,8 @@
 
 // WASM shadow of include/bank/models/auth_model.hpp: the SAME class + action
 // registrations the controllers/QML expect, but with no Lightweight/ODBC
-// dependency (no db_model.hpp). Persistence is the in-memory store. This header
-// is placed first on the WASM include path so it wins over the native one.
+// dependency at all. Persistence is the in-memory store. This header is
+// placed first on the WASM include path so it wins over the native one.
 
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>

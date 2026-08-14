@@ -43,7 +43,23 @@ FetchContent_Declare(Lightweight
     GIT_TAG        v0.20260625.0
     GIT_SHALLOW    TRUE
 )
+# Lightweight's own install() rules unconditionally reference
+# $<TARGET_PDB_FILE:Lightweight> on WIN32 (its CMakeLists.txt), which CMake
+# only allows for linker-created artifacts (DLL/EXE) -- invalid once
+# examples/common/CMakeLists.txt has already forced LIGHTWEIGHT_BUILD_SHARED
+# OFF (its own identical comment explains why), and it fails at generate time
+# even though nothing in this tree ever runs `cmake --install`. Same
+# workaround as that file: skip install-rule generation for just this
+# FetchContent_MakeAvailable call. Only reachable when bank is configured
+# alongside the application ladder (MORPH_BUILD_LADDER=ON) -- bank's own
+# earlier FetchContent_Declare above is a no-op once examples/common's has
+# already populated the Lightweight FetchContent cache, but this
+# MakeAvailable call still runs and still needs the same guard.
+set(_bank_saved_skip_install_rules ${CMAKE_SKIP_INSTALL_RULES})
+set(CMAKE_SKIP_INSTALL_RULES ON)
 FetchContent_MakeAvailable(Lightweight)
+set(CMAKE_SKIP_INSTALL_RULES ${_bank_saved_skip_install_rules})
+unset(_bank_saved_skip_install_rules)
 
 # ── Bank domain library ──────────────────────────────────────────────────────
 add_library(bank_lib STATIC

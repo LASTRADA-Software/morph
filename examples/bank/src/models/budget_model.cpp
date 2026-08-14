@@ -2,6 +2,7 @@
 
 #include "bank/models/budget_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <cstdint>
@@ -40,9 +41,10 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
     }
 
     // Upsert: update the existing row for (user, category) or create a new one.
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto existing = mapper()
-                        .Query<db::BudgetRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto existing = mapper
+                        ->Query<db::BudgetRecord>()
                         .Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId)
                         .Where(Lightweight::FieldNameOf<&db::BudgetRecord::category>, "=", action.category)
                         .All();
@@ -50,7 +52,7 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
         auto rec = existing.front();
         rec.monthlyLimitMinor = action.monthlyLimitMinor;
         rec.currency = action.currency;
-        mapper().Update(rec);
+        mapper->Update(rec);
         return toInfo(rec, owner);
     }
 
@@ -59,13 +61,14 @@ dto::BudgetInfo BudgetModel::execute(const dto::SetBudget& action) {
     rec.category = Light::SqlAnsiString<64>{action.category};
     rec.monthlyLimitMinor = action.monthlyLimitMinor;
     rec.currency = action.currency;
-    mapper().Create(rec);
+    mapper->Create(rec);
     return toInfo(rec, owner);
 }
 
 dto::CommandResult BudgetModel::execute(const dto::DeleteBudget& action) {
-    auto rec = db::loadOwned<db::BudgetRecord>(mapper(), action.id, sessionPrincipal(), "budget");
-    mapper().Delete(rec);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rec = db::loadOwned<db::BudgetRecord>(mapper.Get(), action.id, sessionPrincipal(), "budget");
+    mapper->Delete(rec);
     return dto::CommandResult{.ok = true, .message = "budget deleted"};
 }
 
@@ -74,9 +77,10 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::BudgetRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto rows = mapper
+                    ->Query<db::BudgetRecord>()
                     .Where(Lightweight::FieldNameOf<&db::BudgetRecord::user>, "=", userId)
                     .All();
     dto::BudgetList out;
@@ -90,8 +94,9 @@ dto::BudgetList BudgetModel::execute(const dto::ListBudgets& action) {
 dto::SpendingReport BudgetModel::execute(const dto::SpendingByKind& action) {
     // Push the account/direction/time filters into the query so only the rows we
     // aggregate cross the wire; the by-kind rollup stays in code (no GROUP BY SQL).
-    auto rows = mapper()
-                    .Query<db::TxnRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rows = mapper
+                    ->Query<db::TxnRecord>()
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::direction>, "=",
                            static_cast<int>(TxnDirection::Debit))

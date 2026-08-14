@@ -2,6 +2,7 @@
 
 #include "bank/models/statement_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <cstddef>
@@ -25,8 +26,9 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
     }
 
     // Reach the owner's accounts through the `UserRecord::accounts` relation.
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto user = mapper().QuerySingle<db::UserRecord>(userId).value();
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto user = mapper->QuerySingle<db::UserRecord>(userId).value();
     const auto& accounts = user.accounts.All();
 
     dto::Statement statement;
@@ -58,8 +60,8 @@ dto::Statement StatementModel::execute(const dto::GenerateStatement& action) {
     // All of the owner's transactions in one query (no per-account round-trip);
     // the window's lower bound is pushed down, the optional upper bound
     // (toMs == 0 means "open ended") stays as a cheap in-loop check.
-    auto entries = mapper()
-                       .Query<db::TxnRecord>()
+    auto entries = mapper
+                       ->Query<db::TxnRecord>()
                        .WhereIn(Lightweight::FieldNameOf<&db::TxnRecord::account>, accountIds)
                        .Where(Lightweight::FieldNameOf<&db::TxnRecord::createdAtMs>, ">=", action.fromMs)
                        .All();

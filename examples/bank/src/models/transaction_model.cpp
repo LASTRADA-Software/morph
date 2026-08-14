@@ -2,6 +2,7 @@
 
 #include "bank/models/transaction_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 
@@ -41,11 +42,11 @@ dto::TxnInfo TransactionModel::execute(const dto::Deposit& action) {
     if (!action.validate()) {
         throw ValidationError{"deposit amount must be positive"};
     }
-    auto& dm = mapper();
-    auto account = db::loadOwnedOpenAccount(dm, action.accountId, sessionPrincipal());
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = db::loadOwnedOpenAccount(dm.Get(), action.accountId, sessionPrincipal());
     // Balance update and its ledger entry must commit (or roll back) as a unit.
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto txn = db::applyCredit(dm, account, action.amountMinor, TxnKind::Deposit, 0, action.description);
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto txn = db::applyCredit(dm.Get(), account, action.amountMinor, TxnKind::Deposit, 0, action.description);
     tx.Commit();
     return toTxnInfo(txn);
 }
@@ -54,10 +55,10 @@ dto::TxnInfo TransactionModel::execute(const dto::Withdraw& action) {
     if (!action.validate()) {
         throw ValidationError{"withdrawal amount must be positive"};
     }
-    auto& dm = mapper();
-    auto account = db::loadOwnedOpenAccount(dm, action.accountId, sessionPrincipal());
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    auto txn = db::applyDebit(dm, account, action.amountMinor, TxnKind::Withdrawal, 0, action.description);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = db::loadOwnedOpenAccount(dm.Get(), action.accountId, sessionPrincipal());
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    auto txn = db::applyDebit(dm.Get(), account, action.amountMinor, TxnKind::Withdrawal, 0, action.description);
     tx.Commit();
     return toTxnInfo(txn);
 }
@@ -66,18 +67,18 @@ dto::TransferResult TransactionModel::execute(const dto::Transfer& action) {
     if (!action.validate()) {
         throw ValidationError{"invalid transfer (accounts must differ and amount be positive)"};
     }
-    auto& dm = mapper();
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
     const std::string owner = sessionPrincipal();
-    auto source = db::loadOwnedOpenAccount(dm, action.fromAccountId, owner);
-    auto dest = db::loadOwnedOpenAccount(dm, action.toAccountId, owner);
+    auto source = db::loadOwnedOpenAccount(dm.Get(), action.fromAccountId, owner);
+    auto dest = db::loadOwnedOpenAccount(dm.Get(), action.toAccountId, owner);
     if (source.currency.Value() != dest.currency.Value()) {
         throw ValidationError{"cross-currency transfers are not supported"};
     }
 
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::applyDebit(dm, source, action.amountMinor, TxnKind::TransferOut, action.toAccountId,
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    db::applyDebit(dm.Get(), source, action.amountMinor, TxnKind::TransferOut, action.toAccountId,
                    action.description);
-    db::applyCredit(dm, dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId,
+    db::applyCredit(dm.Get(), dest, action.amountMinor, TxnKind::TransferIn, action.fromAccountId,
                     action.description);
     tx.Commit();
 
@@ -96,8 +97,9 @@ dto::HistoryPage TransactionModel::execute(const dto::History& action) {
 
     // Newest first, paginated in the database: only the requested window is
     // fetched instead of loading and sorting the whole ledger in memory.
-    auto rows = mapper()
-                    .Query<db::TxnRecord>()
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rows = mapper
+                    ->Query<db::TxnRecord>()
                     .Where(Lightweight::FieldNameOf<&db::TxnRecord::account>, "=", action.accountId)
                     .OrderBy(Lightweight::FieldNameOf<&db::TxnRecord::id>,
                              Lightweight::SqlResultOrdering::DESCENDING)

@@ -2,6 +2,7 @@
 
 #include "bank/models/customer_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 #include <morph/core/registry.hpp>
 #include <random>
@@ -44,8 +45,9 @@ dto::AccountInfo CustomerModel::execute(const dto::OpenAccount& action) {
         throw Unauthorized{"no session principal to own the account"};
     }
 
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     db::AccountRecord rec;
-    db::setReference(rec.user, db::requireUserId(mapper(), owner));
+    db::setReference(rec.user, db::requireUserId(mapper.Get(), owner));
     rec.number = Light::SqlAnsiString<34>{generateAccountNumber()};
     rec.kind = action.kind;
     rec.currency = action.currency;
@@ -54,7 +56,7 @@ dto::AccountInfo CustomerModel::execute(const dto::OpenAccount& action) {
     rec.status = static_cast<int>(AccountStatus::Open);
     rec.interestBps = defaultInterestBps(action.kind);
 
-    mapper().Create(rec);
+    mapper->Create(rec);
     return db::toAccountInfo(rec, owner);
 }
 
@@ -66,9 +68,13 @@ dto::AccountList CustomerModel::execute(const dto::ListAccounts& action) {
 
     // Load the owner and walk the `UserRecord::accounts` HasMany relation rather
     // than issuing a manual `WHERE user_id = ?` — the relation resolves the join
-    // for us and returns the user's accounts directly.
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto user = mapper().QuerySingle<db::UserRecord>(userId);
+    // for us and returns the user's accounts directly. The relation's own lazy
+    // loader (DataMapper::AcquireThreadLocal(), Lightweight's HasMany.hpp) uses
+    // its own thread-local connection when `.All()` below actually queries, not
+    // this acquisition -- unaffected by which connection loaded `user` itself.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(mapper.Get(), owner);
+    auto user = mapper->QuerySingle<db::UserRecord>(userId);
     if (!user.has_value()) {
         throw NotFound{"owner not found"};
     }

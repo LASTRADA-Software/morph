@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/auth_dto.hpp"
 #include "bank/dto/common.hpp"
 
@@ -17,7 +16,11 @@
 namespace bank {
 
 /// @brief Manages user identities and authentication.
-class AuthModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class AuthModel {
 public:
     /// @brief Registers a new user; returns an AuthResult carrying the principal.
     dto::AuthResult execute(const dto::RegisterUser& action);

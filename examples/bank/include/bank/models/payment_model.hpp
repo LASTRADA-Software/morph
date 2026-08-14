@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/common.hpp"
 #include "bank/dto/payment_dto.hpp"
 
@@ -17,7 +16,11 @@
 namespace bank {
 
 /// @brief Pays beneficiaries and manages scheduled / standing instructions.
-class PaymentModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class PaymentModel {
 public:
     /// @brief Pays a beneficiary now; debits the account and records the payment.
     dto::PaymentInfo execute(const dto::PayBill& action);

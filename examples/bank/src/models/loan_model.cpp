@@ -2,6 +2,7 @@
 
 #include "bank/models/loan_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 
@@ -60,11 +61,11 @@ dto::LoanInfo LoanModel::execute(const dto::ApplyLoan& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    auto& dm = mapper();
-    auto account = db::loadOwnedOpenAccount(dm, action.accountId, owner);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto account = db::loadOwnedOpenAccount(dm.Get(), action.accountId, owner);
 
     db::LoanRecord loan;
-    db::setReference(loan.user, db::requireUserId(dm, owner));
+    db::setReference(loan.user, db::requireUserId(dm.Get(), owner));
     db::setReference(loan.account, account.id.Value());
     loan.principalMinor = action.principalMinor;
     loan.outstandingMinor = action.principalMinor;
@@ -74,9 +75,9 @@ dto::LoanInfo LoanModel::execute(const dto::ApplyLoan& action) {
     loan.status = static_cast<int>(LoanStatus::Active);
     loan.createdAtMs = db::nowMillis();
 
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    dm.Create(loan);
-    db::applyCredit(dm, account, action.principalMinor, TxnKind::LoanDisbursement, 0, "loan disbursement");
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    dm->Create(loan);
+    db::applyCredit(dm.Get(), account, action.principalMinor, TxnKind::LoanDisbursement, 0, "loan disbursement");
     tx.Commit();
 
     return toInfo(loan, owner);
@@ -86,23 +87,23 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
     if (!action.validate()) {
         throw ValidationError{"invalid repayment"};
     }
-    auto& dm = mapper();
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
     const std::string owner = sessionPrincipal();
-    auto loan = requireOwnedLoan(dm, action.loanId);
+    auto loan = requireOwnedLoan(dm.Get(), action.loanId);
     if (loan.status.Value() != static_cast<int>(LoanStatus::Active)) {
         throw ConflictError{"loan is not active"};
     }
-    auto account = db::loadOwnedOpenAccount(dm, action.fromAccountId, sessionPrincipal());
+    auto account = db::loadOwnedOpenAccount(dm.Get(), action.fromAccountId, sessionPrincipal());
     const std::int64_t payment = std::min(action.amountMinor, loan.outstandingMinor.Value());
 
-    Lightweight::SqlTransaction tx{dm.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-    db::applyDebit(dm, account, payment, TxnKind::LoanRepayment, 0, "loan repayment");
+    Lightweight::SqlTransaction tx{dm->Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    db::applyDebit(dm.Get(), account, payment, TxnKind::LoanRepayment, 0, "loan repayment");
     loan.outstandingMinor = loan.outstandingMinor.Value() - payment;
     if (loan.outstandingMinor.Value() <= 0) {
         loan.outstandingMinor = 0;
         loan.status = static_cast<int>(LoanStatus::PaidOff);
     }
-    dm.Update(loan);
+    dm->Update(loan);
     tx.Commit();
 
     return toInfo(loan, owner);
@@ -110,7 +111,8 @@ dto::LoanInfo LoanModel::execute(const dto::RepayLoan& action) {
 
 dto::LoanInfo LoanModel::execute(const dto::GetLoan& action) {
     const std::string owner = sessionPrincipal();
-    return toInfo(requireOwnedLoan(mapper(), action.id), owner);
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    return toInfo(requireOwnedLoan(dm.Get(), action.id), owner);
 }
 
 dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
@@ -118,9 +120,10 @@ dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
     if (owner.empty()) {
         throw Unauthorized{"no session principal"};
     }
-    const auto userId = db::requireUserId(mapper(), owner);
-    auto rows = mapper()
-                    .Query<db::LoanRecord>()
+    auto dm = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto userId = db::requireUserId(dm.Get(), owner);
+    auto rows = dm
+                    ->Query<db::LoanRecord>()
                     .Where(Lightweight::FieldNameOf<&db::LoanRecord::user>, "=", userId)
                     .All();
     dto::LoanList out;
@@ -132,7 +135,7 @@ dto::LoanList LoanModel::execute(const dto::ListLoans& action) {
 }
 
 dto::LoanScheduleResult LoanModel::execute(const dto::LoanScheduleRequest& action) {
-    auto loan = requireOwnedLoan(mapper(), action.loanId);
+    auto loan = requireOwnedLoan(::Lightweight::GlobalDataMapperPool().Acquire().Get(), action.loanId);
 
     const std::int64_t principal = loan.principalMinor.Value();
     const int rateBps = loan.rateBps.Value();

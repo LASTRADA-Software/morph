@@ -6,7 +6,6 @@
 #include <morph/core/registry.hpp>
 #include <string>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/account_dto.hpp"
 
 /// @file
@@ -22,7 +21,11 @@
 namespace bank {
 
 /// @brief One customer: lists and opens the accounts they own.
-class CustomerModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class CustomerModel {
 public:
     /// @brief Opens a new account for the requested (or session) owner.
     dto::AccountInfo execute(const dto::OpenAccount& action);

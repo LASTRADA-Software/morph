@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/common.hpp"
 #include "bank/dto/payee_dto.hpp"
 
@@ -16,7 +15,11 @@
 namespace bank {
 
 /// @brief Stores and lists beneficiaries scoped to the session owner.
-class PayeeModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class PayeeModel {
 public:
     /// @brief Adds a beneficiary for the current owner; returns the saved payee.
     dto::PayeeInfo execute(const dto::AddPayee& action);

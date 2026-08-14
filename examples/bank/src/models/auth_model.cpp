@@ -2,6 +2,7 @@
 
 #include "bank/models/auth_model.hpp"
 
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/Lightweight.hpp>
 
 #include <optional>
@@ -40,7 +41,8 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
     if (!action.validate()) {
         throw ValidationError{"username required and password must be at least 4 characters"};
     }
-    if (findUser(mapper(), action.username).has_value()) {
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    if (findUser(mapper.Get(), action.username).has_value()) {
         return dto::AuthResult{.ok = false, .message = "username already taken"};
     }
 
@@ -50,7 +52,7 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
     rec.displayName =
         Light::SqlAnsiString<128>{action.displayName.empty() ? action.username : action.displayName};
     rec.status = 0;
-    mapper().Create(rec);
+    mapper->Create(rec);
 
     return dto::AuthResult{.ok = true,
                            .principal = action.username,
@@ -59,7 +61,8 @@ dto::AuthResult AuthModel::execute(const dto::RegisterUser& action) {
 }
 
 dto::AuthResult AuthModel::execute(const dto::LoginRequest& action) {
-    auto user = findUser(mapper(), action.username);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto user = findUser(mapper.Get(), action.username);
     if (!user.has_value()) {
         return dto::AuthResult{.ok = false, .message = "no such user"};
     }
@@ -77,7 +80,8 @@ dto::AuthResult AuthModel::execute(const dto::LoginRequest& action) {
 }
 
 dto::CommandResult AuthModel::execute(const dto::ChangePassword& action) {
-    auto user = findUser(mapper(), action.username);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto user = findUser(mapper.Get(), action.username);
     if (!user.has_value()) {
         throw NotFound{"no such user"};
     }
@@ -88,7 +92,7 @@ dto::CommandResult AuthModel::execute(const dto::ChangePassword& action) {
         throw ValidationError{"new password must be at least 4 characters"};
     }
     user->passwordHash = Light::SqlAnsiString<32>{hashPassword(action.username, action.newPassword)};
-    mapper().Update(*user);  // UserRow is relation-free, so typed Update works
+    mapper->Update(*user);  // UserRow is relation-free, so typed Update works
     return dto::CommandResult{.ok = true, .message = "password changed"};
 }
 

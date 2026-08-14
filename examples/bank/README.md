@@ -34,9 +34,10 @@ GUI / CLI ──actions/results (plain DTOs)──▶ morph Bridge ──▶ Mod
 - **`include/bank/dto/`** — wire DTOs (the morph action/result types). Amounts are
   integer **minor units** (cents); enums travel as their integer values.
 - **`include/bank/db/`** — Lightweight entity records (`*_entity.hpp`, aggregated by
-  `entities.hpp`), the shared `WithMapper` mixin (one lazily-opened `DataMapper` per
-  model), `user_ops.hpp` (principal→`user_id` resolution), and reusable `ledger_ops.hpp`
-  (relation-aware debit/credit/post-entry + the `loadOwned` ownership guard).
+  `entities.hpp`), `user_ops.hpp` (principal→`user_id` resolution), and reusable
+  `ledger_ops.hpp` (relation-aware debit/credit/post-entry + the `loadOwned` ownership
+  guard). Models hold no database state themselves: each `execute()` acquires a
+  `Lightweight::GlobalDataMapperPool()` connection for its own duration.
 - **`include/bank/models/` + `src/models/`** — the models. The `BRIDGE_REGISTER_*`
   macros live in the **model header** so every `.execute()` call site sees the
   `ActionTraits` specialisation. `AccountModel` and `CustomerModel` are **stateful

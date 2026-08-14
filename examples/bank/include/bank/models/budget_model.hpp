@@ -4,7 +4,6 @@
 #include <morph/core/registry.hpp>
 #include <morph/core/bridge.hpp>
 
-#include "bank/db/db_model.hpp"
 #include "bank/dto/budget_dto.hpp"
 #include "bank/dto/common.hpp"
 
@@ -15,7 +14,11 @@
 namespace bank {
 
 /// @brief Manages budgets and derives spending analytics.
-class BudgetModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning one for its own lifetime.
+class BudgetModel {
 public:
     dto::BudgetInfo execute(const dto::SetBudget& action);
     dto::CommandResult execute(const dto::DeleteBudget& action);
