@@ -349,22 +349,27 @@ root `CMakeLists.txt` — don't repeat that eight times):
   **What rung 1 learned doing this for real** (the `gui_lib` split is
   necessary but not sufficient): a client's presenters are
   `BridgeHandler<Model>` templates, so a WASM client still *names* its rung's
-  model type and therefore still includes its model header — and rule 4 puts
-  `Lightweight::DataMapper` in that header's include graph, via the
-  `WithMapper` mixin. Two things close the gap, and every rung needs both:
-  configure the WASM build with **`-DMORPH_CLIENT_ONLY=ON`** (removes the
-  registrars that closure over the model's ODBC-backed bodies —
-  `docs/spec/core/registry.md`; `morph_add_rung()` fails the configure with
-  that explanation if it is missing), and give the rung's `db_model.hpp` a
-  persistence-free `WithMapper` under `__EMSCRIPTEN__` with **no `mapper()`**,
-  so any attempt to reach a database from a browser build is a compile error.
-  That is a two-branch mixin inside the file that already owns the ODBC
-  dependency — not a shadow header tree, and not a second copy of any model,
-  DTO, presenter or QML file. `include/morph/core/registry.hpp`'s
-  `BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)` closes the
-  header dependency itself, for a client willing to make `M` a
-  declaration-only facade type instead — no rung has adopted that shape, so
-  every rung still needs the stub-mixin pattern above.
+  model type and therefore still includes its model header. Every rung's
+  models acquire their `Lightweight::DataMapper` connection per `execute()`
+  call from `Lightweight::GlobalDataMapperPool()` (rather than a model
+  owning one via a `WithMapper`-style mixin member — the pattern this
+  section used to document before that mixin was removed in favor of the
+  pool), so the model *header* itself has no Lightweight/ODBC dependency to
+  begin with — only the model's `.cpp` (where the real query/transaction
+  bodies live) does. Configure the WASM build with
+  **`-DMORPH_CLIENT_ONLY=ON`** (removes the registrars that closure over the
+  model's ODBC-backed bodies — `docs/spec/core/registry.md`;
+  `morph_add_rung()` fails the configure with that explanation if it is
+  missing) and that `.cpp` is never compiled for Emscripten at all
+  (`cmake/morph_add_rung.cmake`'s `if(NOT EMSCRIPTEN)` guard around
+  `ladder_<rung>_lib`'s own creation) — no header-level stub or branch is
+  needed on top of that. `include/morph/core/registry.hpp`'s
+  `BRIDGE_REGISTER_ACTION_FOR_CLIENT(M, A, RESULT, NAME, ...)` remains
+  available for a client willing to make `M` a declaration-only facade type
+  instead, closing the header dependency for cases where a model's own
+  entity types still need a persistence-free stand-in on the WASM include
+  path (see `polls::db::PollRecord` et al.'s own `#ifndef __EMSCRIPTEN__`
+  branch, `poll_entity.hpp`) — no rung's *model* header needs this today.
 - **Coverage wiring (proven by rung 0, on `examples/common`; the same
   recipe applies to every future rung's `src/models/`/`include/<rung>/models/`
   per [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 5).** The `clang-coverage`

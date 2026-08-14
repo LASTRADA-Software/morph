@@ -119,11 +119,15 @@ code itself.**
 - **Entities** are Lightweight `Field<>`-wrapped records in
   `include/<rung>/db/*_entity.hpp`, kept strictly separate from the wire
   DTOs; the model maps DTO ⇄ entity (bank's two-type-layer architecture).
-- **Access** is through `Lightweight::DataMapper`, one lazily-opened mapper
-  per model via the `WithMapper` mixin pattern (`bank/db/db_model.hpp`) —
-  correct without locks precisely because morph runs each model on its own
-  strand. The database is an on-disk SQLite file, never `:memory:`
-  (private per connection).
+- **Access** is through `Lightweight::DataMapper`: a model holds no
+  connection of its own — each `execute()` acquires one from
+  `Lightweight::GlobalDataMapperPool()` for its own duration and returns it
+  before returning, rather than a model owning a permanent connection for
+  its whole lifetime. Still correct without locks: morph runs each model on
+  its own strand, so no two `execute()` calls on the same instance ever
+  overlap, and each acquisition is entirely self-contained within one call.
+  The database is an on-disk SQLite file, never `:memory:` (private per
+  connection).
 - **Schema** is owned by `LIGHTWEIGHT_SQL_MIGRATION` definitions (bank's
   `src/db/schema.cpp` pattern). Migrations are the *only* DDL mechanism —
   no `PRAGMA user_version` scheme, no hand-run SQL scripts.
