@@ -1336,11 +1336,23 @@ TEST_CASE("CreatePaste surfaces a real SQLITE_BUSY rather than mistaking it for 
         (void) warmup.execute(makeCreate("seed"));
     }
 
+    // Same requirement as the other two SQLITE_BUSY tests in this file:
+    // contendedModel's execute() below must acquire its connection while
+    // this hook is installed for the hook to actually apply -- draining the
+    // pool's idle mappers first (drainPoolIdleMappers's own doc comment)
+    // makes that a hard guarantee. Without this, `warmup`'s own earlier
+    // acquisition above can leave an idle, already-connected mapper in the
+    // pool for contendedModel to receive instead of a fresh one, silently
+    // skipping the short busy-timeout PRAGMA and blocking on the real 60s
+    // default -- observed as a 120s CTest timeout on CI, not a local
+    // failure, since it depends on the pool's prior state.
     const ScopedShortBusyTimeout shortTimeout{200};
+    auto drained = drainPoolIdleMappers();
     pastebin::PasteModel contendedModel;
 
     const morph::ladder::testkit::DbBusyFixture busy{"pastes"};
     REQUIRE_THROWS_AS(contendedModel.execute(makeCreate("cannot be written")), Lightweight::SqlException);
+    drained.clear();
 }
 
 // ═════════════════════════════════════════════════════════════════════════
