@@ -20,6 +20,16 @@
 /// enumerator; `Light::PrimaryKey` has exactly three values: `No`,
 /// `AutoAssign`, `ServerSideAutoIncrement` (the latter is what bank's
 /// surrogate integer keys use).
+///
+/// `content` is `Light::SqlText`, not `std::string`: a paste body is
+/// unbounded free-form text, and `SqlText` is Lightweight's dedicated type
+/// for that case — it self-declares `Text()` as its column type via its own
+/// `SqlBasicStringOperations` specialization, rather than relying on
+/// `schema.cpp`'s migration call to override a default (bare `std::string`
+/// defaults to `Varchar(255)` at the C++-type level; only the migration's
+/// explicit `.Column("content", Text())` call was making that correct here).
+/// `id`/`syntax` use `Light::SqlAnsiString<32>` instead, matching bank's
+/// convention for fixed-width/ASCII/token-shaped columns.
 
 namespace pastebin::db {
 
@@ -29,7 +39,7 @@ struct PasteRecord {
 
     /// The animal-name id; caller-assigned, not auto-incremented.
     Light::Field<Light::SqlAnsiString<32>, Light::PrimaryKey::AutoAssign, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<std::string, Light::SqlRealName{"content"}> content;  // 1
+    Light::Field<Light::SqlText, Light::SqlRealName{"content"}> content;  // 1
     Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"syntax"}> syntax;  // 2
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 3
     /// `std::nullopt` = never expires.

@@ -710,7 +710,7 @@ TEST_CASE("GetPaste against a row already at its burn budget throws Burned, not 
         Lightweight::DataMapper mapper;
         pastebin::db::PasteRecord rec;
         rec.id = Light::SqlAnsiString<32>{"test-burned-paste"};
-        rec.content = std::string{"gone"};
+        rec.content = Light::SqlText{"gone"};
         rec.syntax = Light::SqlAnsiString<32>{"text"};
         rec.createdAtMs = std::int64_t{0};
         rec.burnAfterReads = std::optional<std::int64_t>{1};

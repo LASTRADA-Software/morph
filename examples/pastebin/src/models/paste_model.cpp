@@ -95,7 +95,7 @@ namespace {
 [[nodiscard]] PasteView toView(const db::PasteRecord& rec) {
     PasteView view;
     view.id = PasteId{textOf(rec.id.Value())};
-    view.content = rec.content.Value();
+    view.content = rec.content.Value().value;
     view.syntax = textOf(rec.syntax.Value());
     view.createdAt = fromEpochMs(rec.createdAtMs.Value());
     view.expiresAt = fromEpochMs(rec.expiresAtMs.Value());
@@ -189,7 +189,7 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
     for (int attempt = 0; attempt < kMaxIdAttempts; ++attempt) {
         db::PasteRecord rec;
         rec.id = Light::SqlAnsiString<32>{randomPasteId()};
-        rec.content = action.content;
+        rec.content = Light::SqlText{action.content};
         rec.syntax = Light::SqlAnsiString<32>{action.syntax};
         rec.createdAtMs = nowMs();
         rec.expiresAtMs = action.expiresAt.hasValue() ? std::optional{toEpochMs(*action.expiresAt)} : std::nullopt;
@@ -342,7 +342,7 @@ PasteView PasteModel::execute(const EditPaste& action) {
     if (!before.front().isEditable.Value()) {
         throw ValidationError{"EditPaste: paste is not editable"};
     }
-    const std::string previousContent = before.front().content.Value();
+    const std::string previousContent = before.front().content.Value().value;
     const std::string previousSyntax = textOf(before.front().syntax.Value());
 
     // ── The atomic compare-and-swap write ───────────────────────────────────
