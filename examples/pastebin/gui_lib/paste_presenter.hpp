@@ -10,15 +10,14 @@
 // examples/forms/gui_qml/FormsController.hpp: moc only needs the
 // Q_OBJECT/signals declarations below (and the DTO types above, which are
 // lightweight — no Lightweight/ODBC dependency); it must not be pointed at
-// morph's template-heavy bridge.hpp or this rung's own paste_model.hpp,
-// which pulls in Lightweight's DataMapper machinery through
-// pastebin/db/db_model.hpp. Feeding that to moc's parser (not a real C++
-// front end) produces bogus output — empirically, moc mis-parses the
-// nesting and emits the whole rest of this file, including
-// `namespace pastebin::gui { class PastePresenter ... }` below, as if it
-// were nested inside a stray `Lightweight::` namespace it thinks is still
-// open, so the generated moc_paste_presenter.cpp fails to compile with
-// "no member named 'pastebin' in namespace 'Lightweight'".
+// morph's template-heavy bridge.hpp (not a real C++ front end, and
+// bridge.hpp's template machinery produces bogus moc output the same way
+// paste_model.hpp historically did when it transitively pulled in
+// Lightweight's DataMapper machinery through the since-removed
+// pastebin/db/db_model.hpp -- paste_model.hpp itself no longer has any
+// Lightweight/ODBC dependency at all, now that PasteModel acquires a
+// connection per execute() call from Lightweight::GlobalDataMapperPool()
+// instead of owning one, but this guard stays for bridge.hpp's own sake).
 #ifndef Q_MOC_RUN
 #include "pastebin/models/paste_model.hpp"
 

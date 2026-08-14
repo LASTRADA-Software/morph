@@ -5,7 +5,6 @@
 #include <morph/core/registry.hpp>
 
 #include "pastebin/core/errors.hpp"
-#include "pastebin/db/db_model.hpp"
 #include "pastebin/dto/paste_dto.hpp"
 
 /// @file
@@ -20,12 +19,15 @@ namespace pastebin {
 ///
 /// Registered **plain** — no `BRIDGE_MODEL_KEY`, no `AllowShared` (the
 /// README's resolved burn-atomicity decision): every action dispatch gets a
-/// fresh instance and all real state lives in `pastes`, reached through
-/// `db::WithMapper`. Burn-after-read atomicity therefore comes from SQL, not
-/// from a shared C++ instance — see `execute(const GetPaste&)` in
+/// fresh instance and all real state lives in `pastes`. This model holds no
+/// database state itself — each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning a connection for its own
+/// lifetime. Burn-after-read atomicity therefore comes from SQL, not from a
+/// shared C++ instance — see `execute(const GetPaste&)` in
 /// `src/models/paste_model.cpp` for the exact mechanism and why it is safe
 /// against two clients racing on the last allowed read.
-class PasteModel : private db::WithMapper {
+class PasteModel {
 public:
     /// @brief Stores a new paste under a freshly allocated animal-name id.
     /// @param action The paste to store.

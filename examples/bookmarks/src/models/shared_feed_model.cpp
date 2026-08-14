@@ -8,6 +8,7 @@
 #include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
 
 #include <morph/session/session.hpp>
 
@@ -37,7 +38,8 @@ void requireAnyPrincipal() {
 
 ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
     requireAnyPrincipal();
-    auto query = mapper().Query<db::BookmarkRecord>();
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto query = mapper->Query<db::BookmarkRecord>();
     (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isShared>, "=", true);
     (void) query.Where(::Lightweight::FieldNameOf<&db::BookmarkRecord::isArchived>, "=", false);
     if (action.cursor.hasValue()) {
@@ -54,14 +56,14 @@ ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
 
     ListSharedFeedResult result;
     for (const auto& rec : rows) {
-        auto junctionRows = mapper()
-                                .Query<db::BookmarkTagRecord>()
+        auto junctionRows = mapper
+                                ->Query<db::BookmarkTagRecord>()
                                 .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", rec.id.Value())
                                 .All();
         std::vector<std::string> tags;
         for (const auto& jrow : junctionRows) {
             auto tagRows =
-                mapper().Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", jrow.tag.Value()).All();
+                mapper->Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", jrow.tag.Value()).All();
             if (!tagRows.empty()) {
                 tags.push_back(tagRows.front().name.Value());
             }

@@ -8,6 +8,7 @@
 #include "clock.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_busy_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
 #include "testkit/pump.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -25,6 +26,7 @@ using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
+using morph::ladder::testkit::drainPoolIdleMappers;
 using morph::ladder::testkit::pumpUntil;
 
 namespace {
@@ -753,13 +755,17 @@ TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts th
         id2 = seedModel.execute(makeCreate("https://two.example")).id;
     }
 
-    // The model under test must open its connection *while* the short
-    // busy-timeout hook is installed, so it must be a model that has not
-    // executed anything yet (BookmarkModel's mapper connects lazily, on
-    // first use) -- seedModel above already has a long-timeout connection
-    // from creating id1/id2, so it is unaffected by the hook and remains
-    // usable for the post-failure assertions below.
+    // contendedModel's execute() below must acquire its connection from
+    // Lightweight::GlobalDataMapperPool() *while* the short busy-timeout
+    // hook is installed for this hook to actually apply to it (see
+    // db_busy_fixture.hpp's `GlobalDataMapperPool()` note). Draining the
+    // pool's idle mappers first (testkit/db_pool_drain.hpp) turns that into
+    // a hard guarantee rather than an incidental one -- seedModel's own
+    // earlier acquisitions above already returned to the pool by this
+    // point, so without draining they would be exactly the kind of stale,
+    // already-connected mapper this hook must not silently miss.
     const ScopedShortBusyTimeout shortTimeout{200};
+    auto drained = drainPoolIdleMappers();
     bookmarks::BookmarkModel contendedModel;
     const ScopedPrincipal alice{"alice"};
 
@@ -768,6 +774,9 @@ TEST_CASE("BulkEdit rolls back entirely when a genuine SQLITE_BUSY interrupts th
     edit.ids = {id1, id2};
     edit.archive = bookmarks::BulkArchiveOp::Archive;
     REQUIRE_THROWS(contendedModel.execute(edit));
+    // contendedModel's one execute() call above already made its one pool
+    // acquisition, synchronously, on this thread.
+    drained.clear();
 
     // Neither bookmark was archived, and no outbox row survived -- the
     // whole transaction (mutation + outbox write) rolled back together.

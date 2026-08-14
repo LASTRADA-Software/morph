@@ -9,12 +9,14 @@
 #include <exception>
 
 // See pastebin::gui::PastePresenter's identical guard and doc comment
-// (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never
-// see morph/core/bridge.hpp or bookmark_model.hpp: bookmark_model.hpp pulls
-// in Lightweight's DataMapper machinery through bookmarks/db/db_model.hpp,
-// and moc's parser (not a real C++ front end) mis-parses the nesting that
-// results, mistaking `namespace bookmarks::gui { ... }` below for still
-// being nested inside a stray `Lightweight::` namespace.
+// (examples/pastebin/gui_lib/paste_presenter.hpp) for why moc must never see
+// morph/core/bridge.hpp: its template machinery produces bogus moc output
+// the same way bookmark_model.hpp historically did when it transitively
+// pulled in Lightweight's DataMapper machinery through the since-removed
+// bookmarks/db/db_model.hpp -- bookmark_model.hpp itself no longer has any
+// Lightweight/ODBC dependency at all, now that BookmarkModel acquires a
+// connection per execute() call from Lightweight::GlobalDataMapperPool()
+// instead of owning one, but this guard stays for bridge.hpp's own sake.
 #ifndef Q_MOC_RUN
 #include "bookmarks/models/bookmark_model.hpp"
 

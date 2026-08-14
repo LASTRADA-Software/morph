@@ -165,6 +165,7 @@ add_executable(ladder_common_tests
     testkit/test_db_fixture.cpp
     testkit/test_db_fault_fixture.cpp
     testkit/test_db_busy_fixture.cpp
+    testkit/test_db_pool_drain.cpp
     testkit/test_backend_rig.cpp
     testkit/test_presenter.cpp
     testkit/test_event_poller.cpp

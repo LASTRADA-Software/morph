@@ -8,6 +8,7 @@
 #include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlErrorDetection.hpp>
 #include <Lightweight/SqlStatement.hpp>
@@ -77,12 +78,13 @@ Ack TagModel::execute(const RenameTag& action) {
         throw ValidationError{"RenameTag: id and a non-empty, bounded name are required"};
     }
     const auto& owner = requireOwner();
-    auto rec = loadOwnedTag(mapper(), static_cast<std::uint64_t>(*action.id), owner);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto rec = loadOwnedTag(mapper.Get(), static_cast<std::uint64_t>(*action.id), owner);
     rec.name = action.name;
     try {
-        mapper().Update(rec);
+        mapper->Update(rec);
     } catch (const ::Lightweight::SqlException& error) {
-        if (::Lightweight::IsUniqueConstraintViolation(error.info(), mapper().Connection().ServerType())) {
+        if (::Lightweight::IsUniqueConstraintViolation(error.info(), mapper->Connection().ServerType())) {
             throw Conflict{"RenameTag: a tag named '" + action.name + "' already exists"};
         }
         throw;
@@ -97,24 +99,25 @@ Ack TagModel::execute(const MergeTags& action) {
     const auto& owner = requireOwner();
     const auto sourceId = static_cast<std::uint64_t>(*action.sourceId);
     const auto targetId = static_cast<std::uint64_t>(*action.targetId);
-    (void) loadOwnedTag(mapper(), sourceId, owner);
-    (void) loadOwnedTag(mapper(), targetId, owner);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    (void) loadOwnedTag(mapper.Get(), sourceId, owner);
+    (void) loadOwnedTag(mapper.Get(), targetId, owner);
 
-    ::Lightweight::SqlTransaction transaction{mapper().Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
-    auto sourceRows = mapper()
-                          .Query<db::BookmarkTagRecord>()
+    auto sourceRows = mapper
+                          ->Query<db::BookmarkTagRecord>()
                           .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", sourceId)
                           .All();
     for (const auto& row : sourceRows) {
         const auto bookmarkId = row.bookmark.Value();
-        auto clash = mapper()
-                         .Query<db::BookmarkTagRecord>()
+        auto clash = mapper
+                         ->Query<db::BookmarkTagRecord>()
                          .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::bookmark>, "=", bookmarkId)
                          .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", targetId)
                          .All();
         // Either way the source association must go -- delete it outright
-        // rather than `mapper().Update()`-ing its `tag` field in place:
+        // rather than `mapper->Update()`-ing its `tag` field in place:
         // `BelongsTo::operator=(ValueType)` goes through the implicit
         // converting constructor + copy-assignment, which never sets the
         // field's `_modified` flag (only `operator=(ReferencedRecord&)`
@@ -123,7 +126,7 @@ Ack TagModel::execute(const MergeTags& action) {
         // says tag (re)assignment is always a Create/delete of a whole row,
         // never an in-place Update.
         {
-            ::Lightweight::SqlStatement stmt{mapper().Connection()};
+            ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare("DELETE FROM bookmark_tags WHERE bookmark_id = ? AND tag_id = ?");
             (void) stmt.Execute(bookmarkId, sourceId);
         }
@@ -137,11 +140,11 @@ Ack TagModel::execute(const MergeTags& action) {
             db::BookmarkTagRecord junction;
             junction.bookmark = bookmarkId;
             junction.tag = targetId;
-            mapper().Create(junction);
+            mapper->Create(junction);
         }
     }
     {
-        ::Lightweight::SqlStatement stmt{mapper().Connection()};
+        ::Lightweight::SqlStatement stmt{mapper->Connection()};
         stmt.Prepare("DELETE FROM tags WHERE id = ?");
         (void) stmt.Execute(sourceId);
     }
@@ -165,7 +168,7 @@ Ack TagModel::execute(const MergeTags& action) {
     // (a process-wide monotonic counter) makes the key collision-resistant
     // regardless of clock resolution.
     entry.idempotencyKey = owner + "-mergetags-" + std::to_string(nowMs()) + "-" + std::to_string(nextOutboxSeq());
-    mapper().Create(entry);
+    mapper->Create(entry);
 
     transaction.Commit();
     return result;
@@ -173,13 +176,14 @@ Ack TagModel::execute(const MergeTags& action) {
 
 ListTagsResult TagModel::execute(const ListTags&) {
     const auto& owner = requireOwner();
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     auto rows =
-        mapper().Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner).All();
+        mapper->Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner).All();
 
     ListTagsResult result;
     for (const auto& rec : rows) {
-        const auto count = mapper()
-                                .Query<db::BookmarkTagRecord>()
+        const auto count = mapper
+                                ->Query<db::BookmarkTagRecord>()
                                 .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", rec.id.Value())
                                 .All()
                                 .size();

@@ -31,6 +31,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_busy_fixture.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
 #include "testkit/pump.hpp"
 
 #include "pastebin/app/app.hpp"
@@ -74,6 +75,7 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::awaitQt;
+using morph::ladder::testkit::drainPoolIdleMappers;
 using morph::ladder::testkit::pumpUntil;
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -242,11 +244,16 @@ void occupyKeyspace(std::size_t comboCount) {
 /// that collides with `DbBusyFixture`'s held lock blocks for a real minute
 /// before SQLite gives up. `test_db_busy_fixture.cpp` re-issues the PRAGMA on
 /// the connection it owns — that is not available here, because the
-/// connection that must fail fast is the one `PasteModel` opens lazily inside
-/// itself (`db::WithMapper`), which no test can reach. The post-connected
-/// hook is the seam that works from the outside: it runs immediately after
-/// `PostConnect()` on every connection, including that one, so long as the
-/// model's first `execute(...)` happens while this guard is alive.
+/// connection `PasteModel` uses is acquired from
+/// `Lightweight::GlobalDataMapperPool()` inside `execute(...)`, which no test
+/// can reach directly. The post-connected hook is the seam that works from
+/// the outside: it runs immediately after `PostConnect()` on every
+/// newly-created connection. See `db_busy_fixture.hpp`'s
+/// "`SetPostConnectedHook` and `GlobalDataMapperPool()`" note: this is only
+/// guaranteed to fire if the pool actually creates a fresh connection for the
+/// model under test's acquisition, not if it hands back an already-connected
+/// idle one — the two call sites below accept that as a documented,
+/// not-fully-deterministic tradeoff rather than a hard guarantee.
 class ScopedShortBusyTimeout {
   public:
     explicit ScopedShortBusyTimeout(int milliseconds) {
@@ -505,10 +512,18 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     create.editability = pastebin::Editability::Editable;
     const auto id = seedModel.execute(create).id;
 
-    // The model under test must open its connection *while* the short
-    // busy-timeout hook is installed (db::WithMapper connects lazily), same
-    // requirement as the SQLITE_BUSY cases below.
+    // `contendedModel`'s execute() below must acquire a genuinely new pooled
+    // connection *while* the short busy-timeout hook is installed for this
+    // hook to actually apply to it (see db_busy_fixture.hpp's
+    // GlobalDataMapperPool() note above `ScopedShortBusyTimeout`'s own doc
+    // comment) — same requirement as the SQLITE_BUSY cases below. Draining
+    // the pool's idle mappers first (see drainPoolIdleMappers's own doc
+    // comment) turns that into a hard guarantee rather than the "correct in
+    // practice, not guaranteed" caveat a shared pool would otherwise leave:
+    // held alive across the hook install and the racy execute() below, then
+    // released once this test no longer needs a forced-fresh acquisition.
     const ScopedShortBusyTimeout shortTimeout{5000};
+    auto drained = drainPoolIdleMappers();
     pastebin::PasteModel contendedModel;
 
     ::Lightweight::SqlConnection lockingConnection;
@@ -545,6 +560,10 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     }
 
     editor.join();
+    // Safe to stop forcing fresh acquisitions now: contendedModel's one and
+    // only execute() call (and so its one pool acquisition) already
+    // happened, inside the joined editor thread above.
+    drained.clear();
     // Restored only after the editor thread is done issuing statements —
     // `probe` must not be touched by another thread once it goes out of
     // scope below.
@@ -1284,15 +1303,21 @@ TEST_CASE("GetPaste surfaces a real SQLITE_BUSY as a thrown error, not as silent
     pastebin::PasteModel seedModel;
     const auto id = seedModel.execute(makeCreate("contended")).id;
 
-    // The model under test must open its connection *while* the short
-    // busy-timeout hook is installed, so it is a model that has not executed
-    // anything yet (`db::WithMapper` connects lazily, on first use).
+    // Same requirement as the EditPaste contention test above:
+    // contendedModel's execute() below must acquire its connection while
+    // this hook is installed for the hook to actually apply — draining the
+    // pool's idle mappers first (drainPoolIdleMappers's own doc comment)
+    // makes that a hard guarantee rather than a "usually true" assumption.
     const ScopedShortBusyTimeout shortTimeout{200};
+    auto drained = drainPoolIdleMappers();
     pastebin::PasteModel contendedModel;
 
     const morph::ladder::testkit::DbBusyFixture busy{"pastes"};
     const auto start = std::chrono::steady_clock::now();
     REQUIRE_THROWS(contendedModel.execute(pastebin::GetPaste{.id = id}));
+    // contendedModel's one and only execute() call (and so its one pool
+    // acquisition) already happened on this thread, synchronously, above.
+    drained.clear();
     // Fast, not a sixty-second block: without the hook above, Lightweight's
     // own `PRAGMA busy_timeout = 60000` would make this "pass" by waiting out
     // a real minute.

@@ -63,6 +63,32 @@ namespace morph::ladder::testkit {
 /// `ODBC_CONNECTION_STRING`/`Timeout=` override this file's task brief
 /// originally proposed does not work, because the PRAGMA is not derived
 /// from it.
+///
+/// @par `SetPostConnectedHook` and `Lightweight::GlobalDataMapperPool()`
+/// A model that acquires its connection via `GlobalDataMapperPool()` (rather
+/// than opening one for its own exclusive, permanent use) is only
+/// **guaranteed** to trigger `PostConnect()` — and so a caller's
+/// `SetPostConnectedHook` override — when the pool actually creates a new
+/// `SqlConnection`: an empty pool at `Acquire()` time (morph's configured
+/// growth strategy, `BoundedOverflow`, never blocks and never fails to grow
+/// on demand, so "empty" is the only condition that matters here). If the
+/// pool already holds an idle, previously-connected mapper (from an earlier
+/// acquisition elsewhere in the same test binary, including the pool's own
+/// pre-warm at construction), `Acquire()` hands that one back without
+/// reconnecting, and the override installed for *this* test never runs on
+/// it.
+///
+/// A test relying on "the code under test's connection opens fresh, under my
+/// short-busy-timeout hook" must therefore force the pool's idle list empty
+/// immediately before the acquisition it cares about, rather than assume it
+/// already is — `db_pool_drain.hpp`'s `drainPoolIdleMappers()` does exactly
+/// this (hold `Config.maxSize` acquisitions live across the racy call, since
+/// `BoundedOverflow`'s `Return()` never idles more than `maxSize` at once,
+/// so that count is always enough regardless of the pool's prior state).
+/// Both `test_paste_model.cpp` (pastebin) and `test_bookmark_model.cpp`
+/// (bookmarks) use it for exactly this SQLITE_BUSY-under-a-short-timeout
+/// shape; reuse it for any future rung's equivalent test rather than relying
+/// on test ordering or a freshly-started process.
 class DbBusyFixture {
   public:
     /// @param tableName Table to lock — must already exist (construct this

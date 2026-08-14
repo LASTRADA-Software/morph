@@ -5,7 +5,6 @@
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
-#include "bookmarks/db/db_model.hpp"
 #include "bookmarks/dto/shared_feed_dto.hpp"
 
 namespace bookmarks {
@@ -13,7 +12,12 @@ namespace bookmarks {
 /// @brief The one cross-principal read in this rung: every `Shared`,
 ///        non-archived bookmark, from every owner. Registered plain — see
 ///        this task's own header comment for why `AllowShared` is not used.
-class SharedFeedModel : private db::WithMapper {
+///
+/// Holds no database state itself: `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning a connection for its own
+/// lifetime.
+class SharedFeedModel {
 public:
     ListSharedFeedResult execute(const ListSharedFeed& action);
 };

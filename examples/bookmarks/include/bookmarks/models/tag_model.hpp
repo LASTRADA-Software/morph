@@ -5,14 +5,18 @@
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
-#include "bookmarks/db/db_model.hpp"
 #include "bookmarks/dto/tag_dto.hpp"
 
 namespace bookmarks {
 
 /// @brief Rename/merge/list over the `tags` table, scoped to the caller.
 ///        Registered plain — same rationale as `BookmarkModel`.
-class TagModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning a connection for its own
+/// lifetime.
+class TagModel {
 public:
     Ack execute(const RenameTag& action);
     Ack execute(const MergeTags& action);

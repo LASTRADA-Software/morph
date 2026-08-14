@@ -11,6 +11,7 @@
 #include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlError.hpp>
 #include <Lightweight/SqlErrorDetection.hpp>
 #include <Lightweight/SqlStatement.hpp>
@@ -175,6 +176,12 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
                                           kMaxSyntaxBytes)};
     }
 
+    // One connection for this call, acquired from the pool and returned when
+    // it goes out of scope at the end of this function — not a member this
+    // model instance holds for its own lifetime (see paste_model.hpp's file
+    // comment for why the model must not own database state).
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
     // Bounded retry on the (small, deliberately-collidable) animal-name
     // keyspace. The insert itself is the collision test — a pre-check would be
     // a time-of-check/time-of-use window between two model instances on two
@@ -193,7 +200,7 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
         rec.isEditable = action.editability == Editability::Editable;
 
         try {
-            mapper().Create(rec);
+            mapper->Create(rec);
         } catch (const ::Lightweight::SqlException& error) {
             // Only a primary-key collision on the animal-name id is retryable.
             // Every other store error (a lock, a dropped connection, a broken
@@ -202,7 +209,7 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
             // required store-error branch tests distinguish the two.
             // sqliteodbc reports both under SQLSTATE HY000, so the message-based
             // classifier Lightweight ships is the only discriminator available.
-            if (!::Lightweight::IsUniqueConstraintViolation(error.info(), mapper().Connection().ServerType())) {
+            if (!::Lightweight::IsUniqueConstraintViolation(error.info(), mapper->Connection().ServerType())) {
                 throw;
             }
             continue;
@@ -219,6 +226,10 @@ PasteView PasteModel::execute(const GetPaste& action) {
     const std::string& id = *action.id;
     const std::int64_t readAtMs = nowMs();
 
+    // One connection for this whole call — the transaction below and the
+    // fallback classification read after it must run on the same connection.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
     // ── The atomic read-consumption ─────────────────────────────────────────
     // The conditional UPDATE is the whole race-safety argument: SQLite
     // evaluates its WHERE and applies its increment as one indivisible
@@ -233,12 +244,12 @@ PasteView PasteModel::execute(const GetPaste& action) {
     // between. It also makes the burn-delete below part of the same commit.
     std::optional<PasteView> view;
     {
-        ::Lightweight::SqlTransaction transaction{mapper().Connection(),
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(),
                                                   ::Lightweight::SqlTransactionMode::ROLLBACK};
 
         std::size_t consumed = 0;
         {
-            ::Lightweight::SqlStatement consume{mapper().Connection()};
+            ::Lightweight::SqlStatement consume{mapper->Connection()};
             consume.Prepare(kConsumeReadSql);
             auto cursor = consume.Execute(id, readAtMs);
             consumed = cursor.NumRowsAffected();
@@ -254,8 +265,8 @@ PasteView PasteModel::execute(const GetPaste& action) {
         // having actually been consumed. This one comparison is the sole gate
         // on the burn-atomicity guarantee; it must not admit a sentinel.
         if (consumed == 1) {
-            auto rows = mapper()
-                            .Query<db::PasteRecord>()
+            auto rows = mapper
+                            ->Query<db::PasteRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                             .All();
             if (rows.empty()) {
@@ -271,7 +282,7 @@ PasteView PasteModel::execute(const GetPaste& action) {
             // its content, and only then removes the row.
             const std::optional<std::int64_t>& budget = rec.burnAfterReads.Value();
             if (budget && rec.readCount.Value() >= *budget) {
-                ::Lightweight::SqlStatement burn{mapper().Connection()};
+                ::Lightweight::SqlStatement burn{mapper->Connection()};
                 burn.Prepare("DELETE FROM pastes WHERE id = ?");
                 (void) burn.Execute(id);
             }
@@ -287,8 +298,8 @@ PasteView PasteModel::execute(const GetPaste& action) {
     // UPDATE closed: it decides only *which* error to throw and mutates
     // nothing. A row that changes underneath it can at worst turn one
     // truthful-a-moment-ago error into another.
-    auto existing = mapper()
-                        .Query<db::PasteRecord>()
+    auto existing = mapper
+                        ->Query<db::PasteRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                         .All();
     if (existing.empty()) {
@@ -312,13 +323,17 @@ PasteView PasteModel::execute(const EditPaste& action) {
     }
     const std::string& id = *action.id;
 
+    // One connection for this whole call — the CAS transaction below and the
+    // reads before/after it must run on the same connection.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
     // A first, unprotected read: it decides the common-case NotFound /
     // not-editable errors, and supplies the compare-and-swap guard's expected
     // "before" values for the atomic write below. A stale read here does not
     // reopen a race — it just means the guarded UPDATE below affects 0 rows,
     // which is classified as `Conflict`, never silently applied.
-    auto before = mapper()
-                      .Query<db::PasteRecord>()
+    auto before = mapper
+                      ->Query<db::PasteRecord>()
                       .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                       .All();
     if (before.empty()) {
@@ -339,12 +354,12 @@ PasteView PasteModel::execute(const EditPaste& action) {
     // discarded.
     std::optional<PasteView> view;
     {
-        ::Lightweight::SqlTransaction transaction{mapper().Connection(),
+        ::Lightweight::SqlTransaction transaction{mapper->Connection(),
                                                   ::Lightweight::SqlTransactionMode::ROLLBACK};
 
         std::size_t consumed = 0;
         {
-            ::Lightweight::SqlStatement stmt{mapper().Connection()};
+            ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare(kEditPasteSql);
             auto cursor = stmt.Execute(action.content, action.syntax, id, previousContent, previousSyntax);
             consumed = cursor.NumRowsAffected();
@@ -355,8 +370,8 @@ PasteView PasteModel::execute(const EditPaste& action) {
         // and testing for exactly 1 closes the `NumRowsAffected()`
         // signed-to-unsigned `-1` -> `SIZE_MAX` hole.
         if (consumed == 1) {
-            auto rows = mapper()
-                            .Query<db::PasteRecord>()
+            auto rows = mapper
+                            ->Query<db::PasteRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                             .All();
             if (rows.empty()) {
@@ -374,8 +389,8 @@ PasteView PasteModel::execute(const EditPaste& action) {
     }
 
     // ── Zero rows matched: classify why ─────────────────────────────────────
-    auto existing = mapper()
-                        .Query<db::PasteRecord>()
+    auto existing = mapper
+                        ->Query<db::PasteRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "=", id)
                         .All();
     if (existing.empty()) {
@@ -393,18 +408,23 @@ Ack PasteModel::execute(const DeletePaste& action) {
     if (!action.validate()) {
         throw ValidationError{"DeletePaste: id is required"};
     }
-    ::Lightweight::SqlStatement stmt{mapper().Connection()};
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    ::Lightweight::SqlStatement stmt{mapper->Connection()};
     stmt.Prepare("DELETE FROM pastes WHERE id = ?");
     (void) stmt.Execute(*action.id);
     return Ack{};
 }
 
 ListPastesResult PasteModel::execute(const ListPastes& action) {
+    // One connection for this call: the query is built up across several
+    // statements below and must run against the same connection throughout.
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
     // Keyset pagination on the primary key, descending: the cursor is the last
     // id of the previous page, so a row created or reclaimed mid-walk can never
     // shift a later page's offset (the required "sweep fires between two pages"
     // test depends on exactly this).
-    auto query = mapper().Query<db::PasteRecord>();
+    auto query = mapper->Query<db::PasteRecord>();
     (void) query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::isPrivate>, "=", false);
     if (action.cursor.hasValue()) {
         (void) query.Where(::Lightweight::FieldNameOf<&db::PasteRecord::id>, "<", *action.cursor);
@@ -441,7 +461,8 @@ Ack PasteModel::execute(const ExpirePaste& action) {
     // The `expires_at_ms <= ?` guard is what makes this replay-safe: the action
     // payload carries only the id, so re-running a journaled entry against a
     // paste that is not (or no longer) expired deletes nothing.
-    ::Lightweight::SqlStatement stmt{mapper().Connection()};
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    ::Lightweight::SqlStatement stmt{mapper->Connection()};
     stmt.Prepare("DELETE FROM pastes WHERE id = ? AND expires_at_ms IS NOT NULL AND expires_at_ms <= ?");
     (void) stmt.Execute(*action.id, nowMs());
     return Ack{};

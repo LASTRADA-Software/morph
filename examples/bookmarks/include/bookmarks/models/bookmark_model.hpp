@@ -5,7 +5,6 @@
 #include <morph/core/registry.hpp>
 
 #include "bookmarks/core/errors.hpp"
-#include "bookmarks/db/db_model.hpp"
 #include "bookmarks/dto/bookmark_dto.hpp"
 #include "bookmarks/dto/bulk_dto.hpp"
 #include "bookmarks/dto/import_export_dto.hpp"
@@ -46,7 +45,12 @@ namespace bookmarks {
 /// authorize()`'s per-`execute` token check and `authorizeInstance`'s
 /// instance-level check. See `bookmarks/auth/bookmarks_authorizer.hpp` for
 /// the full story.
-class BookmarkModel : private db::WithMapper {
+///
+/// Holds no database state itself: each `execute()` acquires a
+/// `Lightweight::GlobalDataMapperPool()` connection for its own duration and
+/// returns it before returning, rather than owning a connection for its own
+/// lifetime.
+class BookmarkModel {
 public:
     CreateBookmarkResult execute(const CreateBookmark& action);
     BookmarkView execute(const EditBookmark& action);
