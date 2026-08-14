@@ -10,6 +10,7 @@
 // clock is "clock.hpp" — the same spelling testkit/test_clock.cpp uses.
 #include "clock.hpp"
 
+#include <Lightweight/DataBinder/UnicodeConverter.hpp>
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlError.hpp>
@@ -90,12 +91,26 @@ namespace {
     return std::string{stored.str()};
 }
 
+// `content` is stored wide (Light::SqlMaxDynamicWideString — see
+// paste_entity.hpp's file comment for why); the DTO layer stays UTF-8
+// std::string per IMPLEMENTATION.md rule 4, so every read/write of `content`
+// converts here, at the model boundary, rather than leaking the storage
+// representation into the DTO or the caller.
+[[nodiscard]] std::string utf8Of(const Light::SqlMaxDynamicWideString& stored) {
+    return std::string{reinterpret_cast<const char*>(Lightweight::ToUtf8(stored.ToStringView()).c_str())};
+}
+
+[[nodiscard]] Light::SqlMaxDynamicWideString wideOf(const std::string& utf8) {
+    return Light::SqlMaxDynamicWideString{
+        Lightweight::ToStdWideString(std::u8string_view{reinterpret_cast<const char8_t*>(utf8.data()), utf8.size()})};
+}
+
 /// @brief Builds the read-only view sent back to a client from a fully loaded
 ///        `PasteRecord`.
 [[nodiscard]] PasteView toView(const db::PasteRecord& rec) {
     PasteView view;
     view.id = PasteId{textOf(rec.id.Value())};
-    view.content = rec.content.Value().value;
+    view.content = utf8Of(rec.content.Value());
     view.syntax = textOf(rec.syntax.Value());
     view.createdAt = fromEpochMs(rec.createdAtMs.Value());
     view.expiresAt = fromEpochMs(rec.expiresAtMs.Value());
@@ -189,7 +204,7 @@ CreatePasteResult PasteModel::execute(const CreatePaste& action) {
     for (int attempt = 0; attempt < kMaxIdAttempts; ++attempt) {
         db::PasteRecord rec;
         rec.id = Light::SqlAnsiString<32>{randomPasteId()};
-        rec.content = Light::SqlText{action.content};
+        rec.content = wideOf(action.content);
         rec.syntax = Light::SqlAnsiString<32>{action.syntax};
         rec.createdAtMs = nowMs();
         rec.expiresAtMs = action.expiresAt.hasValue() ? std::optional{toEpochMs(*action.expiresAt)} : std::nullopt;
@@ -342,7 +357,7 @@ PasteView PasteModel::execute(const EditPaste& action) {
     if (!before.front().isEditable.Value()) {
         throw ValidationError{"EditPaste: paste is not editable"};
     }
-    const std::string previousContent = before.front().content.Value().value;
+    const Light::SqlMaxDynamicWideString previousContent = before.front().content.Value();
     const std::string previousSyntax = textOf(before.front().syntax.Value());
 
     // ── The atomic compare-and-swap write ───────────────────────────────────
@@ -361,7 +376,7 @@ PasteView PasteModel::execute(const EditPaste& action) {
         {
             ::Lightweight::SqlStatement stmt{mapper->Connection()};
             stmt.Prepare(kEditPasteSql);
-            auto cursor = stmt.Execute(action.content, action.syntax, id, previousContent, previousSyntax);
+            auto cursor = stmt.Execute(wideOf(action.content), action.syntax, id, previousContent, previousSyntax);
             consumed = cursor.NumRowsAffected();
         }
 

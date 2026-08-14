@@ -30,7 +30,7 @@ using namespace Lightweight::SqlColumnTypeDefinitions;
 LIGHTWEIGHT_SQL_MIGRATION(20260806000001, "Create pastes table") {
     plan.CreateTableIfNotExists("pastes")
         .PrimaryKey("id", Varchar(32))
-        .RequiredColumn("content", Text())
+        .RequiredColumn("content", NVarchar(0))
         .RequiredColumn("syntax", Varchar(32))
         .RequiredColumn("created_at_ms", Bigint())
         .Column("expires_at_ms", Bigint())

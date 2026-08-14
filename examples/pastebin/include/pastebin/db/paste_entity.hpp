@@ -21,15 +21,27 @@
 /// `AutoAssign`, `ServerSideAutoIncrement` (the latter is what bank's
 /// surrogate integer keys use).
 ///
-/// `content` is `Light::SqlText`, not `std::string`: a paste body is
-/// unbounded free-form text, and `SqlText` is Lightweight's dedicated type
-/// for that case — it self-declares `Text()` as its column type via its own
-/// `SqlBasicStringOperations` specialization, rather than relying on
-/// `schema.cpp`'s migration call to override a default (bare `std::string`
-/// defaults to `Varchar(255)` at the C++-type level; only the migration's
-/// explicit `.Column("content", Text())` call was making that correct here).
-/// `id`/`syntax` use `Light::SqlAnsiString<32>` instead, matching bank's
-/// convention for fixed-width/ASCII/token-shaped columns.
+/// `content` is `Light::SqlMaxDynamicWideString`, not `std::string`: a paste
+/// body is unbounded free-form Unicode text, and `db_fixture.hpp`'s
+/// `computeConnectionString()` lets `ODBC_CONNECTION_STRING` point this same
+/// suite at a SQL Server backend instead of its SQLite default (per
+/// `examples/LADDER.md`'s security matrix, which expects rungs to eventually
+/// gain non-SQLite CI legs). On that backend, `Light::SqlText`/bare
+/// `std::string` — both `char`-based — render as `VARCHAR(MAX)`, a
+/// single-byte-collation column: non-ASCII paste content would not
+/// round-trip correctly there. `SqlMaxDynamicWideString` is `wchar_t`-based,
+/// so its `SqlBasicStringOperations` specialization self-declares `NVarchar`
+/// as its column type instead of `Varchar`/`Text`, which every dialect's
+/// formatter renders as an unbounded Unicode column (`NVARCHAR(MAX)` on SQL
+/// Server once size exceeds `SqlOptimalMaxColumnSize`; SQLite ignores
+/// declared length as pure type-affinity and stores UTF-8 natively either
+/// way). The model converts at the DTO boundary
+/// (`Lightweight::ToStdWideString`/`Lightweight::ToUtf8`), since the wire
+/// DTOs stay UTF-8 `std::string` per IMPLEMENTATION.md rule 4 — only this
+/// entity field's storage representation is wide. `id`/`syntax` use
+/// `Light::SqlAnsiString<32>` instead, matching bank's convention for
+/// fixed-width/ASCII/token-shaped columns, where the ASCII assumption is
+/// actually true.
 
 namespace pastebin::db {
 
@@ -39,7 +51,7 @@ struct PasteRecord {
 
     /// The animal-name id; caller-assigned, not auto-incremented.
     Light::Field<Light::SqlAnsiString<32>, Light::PrimaryKey::AutoAssign, Light::SqlRealName{"id"}> id;  // 0
-    Light::Field<Light::SqlText, Light::SqlRealName{"content"}> content;  // 1
+    Light::Field<Light::SqlMaxDynamicWideString, Light::SqlRealName{"content"}> content;  // 1
     Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"syntax"}> syntax;  // 2
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 3
     /// `std::nullopt` = never expires.

@@ -294,6 +294,29 @@ TEST_CASE("CreatePaste stores a paste under a freshly allocated animal-name id",
     CHECK_FALSE(view.burnAfterReads.hasValue());
 }
 
+TEST_CASE("CreatePaste and EditPaste round-trip non-ASCII content losslessly", "[pastebin][model]") {
+    // `content` is stored as Light::SqlMaxDynamicWideString (paste_entity.hpp's
+    // file comment explains why: SqlText/std::string are char-based and render
+    // as VARCHAR(MAX) on the SQL Server backend, a single-byte-collation
+    // column). This exercises both the DataMapper-bound write path
+    // (CreatePaste) and the raw-prepared-statement write path (EditPaste's
+    // compare-and-swap, paste_model.cpp's kEditPasteSql) that binds a
+    // Light::SqlMaxDynamicWideString parameter by hand rather than through a
+    // Field<>.
+    DbFixture fixture;
+    pastebin::PasteModel model;
+
+    const std::string original = "héllo wörld — \xE4\xB8\xAD\xE6\x96\x87 \xF0\x9F\x8E\x89";  // Latin-1 + CJK + emoji
+    auto create = makeCreate(original, "text");
+    create.editability = pastebin::Editability::Editable;
+    const auto id = model.execute(create).id;
+    CHECK(model.execute(pastebin::GetPaste{.id = id}).content == original);
+
+    const std::string edited = "édité — \xE6\x97\xA5\xE6\x9C\xAC\xE8\xAA\x9E";  // Japanese
+    model.execute(pastebin::EditPaste{.id = id, .content = edited, .syntax = "text"});
+    CHECK(model.execute(pastebin::GetPaste{.id = id}).content == edited);
+}
+
 TEST_CASE("CreatePaste's validate() rejects empty content and empty syntax", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
@@ -710,7 +733,7 @@ TEST_CASE("GetPaste against a row already at its burn budget throws Burned, not 
         Lightweight::DataMapper mapper;
         pastebin::db::PasteRecord rec;
         rec.id = Light::SqlAnsiString<32>{"test-burned-paste"};
-        rec.content = Light::SqlText{"gone"};
+        rec.content = Light::SqlMaxDynamicWideString{L"gone"};
         rec.syntax = Light::SqlAnsiString<32>{"text"};
         rec.createdAtMs = std::int64_t{0};
         rec.burnAfterReads = std::optional<std::int64_t>{1};
