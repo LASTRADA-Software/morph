@@ -31,6 +31,7 @@ add_executable(morph_tests
     test_remote_extra.cpp
     test_remote_connection_scope.cpp
     test_remote_step_interleaving.cpp
+    test_remote_execute_ordering.cpp
     test_action_validation.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp

@@ -1,0 +1,174 @@
+# lims — rung 6 of the [application ladder](../LADDER.md)
+
+**Status: design annex** ([round-7 program decision](../LADDER.md)) — this
+README is the deliverable; construction is a post-rung-4 decision, and the
+rung's sharpest content (forms conformance D1–D8, journal payload
+evolution) runs earlier as no-app spikes. A lightweight Laboratory
+Information Management System:
+register samples, assign analyses, capture results with real units and
+detection limits on versioned forms, verify and publish, keep a regulatory
+audit trail — with offline data capture in the field. The deepest test of
+morph's headline claim ("exact values for financial/lab data") and of the
+forms subsystem at full depth.
+
+## Reference implementations
+
+Three anchors, each for a different layer:
+
+- **[SENAITE](https://github.com/senaite/senaite.core)** (Python/Plone, GPL) —
+  the *domain* reference. Its code is Zope-era and not worth reading; its
+  **requirements** are gold: sample → analysis request → result → verify →
+  publish workflow, detection limits (`< LOD`, `> UDL`), instrument
+  interfaces, and an immutable per-change audit trail built for 21 CFR Part
+  11-style compliance. Mine the docs and data model, reimplement clean:
+  <https://www.senaite.com/>
+- **[InvenTree](https://github.com/inventree/InvenTree)** (Python/Django,
+  MIT) — the *units* reference. It embeds the pint unit library end-to-end:
+  parameter templates declare a base unit, users enter values in **any
+  compatible unit** ("1500 mA against a template in A") and the system
+  converts exactly, including in API filters; custom units are definable.
+  Reproduce this flow with `morph::units::Quantity` +
+  `UnitTraits<E>::relations` (entry-unit alternatives with exact ratios).
+  Docs: <https://docs.inventree.org/en/latest/concepts/units/>
+- **[ODK Central](https://github.com/getodk/central)** (Node, Apache-2.0) —
+  the *forms + offline* reference. Its entire product is "upload a versioned
+  form schema, clients render data-entry UIs from it, offline". Two features
+  to reproduce:
+  - versioned form definitions (XLSForm/XForms → here: versioned
+    `morph::forms` schemas served by the model);
+  - **offline Entities** (v2024.3+): field workers create *and update*
+    shared records offline; every update carries a target **base version**;
+    the server flags a conflict when the base is stale and a human resolves
+    it. This is exactly morph's shared-instances + offline-queue + replay,
+    with a published conflict-semantics answer to compare against. Design
+    discussion: <https://forum.getodk.org/t/43272>, spec:
+    <https://getodk.github.io/xforms-spec/>
+
+## What to implement
+
+Models: `SampleModel` keyed by sample id (shared instance — bench and office
+clients attach to the same sample), `AnalysisCatalogModel` (analysis
+definitions = form schemas, versioned), `WorksheetModel`.
+
+Entities: client/project, sample, analysis definition (name, unit, entry
+units, decimal places, specification range, LOD/UDL), analysis result,
+verification record, audit entry.
+
+Build order:
+
+1. Analysis catalog: define an analysis with unit, precision, and spec range
+   → the served JSON Schema *is* the result-entry form (`x-decimalPlaces`,
+   `ExtUnits`, `x-unitAlternatives`, bounds).
+2. Sample registration + lifecycle state machine
+   (registered → received → in-progress → to-be-verified → published), each
+   transition a guarded, journaled action.
+3. **Result entry with units**: `Quantity<Unit>` fields; entry-unit
+   conversion (mg/L ↔ µg/L exact); empty-Quantity = "not measured";
+   detection limits as typed values. **Resolved by the round-5 review — the
+   forms palette has no sum types (closed by design)**: `ResultValue =
+   quantity | belowLOD | aboveUDL` is implemented as the *multi-field
+   encoding* (a `Quantity` plus a qualifier `Choice`) glued by
+   `mutuallyExclusive`/`exactlyOneOf` `x-rules`; the rung proves that
+   encoding round-trips distinguishably through wire, journal, and offline
+   payloads (three "no number" meanings — D-test in the review). Native
+   sum types go on the framework-gap ledger, not this rung's critical path.
+4. **Schema versioning**: editing an analysis definition creates version
+   N+1; old results stay bound to their version; clients render the version
+   the result was captured with (ODK's form-version model). **Scope
+   correction (round 5)**: serving stored v-N schema text renders fine (the
+   client machinery is data-driven), but **validation, `x-rules`, and
+   precision reconciliation always run against the *current compiled*
+   struct** — "bound to their version" holds for rendering only; validating
+   a v-N payload under v-N rules is a named framework gap. The
+   render-v1/validate-v2 skew test (review D4) is mandatory and needs no
+   socket.
+5. Conditional form logic: fields required/visible depending on other
+   fields (e.g. dilution factor only when diluted). The boundary is now
+   known (round 5): `requiredWhen`/`visibleWhen`/`readonlyWhen` with
+   single-node conditions exist and are enforced client- and server-side;
+   there are **no `and`/`or`/`not` combinators** (closed vocabulary), a
+   hidden field's draft value still travels (decide clear-on-hide), and
+   comparison rules are vacuously true on unengaged operands while `equals`
+   is false — test the parity suite on *served* schema data including a
+   fail-closed unknown rule kind (review D8).
+6. Verification + audit: four-eyes verify step gated by `IAuthorizer` role;
+   the full audit trail rendered from the journal (SENAITE's immutable
+   snapshot requirement).
+7. **Offline field capture** — the rung's centerpiece: a WASM/desktop client
+   takes samples in the field, disconnected; results queue in
+   `SqliteOfflineQueue`; each queued update carries the sample's **base
+   version**; on reconnect, replay detects stale bases server-side and flags
+   conflicts for human resolution instead of silently merging (the ODK
+   answer, implemented on morph primitives).
+
+## morph subsystems exercised
+
+Unit algebra + exact conversion end-to-end; runtime schema-driven forms at
+their hardest (tagged unions, conditionals, versioning); shared sample
+instances; offline queue with explicit conflict semantics; role-gated
+transitions; journal as regulatory audit.
+
+## Expected strain points
+
+- Tagged-union result values and cross-field conditional logic are beyond
+  plain JSON Schema — this rung maps the exact edge of `morph::forms`.
+  Wire-level corollary: **three distinct "no number" meanings** (empty
+  `Quantity`, `belowLOD`, `aboveUDL`) must round-trip distinguishably
+  through glaze *and* through the offline queue's opaque payloads.
+- Schema versioning: morph serves schemas from compiled C++ types; versioned
+  catalogs mean schemas become *data*. Bridges toward rung 7's runtime
+  custom fields.
+- **Journal payload evolution — this rung owns the ladder's answer
+  [framework gap]**: replay decodes stored payloads with the *current*
+  action structs; rename or retype a field and old entries decode
+  leniently, silently dropping data — the "reconstructible from the journal
+  alone" DoD is then false. Versioned analyses make this unavoidable:
+  per-entry schema/app-version pinning plus a migration story (the journal
+  format's `v` covers the line format only). Rungs 5 and 7 reuse whatever
+  is decided here.
+- **Stale-schema submission**: schema `required`/bounds are client-side
+  only — the server runs whatever payload arrives. A v-N payload against a
+  v-N+1 server (narrowed spec range) must be accepted-under-old-rules,
+  rejected, or migrated — pick one and prove it. Extend to real binary
+  skew: build an old client with `MORPH_CLIENT_ONLY` and run it against a
+  new server (additive field must work; a renamed field must fail *loudly*,
+  not decode a lab result to a default).
+- **Self-conflict in the offline chain**: one field client editing the same
+  sample twice offline — the second queued update's base version must
+  reference the first *queued* update, not the server state, or replay
+  flags the client's own second edit as a conflict (ODK hit exactly this).
+- **Precision through unit relations — the rule exists; test it, don't
+  redesign it** (round-5 correction): conversion carries the dp tag through
+  unchanged, the renderer always submits in the canonical unit at the
+  schema's `x-decimalPlaces`, and alternative-unit display rounds half-up.
+  What to test instead: (a) **retag-vs-round** — `x-decimalPlaces`
+  "enforcement" retags the tag without changing the value, so a hand-built
+  over-precise payload stores `1.23456` displayed as `1.2` (spec text and
+  code disagree; display ≠ stored is disqualifying in a LIMS — this rung
+  owns the decision test, review D1); (b) `x-unitAlternatives` lists
+  **direct relation edges only**, so InvenTree-style "enter in any
+  compatible unit" needs a deliberately complete relations array; chained
+  ratios are not cross-checked; (c) the shipped QML converter silently
+  clears input above a 1e12 divisor — exactly the fine-ratio range of
+  trace-concentration relations (ng/L↔mg/L); (d)
+  `std::optional<Quantity<U>>` silently loses all unit annotations — use
+  empty `Quantity`/`optionalFields`, and lint for the optional spelling.
+- **Empty-principal audit entries**: the authorize/authenticate TOCTOU can
+  dispatch with a cleared principal; in a 21-CFR-framed audit trail that is
+  disqualifying. Deterministic test via the injectable token clock; models
+  refuse empty principals on mutating actions.
+- Base-version conflict detection is app logic today — evaluate whether a
+  reusable morph primitive should exist.
+- Offline field capture in the browser inherits kanban's WASM-offline scope
+  limits ([`../kanban/README.md`](../kanban/README.md)) — desktop-first.
+
+## Definition of done
+
+- The "1500 mA vs A" InvenTree flow works with exact conversion in a
+  generated form.
+- Offline capture demo: two field clients update the same sample offline;
+  reconnect flags exactly the stale-base update as a conflict.
+- Audit trail passes the SENAITE-style test: every state a sample was ever
+  in is reconstructible from the journal alone — **under the payload
+  evolution scheme this rung defines**, verified by replaying a journal
+  recorded before a schema migration.

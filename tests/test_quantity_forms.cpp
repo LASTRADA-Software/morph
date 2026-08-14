@@ -810,9 +810,8 @@ TEST_CASE("Forms::FieldMeta::UnknownFieldNameIsIgnored", "[forms][field_meta]") 
 
 // FieldMeta::i18nKey — a stem override for morph::forms::i18n's explicit-key
 // derivation (docs/spec/forms/forms.md, "Field metadata"): consumed as a
-// *stem*, not a complete key (docs/superpowers/plans/2026-07-20-gui-i18n.md's
-// resolved key-derivation contract), and emitted verbatim as x-i18nKey only
-// when non-empty.
+// *stem*, not a complete key, and emitted verbatim as x-i18nKey only when
+// non-empty.
 struct QFFieldMetaI18nKey {
     std::int64_t sampleId = 0;
     std::int64_t plainField = 0;

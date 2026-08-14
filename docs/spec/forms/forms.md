@@ -1615,6 +1615,10 @@ precision is enforced on dispatch" above for why `reconcileDeclaredPrecision`
 is likewise skipped on that path), so a `Quantity` a caller constructs
 directly carries whatever value the caller gave it, unchecked at this seam.
 
+### Sum types not in the forms palette — multi-field encoding by design
+
+The forms vocabulary provides no native sum-type (tagged union, discriminated union) support. When an action field must express *one of several alternatives* (e.g. a measurement that is "a quantity, or below limit-of-detection, or above upper detection limit"), encode it as a **multi-field structure glued by cross-field rules**: one field for the quantity, one boolean or enum for the state (measured/below/above), and a `RequiredWhen`/`VisibleWhen` rule that gates each based on the others. This is by design: sum types are rare in domain models that already use `hasValue()` optionality and `Choice` enums, and the rule-based multi-field encoding is expressive enough for the rungs' needs while keeping the schema and validation machinery focused.
+
 ### One cached schema per type — no localisation
 
 Each type's schema is memoised in a function-local `static const std::string`

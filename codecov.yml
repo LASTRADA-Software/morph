@@ -1,13 +1,23 @@
 # Codecov configuration.
 #
-# Coverage is produced by the `clang-coverage` CI job via scripts/coverage.sh,
-# restricted to the library headers under include/morph (tests, demo src/ and
-# fetched dependencies are excluded by the positional source filter to llvm-cov).
+# Coverage is produced by the `clang-coverage` CI job via scripts/coverage.sh:
+# always include/morph (the library), plus examples/common (the ladder's
+# hand-written GUI/testkit code — real coverage of morph's own client stack,
+# not app-specific logic; see examples/TESTING.md's "round-7 T4 reframe") and
+# every built rung's own models/app/presenter code, whenever that leg's
+# configure also builds the ladder. Tests, a rung's `main()` shells
+# (`gui/`, `gui_wasm/`), demo src/, fetched dependencies, and
+# AUTOMOC-generated files (which live under the build tree, never under a
+# source-tree path this config names) are excluded.
 
 coverage:
-  # Statuses are informational so a coverage delta never blocks a PR; they still
-  # render the project/patch numbers on the checks list.
   status:
+    # Default (include/morph, i.e. everything not claimed by a component
+    # below): informational only, unchanged from before this file started
+    # tracking the ladder. This project's own IMPLEMENTATION.md rule 5 has
+    # never claimed the whole library is 100% covered — only "models" (and
+    # now the ladder's hand-written GUI/testkit code, see the component
+    # below) carry that promise, so only that promise is a blocking gate.
     project:
       default:
         informational: true
@@ -15,18 +25,148 @@ coverage:
       default:
         informational: true
 
+# The ladder's hand-written GUI/testkit code is held to the same 100% bar
+# examples/IMPLEMENTATION.md rule 5 sets for models (there are no rung
+# models yet — rung 0 ships no app — so this component is the whole of that
+# promise today; src/models/ and include/<rung>/models/ join it as rungs
+# land). Scoped to examples/common specifically, not project-wide: a
+# blocking gate over the *entire* codebase is a much bigger, unverified
+# claim this repo has never made and this change does not attempt.
+#
+# Target is 98%, not a literal 100%, for a measurement-tooling reason rather
+# than an intentional gap: llvm-cov's source-based coverage places a
+# "control reached past this block" counter on the closing brace of certain
+# blocks (a switch-case's `}` after `break;`, a scope's `}` after its one
+# statement calls a `std::function<void()>`), and that counter can read 0
+# even though the statement immediately above it — proven by its own hit
+# count — ran. There is no llvm-cov equivalent of gcov's inline
+# `LCOV_EXCL_LINE` to suppress just those lines. Confirmed present-day
+# instances, all in hand-written (non-test) files, each already directly
+# exercised by an existing test per llvm-cov's own count on the preceding
+# line: backend_rig.hpp's three switch-case closing braces (BackendRig's
+# constructor, one per Mode), strand_interleaver.hpp's two post-`task()`
+# closing braces (`step()`, `runSchedule()`), and fault_proxy.cpp's one
+# integration-unreachable line pair (onClientConnection's null-guard —
+# Qt's own newConnection contract guarantees a valid pointer in practice;
+# the underlying decision, isValidIncomingConnection, is unit-tested
+# directly). Together these put today's real ceiling at 478/485 = 98.56%
+# lines — re-measured at rung 1's close, when `examples/common` gained
+# `db_busy_fixture.hpp` and `backend_rig.hpp`'s executor-liveness guard. The
+# artifact *list* above is unchanged (the same seven lines); only the
+# denominator moved. 98% leaves a small margin below that measured ceiling
+# rather than sitting exactly on it, while still failing the gate long before
+# a real, newly-introduced gap could hide behind this handful of known
+# artifacts.
+#
+# Per-rung components, one per rung, rather than one component spanning the
+# whole ladder: each rung's real ceiling is set by its own handful of known
+# artifacts, and folding them together would mean re-deriving a single number
+# every time a rung lands. A rung's component simply appears when its
+# directory does.
+component_management:
+  individual_components:
+    - component_id: ladder
+      name: "application ladder (examples/common)"
+      paths:
+        - examples/common/**
+      statuses:
+        - type: project
+          target: 98%
+          informational: false
+        - type: patch
+          target: 98%
+          informational: false
+
+    # Rung 1, pastebin.
+    #
+    # What is actually measured, precisely — the `paths` glob below is
+    # `examples/pastebin/**`, but a component can only score files the
+    # uploaded report contains, and that report is whatever
+    # `scripts/coverage.sh` names in its `SOURCES` array. For this rung that
+    # is `include/`, `src/` and `gui_lib/`: the DTOs, the model and app
+    # bootstrap, and the hand-written presenter/QML-adapter layer. It is
+    # **not** `gui/` or `gui_wasm/` — those are `main()` shells (engine setup,
+    # argv parsing, `setInitialProperties`) with no unit-testable seam,
+    # exercised by the offscreen QML engine-load smoke test and by hand, and
+    # they are named in `ignore:` below so their absence is a decision rather
+    # than an accident. `tests/` is excluded for the same reason
+    # examples/common's is: a suite scoring its own test code inflates the
+    # number it is supposed to police.
+    #
+    # Same reasoning as the component above for the target: 96%, not a
+    # literal 100%, because of a measured ceiling rather than an intentional
+    # gap. Measured with `llvm-cov report` over that denominator:
+    # 442/450 lines = 98.22%. Every one of the eight missed lines is
+    # accounted for:
+    #   * units.hpp (2) — the `default:` arm of `UnitTraits<Unit>::meta`'s
+    #     switch. `Unit` has exactly one enumerator, so that arm is
+    #     unreachable without undefined behavior; it exists because the
+    #     repo's warning policy requires a switch default.
+    #   * src/app/app.cpp (4) — `sweepExpiredOnce()`'s `.onError` branch,
+    #     which logs an `ExpirePaste` that failed to dispatch. Provoking a
+    #     dispatch failure through a `SimulatedRemoteBackend` needs the
+    #     fault-injection proxy that lands at rung 4; until then there is no
+    #     honest way to reach it.
+    #   * src/models/paste_model.cpp (2) — the `rows.empty()` guard in
+    #     `execute(GetPaste)`'s read-back, taken when the row vanishes
+    #     between an `UPDATE` that just matched it and a `SELECT` in the same
+    #     transaction, while that transaction holds the write lock. The
+    #     source documents it as unreachable in practice and treats it as
+    #     "gone" rather than asserting.
+    # `gui_lib/` itself is fully covered: `paste_presenter.cpp`,
+    # `paste_qml_bridges.cpp`, `paste_forms_controller.cpp` and both headers'
+    # inline bodies are at 100% lines, by `tests/test_paste_presenter.cpp` and
+    # `tests/test_paste_qml_bridges.cpp`.
+    #
+    # 96%, not something nearer the 98.22% ceiling, for two reasons: it leaves
+    # a margin below that ceiling rather than sitting on it, and the ceiling
+    # is not perfectly stable — `paste_model.cpp` scores 2 or 3 missed lines
+    # depending on the run, because the two `DbBusyFixture` store-error cases
+    # race a real SQLite lock and which classifier branch they land in is
+    # genuinely timing-dependent. A target within a line or two of the ceiling
+    # would flake on that alone. 96% still fails long before a real,
+    # newly-introduced gap could hide behind these eight lines.
+    - component_id: pastebin
+      name: "application ladder rung 1 (examples/pastebin)"
+      paths:
+        - examples/pastebin/**
+      statuses:
+        - type: project
+          target: 96%
+          informational: false
+        - type: patch
+          target: 96%
+          informational: false
+
 # Always post the coverage-comparison comment on a PR, even on the first upload
 # after activation and even when the base report is still processing.
 comment:
-  layout: "reference, diff, flags, files"
+  layout: "reference, diff, flags, files, components"
   behavior: default
   require_base: false
   require_head: true
   require_changes: false
 
-# Only library headers carry coverage; make the exclusion explicit for Codecov's
-# own file walking so tests/ and the demo never dilute the reported number.
+# Nothing in examples/ other than examples/common and the built rungs ever
+# gets compiled by the coverage job's configure (MORPH_BUILD_LADDER builds
+# examples/common's targets plus each rung named by MORPH_LADDER_RUNGS and,
+# under Emscripten only, wasm_spike — which this job never reaches), so
+# bank/forms/concepts/etc. never produce coverage data here in the first
+# place; excluding them explicitly documents the intent rather than relying
+# on that as an accident of what happens to be built. A rung's own test
+# sources are excluded for the same reason examples/common's are: a suite
+# scoring its own test code inflates the number it is supposed to police.
 ignore:
   - "tests/**"
   - "src/**"
-  - "examples/**"
+  - "examples/bank/**"
+  - "examples/forms/**"
+  - "examples/concepts/**"
+  - "examples/vetted_hmac/**"
+  - "examples/qt_tls_client/**"
+  - "examples/common/testkit/test_*.cpp"
+  - "examples/common/testkit/testkit_main.cpp"
+  - "examples/common/wasm_spike/**"
+  - "examples/pastebin/tests/**"
+  - "examples/pastebin/gui/**"
+  - "examples/pastebin/gui_wasm/**"
