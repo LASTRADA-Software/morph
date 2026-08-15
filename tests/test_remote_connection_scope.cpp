@@ -339,6 +339,59 @@ TEST_CASE(
     REQUIRE(gone.env.message == "model not found");
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer: attach on an already-closed connection scope replies "
+    "\"connection closed\" instead of recording a bogus attachment",
+    "[remote][connection-scope]") {
+    // Race window remote.hpp's attachExistingLocked() exists to handle: a
+    // client sends attach, but its connection is gone by the time the server
+    // gets to noteScopeAttachLocked() -- e.g. the socket dropped between the
+    // client sending the request and the server processing it. There is
+    // nothing timing-dependent to reproduce here: closeConnection() and
+    // handle() are both synchronous under _regMtx, so calling closeConnection
+    // on a cid and then handle()-ing an attach carrying that same (now-closed)
+    // cid deterministically presents the exact precondition
+    // noteScopeAttachLocked() checks for, on every run.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+
+    // A creates the shared instance and keeps a live reference to it, so the
+    // directory entry B is about to attach to still exists.
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "42")), std::ref(regA),
+                   cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+    auto modelId = regA.env.modelId;
+
+    // B's connection drops before its attach is processed.
+    server->closeConnection(cidB);
+
+    WaitReply attachB;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "42")), std::ref(attachB), cidB);
+    REQUIRE(attachB.await());
+    REQUIRE(attachB.env.kind == "err");
+    REQUIRE(attachB.env.message == "connection closed");
+
+    // The instance itself is untouched -- A's own reference survives B's
+    // failed, already-dead attach attempt.
+    morph::wire::Envelope execReq;
+    execReq.kind = "execute";
+    execReq.modelId = modelId;
+    execReq.modelType = "CS_SquareModel";
+    execReq.actionType = "CS_SquareAction";
+    execReq.body = R"({"x":6})";
+    WaitReply stillAlive;
+    server->handle(morph::wire::encode(execReq), std::ref(stillAlive));
+    REQUIRE(stillAlive.await());
+    REQUIRE(stillAlive.env.kind == "ok");
+    REQUIRE(stillAlive.env.body == "36");
+}
+
 TEST_CASE("morph::backend::RemoteServer: the unscoped two-argument handle() never populates any connection scope",
           "[remote][connection-scope][regression]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -694,6 +747,57 @@ TEST_CASE("morph::backend::RemoteServer: assign never displaces the incumbent ho
     server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "200")), std::ref(again), cid);
     REQUIRE(again.await());
     REQUIRE(again.env.modelId == incumbent.env.modelId);
+}
+
+TEST_CASE("morph::backend::RemoteServer: assign stamps the caller's authenticated principal, not just the "
+          "unauthenticated-empty case",
+          "[remote][connection-scope][shared-instances][auth]") {
+    // "assign"'s authenticate() call has two branches: the caller is
+    // unauthenticated (env.session.principal cleared -- already covered by
+    // every other assign test in this file, none of which configure an
+    // authenticating IAuthorizer), and the caller *is* authenticated (the
+    // verified principal is stamped onto env.session.principal instead).
+    // OwnershipAuthorizer::authenticate returns ctx.principal verbatim
+    // whenever it's non-empty, so a session carrying one exercises the
+    // second branch deterministically.
+    struct EchoAuthorizer : morph::session::IAuthorizer {
+        [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view,
+                                     std::string_view) const override {
+            return true;
+        }
+        [[nodiscard]] std::optional<std::string> authenticate(const morph::session::Context& ctx) const override {
+            return ctx.principal.empty() ? std::nullopt : std::make_optional(ctx.principal);
+        }
+    };
+
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto authz = std::make_shared<EchoAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authz, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply anon;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(anon), cid);
+    REQUIRE(anon.await());
+    REQUIRE(anon.env.kind == "ok");
+
+    morph::wire::Envelope assignReq = morph::wire::makeAssign("CS_SquareModel", "300", anon.env.modelId);
+    assignReq.session.principal = "alice";
+    WaitReply promoted;
+    server->handle(morph::wire::encode(assignReq), std::ref(promoted), cid);
+    REQUIRE(promoted.await());
+    REQUIRE(promoted.env.kind == "ok");
+
+    // The instance is filed under the key regardless of which authenticate()
+    // branch stamped the principal -- assign's own authorization gate is
+    // authorizeRegister, not ownership, so this is the same observable
+    // outcome as the unauthenticated case; the point of this test is that the
+    // authenticated branch runs at all, not a different result.
+    WaitReply attached;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "300")), std::ref(attached),
+                   cid);
+    REQUIRE(attached.await());
+    REQUIRE(attached.env.modelId == anon.env.modelId);
 }
 
 TEST_CASE("morph::backend::RemoteServer: the new kinds reject an empty typeId",
