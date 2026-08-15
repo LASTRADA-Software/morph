@@ -222,6 +222,13 @@ queue depths; `SqliteOfflineQueue` is the index-backed alternative for
 high-volume keyed enqueues. Not safe for multiple processes to open the same
 path concurrently.
 
+The constructor takes an optional second `morph::core::FileIoOps` parameter
+(`FileOfflineQueue(std::filesystem::path, morph::core::FileIoOps = {})`) — the
+same test-only fault-injection seam `FileActionLog` uses (see
+`docs/spec/journal/journal.md`): the raw `fwrite`/`fflush`/`fsync`/`fopen`
+calls this class makes, as an injectable strategy defaulting to the real
+syscalls. A normal caller never passes one.
+
 ### `SqliteOfflineQueue`
 
 Reference SQLite-backed `IOfflineQueue` (`sqlite_offline_queue.hpp`), built

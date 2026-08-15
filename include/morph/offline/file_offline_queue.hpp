@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
 #include "offline_queue.hpp"
 
@@ -135,13 +136,18 @@ public:
     /// @brief Opens (or creates) the queue log at @p path, replaying and
     ///        compacting whatever is already there.
     /// @param path NDJSON file to store queue state in.
+    /// @param ioOps Injectable file-I/O primitives; defaults to the real
+    ///        syscalls. Test-only seam — see `morph::core::FileIoOps`'s own
+    ///        docs — for forcing the failure branches that need a real
+    ///        OS-level I/O error to reach.
     /// @throws FileOfflineQueueError if @p path exists but contains a
     ///         malformed non-trailing line.
     /// @throws std::runtime_error if @p path cannot be opened/rewritten.
-    explicit FileOfflineQueue(std::filesystem::path path) : _path{std::move(path)} {
+    explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {})
+        : _path{std::move(path)}, _io{std::move(ioOps)} {
         load();
         compact();
-        _file = std::fopen(_path.string().c_str(), "a");
+        _file = _io.fopen(_path.string(), "a");
         if (_file == nullptr) {
             throw std::runtime_error("FileOfflineQueue: failed to open " + _path.string());
         }
@@ -263,22 +269,17 @@ private:
     void writeLine(const std::string& json) {
         std::string line = json;
         line.push_back('\n');
-        if (std::fwrite(line.data(), 1, line.size(), _file) != line.size()) {
+        if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
             throw std::runtime_error("FileOfflineQueue: short write to " + _path.string());
         }
         syncFile(_file, _path.string());
     }
 
-    static void syncFile(std::FILE* file, const std::string& what) {
-        if (std::fflush(file) != 0) {
+    void syncFile(std::FILE* file, const std::string& what) const {
+        if (_io.fflush(file) != 0) {
             throw std::runtime_error("FileOfflineQueue: failed to flush " + what);
         }
-#ifdef _WIN32
-        int const syncResult = _commit(_fileno(file));
-#else
-        int const syncResult = ::fsync(fileno(file));
-#endif
-        if (syncResult != 0) {
+        if (_io.fsync(file) != 0) {
             throw std::runtime_error("FileOfflineQueue: failed to fsync " + what);
         }
     }
@@ -328,14 +329,14 @@ private:
     ///        append-mode `_file` handle is opened for new writes.
     void compact() {
         std::string const tmp = _path.string() + ".compact-tmp";
-        std::FILE* out = std::fopen(tmp.c_str(), "w");
+        std::FILE* out = _io.fopen(tmp, "w");
         if (out == nullptr) {
             throw std::runtime_error("FileOfflineQueue: failed to open " + tmp + " for compaction");
         }
         auto writeRecord = [&](const detail::FileQueueRecord& record) {
             std::string outLine = detail::toJson(record);
             outLine.push_back('\n');
-            if (std::fwrite(outLine.data(), 1, outLine.size(), out) != outLine.size()) {
+            if (_io.fwrite(outLine.data(), outLine.size(), out) != outLine.size()) {
                 // Closing on the way out of a throw; nothing to report a
                 // close failure to.
                 // NOLINTNEXTLINE(cert-err33-c, cppcoreguidelines-owning-memory)
@@ -381,6 +382,7 @@ private:
     }
 
     std::filesystem::path _path;
+    ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
     std::mutex _mtx;
     std::map<uint64_t, QueueItem> _items;
