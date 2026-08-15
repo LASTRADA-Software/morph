@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -214,9 +215,7 @@ public:
     /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
     /// @param reply Callback invoked with the JSON-encoded reply envelope.
     void handle(std::string msg, std::function<void(std::string)> reply) {
-        auto self = shared_from_this();
-        _pool.post(
-            [self, msg = std::move(msg), reply = std::move(reply)]() mutable { self->dispatchMessage(msg, reply); });
+        handleImpl(std::move(msg), std::move(reply), 0);
     }
 
     /// @brief Like `handle(msg, reply)`, but additionally attributes any
@@ -234,10 +233,7 @@ public:
     /// @param cid   Connection scope to attribute a `register` in @p msg to;
     ///              `0` means unscoped.
     void handle(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
-        auto self = shared_from_this();
-        _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid]() mutable {
-            self->dispatchMessage(msg, reply, cid);
-        });
+        handleImpl(std::move(msg), std::move(reply), cid);
     }
 
     /// @brief Synchronously processes a JSON `Envelope` on the calling thread and returns the reply.
@@ -286,6 +282,46 @@ public:
         return reply;
     }
 
+  private:
+    /// @brief Shared body of both `handle()` overloads.
+    ///
+    /// Finding 035: peeks at @p msg's `kind`/`modelId` — a cheap, best-effort
+    /// decode, thrown away immediately either way — and, for an `execute`
+    /// naming a `modelId`, takes an execute-ordering ticket (see
+    /// `takeExecuteTicket`'s own doc comment on the class-private members
+    /// above) *before* posting to `_pool`, so two same-model `execute`s
+    /// posted back-to-back always take their tickets in call order — the
+    /// same order the transport called `handle()` in, i.e. send order. If
+    /// this peek fails to decode at all, or isn't an `execute`, no ticket is
+    /// taken; `dispatchMessage` still does the real (only) decode moments
+    /// later on the pool thread and produces the canonical error for
+    /// genuinely malformed input — this peek only ever *adds* a ticket for a
+    /// well-formed `execute`, it never changes what gets sent to
+    /// `dispatchMessage` or how errors are reported.
+    /// @param msg   JSON-encoded `morph::wire::Envelope` (via `wire::encode`).
+    /// @param reply Callback invoked with the JSON-encoded reply envelope.
+    /// @param cid   Connection scope; `0` means unscoped (see `handle()`'s own doc).
+    void handleImpl(std::string msg, std::function<void(std::string)> reply, ConnectionId cid) {
+        auto self = shared_from_this();
+        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> ticket;
+        try {
+            if (auto peek = ::morph::wire::decode(msg); peek.kind == "execute" && peek.modelId != 0) {
+                ::morph::exec::detail::ModelId const mid{peek.modelId};
+                ticket.emplace(mid, takeExecuteTicket(mid));
+            }
+        } catch (const std::exception&) {  // NOLINT(bugprone-empty-catch)
+            // Malformed input: no ticket taken (there is no well-formed
+            // execute to order). dispatchMessage's own decode, on the pool
+            // thread, produces the canonical decode-error reply for this —
+            // duplicating that error path here would serve no purpose since
+            // this peek's only job is deciding whether to take a ticket.
+        }
+        _pool.post([self, msg = std::move(msg), reply = std::move(reply), cid, ticket]() mutable {
+            self->dispatchMessage(msg, reply, cid, ticket);
+        });
+    }
+
+  public:
     /// @brief Opens a new connection scope and returns its id.
     ///
     /// Call once per accepted transport connection (e.g. from a WebSocket
@@ -758,8 +794,15 @@ private:
     // One flat switch over the wire's `kind` discriminator. Splitting it would
     // scatter the authorization sequence each branch depends on across helpers,
     // with no reader benefit.
+    //
+    // `executeTicket`, when engaged, is this call's execute-ordering ticket
+    // from `handleImpl` (finding 035) — forwarded straight through to
+    // `dispatchExecute`, the only branch below that consults it. Every other
+    // `kind` ignores it; `handleImpl` never takes one for a non-`execute`
+    // envelope in the first place, so it is always `std::nullopt` for those.
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0) {
+    void dispatchMessage(const std::string& msg, std::function<void(std::string)>& reply, ConnectionId cid = 0,
+                         std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
         ::morph::wire::Envelope env;
         try {
             env = ::morph::wire::decode(msg);
@@ -1023,7 +1066,7 @@ private:
                 }
                 reply(::morph::wire::encode(::morph::wire::makeOk(env.callId)));
             } else if (env.kind == "execute") {
-                dispatchExecute(std::move(env), reply);
+                dispatchExecute(std::move(env), reply, executeTicket);
             } else if (env.kind == "hello") {
                 const std::uint32_t minV = _minVersion.load();
                 const std::uint32_t maxV = _maxVersion.load();
@@ -1045,8 +1088,31 @@ private:
     // A single ordered gate sequence — limits, authorize, authenticate, lookup,
     // per-instance authorize — whose *order* is the security contract itself
     // (see docs/spec/security.md), so it is deliberately not broken up.
+    //
+    // `executeTicket`, when engaged, is this call's finding-035 execute-
+    // ordering ticket from `handleImpl`. Every early-return branch below
+    // that follows the ticket-taking site must release it (via
+    // `releaseExecuteTicket`) before returning — an unreleased ticket
+    // permanently stalls every later ticket for the same model. The one
+    // path that actually reaches the strand releases it via
+    // `awaitExecuteTurn` + `releaseExecuteTicket` bracketing the pre-existing
+    // `_strand.post(mid, ...)` call instead of releasing immediately, since
+    // that call site is the entire point of taking a ticket in the first
+    // place — see the class-private members' own doc comment for the full
+    // design (finding 035).
     // NOLINTNEXTLINE(readability-function-cognitive-complexity)
-    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply) {
+    void dispatchExecute(::morph::wire::Envelope env, std::function<void(std::string)> reply,
+                        std::optional<std::pair<::morph::exec::detail::ModelId, std::uint64_t>> executeTicket = {}) {
+        // Releases executeTicket (if engaged) exactly once, then calls reply
+        // with an error envelope. Used by every early-return branch below so
+        // the "always release what you took" rule can't be missed at a call
+        // site — this is the only way any of these branches produce a reply.
+        auto rejectAndRelease = [this, &executeTicket, &env, &reply](const char* message) {
+            if (executeTicket) {
+                releaseExecuteTicket(executeTicket->first, executeTicket->second);
+            }
+            reply(::morph::wire::encode(::morph::wire::makeErr(message, env.callId)));
+        };
         LimitPolicy limits;
         {
             std::scoped_lock const lock{_limitsMtx};
@@ -1059,11 +1125,11 @@ private:
         // and a registry lookup.
         if (limits.maxInFlightExecutes != 0 &&
             _inFlightExecutes.load(std::memory_order_relaxed) >= limits.maxInFlightExecutes) {
-            reply(::morph::wire::encode(::morph::wire::makeErr("server busy", env.callId)));
+            rejectAndRelease("server busy");
             return;
         }
         if (!_authorizer->authorize(env.session, env.modelType, env.actionType)) {
-            reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+            rejectAndRelease("unauthorized");
             return;
         }
         // Make the identity authoritative. A verifying authorizer returns the
@@ -1097,7 +1163,14 @@ private:
             }
         }
         if (!holder) {
-            reply(::morph::wire::encode(::morph::wire::makeErr("model not found", env.callId)));
+            // The one path this whole mechanism exists to keep fast (finding
+            // 035, and the reverted first attempt this doc comment on the
+            // class-private members describes): a lookup against a modelId
+            // that is not (or no longer) live must resolve immediately,
+            // never waiting on some other, unrelated model's strand — this
+            // ticket is released right here, before any wait could ever be
+            // introduced by a future change to this function.
+            rejectAndRelease("model not found");
             return;
         }
         // Per-instance (row-level) authorization. `authorize` above only saw the
@@ -1107,7 +1180,7 @@ private:
         // now carries the verified principal (stamped just above), so an
         // ownership authorizer compares the recorded owner against it.
         if (known && !_authorizer->authorizeInstance(env.session, env.modelType, env.actionType, mid.v, owner)) {
-            reply(::morph::wire::encode(::morph::wire::makeErr("unauthorized", env.callId)));
+            rejectAndRelease("unauthorized");
             return;
         }
         // Capture a strong self-reference so the server (and therefore
@@ -1137,7 +1210,7 @@ private:
             std::size_t current = _inFlightExecutes.load(std::memory_order_relaxed);
             for (;;) {
                 if (current >= limits.maxInFlightExecutes) {
-                    reply(::morph::wire::encode(::morph::wire::makeErr("server busy", env.callId)));
+                    rejectAndRelease("server busy");
                     return;
                 }
                 // compare_exchange_weak refreshes `current` on failure, so a
@@ -1190,6 +1263,21 @@ private:
             }
         }
 
+        // Finding 035's actual fix: block (on this pool thread — never the
+        // strand itself, and never any other model's strand) until every
+        // execute for `mid` that the transport sent before this one has
+        // already made its own `_strand.post(mid, ...)` call below. Every
+        // early-return above this point released its ticket immediately
+        // without ever waiting here, so a model-not-found/unauthorized/
+        // busy rejection for a *different* ticket can never be the thing
+        // this wait is stuck behind — only a ticket that is also headed for
+        // `_strand.post` can hold this one up, and it can only hold it up
+        // for as long as *its own* pre-strand work (identical in kind to
+        // this one's) takes, not for the duration of whatever the model's
+        // strand does with it afterward.
+        if (executeTicket) {
+            awaitExecuteTurn(executeTicket->first, executeTicket->second);
+        }
         _strand.post(mid, [self, env = std::move(env), holder = std::move(holder), complete, timeoutHandle]() mutable {
             ::morph::exec::detail::ModelId const targetMid{env.modelId};
             auto const start = std::chrono::steady_clock::now();
@@ -1256,6 +1344,17 @@ private:
                 complete(::morph::wire::encode(::morph::wire::makeErr(exc.what(), env.callId)));
             }
         });
+        // The ticket's whole job was ordering *this* `_strand.post()` call
+        // relative to any other in-flight execute for `mid` — that call has
+        // now happened, in its correct turn, so the next ticket (if any) may
+        // proceed immediately. Not tied to the strand task's own completion:
+        // StrandExecutor already serializes everything from here on (that is
+        // its entire job), so holding this ticket any longer would only
+        // delay a *different* execute's own pre-strand work for no ordering
+        // benefit.
+        if (executeTicket) {
+            releaseExecuteTicket(executeTicket->first, executeTicket->second);
+        }
     }
 
     /// @brief Returns the next opaque model id.
@@ -1282,6 +1381,123 @@ private:
     ::morph::model::detail::ActionDispatcher& _dispatcher;
     ::morph::model::detail::ModelRegistryFactory& _registry;
     std::shared_ptr<::morph::session::IAuthorizer> _authorizer;
+
+    // ── Per-model execute-ordering gate ──────────────────────────────────────
+    // `handle()`'s two overloads dispatch to `_pool`, a multi-worker
+    // ThreadPoolExecutor: two `execute` envelopes for the *same* model,
+    // posted back-to-back, can have their pre-strand work (decode, authorize,
+    // authenticate, registry lookup) finish on two different pool threads in
+    // either order -- so without this gate, whichever one finishes first
+    // reaches `_strand.post(mid, ...)` first, even if the client sent the
+    // other one first (`tests/test_remote_execute_ordering.cpp` reproduces
+    // this deterministically). A first attempt strand-routed the *entire*
+    // dispatch pipeline for a known `modelId`, which closed the race but
+    // broke `test_remote_connection_scope.cpp`'s "an in-flight execute
+    // completes safely across a disconnect" guarantee: a lookup against a
+    // since-reclaimed `modelId` must resolve immediately without waiting on
+    // some other, still-blocked model's strand, and moving the whole
+    // pipeline onto the strand collapsed that fast-reject path into the same
+    // queue as the slow model's in-flight work. The ticket gate below fixes
+    // only the ordering of the `_strand.post()` call itself, leaving the
+    // fast-reject path exactly as fast as it always was.
+    //
+    // The gate orders only the *moment of the `_strand.post()` call itself*,
+    // not the pipeline before it: a ticket is handed out synchronously in
+    // `dispatchDecoded` (called directly from `handle()`, which runs on
+    // whatever single thread the transport calls it from -- in true send
+    // order, nothing async yet) for every `execute` with a known `modelId`,
+    // *before* posting to `_pool`. `dispatchExecute` waits for its ticket's
+    // turn only immediately before the pre-existing `_strand.post(mid, ...)`
+    // call, and releases the next ticket's turn either right after posting
+    // (live model) or immediately on a "model not found"/other early-return
+    // rejection (dead model, unauthorized, over limit, etc. -- none of these
+    // ever reach the strand, so their ticket must not block anyone behind
+    // it). This keeps the fast-reject path exactly as fast as it always was
+    // (`test_remote_connection_scope.cpp`'s "an in-flight execute completes
+    // safely across a disconnect" test — a lookup against a since-reclaimed
+    // modelId must resolve without waiting on some other blocked model's
+    // strand — never touches this gate at all, since it never gets a ticket
+    // for a model that turns out to be gone... except it does get a ticket,
+    // and must release it immediately rather than hold up a live ticket
+    // behind it; see `releaseExecuteTicket`'s own doc comment).
+    //
+    // Keyed by ModelId, not held forever: a model with no outstanding
+    // tickets has no entry in `_executeGates` at all (erased once its last
+    // ticket is released), so this never grows unbounded across the
+    // server's lifetime the way a per-model map with no cleanup would.
+    struct ExecuteGate {
+        std::uint64_t nextTicket = 0;
+        std::uint64_t nextToRun = 0;
+        std::condition_variable cv;
+    };
+    std::mutex _executeGateMtx;
+    std::unordered_map<::morph::exec::detail::ModelId, std::shared_ptr<ExecuteGate>, ::morph::exec::detail::ModelIdHash>
+        _executeGates;
+
+    /// @brief Hands out the next ticket for @p mid, in call order.
+    ///
+    /// Called synchronously from `dispatchDecoded` (i.e. from `handle()`'s
+    /// own calling thread, before anything is posted anywhere) — the ticket
+    /// numbers two calls receive for the same `mid` are therefore always in
+    /// the order `handle()` was called, which is the order the transport
+    /// received them in.
+    /// @param mid The model the upcoming `execute` targets.
+    /// @return This call's ticket number.
+    [[nodiscard]] std::uint64_t takeExecuteTicket(::morph::exec::detail::ModelId mid) {
+        std::scoped_lock const lock{_executeGateMtx};
+        auto& gate = _executeGates[mid];
+        if (!gate) {
+            gate = std::make_shared<ExecuteGate>();
+        }
+        return gate->nextTicket++;
+    }
+
+    /// @brief Blocks until @p ticket is next in line for @p mid, then returns.
+    ///
+    /// Called from a pool thread, immediately before the pre-existing
+    /// `_strand.post(mid, ...)` call in `dispatchExecute` — nothing else
+    /// about that call site changes; this only delays *when* it happens; it
+    /// still runs on the pool, never blocks the strand itself.
+    /// @param mid    The model the caller is about to `_strand.post()` to.
+    /// @param ticket This call's ticket, from `takeExecuteTicket`.
+    void awaitExecuteTurn(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {
+        std::unique_lock lock{_executeGateMtx};
+        auto iter = _executeGates.find(mid);
+        if (iter == _executeGates.end()) {
+            return;  // Nothing left to wait for -- every ticket for mid already released.
+        }
+        auto gate = iter->second;  // Keep it alive even if releaseExecuteTicket erases the map entry mid-wait.
+        gate->cv.wait(lock, [&gate, ticket] { return gate->nextToRun == ticket; });
+    }
+
+    /// @brief Releases @p ticket for @p mid, letting the next ticket (if any) proceed.
+    ///
+    /// Called exactly once per ticket taken, from every path that took one —
+    /// whether that path went on to `_strand.post()` (a live model) or bailed
+    /// out early (model not found, unauthorized, over limit, a decode/
+    /// validation throw). A ticket that is taken but never released would
+    /// permanently stall every later ticket for the same `mid`; this is why
+    /// every early-return branch in `dispatchExecute` that follows
+    /// `takeExecuteTicket` must call this before returning, not just the
+    /// branch that reaches the strand.
+    /// @param mid    The model @p ticket was taken for.
+    /// @param ticket The ticket to release.
+    void releaseExecuteTicket(::morph::exec::detail::ModelId mid, std::uint64_t ticket) {
+        std::scoped_lock const lock{_executeGateMtx};
+        auto iter = _executeGates.find(mid);
+        if (iter == _executeGates.end()) {
+            return;  // Defensive; should not happen (this ticket's own take() created the entry).
+        }
+        iter->second->nextToRun = ticket + 1;
+        if (iter->second->nextToRun == iter->second->nextTicket) {
+            // No ticket is currently waiting and none can arrive for a ticket
+            // number already handed out — safe to drop the entry so a model
+            // with no in-flight executes leaves no trace in this map.
+            _executeGates.erase(iter);
+        } else {
+            iter->second->cv.notify_all();
+        }
+    }
     // mutable: health() is const and must still be able to lock this to read
     // _models.size() safely from any thread.
     mutable std::mutex _regMtx;

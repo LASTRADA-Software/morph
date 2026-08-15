@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -20,6 +21,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 namespace morph::testing {
 
@@ -112,6 +114,95 @@ public:
     }
 
 private:
+    mutable std::mutex _mtx;
+    std::deque<std::function<void()>> _queue;
+};
+
+/// @brief An `IExecutor` that queues every posted task and runs them only
+///        when explicitly stepped — never on its own thread.
+///
+/// Without this, strand-ordering bugs in code built over `IExecutor` (see
+/// `test_remote_execute_ordering.cpp`'s use of it against `RemoteServer`, or
+/// `examples/common/testkit/strand_interleaver.hpp`'s identical copy against
+/// `StrandExecutor` in the ladder's own tests) are probabilistic stress runs
+/// instead of reproducible interleavings: a test controls exactly which
+/// posted task runs next, rather than hoping real OS thread scheduling
+/// happens to hit the race on a given run.
+///
+/// Single-threaded by construction: `post()` just appends to a deque under a
+/// mutex (posts can legitimately arrive from other threads — e.g. code under
+/// test posting a continuation from inside a running task — but every task
+/// itself runs synchronously on whichever thread calls `step()`/
+/// `runSchedule()`).
+///
+/// Duplicated from `examples/common/testkit/strand_interleaver.hpp` rather
+/// than shared across the two build trees — that header has no reachable
+/// include path from `tests/` (`morph_ladder_testkit`'s own include
+/// directories do not cover the repo-root `tests/` directory, and
+/// `test_support.hpp` is a private header for `morph_tests`' own
+/// translation units, not an installed/exported one) — matching this
+/// codebase's established convention for small, self-contained internal
+/// details that would otherwise need new cross-module plumbing to share.
+///
+/// Unlike `ThreadPoolExecutor`/`StrandExecutor`, a task's exception is not
+/// caught and logged here: it propagates straight out of `step()`/
+/// `runSchedule()` to the caller. That is deliberate — the caller is a test,
+/// and the exception is often a `REQUIRE` failure the test needs to see
+/// rather than have silently swallowed.
+class DeterministicExecutor : public ::morph::exec::IExecutor {
+  public:
+    void post(std::function<void()> task) override {
+        std::lock_guard lock{_mtx};
+        _queue.push_back(std::move(task));
+    }
+
+    /// @return The number of tasks currently queued and not yet run.
+    [[nodiscard]] std::size_t pending() const {
+        std::lock_guard lock{_mtx};
+        return _queue.size();
+    }
+
+    /// @brief Runs the oldest-queued task. Throws if the queue is empty.
+    void step() {
+        std::function<void()> task;
+        {
+            std::lock_guard lock{_mtx};
+            if (_queue.empty()) {
+                throw std::runtime_error("DeterministicExecutor::step: queue is empty");
+            }
+            task = std::move(_queue.front());
+            _queue.pop_front();
+        }
+        task();
+    }
+
+    /// @brief Runs tasks in the exact order given, by *current* queue
+    ///        position at the moment each entry is consumed — so a task that
+    ///        posts new work mid-schedule is reflected in later indices.
+    ///        `order` must name every index that will exist by the time it's
+    ///        reached; the simplest correct schedule is just `{0, 1, ..., n-1}`
+    ///        run one at a time via repeated `step()` calls when a test only
+    ///        wants strict FIFO — `runSchedule` exists for tests that
+    ///        deliberately want a *non*-FIFO interleaving.
+    /// @param order The queue indices to run, in caller-chosen order, each
+    ///              read against the queue's *current* contents at the
+    ///              moment it is consumed (see above).
+    void runSchedule(const std::vector<std::size_t>& order) {
+        for (auto index : order) {
+            std::function<void()> task;
+            {
+                std::lock_guard lock{_mtx};
+                if (index >= _queue.size()) {
+                    throw std::runtime_error("DeterministicExecutor::runSchedule: index beyond current queue size");
+                }
+                task = std::move(_queue[index]);
+                _queue.erase(_queue.begin() + static_cast<std::ptrdiff_t>(index));
+            }
+            task();
+        }
+    }
+
+  private:
     mutable std::mutex _mtx;
     std::deque<std::function<void()>> _queue;
 };

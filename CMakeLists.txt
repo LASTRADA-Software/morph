@@ -29,15 +29,24 @@ option(MORPH_BUILD_BANK_GUI      "Build the Qt 6 GUI for the bank example" OFF)
 option(MORPH_BUILD_HMAC_EXAMPLES "Build vetted-HMAC adapter examples (libsodium/OpenSSL, heavy deps)" OFF)
 option(MORPH_BUILD_FORMS_QML     "Build the shipped Qt/QML forms renderer module (MorphForms) and its demo" OFF)
 
+# The application ladder (examples/LADDER.md): a shared testkit + GUI
+# architecture consumed by every ladder rung. Off by default like the other
+# heavy-dependency example options; needs MORPH_BUILD_QT and MORPH_BUILD_TESTS
+# (checked inside examples/common/CMakeLists.txt with a clear FATAL_ERROR).
+option(MORPH_BUILD_LADDER "Build the application ladder's shared testkit/GUI infrastructure and enabled rungs" OFF)
+
+# Cache list of rungs to build when MORPH_BUILD_LADDER=ON. "all" builds every
+# rung with a CMakeLists.txt under examples/<rung>/; a semicolon-separated
+# subset (e.g. "pastebin;bookmarks") builds only those. Rung 0 has no rung
+# folders yet, so this option exists but has nothing to select until rung 1
+# lands (see examples/TESTING.md, "Build system and CI").
+set(MORPH_LADDER_RUNGS "all" CACHE STRING "Semicolon-separated list of ladder rungs to build, or \"all\"")
+
 if(MORPH_BUILD_HMAC_EXAMPLES AND NOT MORPH_BUILD_EXAMPLES)
     message(WARNING "MORPH_BUILD_HMAC_EXAMPLES is ignored: it lives under examples/vetted_hmac, "
                     "which needs MORPH_BUILD_EXAMPLES=ON.")
 endif()
 
-if(MORPH_BUILD_FORMS_QML AND EMSCRIPTEN)
-    message(WARNING "MORPH_BUILD_FORMS_QML is ignored: the Qt/QML forms renderer needs a "
-                    "non-Emscripten toolchain.")
-endif()
 option(MORPH_BUILD_QT            "Build Qt6 WebSocket backend and tests" OFF)
 option(MORPH_BUILD_NET           "Build the morph::net raw-socket WebSocket transport (POSIX only; see docs/spec/core/backend.md)" OFF)
 option(MORPH_BUILD_FUZZERS       "Build libFuzzer harnesses over wire::decode/dispatchExecute (Clang only)" OFF)
@@ -214,7 +223,15 @@ target_sources(morph
 # deferred to just after the "Tests" section further below, since Catch2 is
 # only found/fetched there and its test executable names Catch2::Catch2
 # directly.
-if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+# Emscripten builds this too. MorphForms is a plain Qt Quick QML module over
+# header-only morph code — nothing in it is host-only — and a WASM ladder
+# client has to render the *same* schema-driven Main.qml the desktop client
+# does (examples/TESTING.md's "same client code"), which imports MorphForms.
+# This block used to carry a `NOT EMSCRIPTEN` guard plus a "needs a
+# non-Emscripten toolchain" warning, written when no WASM target consumed the
+# renderer; that claim was never tested. Its one host-only piece, the QuickTest
+# suite, is guarded inside src/qt/forms/CMakeLists.txt instead.
+if(MORPH_BUILD_FORMS_QML)
     # 6.5 is a hard floor, not a preference: qt_standard_project_setup's
     # REQUIRES keyword and QQmlApplicationEngine::loadFromModule (used by the
     # demo) both arrive in 6.5. Stating it here turns "your Qt is too old" into
@@ -285,6 +302,19 @@ if(MORPH_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
+# ── Application ladder (optional) ───────────────────────────────────────────
+# Deferred to here (after the Tests section above), the same way
+# MORPH_BUILD_FORMS_QML's src/qt/forms subdirectory is deferred further below:
+# examples/common/CMakeLists.txt calls find_package(Catch2 3 CONFIG QUIET) and
+# treats "not found" as a hard FATAL_ERROR (its own Catch2 does not get
+# fetched -- it relies on MORPH_BUILD_TESTS=ON having already resolved one).
+# Adding examples/ before this point would let that find_package() run before
+# the Tests section's FetchContent fallback ever executes, breaking the
+# no-system-Catch2 case even though MORPH_BUILD_TESTS=ON.
+if(MORPH_BUILD_LADDER)
+    add_subdirectory(examples)
+endif()
+
 # ── Qt/QML forms renderer (optional) ─────────────────────────────────────────
 # The actual MorphForms module/plugin (src/qt/forms), deferred to here (after
 # Catch2 is found/fetched above) since its own CMakeLists.txt links a Catch2
@@ -294,7 +324,7 @@ endif()
 # examples/forms/gui_qml (a consumer, added above) only forward-references
 # the plain (non-namespaced) morph_forms_moduleplugin target this creates,
 # which CMake resolves once this subdirectory is processed.
-if(MORPH_BUILD_FORMS_QML AND NOT EMSCRIPTEN)
+if(MORPH_BUILD_FORMS_QML)
     add_subdirectory(src/qt/forms)
 endif()
 

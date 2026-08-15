@@ -331,6 +331,48 @@ action, and a result-keyed dispatch promotes its binding through
 `assignHandlerPrimary`, which takes `_attachMtx` itself. It is the same rule
 `registerHandlerImpl` already follows for `_mtx`.
 
+The rule holds unconditionally, including for a backend that completes its
+callback **inline** — synchronously, from inside `attachModelAsync` /
+`registerModelSharedAsync`, while the dispatching frame still holds the lock.
+`QtWebSocketBackend` does this today on its `!_connected` branch (it reports
+`onError("disconnected")` and returns `true`), and nothing in `IBackend`
+forbids a backend from doing it on the *success* path too. An inline callback
+therefore parks its outcome instead of acting on it, and the dispatching frame
+applies it after its own dispatch call returns: publish under the lock it
+already holds, release, then report. See
+[bridge.md](bridge.md), "Thread safety", for the mechanism.
+
+**Known gap: no in-flight attach dedup.** Two calls for the *same* key issued
+before the first one's reply arrives are not coalesced. Both
+`attachHandlerAsync` and `ensureBoundAsync` guard on binding state
+(`primary`/`currentId`) that is only updated when the reply lands, so both
+calls pass the guard and both dispatch. This is a real behaviour difference
+from the synchronous predecessors, not merely something inherent to asynchrony:
+`attachHandler` held `_attachMtx` across the whole blocking round trip, which
+serialised concurrent callers for free. It takes no second thread to hit —
+two `handler.execute(...)` calls in one event-loop turn are enough. The server
+answers both with the same `ModelId` but records two attachments, so one
+server-side attach reference leaks. The leak is **bounded, not unbounded**: the
+connection scope releases every reference it holds when the connection closes
+(see "Lifetime and the A7 connection-scope change" below). Closing it properly
+needs in-flight tracking on the binding, so a second caller rides the first
+dispatch's completion instead of issuing its own; tracked as a follow-up.
+Until then, a caller should not fire the same keyed action twice back-to-back
+before the first settles.
+
+**Not covered: the result-keyed *promote* step is still synchronous.** This
+section made the **bind** half of a result-keyed action async
+(`ensureBoundAsync` → `registerModelSharedAsync`). The **promote** half did
+not change: `Bridge::assignHandlerPrimary` still calls the synchronous
+`IBackend::assignPrimary`, which on `QtWebSocketBackend` is a `sendSync` —
+a nested `QEventLoop`. There is no `assignPrimaryAsync`. So a **WASM client
+dispatching a result-keyed creating action** (a `CreatePoll`-shaped action:
+create the entity, adopt the key its result carries) still blocks, and still
+aborts the page, at the promote step — after the bind step this section fixed
+already succeeded. Payload-keyed actions (`OpenPoll{pollId}`-shaped, the
+attach path) are fully covered and do not block. Giving `assignPrimary` an
+async form is a separate follow-up.
+
 ## Ownership and authorization
 
 `RemoteServer` records an `ownerPrincipal` for each instance at register time
@@ -377,8 +419,10 @@ attached to, so a scope entry is a **reference**, not ownership:
 - The instance is destroyed when the count reaches zero, at which point it
   leaves the directory.
 - `closeConnection` remains idempotent and still bypasses `IAuthorizer`; it
-  decrements once per scope entry regardless of how many handlers a single
-  connection had attached.
+  decrements once per attach a connection made (`noteScopeAttachLocked`
+  tracks a per-`(connection, instance)` count, so a connection that attached
+  the same instance from two handlers releases two references, not one) —
+  a duplicate attach never leaks, it always unwinds fully at connection close.
 
 Unshared instances have exactly one attacher by construction, so their lifetime
 is unchanged: count reaches zero on the same event that erases them today.
@@ -404,7 +448,7 @@ strictly reduces pressure on it.
 | `handler.attach(key)` | `void` | Attaches (or re-points) without executing an action. Synchronous and throwing, by design — see [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
 | `handler.primary()` | `std::optional<PrimaryKey>` | The handler's current primary; empty if unattached. |
 | `handler.instances()` | `Completion<std::vector<PrimaryKey>>` | Snapshot of live shared keys for this model type. |
-| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its attach (payload-keyed) or bind-and-promote (result-keyed) step takes the backend's async path when one exists, so the call no longer blocks on a round-trip — visible only as *not aborting a WASM main thread*. See [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
+| `handler.execute(keyedAction)` | `Completion<R>` | Unchanged signature and contract. Its **attach** step (payload-keyed) and the **bind** step of the result-keyed path take the backend's async path when one exists, so neither blocks on a round-trip — visible only as *not aborting a WASM main thread*. The result-keyed path's **promote** step (`assignPrimary`) is still synchronous and still blocks. See [Async register-or-attach and attach](#async-register-or-attach-and-attach). |
 | `IBackend::registerModelSharedAsync` / `attachModelAsync` | `bool` | Opt-in non-blocking counterparts to `registerModelShared`/`attachModel`; `false` by default, and callers then fall back to the synchronous method unchanged. |
 
 ## Design decisions

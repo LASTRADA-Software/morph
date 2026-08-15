@@ -3,9 +3,13 @@
 /build-wasm/
 /out/
 *.db
+*.profraw
 /.cache/
 /compile_commands.json
 *.user
 *.suo
 .vs/
 bv-clang/
+
+# superpowers subagent-driven-development scratch workspace (ledgers, briefs, review packages)
+/.superpowers/

@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "dependencies": [
     "glaze",
-    "catch2"
+    "catch2",
+    "yaml-cpp",
+    "libzip"
   ],
   "builtin-baseline": "c3867e714dd3a51c272826eea77267876517ed99"
 }

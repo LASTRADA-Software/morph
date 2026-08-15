@@ -176,6 +176,49 @@ jobs:
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
+      # Only the coverage leg builds the ladder: examples/common's
+      # hand-written GUI/testkit code is real coverage of morph's client
+      # stack (Bridge, backends, QtExecutor, completions — see
+      # examples/TESTING.md's "round-7 T4 reframe"), so it belongs in the
+      # coverage number the same way the models it will host later do
+      # (examples/IMPLEMENTATION.md rule 5). asan/tsan/ubsan skip this, same
+      # as before — "a GUI stack under TSan is mostly noise" — coverage
+      # instrumentation carries none of that risk.
+      - name: Install ODBC + SQLite driver (coverage leg only)
+        if: matrix.preset == 'clang-coverage'
+        run: |
+          # unixodbc-dev + libsqliteodbc: the application ladder (built by this
+          # leg only) fetches the Lightweight ORM, whose CMake runs
+          # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder fixtures
+          # open a real `DRIVER=SQLite3` connection at test time.
+          # Named explicitly rather than relied on from the runner image.
+          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt
+          # does `find_package(yaml-cpp)`/`find_package(libzip)` as system
+          # CONFIG packages, not through CPM (examples/bank/CMakeLists.txt's
+          # comment on the identical fetch) — without these, configure fails
+          # the moment this leg's MORPH_BUILD_LADDER=ON pulls Lightweight in.
+          # Dropped from this step by mistake when it was renamed from
+          # "Install Qt6 WebSockets" to "Install ODBC + SQLite driver" —
+          # every other job that builds the ladder on Linux (Application
+          # ladder, all optional features) already carries this pair.
+          sudo apt-get install -y libgl1-mesa-dev unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev
+
+      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
+      # unconditionally (not gated on MORPH_BUILD_FORMS_QML) and Ubuntu
+      # 24.04 still ships 6.4.2 -- the identical gap the "all optional
+      # features" and "Application ladder" jobs' own install-qt-action steps
+      # already document. Named qt6-base-dev/qt6-websockets-dev/qt6-tools-dev
+      # used to be installed above; replaced wholesale rather than kept
+      # alongside aqtinstall's Qt, which would leave two Qt6 installs on the
+      # same runner for find_package() to pick between.
+      - name: Install Qt ${{ env.QT_VERSION }} (coverage leg only)
+        if: matrix.preset == 'clang-coverage'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
@@ -190,23 +233,45 @@ jobs:
       # morph::net and the SQLite offline queue are opt-in, but they are also
       # where the memory/threading/UB risk actually lives (raw sockets, an I/O
       # thread, a hand-rolled frame reader, a C API). Left off, the sanitizers
-      # and the coverage number both silently skipped them. Qt/QML and the
-      # fuzzers stay out of this matrix — they are covered by the
-      # linux-all-features job, and a GUI stack under TSan is mostly noise.
+      # and the coverage number both silently skipped them. QML and the
+      # fuzzers stay out of this matrix entirely — they are covered by the
+      # linux-all-features job, and a GUI stack under TSan is mostly noise;
+      # the ladder (Qt6::WebSockets, no QML) is the one exception, built only
+      # on the coverage leg, for the reason in the Qt install step above.
       - name: Configure
         run: |
+          EXTRA_ARGS=()
+          if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
+            EXTRA_ARGS+=(-DMORPH_BUILD_QT=ON -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=all)
+          fi
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
+            "${EXTRA_ARGS[@]}"
 
+      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
+      # catch_discover_tests() runs each Qt-linked test binary once at BUILD
+      # time to enumerate its cases, which can abort on this headless runner
+      # without it — see "Linux / all optional features"'s own Build step
+      # for the identical failure this leg's coverage build hit once the
+      # ladder actually started compiling (this leg has no QML, a narrower
+      # Qt surface, but ladder_common_tests still links Qt6::WebSockets).
+      # Harmless for the non-Qt legs (nothing reads it).
       - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset ${{ matrix.preset }}
 
       - name: Test
+        env:
+          # Harmless for the non-Qt legs (nothing reads it); required for the
+          # coverage leg's ladder tests, which open real Qt widgets/sockets
+          # on a runner with no display.
+          QT_QPA_PLATFORM: offscreen
         run: |
           if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
             LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
@@ -311,6 +376,131 @@ jobs:
           path: /home/runner/.cache/sccache
           key: sccache-qt
 
+  # ── Linux: application ladder testkit (path-filtered) ─────────────────
+  ladder-tests:
+    name: Application ladder
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need history for the changed-paths diff below
+
+      - name: Determine whether the ladder needs to run
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" HEAD)
+          # src/qt/: the compiled bodies of morph_qt_impl — the very thing the
+          # testkit exists to conformance-test (and where finding 017's fix
+          # lands). CMakeLists.txt/cmake/ and this workflow itself: a change to
+          # any of them can break or silently skip this job.
+          if echo "$changed" | grep -qE '^(examples/(common|pastebin|bookmarks|polls|kanban)/|examples/CMakeLists\.txt$|include/morph/|src/qt/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|\.github/workflows/ci\.yml$|examples/LADDER\.md|examples/IMPLEMENTATION\.md|examples/TESTING\.md)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache apt packages
+        if: steps.filter.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-qt-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-qt-
+
+      - name: Install GCC 15, ninja, catch2
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          # unixodbc-dev + libsqliteodbc: the application ladder fetches the
+          # Lightweight ORM, whose CMake runs
+          # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder fixtures
+          # open a real `DRIVER=SQLite3` connection at test time.
+          # Named explicitly rather than relied on from the runner image.
+          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt
+          # does `find_package(yaml-cpp)`/`find_package(libzip)` as system
+          # CONFIG packages, not through CPM (examples/bank/CMakeLists.txt's
+          # comment on the identical fetch) — without these, configure fails
+          # the moment MORPH_BUILD_LADDER=ON pulls Lightweight in.
+          # Qt itself is installed by the aqtinstall step below, not apt: see
+          # that step's comment for why the distro package is unusable here.
+          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
+            libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
+            unixodbc-dev libsqliteodbc
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+
+      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
+      # (QQmlApplicationEngine::loadFromModule, used by MORPH_BUILD_FORMS_QML
+      # rungs) and Ubuntu 24.04 still ships 6.4.2 — the exact gap the "all
+      # optional features" job's identical step already documents. This job
+      # configures MORPH_BUILD_LADDER=ON without MORPH_BUILD_FORMS_QML, but
+      # examples/common/CMakeLists.txt's Qt6 6.5 REQUIRED applies unconditionally
+      # (it is not gated on MORPH_BUILD_FORMS_QML), so the floor still bites here.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        if: steps.filter.outputs.run == 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Cache sccache
+        if: steps.filter.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-ladder-${{ github.sha }}
+          restore-keys: sccache-ladder-
+
+      - name: Install sccache
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure (gcc-debug, ladder + Qt on)
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          cmake --preset gcc-debug \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
+      # catch_discover_tests() runs each Qt-linked test binary once at BUILD
+      # time to enumerate its cases, which aborts on a headless runner (no X
+      # server) without it — see "Linux / all optional features"'s own Build
+      # step for the identical note. This job has not hit it in practice
+      # (its ladder test binaries' discovery apparently succeeds without a
+      # platform anyway), but the risk is structurally identical, so it is
+      # set defensively rather than left to reappear the next time a rung
+      # adds a Qt Quick-linked test binary here.
+      - name: Build
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: cmake --build --preset gcc-debug
+
+      - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
+
   # ── Linux: every optional feature enabled at once ─────────────────────
   # Every MORPH_BUILD_* option below is off by default, and until this job
   # existed no CI configuration turned any of them on — so several thousand
@@ -350,8 +540,21 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
+          # unixodbc-dev + libsqliteodbc: the application ladder (enabled in
+          # the configure step below) fetches the Lightweight ORM, whose CMake
+          # runs `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder
+          # fixtures open a real `DRIVER=SQLite3` connection at test time.
+          # Named explicitly rather than relied on from the runner image.
+          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt
+          # (examples/bank/CMakeLists.txt's comment on the same fetch) does
+          # `find_package(yaml-cpp)`/`find_package(libzip)` as system CONFIG
+          # packages, not through CPM — without these, Lightweight's configure
+          # fails with "could not find a package configuration file" the
+          # moment MORPH_BUILD_LADDER=ON pulls it in here.
           sudo apt-get install -y ninja-build catch2 \
             libsqlite3-dev libsodium-dev libssl-dev \
+            unixodbc-dev libsqliteodbc \
+            libyaml-cpp-dev libzip-dev \
             libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
             libxcb-keysyms1 libxcb-shape0 libxcb-xinerama0
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
@@ -393,10 +596,22 @@ jobs:
             EXTRA="-DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}"
           fi
           # shellcheck disable=SC2086
+          # MORPH_BUILD_LADDER belongs in this job by its own charter ("every
+          # MORPH_BUILD_* option … enabling them together also proves they
+          # compose") and closes a real hole: until it was added here, *no* CI
+          # leg configured MORPH_BUILD_LADDER=ON together with
+          # MORPH_BUILD_FORMS_QML=ON. The ladder-tests job below cannot — its
+          # distro Qt is 6.4.2, under the 6.5 floor MORPH_BUILD_FORMS_QML
+          # requires — so each rung's QML module, desktop client and offscreen
+          # engine-load smoke test were built by nothing at all. This job has
+          # Qt ${{ env.QT_VERSION }} from aqtinstall, so here they are built,
+          # and the smoke test runs, on every push.
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_FORMS_QML=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DMORPH_BUILD_LOAD_TESTS=ON \
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
@@ -406,7 +621,19 @@ jobs:
             -DCMAKE_C_COMPILER_LAUNCHER=sccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
 
+      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
+      # catch_discover_tests() runs each Qt-linked test binary once at BUILD
+      # time to enumerate its cases (CatchAddTests.cmake), not only when
+      # ctest later executes them — a ladder_<rung>_tests binary aborts at
+      # that discovery step on this headless runner (no X server, xcb
+      # platform plugin fails to load) without it, before any real test ever
+      # runs. Only bites once MORPH_BUILD_LADDER=ON actually reaches a rung's
+      # own Qt-linked test binary, which is why this job's build only started
+      # failing here after the yaml-cpp/libzip configure gap (fixed earlier
+      # this branch) stopped masking it.
       - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: cmake --build --preset ${{ matrix.preset }}
 
       # Includes the fuzz *replay* tests on the clang leg: each committed seed

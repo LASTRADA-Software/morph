@@ -37,7 +37,13 @@ target_compile_features(morph_forms_module PUBLIC cxx_std_23)
 # exact digit arithmetic, unit conversion, readiness) -- independent of any
 # app/demo. Later tasks add more tst_*.qml files here; -input (below) picks
 # up every tst_*.qml in this directory with no further CMake changes.
-if(MORPH_BUILD_TESTS)
+#
+# NOT EMSCRIPTEN: the module itself builds for wasm (a WASM ladder client
+# imports MorphForms), but these two test executables do not belong in a
+# browser build -- ctest cannot run a .wasm binary, and MORPH_BUILD_TESTS is
+# never part of a WASM configure anyway (examples/common/CMakeLists.txt's own
+# Emscripten note). This keeps that true even if someone sets it.
+if(MORPH_BUILD_TESTS AND NOT EMSCRIPTEN)
     find_package(Qt6 REQUIRED COMPONENTS QuickTest)
 
     qt_add_executable(morph_forms_qml_tests tests/tst_main.cpp)

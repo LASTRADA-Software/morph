@@ -545,3 +545,37 @@ TEST_CASE("morph::backend::LocalBackend: setConnectHandler/setDisconnectHandler 
     REQUIRE_NOTHROW(backend.setConnectHandler(nullptr));
     REQUIRE_NOTHROW(backend.setDisconnectHandler(nullptr));
 }
+
+// ── remote.hpp: SimulatedRemoteBackend::assignPrimary's early-return guard ───
+
+TEST_CASE("morph::backend::SimulatedRemoteBackend::assignPrimary: an empty primary or a zero ModelId is a no-op, "
+          "not a wire round-trip",
+          "[coverage][remote]") {
+    // remote.hpp's assignPrimary bails out before building/sending an "assign"
+    // envelope at all when either precondition fails (empty primary, or no
+    // instance to promote) -- this is reachable through the public IBackend
+    // interface directly, unlike SimulatedRemoteBackend's server-side
+    // concurrency-race branches, which need two genuinely racing calls to
+    // reach at all.
+    ::morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = emptyThrowEnv();
+    auto server = std::make_shared<::morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    ::morph::backend::SimulatedRemoteBackend backend{*server};
+
+    auto mid = backend.registerModel("Cov_EmptyThrowModel", {});
+
+    // Empty primary: bails out regardless of mid.
+    REQUIRE_NOTHROW(backend.assignPrimary(mid, "Cov_EmptyThrowModel", ""));
+
+    // Zero ModelId: bails out regardless of primary.
+    REQUIRE_NOTHROW(
+        backend.assignPrimary(::morph::exec::detail::ModelId{0}, "Cov_EmptyThrowModel", "some-key"));
+
+    // Confirms the no-op actually didn't file anything under "some-key": a
+    // fresh shared registration under that key gets its own new id, not
+    // mid's -- if assignPrimary's guard had been bypassed, this would instead
+    // reach mid.
+    auto attached =
+        backend.registerModelShared("Cov_EmptyThrowModel", {}, ::morph::backend::detail::InstanceIdentity{.primary = "some-key"});
+    REQUIRE(attached.v != mid.v);
+}

@@ -21,6 +21,9 @@ function(apply_warnings target)
     target_compile_options(${target} PRIVATE
         # ── MSVC ──────────────────────────────────────────────────────────────
         $<$<CXX_COMPILER_ID:MSVC>:
+            /bigobj     # heavy template instantiation (BRIDGE_REGISTER_ACTION chains,
+                        # examples/forms/main.cpp) exceeds the default object-file
+                        # section limit (C1128) without this
             /W4
             /permissive-
             /w14062     # enumerator not handled in switch
