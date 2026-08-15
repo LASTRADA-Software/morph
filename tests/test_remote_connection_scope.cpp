@@ -1168,12 +1168,18 @@ TEST_CASE(
     // Exactly one of the two already has its reply: the CAS loop rejects
     // synchronously, before ever reaching the strand, so the loser's
     // WaitReply settles immediately -- well before the winner's, which is
-    // still blocked in execute() until released below.
+    // still blocked in execute() until released below. Poll `.ready`, not
+    // `.env` directly: `.env` is written by the reply callback on a pool
+    // thread with no synchronization of its own beyond `.ready`'s
+    // release-store/acquire-load pair (see WaitReply's own doc comment) --
+    // reading `.env.kind` before observing `.ready == true` is a real data
+    // race (caught by this file's own TSan CI leg the first time this test
+    // was written this way).
     REQUIRE(morph::testing::waitUntil(
-        [&] { return replyA.env.kind == "err" || replyB.env.kind == "err"; }, std::chrono::milliseconds{2000}));
+        [&] { return replyA.ready.load() || replyB.ready.load(); }, std::chrono::milliseconds{2000}));
 
-    const bool aErr = replyA.env.kind == "err";
-    const bool bErr = replyB.env.kind == "err";
+    const bool aErr = replyA.ready.load() && replyA.env.kind == "err";
+    const bool bErr = replyB.ready.load() && replyB.env.kind == "err";
     REQUIRE(aErr != bErr);
     const auto& loser = aErr ? replyA : replyB;
     REQUIRE(loser.env.message == "server busy");
