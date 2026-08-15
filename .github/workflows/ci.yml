@@ -288,6 +288,17 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: build/clang-coverage/coverage.lcov
+          # Without this, codecov-action's own auto-discovery finds every
+          # other *.lcov/coverage.* file under the build tree too (its own
+          # log says so: "Found 5 coverage files to report") -- including
+          # coverage.lcov.raw, the *pre-aggregation* file
+          # aggregate_lcov_branches.py's morph#93/#92 fixes rewrite away
+          # from, plus unrelated fetched-dependency fixtures
+          # (_deps/nlohmann_json-src/.../coverage.test). Codecov then merges
+          # all of them, silently re-introducing every record `coverage.lcov`
+          # was built to remove. `files:` alone does not disable that scan --
+          # this does.
+          disable_search: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage HTML
