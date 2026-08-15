@@ -46,6 +46,12 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
     ProbePresenter(morph::bridge::Bridge& bridge, morph::exec::IExecutor* exec)
         : _handler{bridge, exec}, _failHandler{bridge, exec} {}
 
+    /// @brief Calls trackBound() on the base class -- the doc-commented
+    ///        usage pattern (presenter.hpp) that no other test in this file
+    ///        exercises: every other ProbePresenter test constructs the
+    ///        presenter and never touches bound()/trackBound() at all.
+    void hookBound() { trackBound(_handler.whenBound()); }
+
     void bump(int value) {
         track<int>(_handler.execute(PresenterProbeAction{value}), [this](int result) { lastResult = result; });
     }
@@ -255,4 +261,45 @@ TEST_CASE("AppContext{Remote} defers readiness to the first connect",
     ctx.onReady([&] { late = true; });
     REQUIRE(late);
     REQUIRE(fired == 1);  // the first callback is not re-run
+}
+
+TEST_CASE("Presenter::trackBound() emits bound() exactly once, synchronously in Local mode",
+          "[ladder][testkit][gui][presenter]") {
+    // Local mode's handler is already bound by construction (presenter.hpp's
+    // own doc comment on bound()), so whenBound()'s Completion<bool> settles
+    // on the very first event-loop turn -- pumpUntil, not a bare assertion,
+    // since "posted, not delivered inline" (trackBound()'s own comment on why
+    // it uses QPointer) still applies even when the outcome is a foregone
+    // conclusion.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    ProbePresenter presenter{ctx.bridge(), ctx.executor()};
+
+    int boundCount = 0;
+    QObject::connect(&presenter, &morph::ladder::gui::Presenter::bound, [&] { ++boundCount; });
+
+    presenter.hookBound();
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return boundCount == 1; }));
+    REQUIRE(boundCount == 1);
+}
+
+TEST_CASE("Presenter::trackBound() still emits bound() when the presenter is destroyed first",
+          "[ladder][testkit][gui][presenter]") {
+    // trackBound()'s QPointer<Presenter> guard exists for exactly this case:
+    // whenBound()'s Completion resolves through the executor (posted, not
+    // inline), so a short-lived presenter destroyed before that post runs
+    // must not have its .then()/.onError() handlers dereference freed
+    // memory. This constructs the presenter inside a nested scope, destroys
+    // it immediately, then pumps -- if the QPointer guard were missing or
+    // wrong, this would be a use-after-free (caught by ASan/UBSan CI legs,
+    // not just a logic assertion here).
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    {
+        ProbePresenter presenter{ctx.bridge(), ctx.executor()};
+        presenter.hookBound();
+    }  // presenter destroyed here, whenBound()'s completion still pending
+
+    // Nothing to assert beyond "this doesn't crash" -- pump a couple of turns
+    // so the posted completion actually runs while the presenter is gone.
+    REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
+    SUCCEED("posted whenBound() completion resolved after destruction without crashing");
 }
