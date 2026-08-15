@@ -179,6 +179,24 @@ TEST_CASE("Forms::Rules::GreaterOrEqual::LessAndLessOrEqual", "[forms][rules]") 
     CHECK_FALSE(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
 }
 
+TEST_CASE("Forms::Rules::GreaterOrEqual::Less::LessOrEqual::VacuousWhileEitherOperandUnengaged", "[forms][rules]") {
+    // Mirrors Forms::Rules::Greater::VacuousWhileEitherOperandUnengaged, but
+    // for the three sibling comparisons: LessAndLessOrEqual above always
+    // starts from both operands already engaged, so greaterOrEqual/less/
+    // lessOrEqual's own "either operand unengaged -> vacuously true" arm
+    // (each's `if (!lv.hasValue() || !rv.hasValue())`) was never exercised.
+    CFRDiscountForm form{};
+    CHECK(morph::forms::greaterOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+    CHECK(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+    CHECK(morph::forms::lessOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+
+    // lhs engaged, rhs still unengaged -> still vacuous (the other half of the ||).
+    form.discount = Rational{5, DecimalPlaces{2}};
+    CHECK(morph::forms::greaterOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+    CHECK(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+    CHECK(morph::forms::lessOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo).test(form));
+}
+
 TEST_CASE("Forms::Rules::RequiredWhen::ComparisonAsCondition", "[forms][rules]") {
     // A comparison reused as the `when` clause of requiredWhen (dual-use).
     // With both operands unengaged, greater() is vacuously true (the
@@ -248,6 +266,31 @@ TEST_CASE("Forms::Rules::AtLeastOneOfAndMutuallyExclusive", "[forms][rules]") {
     form.phone = "555";
     CHECK(atLeastOne.test(form));   // still at least one (now two)
     CHECK_FALSE(mutex.test(form));  // two engaged -> not mutually exclusive
+}
+
+TEST_CASE("Forms::Rules::EmitNode::KindStringsNeverExercisedViaSchemaJson", "[forms][rules]") {
+    // notEngaged/greaterOrEqual/less/lessOrEqual/atLeastOneOf/mutuallyExclusive
+    // all have their test() logic covered above, but none of those fixtures
+    // ever runs the rule through schemaJson<A>()/emitNode() -- the only path
+    // that calls detail::ruleKindName() with these enumerators -- so each
+    // one's "kind" wire string has never actually been produced. Calling
+    // emitNode() directly (as the rule/condition objects already do
+    // internally) exercises exactly that.
+    CHECK(morph::forms::notEngaged(&CFRDiscountForm::promo).emitNode()["kind"].get<std::string>() == "notEngaged");
+    CHECK(morph::forms::greaterOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo)
+              .emitNode()["kind"]
+              .get<std::string>() == "greaterOrEqual");
+    CHECK(morph::forms::less(&CFRDiscountForm::discount, &CFRDiscountForm::promo).emitNode()["kind"].get<std::string>() ==
+          "less");
+    CHECK(morph::forms::lessOrEqual(&CFRDiscountForm::discount, &CFRDiscountForm::promo)
+              .emitNode()["kind"]
+              .get<std::string>() == "lessOrEqual");
+    CHECK(morph::forms::atLeastOneOf(&CFRContactForm::email, &CFRContactForm::phone)
+              .emitNode()["kind"]
+              .get<std::string>() == "atLeastOneOf");
+    CHECK(morph::forms::mutuallyExclusive(&CFRContactForm::email, &CFRContactForm::phone)
+              .emitNode()["kind"]
+              .get<std::string>() == "mutuallyExclusive");
 }
 
 TEST_CASE("Forms::Rules::Equals::EngagedComparesLiteralUnengagedIsFalse", "[forms][rules]") {

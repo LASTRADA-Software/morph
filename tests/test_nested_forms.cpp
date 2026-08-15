@@ -571,6 +571,55 @@ TEST_CASE(
     CHECK(property["type"].get<std::string>() == "string");
 }
 
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a $ref untouched when dom has no $defs "
+    "at all",
+    "[forms][nested][issue25]") {
+    // A #/$defs/-prefixed $ref, but the whole dom never got a "$defs" object
+    // in the first place -- the first half of the `dom.contains("$defs") &&
+    // dom["$defs"].contains(key)` guard. Well-formed glaze output never
+    // produces this (a $ref into $defs implies $defs exists), so this only
+    // changes behavior for malformed input, which is left untouched (see the
+    // function's own doc comment).
+    glz::generic_u64 dom{};
+    glz::generic_u64 property{};
+    property["$ref"] = std::string{"#/$defs/Specimen"};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    CHECK_FALSE(dom.contains("$defs"));
+    CHECK(property["$ref"].get<std::string>() == "#/$defs/Specimen");
+}
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: annotateNestedAggregateRef leaves a $ref untouched when the named $defs "
+    "key doesn't exist",
+    "[forms][nested][issue25]") {
+    // $defs exists this time, but not under the referenced key -- the second
+    // half of the same guard. Also malformed-input-only (see above).
+    glz::generic_u64 dom{};
+    dom["$defs"]["SomeOtherType"]["properties"] = glz::generic_u64::object_t{};
+    glz::generic_u64 property{};
+    property["$ref"] = std::string{"#/$defs/Specimen"};
+    morph::forms::detail::annotateNestedAggregateRef<Specimen>(dom, property);
+    CHECK_FALSE(dom["$defs"].contains("Specimen"));
+}
+
+TEST_CASE(
+    "Forms::SchemaJson::NestedAggregate: recurseIntoNestedAggregateIfAny leaves a std::vector<Sub> property "
+    "untouched when it has no \"items\" node",
+    "[forms][nested][issue25]") {
+    // Every std::vector<Sub> member schemaJson<A>() actually produces (via
+    // glaze) has an "items" node -- annotateNestedAggregate always calls
+    // this with real glaze output, never a hand-built one, so this arm has
+    // never been driven false. Malformed-input-only, same as
+    // annotateNestedAggregateRef's own defensive fallbacks above.
+    glz::generic_u64 dom{};
+    glz::generic_u64 property{};
+    property["type"] = std::string{"array"};  // no "items" key
+    morph::forms::detail::recurseIntoNestedAggregateIfAny<std::vector<Specimen>>(dom, property);
+    CHECK_FALSE(property.contains("items"));
+    CHECK_FALSE(dom.contains("$defs"));
+}
+
 // ── Self-referential nested-aggregate type, standalone ─────────────────────
 
 TEST_CASE("Forms::SchemaJson::NestedAggregate: a self-referential nested-aggregate type round-trips fine on its own",
