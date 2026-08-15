@@ -30,10 +30,42 @@ TEST_CASE("render::normalizeLocaleNumber rejects malformed input rather than gue
     CHECK(normalizeLocaleNumber("-", ".", "") == std::nullopt);
 }
 
+TEST_CASE("render::normalizeLocaleNumber rejects empty input", "[render][locale]") {
+    // No characters ever reach the output, so `canonical` stays empty -- the
+    // `canonical.empty()` arm of the final malformed check, distinct from the
+    // `canonical == "-"` arm the lone-dash case above exercises.
+    CHECK(normalizeLocaleNumber("", ".", "") == std::nullopt);
+}
+
+TEST_CASE("render::normalizeLocaleNumber rejects a sign that is not in the leading position",
+          "[render][locale]") {
+    // A `-` reached after digits have already been emitted is sign injection,
+    // not a leading sign -- distinct from the lone-dash case (`sawAnyOutput`
+    // is still false there) and from the multi-decimal case (a different
+    // malformed reason entirely).
+    CHECK(normalizeLocaleNumber("1-2", ".", "") == std::nullopt);
+}
+
+TEST_CASE("render::normalizeLocaleNumber supports a locale with no decimal separator",
+          "[render][locale]") {
+    // Some locales (e.g. integer-only entry fields) pass an empty
+    // decimalSeparator: the decimal-separator match must short-circuit on
+    // `decimalSeparator.empty()` rather than call `starts_with` on an empty
+    // needle, and grouping must still work standalone.
+    CHECK(normalizeLocaleNumber("1.050", "", ".") == "1050");
+    CHECK(normalizeLocaleNumber("-1.050", "", ".") == "-1050");
+}
+
 TEST_CASE("render::formatCanonicalNumber groups thousands and swaps the decimal separator", "[render][locale]") {
     CHECK(formatCanonicalNumber("1050.25", ",", ".") == "1.050,25");
     CHECK(formatCanonicalNumber("-1050.25", ",", ".") == "-1.050,25");
     CHECK(formatCanonicalNumber("1234.5", ".", "") == "1234.5");
+}
+
+TEST_CASE("render::formatCanonicalNumber handles empty input", "[render][locale]") {
+    // `canonicalText.empty()` must short-circuit the sign check rather than
+    // call `.front()` on an empty view.
+    CHECK(formatCanonicalNumber("", ",", ".").empty());
 }
 
 TEST_CASE("render locale numeric round-trip: normalize then format reproduces the original", "[render][locale]") {
