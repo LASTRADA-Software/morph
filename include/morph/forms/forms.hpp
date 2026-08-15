@@ -535,6 +535,12 @@ enum class RuleKind : std::uint8_t {
         case RuleKind::Not:
             return "not";
         default:
+            // Unreachable through any real code path: every rule/condition
+            // node's `kind` member is a `static constexpr detail::RuleKind`
+            // initialised from one of the enumerators above, and the switch
+            // handles all of them explicitly. This arm only exists to satisfy
+            // the compiler that the function returns on every enum value,
+            // including one manufactured by an out-of-range `static_cast`.
             return "";
     }
 }

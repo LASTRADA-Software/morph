@@ -1346,3 +1346,76 @@ TEST_CASE("morph::backend::RemoteServer: an action that throws still cancels its
     REQUIRE(again.await());
     REQUIRE(again.env.kind == "ok");
 }
+
+TEST_CASE(
+    "morph::backend::RemoteServer: an attach that loses the create race still releases the caller's old "
+    "instance on the race re-check's hit, not just the pre-construct hit",
+    "[remote][connection-scope][shared-instances]") {
+    // acquireSharedInstance's `releaseCurrent` release (remote.hpp) is
+    // duplicated at both attachExistingLocked call sites: the first, taken
+    // before _registry.create() ever runs (an immediate directory hit -- the
+    // one every other "re-point releases the old instance" test in this file
+    // exercises), and the second, taken only when a concurrent attach won the
+    // insert race while this call's own holder was still under construction
+    // outside _regMtx. The two releaseCurrent.v != 0U checks are separate
+    // statements guarding the same call, so a test that only ever drives the
+    // first hit leaves the second's own branch (taken/not-taken) unexercised.
+    //
+    // Reuses the "two attaches racing the same not-yet-existing key" idiom
+    // right above (CsRaceModel's exchange-guarded slow factory), but this
+    // time the *first* attach (the one that ends up finding the race already
+    // lost) also carries a `releaseCurrent` -- a private CS_SquareModel
+    // instance it was previously attached to -- so its second
+    // attachExistingLocked hit is the one that must release it.
+    CsRaceModel::slowFactoryTaken.store(false);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply oldReg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(oldReg));
+    REQUIRE(oldReg.await());
+    REQUIRE(oldReg.env.kind == "ok");
+    auto const oldMid = oldReg.env.modelId;
+    REQUIRE(server->health().liveModels == 1U);
+
+    // First attach: re-points from `oldMid` to a brand-new key, on
+    // CsRaceModel (whose factory sleeps on the first call reaching it) --
+    // this is the call whose own second attachExistingLocked check must find
+    // the race already lost.
+    WaitReply first;
+    server->handle(
+        morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release", oldMid)), std::ref(first));
+
+    // Second attach: a plain fresh attach for the same key, no releaseCurrent
+    // -- CsRaceModel's factory does not sleep for this call, so it reliably
+    // wins the insert while the first is still constructing.
+    WaitReply second;
+    server->handle(
+        morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key-release")), std::ref(second));
+
+    REQUIRE(first.await(std::chrono::milliseconds{2000}));
+    REQUIRE(second.await(std::chrono::milliseconds{2000}));
+    REQUIRE(first.env.kind == "ok");
+    REQUIRE(second.env.kind == "ok");
+    REQUIRE(first.env.modelId == second.env.modelId);
+
+    // The load-bearing assertion: the old CS_SquareModel instance must be
+    // gone -- released via the *second* attachExistingLocked hit's
+    // releaseCurrent branch, since the first attach never reached its own
+    // pre-construct check's hit (the key did not exist yet when it started).
+    // Only the new CsRaceModel instance remains live.
+    REQUIRE(server->health().liveModels == 1U);
+
+    morph::wire::Envelope oldExec;
+    oldExec.kind = "execute";
+    oldExec.modelId = oldMid;
+    oldExec.modelType = "CS_SquareModel";
+    oldExec.actionType = "CS_SquareAction";
+    oldExec.body = R"({"x":2})";
+    WaitReply oldExecReply;
+    server->handle(morph::wire::encode(oldExec), std::ref(oldExecReply));
+    REQUIRE(oldExecReply.await());
+    REQUIRE(oldExecReply.env.kind == "err");
+    REQUIRE(oldExecReply.env.message == "model not found");
+}

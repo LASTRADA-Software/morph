@@ -80,6 +80,42 @@ class SlowFirstAuthorizer : public morph::session::IAuthorizer {
     mutable std::atomic<bool> _slowCallTaken{false};
 };
 
+/// @brief Allow-all authorizer whose `authorize()` sleeps once, for the
+///        first call it sees carrying `EroAddAction::by == kSlowByValue` --
+///        every call carrying `EroAddAction::by == kRejectByValue` returns
+///        `false` immediately, every run, with no sleep at all.
+///
+/// Drives `dispatchExecute`'s per-model execute-ordering gate (remote.hpp's
+/// `_executeGates`) past full drain while an earlier-numbered ticket for the
+/// same model is still outstanding: the slow call takes ticket 0 and is held
+/// up in `authorize()`; two `kRejectByValue` calls for the *same* model, sent
+/// after it, take tickets 1 and 2 and are rejected in `dispatchExecute`
+/// before ever reaching `awaitExecuteTurn` (the "unauthorized" branch
+/// releases its ticket immediately, without waiting). Both reject calls
+/// therefore release and drain the gate (`releaseExecuteTicket`'s
+/// `nextToRun == nextTicket` check erases the map entry once ticket 2
+/// releases) while ticket 0 has not yet even called `awaitExecuteTurn` --
+/// exactly the interleaving `awaitExecuteTurn`'s and `releaseExecuteTicket`'s
+/// own "gate already gone" branches exist for.
+class SlowFirstThenRejectAuthorizer : public morph::session::IAuthorizer {
+  public:
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view,
+                                  std::string_view actionType) const override {
+        if (actionType == kRejectMarker) {
+            return false;
+        }
+        if (!_slowCallTaken.exchange(true)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        }
+        return true;
+    }
+
+    static constexpr std::string_view kRejectMarker = "ERO_RejectAction";
+
+  private:
+    mutable std::atomic<bool> _slowCallTaken{false};
+};
+
 }  // namespace
 
 struct EroAddAction {
@@ -205,4 +241,76 @@ TEST_CASE("RemoteServer::handle() preserves send order for two same-model execut
     // whichever pool thread happened to finish its pre-strand work first.
     CHECK(replyA.env.body == "10");
     CHECK(replyB.env.body == "110");
+}
+
+TEST_CASE("RemoteServer::dispatchExecute: awaitExecuteTurn and releaseExecuteTicket both cope when their "
+          "model's execute gate has already fully drained and been erased",
+          "[remote][execute-ordering]") {
+    // Three same-model executes, same send order every run:
+    //   A (ticket 0, EroAddAction by=kSlowByValue) -- held up in authorize()
+    //     for 200ms by SlowFirstThenRejectAuthorizer, so it is reliably still
+    //     there when B and C's own pre-strand work runs.
+    //   B (ticket 1, ERO_RejectAction) -- authorize() returns false
+    //     immediately; dispatchExecute's rejectAndRelease releases ticket 1
+    //     right away, never calling awaitExecuteTurn at all.
+    //   C (ticket 2, ERO_RejectAction) -- same as B, ticket 2.
+    // releaseExecuteTicket unconditionally sets nextToRun = ticket + 1, so
+    // C's release (nextToRun 2 -> 3) meets nextTicket (3, since all three
+    // tickets were already taken by the time C releases) and erases the
+    // gate's map entry -- while A (ticket 0) has not yet reached
+    // awaitExecuteTurn at all. When A's authorize() finally returns:
+    //   - awaitExecuteTurn(mid, 0) finds no map entry -- "gate already gone"
+    //     (line ~1467) -- and returns immediately instead of waiting.
+    //   - dispatchExecute posts to the strand, runs, and then calls
+    //     releaseExecuteTicket(mid, 0), which *also* finds no map entry --
+    //     the defensive "should not happen" branch (line ~1489) -- since C's
+    //     release already erased it.
+    // Both branches are exercised by this one interleaving, in one test.
+    morph::exec::ThreadPoolExecutor pool{3};
+    auto authorizer = std::make_shared<SlowFirstThenRejectAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, eroDispatcher(), eroRegistry());
+
+    WaitReply regReply;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("ERO_CounterModel")), std::ref(regReply));
+    REQUIRE(regReply.await());
+    REQUIRE(regReply.env.kind == "ok");
+    const auto modelId = regReply.env.modelId;
+    REQUIRE(modelId != 0U);
+
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "ERO_CounterModel";
+    reqA.actionType = "ERO_AddAction";
+    reqA.body = R"({"by":5})";
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    reqB.actionType = std::string{SlowFirstThenRejectAuthorizer::kRejectMarker};
+    WaitReply replyB;
+    server->handle(morph::wire::encode(reqB), std::ref(replyB));
+
+    morph::wire::Envelope reqC = reqB;
+    reqC.callId = 3;
+    WaitReply replyC;
+    server->handle(morph::wire::encode(reqC), std::ref(replyC));
+
+    // B and C settle fast (rejected in authorize(), no wait); A settles after
+    // its 200ms sleep. If awaitExecuteTurn/releaseExecuteTicket's "gate
+    // already gone" branches did not handle a missing map entry gracefully
+    // (e.g. by dereferencing iter->second unconditionally), this would crash
+    // or hang instead of completing within the budget below.
+    REQUIRE(replyB.await(std::chrono::milliseconds{2000}));
+    REQUIRE(replyC.await(std::chrono::milliseconds{2000}));
+    REQUIRE(replyA.await(std::chrono::milliseconds{5000}));
+
+    REQUIRE(replyB.env.kind == "err");
+    REQUIRE(replyB.env.message == "unauthorized");
+    REQUIRE(replyC.env.kind == "err");
+    REQUIRE(replyC.env.message == "unauthorized");
+    REQUIRE(replyA.env.kind == "ok");
+    CHECK(replyA.env.body == "5");
 }
