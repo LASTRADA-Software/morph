@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
 #include "action_log.hpp"
 
@@ -57,11 +58,16 @@ public:
     /// whatever is already on disk at @p path — an O(n) scan of the existing
     /// file's contents, paid once here, not on every `append()`.
     /// @param path File to append entries to.
+    /// @param ioOps Injectable file-I/O primitives; defaults to the real
+    ///        syscalls. Test-only seam — see `morph::core::FileIoOps`'s own
+    ///        docs — for forcing the failure branches that need a real
+    ///        OS-level I/O error to reach.
     /// @throws std::runtime_error if the file cannot be opened.
     /// @throws SerializationError if an existing file at @p path has a malformed
     ///         *interior* line (a malformed trailing line is tolerated — see
     ///         `entries()`).
-    explicit FileActionLog(std::filesystem::path path) : _path{std::move(path)} {
+    explicit FileActionLog(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {})
+        : _path{std::move(path)}, _io{std::move(ioOps)} {
         // Discard a torn trailing record before anything else touches the file.
         // The file is opened "a", so the next append() would otherwise start
         // writing at the exact byte the truncated JSON stopped at, with no
@@ -94,7 +100,7 @@ public:
                 _seenIdempotencyKeys.insert(existing.idempotencyKey);
             }
         }
-        _file = std::fopen(_path.string().c_str(), "a");
+        _file = _io.fopen(_path.string(), "a");
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog: failed to open " + _path.string());
         }
@@ -143,13 +149,7 @@ public:
         entry.seq = ++_nextSeq;
         auto line = toJson(entry);
         line.push_back('\n');
-        // Not covered by this file's own test suite: forcing a short fwrite()
-        // needs a real OS-level failure (disk full, fd closed underneath us)
-        // at this exact point, and the codebase has no fault-injection seam
-        // for file I/O to trigger that on demand (see
-        // LASTRADA-Software/morph#97, requesting one). Left uncovered rather
-        // than shipping a flaky test that fills the disk.
-        if (std::fwrite(line.data(), 1, line.size(), _file) != line.size()) {
+        if (_io.fwrite(line.data(), line.size(), _file) != line.size()) {
             throw std::runtime_error("FileActionLog::append: short write to " + _path.string());
         }
         if (!entry.idempotencyKey.empty()) {
@@ -176,22 +176,11 @@ public:
     void flush() override {
         std::scoped_lock const lock{_mtx};
         requireOpen("flush");
-        // Not covered by this file's own test suite: forcing fflush()/fsync()
-        // to fail here needs a real OS-level failure (disk full, fd closed
-        // underneath us) at this exact point, and the codebase has no
-        // fault-injection seam for file I/O to trigger that on demand (see
-        // LASTRADA-Software/morph#97, requesting one). Left uncovered rather
-        // than shipping a flaky test that fills the disk.
-        if (std::fflush(_file) != 0) {
+        if (_io.fflush(_file) != 0) {
             _unflushedIdempotencyKeys.clear();
             throw std::runtime_error("FileActionLog::flush: failed to flush " + _path.string());
         }
-#ifdef _WIN32
-        int const syncResult = _commit(_fileno(_file));
-#else
-        int const syncResult = ::fsync(fileno(_file));
-#endif
-        if (syncResult != 0) {
+        if (_io.fsync(_file) != 0) {
             _unflushedIdempotencyKeys.clear();
             throw std::runtime_error("FileActionLog::flush: failed to fsync " + _path.string());
         }
@@ -287,21 +276,10 @@ public:
         // flush() itself takes _mtx and this is already under it. A failure is
         // raised before the file is closed and renamed, so a segment is never
         // sealed around entries that never reached the disk.
-        //
-        // Not covered by this file's own test suite: forcing fflush()/fsync()
-        // to fail here needs a real OS-level failure at this exact point, and
-        // the codebase has no fault-injection seam for file I/O to trigger
-        // that on demand (see LASTRADA-Software/morph#97, requesting one).
-        // Left uncovered rather than shipping a flaky test that fills the disk.
-        if (std::fflush(_file) != 0) {
+        if (_io.fflush(_file) != 0) {
             throw std::runtime_error("FileActionLog::rotate: failed to flush " + _path.string());
         }
-#ifdef _WIN32
-        int const syncResult = _commit(_fileno(_file));
-#else
-        int const syncResult = ::fsync(fileno(_file));
-#endif
-        if (syncResult != 0) {
+        if (_io.fsync(_file) != 0) {
             throw std::runtime_error("FileActionLog::rotate: failed to fsync " + _path.string());
         }
         // Everything buffered is now durable in the segment about to be sealed.
@@ -320,18 +298,7 @@ public:
         // success this creates a fresh empty file; on failure it reopens the
         // same pre-rotation file (still holding every prior entry), so a
         // failed rotation never leaves the log unusable.
-        //
-        // Not covered by this file's own test suite: this branch (and the
-        // `_file == nullptr` states it leaves behind -- the destructor's null
-        // check, requireOpen()'s throwing arm, and the "successful vs failed
-        // rename" wording just below) only runs when this fopen() fails right
-        // after the rename above just succeeded. Forcing that needs the
-        // original path's directory to become unwritable in the gap between
-        // two sequential library calls, which requires a real fault-injection
-        // seam this codebase does not have (see LASTRADA-Software/morph#97,
-        // requesting one). Left uncovered rather than racing a directory
-        // removal against this call.
-        _file = std::fopen(_path.string().c_str(), "a");
+        _file = _io.fopen(_path.string(), "a");
         if (_file == nullptr) {
             throw std::runtime_error("FileActionLog::rotate: failed to reopen " + _path.string() + " after " +
                                      (renameError ? "a failed" : "a successful") + " rename to " +
@@ -370,17 +337,10 @@ private:
         if (errorCode || size == 0) {
             return;  // absent or empty: nothing to repair
         }
-        std::ifstream input{_path, std::ios::binary};
-        // Not covered by this file's own test suite: forcing ifstream to fail
-        // here needs the path to become unreadable in the gap between the
-        // file_size() call just above and this open -- a permission change or
-        // removal raced against this exact window -- and the codebase has no
-        // fault-injection seam for file I/O to trigger that on demand (see
-        // LASTRADA-Software/morph#97, requesting one). Left uncovered rather
-        // than racing a permission change against this call.
-        if (!input) {
+        if (!_io.canOpenForRead(_path)) {
             return;
         }
+        std::ifstream input{_path, std::ios::binary};
         std::uintmax_t intactEnd = 0;
         std::uintmax_t offset = 0;
         std::string line;
@@ -395,14 +355,7 @@ private:
         if (intactEnd == size) {
             return;
         }
-        std::filesystem::resize_file(_path, intactEnd, errorCode);
-        // Not covered by this file's own test suite: forcing resize_file() to
-        // fail here needs a real OS-level failure (permission revoked between
-        // the read pass above and this truncation, disk full, etc.) at this
-        // exact point, and the codebase has no fault-injection seam for file
-        // I/O to trigger that on demand (see LASTRADA-Software/morph#97,
-        // requesting one). Left uncovered rather than shipping a flaky test
-        // that races a permission change against this call.
+        _io.resizeFile(_path, intactEnd, errorCode);
         if (errorCode) {
             ::morph::log::logWarn("FileActionLog: could not truncate torn trailing record in " + _path.string() +
                                   ": " + errorCode.message());
@@ -413,6 +366,7 @@ private:
     }
 
     std::filesystem::path _path;
+    ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
     mutable std::mutex _mtx;
     uint64_t _nextSeq{0};

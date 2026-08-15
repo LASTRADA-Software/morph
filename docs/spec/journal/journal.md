@@ -212,7 +212,12 @@ entry is one `toJson`-encoded line. `flush()` flushes the C stdio buffer and
 then issues a real `fsync` (POSIX `fsync` / Windows `_commit`), so a crash
 immediately after `flush()` returns cannot lose data.
 
-Open (creating if necessary) via `FileActionLog(std::filesystem::path)`.
+Open (creating if necessary) via `FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})`.
+The second parameter is a test-only fault-injection seam (`morph/core/
+file_io_ops.hpp`) — the raw `fwrite`/`fflush`/`fsync`/`fopen`/file-open/
+`resize_file` calls this class makes, as an injectable strategy defaulting to
+the real syscalls, letting a test force the failure branches that otherwise
+need a real OS-level I/O error to reach. A normal caller never passes one.
 Throws `std::runtime_error` if the file cannot be opened. Closes the file in
 the destructor. Copy and move are deleted.
 
@@ -702,7 +707,7 @@ All symbols live in `namespace morph::journal`.
 |---|---|---|
 | `IActionLog` | abstract struct | `virtual ~IActionLog() = default`; `append(LogEntry)`, `flush()`, `entries(entityKey)`. |
 | `InMemoryActionLog` | class | `: IActionLog`. Thread-safe `std::vector`-backed. `flush()` no-op. |
-| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path)`. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
+| `FileActionLog` | class | `: IActionLog`. Newline-delimited JSON, fsync on `flush()`. `explicit FileActionLog(std::filesystem::path, morph::core::FileIoOps = {})` — the `FileIoOps` is a test-only fault-injection seam, see above. `void rotate(const std::filesystem::path& sealedPath)` seals the active file and reopens a fresh one — see [Rotation and retention](#rotation-and-retention). Copy/move deleted. |
 | `SessionLog` | class | `: IActionLog`. Full-fidelity in-memory log + `undoLast()` + `checkpoint()`. |
 
 ### Process-wide default
