@@ -24,19 +24,35 @@ specifiers that were never executable in the first place. `tr()` itself is
 practically never called directly (Qt's own i18n machinery calls it, not
 application code), so this region is always "uncovered", and `llvm-cov show`/
 `export -format=lcov` faithfully emit a `DA:<line>,0` for every line inside
-it. Crucially, `llvm-cov`'s own line-count aggregation *disagrees* with its
-own per-line export here: every such file's `LF`/`LH` totals are `0`, i.e.
-llvm-cov report itself doesn't consider these "real" lines at all (hence
-these files show `Lines: 0, Cover: -` in its report table) -- but the raw
-per-line `DA:` records get emitted anyway, and Codecov faithfully counts
-each stray `DA:<line>,0` as a real missed line, inflating the diff's miss
-count with lines nothing could ever have exercised (`Q_OBJECT`'s macro line
-itself, its class's doc comments, blank lines, `public:`/`signals:`/
-`private:`). This script uses llvm-cov's own verdict -- a file whose block
-ends with `LF:0`/`LH:0` -- to drop every `DA:`/`FN:`/`FNDA:`/`FNF:`/`FNH:`
-record for that file, matching what `llvm-cov report` already shows. No
-JSON lookup is needed for this part: `LF:`/`LH:` are already present in the
-raw lcov itself, once each file's whole record is buffered.
+it, and Codecov faithfully counts each stray `DA:<line>,0` as a real missed
+line -- inflating the diff's miss count with lines nothing could ever have
+exercised (`Q_OBJECT`'s macro line itself, its class's doc comments, blank
+lines, `public:`/`signals:`/`private:`).
+
+When `tr()`'s phantom region happens to be the file's *only* content (a
+header holding nothing but declarations, all real bodies living in a
+matching .cpp), `llvm-cov`'s own line-count aggregation disagrees with its
+own per-line export: the file's `LF`/`LH` totals are `0` (llvm-cov report
+shows "Lines: 0, Cover: -", excluding it from its percentage), yet the raw
+per-line `DA:` records get emitted anyway. This script drops every
+`DA:`/`FN:`/`FNDA:`/`FNF:`/`FNH:` record for such a file, matching what
+`llvm-cov report` already shows -- no JSON lookup needed, since `LF:`/`LH:`
+already appear in the raw lcov itself once each file's whole record is
+buffered.
+
+But a header can also mix real, hit lines (inline bodies, other classes'
+declarations) with one `tr()`'s phantom span -- there `LF`/`LH` are
+correctly nonzero, so the whole-file drop above never triggers, and the
+phantom span's stray `DA:` records survive untouched (confirmed via real
+CI data: examples/pastebin/include/pastebin/app/app.hpp showed LF:2/LH:2 --
+its 2 real lines both hit -- while still carrying 21 stray `DA:40..60,0`
+records from `App::tr()`, dragging the file to 10% covered).
+`_ZN...2trEPKc...i` is the Itanium-mangled `tr(char const*, char const*,
+int)` -- a stable signature across every `QObject`-derived class regardless
+of namespace/class name -- so any `FN:` entry whose mangled name contains
+that substring and whose `FNDA:` count is `0` gets its own `DA:` span (from
+its own line to the line before the next `FN:`, or EOF) dropped, independent
+of the file's overall LF/LH.
 
 Usage: aggregate_lcov_branches.py <in.lcov> <cov.json> <out.lcov>
 """
@@ -64,14 +80,42 @@ def load_branch_aggregate(json_path):
     return per_file
 
 
+def dead_tr_spans(block):
+    """Line ranges [start, end) of phantom, never-called Q_OBJECT tr()
+    functions in this file's block -- see module docstring. Each FN: gives a
+    candidate start line; FNDA: (by mangled name, order-independent) gives
+    its call count; the span runs to the next-highest FN: start line in the
+    file, or to infinity (EOF) if none is higher.
+    """
+    fn_lines = []  # (line, mangled_name), in file order but not necessarily line order
+    call_count = {}  # mangled_name -> count
+    for bline in block:
+        if bline.startswith("FN:"):
+            ln_str, name = bline[3:].split(",", 1)
+            fn_lines.append((int(ln_str), name))
+        elif bline.startswith("FNDA:"):
+            count_str, name = bline[5:].split(",", 1)
+            call_count[name] = call_count.get(name, 0) + int(count_str)
+
+    starts = sorted(ln for ln, _name in fn_lines)
+    spans = []
+    for ln, name in fn_lines:
+        if "2trEPKc" not in name or call_count.get(name, 0) != 0:
+            continue
+        later = [s for s in starts if s > ln]
+        end = min(later) if later else float("inf")
+        spans.append((ln, end))
+    return spans
+
+
 def main():
     in_lcov, json_path, out_lcov = sys.argv[1], sys.argv[2], sys.argv[3]
     branches = load_branch_aggregate(json_path)
 
     out = []
-    # Each file's record is buffered so it can be dropped in its entirety
-    # (line/function noise) once LF:/LH: -- which only appear at the very
-    # end of the block, right before end_of_record -- are known.
+    # Each file's record is buffered so it can be dropped/filtered once
+    # LF:/LH: -- which only appear at the very end of the block, right
+    # before end_of_record -- and every FN:/FNDA: pair are known.
     block = []
     cur = None
     for raw in open(in_lcov):
@@ -113,7 +157,35 @@ def main():
                 out.append(block[0])
                 out.append("end_of_record")
             else:
-                out.extend(block)  # BRDA:/BRF:/BRH: never reach `block` -- filtered out above
+                # File has real content, so the whole-file drop above never
+                # fires -- but it may still carry one or more phantom tr()
+                # spans mixed in with real lines. Drop only their FN/FNDA and
+                # the DA: records whose line falls in [start, end), then
+                # shrink FNF: to match (each dropped tr() had FNDA:0, so
+                # FNH: is unaffected). LF:/LH: need no adjustment at all --
+                # confirmed against real data (examples/pastebin/include/
+                # pastebin/app/app.hpp's own LF:2/LH:2 already counted only
+                # its 2 real lines; llvm-cov's own line-count aggregation
+                # never included the 21 stray tr()-span DA: records in the
+                # first place, matching the whole-file LF:0/LH:0 case above.
+                dead = dead_tr_spans(block)
+                dropped_fns = 0
+                for bline in block:
+                    if bline.startswith(("FN:", "FNDA:")):
+                        _, rest = bline.split(":", 1)
+                        name = rest.split(",", 1)[1]
+                        if "2trEPKc" in name:
+                            if bline.startswith("FN:"):
+                                dropped_fns += 1
+                            continue  # drop this tr()'s own FN:/FNDA: record
+                    elif bline.startswith("DA:"):
+                        ln = int(bline[3:].split(",", 1)[0])
+                        if any(start <= ln < end for start, end in dead):
+                            continue
+                    elif bline.startswith("FNF:"):
+                        out.append(f"FNF:{int(bline[4:]) - dropped_fns}")
+                        continue
+                    out.append(bline)
                 out.extend(branch_records)
                 out.append(line)
             block = []
