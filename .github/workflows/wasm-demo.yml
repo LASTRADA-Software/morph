@@ -81,7 +81,18 @@ jobs:
           WASM=${{ runner.temp }}/qt/Qt/${{ env.QT_VERSION }}/wasm_singlethread
           # The all_os/wasm package extracts its scripts without the exec bit.
           chmod +x "$WASM"/bin/* || true
+          # MinSizeRel: no CMAKE_BUILD_TYPE was ever set here, so every prior
+          # run configured an unoptimized debug-equivalent build -- Emscripten
+          # without -Os/dead-code-elimination produces a .wasm north of
+          # GitHub's 100 MB Pages/repo file-size limit (108.29 MB, confirmed
+          # from a real failed deploy), which the "Deploy to GitHub Pages"
+          # step below has been silently failing on for every push since this
+          # workflow was introduced. This is a demo bundle shipped to end
+          # users over the network, not a local dev build, so MinSizeRel (not
+          # Release) is the right target -- payload size matters more than
+          # runtime speed here.
           "$WASM/bin/qt-cmake" -S . -B build-wasm -G Ninja \
+            -DCMAKE_BUILD_TYPE=MinSizeRel \
             -DQT_HOST_PATH="$HOST" \
             -DMORPH_BUILD_EXAMPLES=ON -DMORPH_BUILD_BANK_EXAMPLE=ON \
             -DMORPH_BUILD_BANK_GUI=ON -DMORPH_BUILD_TESTS=OFF
