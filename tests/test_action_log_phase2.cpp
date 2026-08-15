@@ -543,3 +543,67 @@ TEST_CASE("FileActionLog: append and flush on a log whose rotate() left it close
     REQUIRE_NOTHROW(log.flush());
     REQUIRE(log.entries().size() == 2);
 }
+
+// ── repairTornTail(): the pre-existing-but-empty file arm ───────────────────
+// repairTornTail()'s early-out is `errorCode || size == 0`. Every other test
+// in this file either opens a path that doesn't exist yet (errorCode set) or
+// a path that already holds complete records (size != 0); no test exercises
+// the "file already exists at this path, but is exactly zero bytes" arm --
+// e.g. a host that pre-touches the path, or a previous run that created the
+// file but crashed before the first append()'s fwrite. That arm must be a
+// no-op, not a crash or a spurious truncation warning.
+
+TEST_CASE("FileActionLog: opening a pre-existing, zero-byte file is a no-op repair",
+          "[action_log][phase2][file]") {
+    TempFile const tmp{"file_preexisting_empty"};
+    {
+        // Create the file with zero bytes, without going through FileActionLog.
+        std::ofstream touch{tmp.path};
+    }
+    REQUIRE(std::filesystem::exists(tmp.path));
+    REQUIRE(std::filesystem::file_size(tmp.path) == 0);
+
+    FileActionLog log{tmp.path};
+    REQUIRE(log.entries().empty());
+
+    // The log stays fully usable afterward.
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    log.flush();
+    REQUIRE(log.entries().size() == 1);
+}
+
+// ── rotate(): the idempotencyKey-promotion loop with a non-empty set ───────
+// rotate() inlines flush()'s durability steps and then promotes every key
+// buffered since the last successful flush into `_seenIdempotencyKeys`
+// (mirroring flush()'s own loop, covered elsewhere via plain flush()). No
+// existing rotate() test appends an entry with a non-empty idempotencyKey
+// first, so that loop's body -- and the dedup state it produces -- is never
+// actually exercised by rotate(), only by flush(). Confirm the promoted key
+// is recognized as a duplicate on both sides of a rotation: in the freshly
+// reopened active file, and after a simulated restart against the sealed file.
+
+TEST_CASE("FileActionLog::rotate: promotes unflushed idempotencyKeys into durable dedup state",
+          "[action_log][phase2][file]") {
+    TempFile const active{"file_rotate_idem_active"};
+    TempFile const sealed{"file_rotate_idem_sealed"};
+
+    auto rowEntry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    rowEntry.idempotencyKey = "row-1";
+
+    FileActionLog log{active.path};
+    log.append(rowEntry);
+    // Not flushed yet: the key lives only in _unflushedIdempotencyKeys going
+    // into rotate(), so rotate() -- not flush() -- is what must promote it.
+    log.rotate(sealed.path);
+
+    // A re-relay of the same row after the rotation is still recognized as a
+    // duplicate: the key was promoted to _seenIdempotencyKeys, not dropped.
+    log.append(rowEntry);
+    log.flush();
+    REQUIRE(log.entries().empty());  // the duplicate never reached the active file
+
+    FileActionLog sealedReader{sealed.path};
+    auto sealedEntries = sealedReader.entries();
+    REQUIRE(sealedEntries.size() == 1);
+    REQUIRE(sealedEntries[0].idempotencyKey == "row-1");
+}
