@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -7,15 +8,19 @@
 #include <exception>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <mutex>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/forms/app.hpp>
 #include <morph/forms/flows.hpp>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "test_support.hpp"
 
@@ -45,21 +50,43 @@ struct FlowStepTwoResult {
     std::string summary;
 };
 
+// A step whose execute() always throws, so a FlowSession's onError path
+// (including the no-onError-given default logging path) can be exercised
+// without needing a backend switch mid-flight, mirroring
+// test_subscription.cpp's SubExplode pattern.
+struct FlowStepExplodes {
+    std::string label;
+    [[nodiscard]] bool validate() const { return !label.empty(); }
+};
+struct FlowStepExplodesResult {
+    std::int64_t id = 0;
+};
+
 struct FlowTestModel {
     std::int64_t nextId = 1;
 
     FlowStepOneResult execute(const FlowStepOne& action) {
         std::this_thread::sleep_for(std::chrono::milliseconds{50});
+        // A sentinel label to let a test deterministically fail one specific
+        // fire of FlowStepOne (e.g. a stale, already-superseded one) without
+        // needing a real backend-switch race.
+        if (action.label == "explode") {
+            throw std::runtime_error{"boom"};
+        }
         return FlowStepOneResult{.id = nextId++, .label = action.label};
     }
     FlowStepTwoResult execute(const FlowStepTwo& action) {
         return FlowStepTwoResult{.summary = std::to_string(action.refId) + ":" + action.note};
+    }
+    static FlowStepExplodesResult execute(const FlowStepExplodes& /*action*/) {
+        throw std::runtime_error{"boom"};
     }
 };
 
 BRIDGE_REGISTER_MODEL(FlowTestModel, "FlowsTest_FlowTestModel")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepOne, "FlowsTest_FlowStepOne")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepTwo, "FlowsTest_FlowStepTwo")
+BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepExplodes, "FlowsTest_FlowStepExplodes")
 
 using DemoWizard = morph::flows::Wizard<
     "Demo flow", morph::flows::WizardStep<FlowStepOne, "Step one">,
@@ -207,6 +234,257 @@ TEST_CASE("FlowSession: backend switch mid-flight surfaces BackendChangedError o
     // cleanly against the new backend.
     flow.set<&FlowStepOne::label>(std::string{"racing again"});
     REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+}
+
+TEST_CASE("FlowSession: resolved() returns nullopt for a path never captured", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
+
+    // Nothing has fired yet -- the path is well-formed but was never recorded.
+    CHECK_FALSE(flow.resolved("FlowsTest_FlowStepOne.id").has_value());
+    // A path naming a field that is never produced by either step.
+    CHECK_FALSE(flow.resolved("FlowsTest_FlowStepOne.nonexistentField").has_value());
+}
+
+TEST_CASE("FlowSession: advance() on an already-finished flow returns false", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
+
+    flow.set<&FlowStepOne::label>(std::string{"sample C"});
+    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(flow.advance());
+
+    flow.set<&FlowStepTwo::refId>(std::int64_t{7});
+    flow.set<&FlowStepTwo::note>(std::string{"final step"});
+    REQUIRE(morph::testing::waitUntil([&] { return flow.ready(); }));
+    REQUIRE(flow.advance());
+    REQUIRE(flow.finished());
+
+    // The flow has already advanced past its last step: advance() must
+    // report false rather than incrementing _index further (finished()'s
+    // arm of the `!ready || finished()` guard, not just the not-ready arm
+    // already covered above).
+    CHECK_FALSE(flow.advance());
+    CHECK(flow.finished());
+    CHECK(flow.currentIndex() == flow.stepCount());
+}
+
+TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    // No onError given -- FlowSession's default routes the failure through
+    // morph::log::logError (logUnhandledError) instead of a callback.
+    morph::flows::FlowSession<FlowTestModel, FlowStepExplodes> flow{handler};
+
+    // logUnhandledError's call site runs wherever the dispatched action's
+    // exception is actually caught -- a `pool` worker thread, not this test's
+    // own thread -- so `logged` is written cross-thread while this test's
+    // waitUntil polls it; a plain std::vector needs a mutex for that, same
+    // idiom as test_concurrency_invariants.cpp's own logger-override tests.
+    std::mutex loggedMtx;
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) {
+            std::scoped_lock const lock{loggedMtx};
+            logged.emplace_back(msg);
+        },
+        morph::log::LogLevel::error,
+    };
+
+    flow.set<&FlowStepExplodes::label>(std::string{"trigger"});
+
+    REQUIRE(morph::testing::waitUntil([&] {
+        std::scoped_lock const lock{loggedMtx};
+        return std::ranges::any_of(
+            logged, [](const std::string& line) { return line.contains("FlowsTest_FlowStepExplodes"); });
+    }));
+    CHECK_FALSE(flow.ready());
+}
+
+TEST_CASE("FlowSession: a late reply for a step already left behind is dropped", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::DeterministicExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{handler};
+
+    // First fire of step one.
+    flow.set<&FlowStepOne::label>(std::string{"first"});
+    // Edit the same field again while step one is still current: FlowSession
+    // has no in-flight coalescing (see captureResult's doc comment), so this
+    // is a second, independent fire for the same step.
+    flow.set<&FlowStepOne::label>(std::string{"second"});
+
+    // Each fire's result reaches FlowSession's captureResult through two
+    // hops on cbExec (Bridge::executeVia's own internal .then, which then
+    // posts the typed Completion's callback onward -- see completion.hpp's
+    // CompletionState::setValue), so draining exactly one task at a time and
+    // waiting for the queue to be repopulated between steps is what lets
+    // this test stop the instant the *first* fire's real captureResult runs,
+    // instead of draining straight through both fires' replies.
+    while (!flow.ready()) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.step();
+    }
+
+    // The first fire to actually reach captureResult marks the flow ready;
+    // advance while the second fire's reply is still queued behind it.
+    REQUIRE(flow.advance());
+    CHECK(flow.currentIndex() == 1);
+
+    auto const capturedBeforeStaleReply = flow.resolved("FlowsTest_FlowStepOne.label");
+    REQUIRE(capturedBeforeStaleReply.has_value());
+    // advance() clears readiness for the new current step (step two); step
+    // two has had no set<> call at all, so this is false until the stale
+    // reply is (wrongly, if the guard is broken) applied to it below.
+    CHECK_FALSE(flow.ready());
+
+    // Drain the remaining queued task(s): the second fire's reply, whose
+    // stepIndex (captured as step 0 at dispatch time) no longer matches
+    // _activeStep (now 1). captureResult must return early for it -- not
+    // overwrite _resolvedValues with a superseded reply, and not mark step
+    // two ready when nothing was ever entered into it.
+    REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+    while (cbExec.pending() > 0) {
+        cbExec.step();
+    }
+
+    CHECK(flow.currentIndex() == 1);  // unaffected by the stale reply
+    CHECK_FALSE(flow.ready());        // step two still not (falsely) marked ready
+    CHECK(flow.resolved("FlowsTest_FlowStepOne.label") == capturedBeforeStaleReply);  // not overwritten
+}
+
+TEST_CASE("FlowSession: a late error for a step already left behind does not un-ready the new step",
+          "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::DeterministicExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    std::vector<std::string> errors;
+    morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo> flow{
+        handler, [&](std::exception_ptr err) {
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& exc) {
+                errors.emplace_back(exc.what());
+            } catch (...) {
+                errors.emplace_back("unknown");
+            }
+        }};
+
+    // A fire of step one that will fail (see FlowTestModel::execute's
+    // "explode" sentinel), followed by a second fire of the same
+    // still-current step that will succeed. Both are independent,
+    // in-flight dispatches (BridgeHandler::execute has no coalescing --
+    // only BridgeHandler::subscribe does, per bridge.md).
+    flow.set<&FlowStepOne::label>(std::string{"explode"});
+    flow.set<&FlowStepOne::label>(std::string{"succeeds"});
+
+    // Drain tasks one at a time (see the previous test's comment on the
+    // two-hop cbExec delivery) until the flow becomes ready -- that is the
+    // succeeding fire's captureResult, whichever order the two fires'
+    // replies actually arrive in.
+    while (!flow.ready()) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.step();
+    }
+    REQUIRE(flow.advance());
+    CHECK(flow.currentIndex() == 1);
+
+    // Make step two ready too, so its readiness is something the stale
+    // error below could (if the guard were broken) wrongly clear. Drive
+    // cbExec by hand (nothing runs it on its own) until that fire's own
+    // captureResult has actually landed.
+    flow.set<&FlowStepTwo::refId>(std::int64_t{42});
+    flow.set<&FlowStepTwo::note>(std::string{"note"});
+    while (!flow.ready()) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.step();
+    }
+
+    // Drain whatever is left: the failing fire's stale error, dispatched
+    // back when step one (index 0) was still current. Its stepIndex no
+    // longer matches _activeStep (now 1, step two's own in-flight fire), so
+    // the guard at captureResult's error-path sibling must not clear
+    // _currentReady for step two -- even though the error is still reported
+    // through onError either way (see fireStep's doc comment).
+    while (!std::ranges::any_of(errors, [](const std::string& msg) { return msg == "boom"; })) {
+        REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+        cbExec.step();
+    }
+
+    CHECK(flow.currentIndex() == 1);
+    CHECK(flow.ready());  // step two's own readiness must survive the stale error
+}
+
+TEST_CASE("FlowSession: a completion arriving after the flow is destroyed is a no-op", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::DeterministicExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    auto flow = std::make_unique<morph::flows::FlowSession<FlowTestModel, FlowStepOne, FlowStepTwo>>(handler);
+
+    flow->set<&FlowStepOne::label>(std::string{"about to vanish"});
+    REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+
+    // Destroy the flow before its in-flight step's completion is delivered.
+    // ~FlowSession flips _alive to false; FlowSession::fireStep's own
+    // .then() continuation must check it and return without touching the
+    // destroyed FlowSession.
+    flow.reset();
+
+    // The result reaches FlowSession::fireStep's .then() through two hops
+    // on cbExec (Bridge::executeVia's own internal .then, which then posts
+    // the typed Completion's callback onward -- see completion.hpp's
+    // CompletionState::setValue) -- draining every task this produces (not
+    // just the first) is what actually reaches FlowSession's own closure
+    // with _alive now false. Running all of it must not crash or touch
+    // freed memory -- that is the entire assertion here (see
+    // FlowSession::fireStep's doc comment on why both closures capture
+    // _alive by value).
+    while (cbExec.pending() > 0) {
+        CHECK_NOTHROW(cbExec.step());
+    }
+}
+
+TEST_CASE("FlowSession: an error arriving after the flow is destroyed is a no-op", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    morph::testing::DeterministicExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    std::atomic<bool> onErrorCalled{false};
+    auto flow = std::make_unique<morph::flows::FlowSession<FlowTestModel, FlowStepExplodes>>(
+        handler, [&](std::exception_ptr) { onErrorCalled.store(true); });
+
+    flow->set<&FlowStepExplodes::label>(std::string{"about to vanish"});
+    REQUIRE(morph::testing::waitUntil([&] { return cbExec.pending() > 0; }));
+
+    flow.reset();
+
+    // See the matching comment in the .then() variant above for why every
+    // queued task (not just the first) must be drained to actually reach
+    // FlowSession::fireStep's own .onError() closure. The onError closure's
+    // _alive check must fire first and return before touching `this` (which
+    // would call the now-dangling _onError member).
+    while (cbExec.pending() > 0) {
+        CHECK_NOTHROW(cbExec.step());
+    }
+    CHECK_FALSE(onErrorCalled.load());
 }
 
 // ---------------------------------------------------------------------------

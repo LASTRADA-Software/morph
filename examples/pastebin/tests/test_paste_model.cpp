@@ -102,6 +102,13 @@ using morph::ladder::testkit::pumpUntil;
     return *morph::ladder::now() + delta;
 }
 
+/// @brief Mirrors `paste_model.cpp`'s anonymous-namespace `toEpochMs` (not
+///        visible from this TU) so a test can seed `PasteRecord::expiresAtMs`
+///        directly, bypassing `CreatePaste`'s `Timestamp`-typed action field.
+[[nodiscard]] std::int64_t toEpochMs(const ::morph::time::DateTime& instant) {
+    return instant.value.time_since_epoch().count();
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // The animal-name keyspace, mirrored from `src/models/paste_model.cpp`
 // ─────────────────────────────────────────────────────────────────────────
@@ -930,6 +937,43 @@ TEST_CASE("GetPaste against a row already at its burn budget throws Burned, not 
 
     pastebin::PasteModel model;
     REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"test-burned-paste"}}),
+                      pastebin::Burned);
+}
+
+TEST_CASE("GetPaste against a row that is both burn-exhausted and still-future-expiring throws Burned",
+          "[pastebin][model]") {
+    // Same "conditional UPDATE matched zero rows, and the row still exists"
+    // classification branch as the burned-row test above, but with
+    // `expiresAtMs` engaged and still in the future rather than disengaged.
+    // That combination is what forces the classifier's expiry check
+    // (`row.expiresAtMs.Value() && *row.expiresAtMs.Value() <= readAtMs`) to
+    // evaluate its first operand true and its second false -- the row *has*
+    // an expiry, it just has not arrived yet -- so the check falls through to
+    // the burn check below it instead of short-circuiting on a disengaged
+    // `expiresAtMs`, as the burned-row test above does. A row that is merely
+    // burn-exhausted (not also expiring) cannot reach this arm: the atomic
+    // UPDATE's own `WHERE` only excludes an *already-past* expiry, so an
+    // engaged-but-future `expiresAtMs` never changes whether the UPDATE
+    // matches -- the burn guard alone is what sends this row to the
+    // classifier, and the still-future expiry is what makes the classifier
+    // itself walk both operands of its own `&&` instead of stopping at a
+    // null check.
+    DbFixture fixture;
+    {
+        Lightweight::DataMapper mapper;
+        pastebin::db::PasteRecord rec;
+        rec.id = Light::SqlAnsiString<32>{"test-burned-not-expired-paste"};
+        rec.content = Light::SqlMaxDynamicWideString{L"gone"};
+        rec.syntax = Light::SqlAnsiString<32>{"text"};
+        rec.createdAtMs = std::int64_t{0};
+        rec.expiresAtMs = toEpochMs(nowPlus(std::chrono::hours{1}));
+        rec.burnAfterReads = std::optional<std::int64_t>{1};
+        rec.readCount = std::int64_t{1};  // already at budget
+        mapper.Create(rec);
+    }
+
+    pastebin::PasteModel model;
+    REQUIRE_THROWS_AS(model.execute(pastebin::GetPaste{.id = pastebin::PasteId{"test-burned-not-expired-paste"}}),
                       pastebin::Burned);
 }
 

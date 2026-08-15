@@ -851,6 +851,14 @@ TEST_CASE("Forms::FieldMeta::LabelInference", "[forms][field_meta]") {
     CHECK(morph::forms::detail::inferTitle("dryMassPct") == "Dry Mass Pct");
     CHECK(morph::forms::detail::inferTitle("sample_id") == "Sample Id");
     CHECK(morph::forms::detail::inferTitle("notes") == "Notes");
+    // Every uppercase transition above is preceded by a lowercase letter
+    // (prevUpper == false), so `i > 0 && isUpper && !prevUpper`'s
+    // "consecutive uppercase" arm (isUpper true, prevUpper also true --
+    // e.g. mid-run of an acronym) was never taken. "sampleID" holds two
+    // uppercase letters back to back ('I' then 'D'): the first starts a new
+    // word (preceded by lowercase 'e'), the second must NOT start another
+    // word of its own.
+    CHECK(morph::forms::detail::inferTitle("sampleID") == "Sample Id");
 }
 
 TEST_CASE("Forms::FieldMeta::FluentBuildersComposeWithLiteralForm", "[forms][field_meta]") {
@@ -904,4 +912,31 @@ TEST_CASE("Forms::FieldMeta::DescribeSugarMatchesExplicitLiteral", "[forms][fiel
     CHECK(literal.contains(R"("title":"Sample","description":"Which logged sample")"));
     CHECK(sugar.contains(R"("x-readonly":true)"));
     CHECK(literal.contains(R"("x-readonly":true)"));
+}
+
+// Two members sharing the identical declared type: describe<>()'s member
+// lookup (detail::memberWireName) first narrows candidates by type (`if
+// constexpr (std::is_same_v<MemberT, TargetT>)`), then must still
+// distinguish between same-typed candidates by address. QFDescribeSugar/
+// QFDescribeLiteral above never exercise the "type matches but this isn't
+// the right member" case, since sampleId and mass there have different
+// types: the type-level narrowing alone was always enough. Both fields
+// here are std::int64_t, so memberWireName's address comparison is what
+// has to tell them apart.
+struct QFDescribeSameTypeTwice {
+    std::int64_t first = 0;
+    std::int64_t second = 0;
+
+    static const std::array<morph::forms::FieldMeta, 2> fieldMetadata;
+};
+
+inline const std::array<morph::forms::FieldMeta, 2> QFDescribeSameTypeTwice::fieldMetadata{
+    morph::forms::describe<&QFDescribeSameTypeTwice::first>("First"),
+    morph::forms::describe<&QFDescribeSameTypeTwice::second>("Second"),
+};
+
+TEST_CASE("Forms::FieldMeta::DescribeSugarDistinguishesSameTypedMembersByAddress", "[forms][field_meta]") {
+    auto const schema = morph::forms::schemaJson<QFDescribeSameTypeTwice>();
+    CHECK(schema.contains(R"("first":{"$ref":"#/$defs/int64_t","x-order":0,"title":"First"})"));
+    CHECK(schema.contains(R"("second":{"$ref":"#/$defs/int64_t","x-order":1,"title":"Second"})"));
 }

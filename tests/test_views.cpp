@@ -53,11 +53,42 @@ struct VtRow {
     VtMass weight{};
 };
 
+/// @brief Two members of the SAME Quantity type, mirroring
+///        `test_forms_conformance_corpus.cpp`'s `CFSharedDefFields` fixture:
+///        glaze promotes the shared schema to a `$defs` entry referenced back
+///        via each property's `$ref`, rather than inlining `ExtUnits` on each
+///        property directly (docs/spec/forms/views.md, "Column derivation").
+struct VtSharedMassRow {
+    VtMass massA{};
+    VtMass massB{};
+};
+
+/// @brief A row type with no reflected members at all, so
+///        `schemaJson<VtEmptyRow>()` never populates a top-level
+///        `"properties"` key (`mergeSchemaExtras` only ever writes into
+///        `dom["properties"]` from inside `forEachNamedMember`'s per-member
+///        visitor, which for zero members never runs).
+struct VtEmptyRow {};
+
 struct VtRowList {
     std::vector<VtRow> rows;
 };
 
+/// @brief A non-vector Result with TWO array-valued members, in declaration
+///        order -- exercises `buildViewSchema`'s `forEachNamedMember` walk
+///        picking the FIRST vector member (`extras`) and then leaving `found`
+///        already `true` for the second (`rows`), so the second is skipped
+///        rather than overwriting `columnsJson` (docs/spec/forms/views.md,
+///        "Column derivation": "...otherwise its first `std::vector<Row>`-
+///        typed member in declaration order").
+struct VtTwoRowList {
+    std::vector<VtRow> extras;
+    std::vector<VtRow> rows;
+};
+
 struct VtListRows {};
+
+struct VtListTwoRows {};
 
 struct VtEditRow {
     std::int64_t id = 0;
@@ -75,6 +106,9 @@ public:
     VtRowList execute(const VtListRows&) {
         return VtRowList{.rows = {{.id = 1, .label = "One"}, {.id = 2, .label = "Two"}}};
     }
+    VtTwoRowList execute(const VtListTwoRows&) {
+        return VtTwoRowList{.extras = {{.id = 9, .label = "Extra"}}, .rows = {{.id = 1, .label = "One"}}};
+    }
     VtRow execute(const VtEditRow& action) { return VtRow{.id = action.id, .label = action.label}; }
     VtRow execute(const VtDeleteRow& action) { return VtRow{.id = action.id, .label = {}}; }
     VtRow execute(const VtCreateRow&) { return VtRow{}; }
@@ -90,10 +124,12 @@ using vt::VtCreateRow;
 using vt::VtDeleteRow;
 using vt::VtEditRow;
 using vt::VtListRows;
+using vt::VtListTwoRows;
 using vt::VtModel;
 
 BRIDGE_REGISTER_MODEL(VtModel, "VtModel")
 BRIDGE_REGISTER_ACTION(VtModel, VtListRows, "VtListRows", morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(VtModel, VtListTwoRows, "VtListTwoRows", morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(VtModel, VtEditRow, "VtEditRow")
 BRIDGE_REGISTER_ACTION(VtModel, VtDeleteRow, "VtDeleteRow")
 BRIDGE_REGISTER_ACTION(VtModel, VtCreateRow, "VtCreateRow")
@@ -257,6 +293,39 @@ TEST_CASE("Views::DeriveColumns::HiddenColumnStillEmitted", "[views]") {
     CHECK(columns[0]["v-hidden"].get<bool>());
 }
 
+TEST_CASE("Views::DeriveColumns::SharedQuantityDefUsesRefIndirection", "[views]") {
+    // massA/massB are the SAME Quantity<VtUnit::kg> type, so glaze promotes
+    // the shared schema to one $defs entry both properties' $ref points at,
+    // instead of inlining ExtUnits on each property node directly (the
+    // buildColumnEntry `$ref`/`$defs` fallback -- docs/spec/forms/views.md,
+    // "Column derivation").
+    auto const columnsJson = morph::views::detail::deriveColumns<RowNoOverride, vt::VtSharedMassRow>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, columnsJson));
+    REQUIRE(dom.is_array());
+    auto const& columns = dom.get_array();
+    REQUIRE(columns.size() == 2);
+
+    CHECK(columns[0]["field"].get_string() == "massA");
+    CHECK(columns[0]["ExtUnits"]["unitAscii"].get_string() == "kg");
+    CHECK(columns[0]["x-decimalPlaces"].get<std::uint64_t>() == 2);
+
+    CHECK(columns[1]["field"].get_string() == "massB");
+    CHECK(columns[1]["ExtUnits"]["unitAscii"].get_string() == "kg");
+    CHECK(columns[1]["x-decimalPlaces"].get<std::uint64_t>() == 2);
+}
+
+TEST_CASE("Views::DeriveColumns::EmptyRowSchemaYieldsNoColumns", "[views]") {
+    // vt::VtEmptyRow has no reflected members, so schemaJson<VtEmptyRow>()
+    // never gains a top-level "properties" key -- deriveColumns's
+    // `!rowDom.contains("properties")` early-return (docs/spec/forms/views.md
+    // does not special-case this; it falls out of forms.md's reflection
+    // walk simply never running for zero members).
+    auto const columnsJson = morph::views::detail::deriveColumns<RowNoOverride, vt::VtEmptyRow>();
+    CHECK(columnsJson == "[]");
+}
+
 // ---------------------------------------------------------------------------
 // Task 3: full viewSchemaJson<V>() assembly.
 // ---------------------------------------------------------------------------
@@ -288,6 +357,26 @@ struct VtFullView {
     static constexpr std::array<morph::views::ActionDescriptor, 2> actions{
         morph::views::describeAction<vt::VtDeleteRow>("Delete", morph::views::ActionScope::Row, kDeleteBind, true),
         morph::views::describeAction<vt::VtCreateRow>("New", morph::views::ActionScope::Collection),
+    };
+};
+
+// Result (VtTwoRowList) has two vector members, "extras" then "rows" in
+// declaration order -- exercises buildViewSchema's forEachNamedMember walk
+// leaving `found` already true by the time it reaches the second one.
+struct VtTwoRowsView {
+    using kind = morph::views::CollectionView;
+    using query = vt::VtListTwoRows;
+};
+
+// A v-actions entry with no label supplied: buildActionNode must fall back
+// to the action's own type id (docs/spec/forms/views.md's `v-actions` row:
+// "label ... "" = use the action type id as-is").
+struct VtDefaultLabelActionView {
+    using kind = morph::views::CollectionView;
+    using query = vt::VtListRows;
+
+    static constexpr std::array<morph::views::ActionDescriptor, 1> actions{
+        morph::views::describeAction<vt::VtCreateRow>(),
     };
 };
 
@@ -343,6 +432,40 @@ TEST_CASE("Views::ViewSchemaJson::MasterDetailWithRowActionAndActions", "[views]
     CHECK(actions[1]["scope"].get_string() == "collection");
     CHECK_FALSE(actions[1].contains("confirm"));
     CHECK_FALSE(actions[1].contains("bind"));
+}
+
+TEST_CASE("Views::ViewSchemaJson::NonVectorResultUsesFirstVectorMemberOnly", "[views]") {
+    // VtTwoRowList declares "extras" before "rows" -- viewSchemaJson must
+    // derive v-columns from "extras" (the first array-valued member in
+    // declaration order) and never look at "rows" at all, exercising the
+    // forEachNamedMember walk's `found` guard once it is already true.
+    auto const schema = morph::views::viewSchemaJson<VtTwoRowsView>();
+    REQUIRE_FALSE(schema.empty());
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+    REQUIRE(dom["v-columns"].is_array());
+    auto const& columns = dom["v-columns"].get_array();
+    REQUIRE(columns.size() == 3);  // id, label, weight -- VtRow's own fields
+    CHECK(columns[0]["field"].get_string() == "id");
+    CHECK(columns[1]["field"].get_string() == "label");
+    CHECK(columns[2]["field"].get_string() == "weight");
+}
+
+TEST_CASE("Views::ViewSchemaJson::ActionWithNoLabelFallsBackToActionTypeId", "[views]") {
+    // describeAction<VtCreateRow>() with no label supplied leaves
+    // ActionDescriptor::label empty; buildActionNode's v-actions path must
+    // then use actionTypeId as the button label (docs/spec/forms/views.md's
+    // `v-actions` row: "" = use the action type id as-is").
+    auto const schema = morph::views::viewSchemaJson<VtDefaultLabelActionView>();
+
+    glz::generic_u64 dom{};
+    REQUIRE_FALSE(glz::read_json(dom, schema));
+    REQUIRE(dom.contains("v-actions"));
+    auto const& actions = dom["v-actions"].get_array();
+    REQUIRE(actions.size() == 1);
+    CHECK(actions[0]["action"].get_string() == "VtCreateRow");
+    CHECK(actions[0]["label"].get_string() == "VtCreateRow");  // fallback, not empty
 }
 
 TEST_CASE("Views::ViewSchemaJson::Memoized", "[views]") {

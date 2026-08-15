@@ -339,6 +339,45 @@ TEST_CASE("OutboxRelay + journal::replay: relayed entries reconstruct state matc
     REQUIRE(reconstructed->into<OBModel>().balance == 15);
 }
 
+TEST_CASE("OutboxRelay::relay(): a null drainOutbox is logged, not rejected, at call time", "[outbox][relay]") {
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::debug,
+    };
+
+    auto sink = std::make_shared<InMemoryActionLog>();
+    OutboxRelay relay;
+    // relay.drainOutbox left null on purpose.
+    relay.markRelayed = [](std::span<const LogEntry>) {};
+    relay.sink = sink;
+
+    REQUIRE_THROWS_AS(relay.relay(), std::bad_function_call);
+
+    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
+        return line.find("drainOutbox") != std::string::npos;
+    });
+    REQUIRE(sawWarning);
+    REQUIRE(sink->entries().empty());  // drainOutbox() threw before anything reached the sink
+}
+
+// A null `sink` is deliberately NOT exercised into relay()'s body here: unlike
+// `drainOutbox`/`markRelayed` (null std::function -> catchable
+// std::bad_function_call), `sink` is a std::shared_ptr<IActionLog>, so
+// `sink->append(row)` on a null sink is a null-pointer virtual dispatch --
+// real UB that crashes the process (confirmed: SIGSEGV under this build), not
+// a C++ exception a REQUIRE_THROWS_AS could observe. This is the documented
+// contract (see outbox.hpp's class doc and docs/spec/journal/journal.md:
+// "invoking a null member still throws (std::bad_function_call) or crashes
+// as usual"), not an oversight -- forcing it into a portable, deterministic
+// unit test would need a signal/guard-page harness like
+// test_bridge_lifetime.cpp's POSIX-only hasSubscribers() case, which is far
+// more machinery than this one branch warrants and still would not run on
+// Windows/MSVC, where this suite also builds. The logIfAnyDepNull() call
+// itself (the actual branch under test) is still reached and its warning
+// still fires -- only the subsequent crash is left unexercised. Tracked as
+// LASTRADA-Software/morph#95.
+
 TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process restart dedups via the sink",
           "[outbox][relay][file_action_log]") {
     TempFile tmp{"outbox_relay_restart"};

@@ -418,6 +418,14 @@ inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
 inline std::string encode(const Envelope& env) {
     std::string out;
     if (auto errCode = glz::write<detail::EscapingWriteOpts{}>(env, out)) {
+        // Not covered by this file's own test suite: every glaze write-error
+        // trigger site (`invalid_partial_key`/`unknown_key` from partial writes,
+        // `invalid_variant_object` from a `std::variant` member) is unreachable
+        // for `Envelope` -- it has no variant fields and `encode` never uses
+        // glaze's partial-write-by-key-list feature. Forcing this branch would
+        // need a fault-injection seam glaze does not expose (see
+        // LASTRADA-Software/morph#96, requesting one). Left uncovered rather
+        // than reshaping `Envelope` purely to make a test possible.
         throw std::runtime_error("envelope encode failed: " + glz::format_error(errCode, out));
     }
     return out;

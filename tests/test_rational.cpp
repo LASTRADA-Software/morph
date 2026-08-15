@@ -413,6 +413,26 @@ TEST_CASE("Rational::fromFloat::ErrorPaths", "[rational]")
     CHECK(halfUlp.error() == RationalError::Overflow);
 }
 
+TEST_CASE("Rational::fromFloat::NegativeOverflow", "[rational]")
+{
+    // The overflow guard is `scaled >= 2^63 - 0.5 || scaled < -2^63`: every
+    // case above only ever drives the *positive* disjunct. Exercise the
+    // negative one directly with a large-magnitude negative value whose
+    // scaled magnitude passes -2^63 the same way 1e20 passes +2^63 above.
+    auto const negativeOverflow = Rational::fromFloat(-1e20, dp9);
+    REQUIRE_FALSE(negativeOverflow.has_value());
+    CHECK(negativeOverflow.error() == RationalError::Overflow);
+
+    // Near the negative boundary: just under (in magnitude) scales fine,
+    // just past -2^63 is rejected. INT64_MIN itself (== -2^63 exactly) is a
+    // valid llround result and must NOT be rejected by this guard.
+    auto const justUnderNegative = Rational::fromFloat(-4.0e17, dp1);  // scaled -4e18, > -2^63
+    REQUIRE(justUnderNegative.has_value());
+    auto const justPastNegative = Rational::fromFloat(-1.0e18, dp1);  // scaled -1e19, < -2^63
+    REQUIRE_FALSE(justPastNegative.has_value());
+    CHECK(justPastNegative.error() == RationalError::Overflow);
+}
+
 // ---------------------------------------------------------------------------
 // Rational — exact arithmetic
 // ---------------------------------------------------------------------------

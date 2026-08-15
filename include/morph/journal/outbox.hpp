@@ -113,6 +113,13 @@ private:
         if (!sink) {
             ::morph::log::logError("[journal::OutboxRelay] null sink");
         }
+        // This branch itself is unit-tested (test_outbox.cpp asserts the
+        // warning fires). The crash relay() goes on to hit afterwards --
+        // sink->append() dispatching through a null shared_ptr -- is real UB
+        // and not exercised: no seam here turns it into something a portable
+        // unit test can catch instead of taking down the process (see
+        // LASTRADA-Software/morph#95, requesting either a catchable exception
+        // for this case or an observability hook logIfAnyDepNull() could feed).
     }
 };
 

@@ -716,6 +716,65 @@ TEST_CASE("morph::backend::RemoteServer: attach re-points and releases the old i
     REQUIRE(server->health().liveModels == 1U);
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer: attach re-points away from a key another connection still holds -- the "
+    "old instance survives",
+    "[remote][connection-scope][shared-instances]") {
+    // Sibling of "attach re-points and releases the old instance" above, but
+    // for the *other* branch of releaseScopedLocked's refcount-hits-zero
+    // check (docs/spec/core/shared_instances.md, "Re-pointing, not
+    // re-keying": "The instance for 42 is untouched ... and survives if any
+    // other handler is still attached"). That test's sole connection is the
+    // only holder of the key it moves away from, so the count always hits
+    // zero; this one adds a second connection sharing the same key first, so
+    // the re-pointing connection's own release decrements without reaching
+    // zero.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cidA = server->openConnection();
+    auto cidB = server->openConnection();
+
+    WaitReply regA;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(regA), cidA);
+    REQUIRE(regA.await());
+    REQUIRE(regA.env.kind == "ok");
+
+    WaitReply regB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(regB), cidB);
+    REQUIRE(regB.await());
+    REQUIRE(regB.env.kind == "ok");
+    REQUIRE(regB.env.modelId == regA.env.modelId);  // both connections share the one instance for key 1
+    REQUIRE(server->health().liveModels == 1U);
+
+    // cidA re-points from key 1 to key 2. cidB still holds key 1, so the old
+    // instance's refcount drops from 2 to 1 -- not to 0 -- and must survive.
+    WaitReply moved;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_SquareModel", "2", regA.env.modelId)),
+                   std::ref(moved), cidA);
+    REQUIRE(moved.await());
+    REQUIRE(moved.env.kind == "ok");
+    REQUIRE(moved.env.modelId != regA.env.modelId);
+    // Two live instances now: the new one for key 2, and the old one for key
+    // 1 -- still alive because cidB is still attached to it.
+    REQUIRE(server->health().liveModels == 2U);
+
+    // Key 1 is still reachable and still the same instance cidB originally
+    // attached to -- proving it was kept alive, not silently recreated.
+    WaitReply reattachB;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "1")), std::ref(reattachB),
+                   cidB);
+    REQUIRE(reattachB.await());
+    REQUIRE(reattachB.env.kind == "ok");
+    REQUIRE(reattachB.env.modelId == regA.env.modelId);
+    REQUIRE(server->health().liveModels == 2U);  // no new instance was created
+
+    // Finally, cidB releases its own reference to key 1 -- now the refcount
+    // does hit zero, and the old instance is reclaimed.
+    server->closeConnection(cidB);
+    REQUIRE(server->health().liveModels == 1U);  // only key 2's instance remains
+}
+
 TEST_CASE("morph::backend::RemoteServer: assign files a live instance under a key",
           "[remote][connection-scope][shared-instances]") {
     morph::exec::ThreadPoolExecutor pool{2};
@@ -1084,6 +1143,49 @@ TEST_CASE(
     const auto& loser = firstOk ? second : first;
     REQUIRE(loser.env.kind == "err");
     REQUIRE(loser.env.message == "too many models");
+    REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: a shared register with an empty primary is not exempted from the "
+    "advisory maxLiveModels pre-check",
+    "[remote][connection-scope][limits]") {
+    // The comment above the advisory check in remote.hpp's register branch
+    // explains the exemption is for a shared register that "may well create
+    // nothing" -- true only when it names a real primary, since then a
+    // directory hit just takes another reference. `shared: true` with an
+    // *empty* primary carries no key to attach by, so it always falls through
+    // to the ordinary private-register path below (same as `shared: false`)
+    // and must still be counted against the cap here, not waved through as if
+    // it could resolve to an existing attachment. Every other test exercising
+    // this line's `!env.shared` operand uses a non-shared register, and every
+    // other test exercising `env.primary.empty()` uses a non-shared one too --
+    // none combine `shared: true` with an empty primary, which is the only way
+    // to reach this specific arm.
+    auto& env = csEnv();
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    morph::backend::LimitPolicy policy;
+    policy.maxLiveModels = 1;
+    server->setLimitPolicy(policy);
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(first));
+    REQUIRE(first.await());
+    REQUIRE(first.env.kind == "ok");
+
+    // A hand-built envelope: `shared: true` but `primary` left empty --
+    // makeRegisterShared() always supplies a non-empty primary, so this
+    // combination can only be produced directly.
+    morph::wire::Envelope sharedNoKey;
+    sharedNoKey.kind = "register";
+    sharedNoKey.typeId = "CS_SquareModel";
+    sharedNoKey.shared = true;
+    WaitReply second;
+    server->handle(morph::wire::encode(sharedNoKey), std::ref(second));
+    REQUIRE(second.await());
+    REQUIRE(second.env.kind == "err");
+    REQUIRE(second.env.message == "too many models");
     REQUIRE(server->health().liveModels == 1U);
 }
 
