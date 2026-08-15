@@ -235,6 +235,19 @@ concept HasViewActions = requires {
 template <typename V, typename Row>
 [[nodiscard]] std::string deriveColumns() {
     glz::generic_u64 rowDom{};
+    // The `glz::read_json` half of this condition guards against
+    // `schemaJson<Row>()` returning text that isn't valid JSON at all. That
+    // can only happen when `glz::write_json_schema<Row>()` itself fails
+    // (forms.md, "Total schema failure yields an empty string") -- glaze's
+    // own schema writer failing for a real, compilable, default-constructible
+    // reflectable aggregate, not something reachable through any Row a
+    // caller can actually declare -- so this half is untestable dead code,
+    // kept only because it is cheaper to leave in than to prove absent at
+    // every call site. `!rowDom.contains("properties")` is the reachable
+    // half: it is what actually fires for a Row with no reflected members
+    // (see VtEmptyRow in test_views.cpp), since `mergeSchemaExtras` only
+    // ever writes `dom["properties"]` from inside the per-member visitor,
+    // which for zero members never runs.
     if (glz::read_json(rowDom, ::morph::forms::schemaJson<Row>()) || !rowDom.contains("properties")) {
         return "[]";
     }
