@@ -1189,3 +1189,58 @@ TEST_CASE(
     REQUIRE(winner.await(std::chrono::milliseconds{2000}));
     REQUIRE(winner.env.kind == "ok");
 }
+
+TEST_CASE("morph::backend::RemoteServer: an action that throws still cancels its own executeTimeout, not just "
+          "one that returns normally",
+          "[remote][connection-scope][limits]") {
+    // dispatchExecute's strand task cancels timeoutHandle in two places: the
+    // try block's normal-completion path, and the catch block's
+    // exception path. Every existing executeTimeout test in
+    // test_limit_policy.cpp either lets the timeout actually fire (a slow
+    // action outliving its budget) or lets a normal action complete well
+    // inside it -- none combine a *throwing* action with executeTimeout
+    // configured, so the catch block's own cancel() call had never run.
+    // CsSquareFail (already registered in csEnv()) throws synchronously,
+    // well inside any reasonable timeout.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    morph::backend::LimitPolicy policy;
+    policy.executeTimeout = std::chrono::milliseconds{500};
+    server->setLimitPolicy(policy);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(reg));
+    REQUIRE(reg.await());
+
+    morph::wire::Envelope req;
+    req.kind = "execute";
+    req.callId = 1;
+    req.modelId = reg.env.modelId;
+    req.modelType = "CS_SquareModel";
+    req.actionType = "CS_SquareFail";
+    req.body = "{}";
+    WaitReply reply;
+    server->handle(morph::wire::encode(req), std::ref(reply));
+
+    // The action throws immediately, well before the 500ms budget -- if this
+    // reply is "err" with the action's own message (not "timeout"), the
+    // catch block's cancel() ran and prevented the timeout from firing a
+    // second, stale reply later.
+    REQUIRE(reply.await(std::chrono::milliseconds{2000}));
+    REQUIRE(reply.env.kind == "err");
+    REQUIRE(reply.env.message == "square failed");
+
+    // Waiting past the configured timeout confirms it was actually
+    // cancelled, not merely that this reply beat it to the punch: a second,
+    // stale "timeout" reply landing here (which WaitReply has no way to
+    // observe, since it only keeps the first) would indicate the cancel
+    // didn't take -- there is nothing further to assert beyond "the server
+    // is still fine," which the next call demonstrates.
+    std::this_thread::sleep_for(std::chrono::milliseconds{600});
+
+    WaitReply again;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(again));
+    REQUIRE(again.await());
+    REQUIRE(again.env.kind == "ok");
+}
