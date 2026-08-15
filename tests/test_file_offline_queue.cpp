@@ -252,3 +252,157 @@ TEST_CASE("morph::offline::FileOfflineQueue: surviving items are intact after re
     }
     std::filesystem::remove(path);
 }
+
+TEST_CASE("morph::offline::FileOfflineQueue: a non-matching idempotencyKey enqueues a new item, not a dedup hit",
+          "[file_queue]") {
+    // The dedup scan in enqueue() must walk past a pending item with a
+    // *different* non-empty key without matching it -- covering the loop's
+    // no-match arm, not just the single-item, first-iteration match the
+    // existing dedup test exercises.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("first-payload", "key-a");
+        auto id2 = queue.enqueue("second-payload", "key-b");
+
+        REQUIRE(id2 != id1);
+        REQUIRE(queue.drain().size() == 2);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: markDone on an unknown id is a no-op", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("payload");
+        REQUIRE_NOTHROW(queue.markDone(id1 + 1000));  // never issued -- erase() finds nothing
+        REQUIRE(queue.drain().size() == 1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: setAttempts on an unknown id is a no-op", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("payload");
+        REQUIRE_NOTHROW(queue.setAttempts(id1 + 1000, 7));  // never issued -- find() misses
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        CHECK(items[0].attempts == 0);  // untouched
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: setIdempotencyKey via the base IOfflineQueue default stamps an "
+          "already-enqueued item",
+          "[file_queue]") {
+    // FileOfflineQueue overrides the two-arg enqueue(payload, key) itself, so
+    // an ordinary call -- through any reference type -- always resolves to
+    // that override, never to IOfflineQueue's default (which delegates to the
+    // single-arg enqueue and then stamps the key via the protected
+    // setIdempotencyKey hook). The explicit scope-qualified call below is the
+    // only way to invoke that base default over a FileOfflineQueue, mirroring
+    // the equivalent coverage test for IOfflineQueue's default in
+    // test_offline_queue.cpp -- it reaches FileOfflineQueue's own
+    // setIdempotencyKey override, which is otherwise never invoked by any
+    // ordinary call path.
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        morph::offline::IOfflineQueue& base = queue;
+        auto id = base.IOfflineQueue::enqueue("payload", "stamped-key");
+
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        CHECK(items[0].id == id);
+        CHECK(items[0].idempotencyKey == "stamped-key");
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: setIdempotencyKey via the base default is a no-op on an unknown id",
+          "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto id1 = queue.enqueue("payload");
+
+        // Stamp a key onto an id that was never enqueued -- setIdempotencyKey's
+        // find() misses, so this must not throw or touch any existing item.
+        morph::offline::IOfflineQueue& base = queue;
+        REQUIRE_NOTHROW(base.IOfflineQueue::enqueue("other-payload", "orphan-key"));
+
+        auto items = queue.drain();
+        REQUIRE(items.size() == 2);
+        CHECK(items[0].id == id1);
+        CHECK(items[0].idempotencyKey.empty());
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: load() skips a blank line in the NDJSON file", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    uint64_t id1 = 0;
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        id1 = queue.enqueue("first");
+    }
+    // A blank line can't be produced by FileOfflineQueue itself (every write
+    // ends in exactly one '\n' with no other blank lines), but a hand-edited
+    // or externally-appended file could have one -- load() must skip it
+    // rather than try to decode it as JSON.
+    {
+        std::ofstream out{path, std::ios::app};
+        out << "\n";
+    }
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        auto items = queue.drain();
+        REQUIRE(items.size() == 1);
+        REQUIRE(items[0].id == id1);
+        REQUIRE(items[0].payload == "first");
+        // The queue is still fully usable afterwards.
+        auto id2 = queue.enqueue("second");
+        REQUIRE(id2 > id1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: load() rethrows on a malformed line that is NOT the last "
+          "(genuine corruption)",
+          "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        queue.enqueue("first");
+    }
+    {
+        // Insert a complete-but-malformed line, then a well-formed line after
+        // it -- the malformed line is no longer trailing, so it must be
+        // reported as genuine corruption, not tolerated like a torn tail.
+        std::ofstream out{path, std::ios::app};
+        out << "not json at all\n";
+        out << R"({"op":"put","id":99,"payload":"after-corruption","idempotencyKey":"","attempts":0})" << "\n";
+    }
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), morph::offline::FileOfflineQueueError);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: construction throws if the compaction temp file cannot be opened",
+          "[file_queue]") {
+    // load() no-ops when the path does not exist, so compact() is the first
+    // thing to touch disk: its own fopen(path + ".compact-tmp", "w") fails
+    // when the parent directory does not exist, throwing before the
+    // append-mode _file handle is ever opened.
+    auto const path = std::filesystem::path{"/no/such/directory/at/all/queue.ndjson"};
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), std::runtime_error);
+}
