@@ -21,6 +21,7 @@ var hierarchy =
     [ "morph::bridge::Bridge", "d0/ddc/classmorph_1_1bridge_1_1Bridge.html", null ],
     [ "morph::bridge::BridgeHandler&lt; Model, Sharing &gt;", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", null ],
     [ "morph::bridge::NoSharing", "d8/d38/structmorph_1_1bridge_1_1NoSharing.html", null ],
+    [ "morph::core::FileIoOps", "db/d00/structmorph_1_1core_1_1FileIoOps.html", null ],
     [ "morph::detail::FixedString&lt; N &gt;", "df/d52/structmorph_1_1detail_1_1FixedString.html", null ],
     [ "morph::exec::IExecutor", "d4/d49/structmorph_1_1exec_1_1IExecutor.html", [
       [ "morph::exec::MainThreadExecutor", "d1/db0/classmorph_1_1exec_1_1MainThreadExecutor.html", null ],

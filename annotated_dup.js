@@ -30,6 +30,9 @@ var annotated_dup =
         [ "AllowShared", "dd/dfb/structmorph_1_1bridge_1_1AllowShared.html", null ],
         [ "BridgeHandler", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler" ]
       ] ],
+      [ "core", null, [
+        [ "FileIoOps", "db/d00/structmorph_1_1core_1_1FileIoOps.html", "db/d00/structmorph_1_1core_1_1FileIoOps" ]
+      ] ],
       [ "detail", null, [
         [ "FixedString", "df/d52/structmorph_1_1detail_1_1FixedString.html", "df/d52/structmorph_1_1detail_1_1FixedString" ]
       ] ],

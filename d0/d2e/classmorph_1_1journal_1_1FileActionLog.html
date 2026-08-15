@@ -137,18 +137,18 @@ Inheritance diagram for morph::journal::FileActionLog:</div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
 Public Member Functions</h2></td></tr>
-<tr class="memitem:ac31c936b2ec3c6a63f979aca51a92fd5" id="r_ac31c936b2ec3c6a63f979aca51a92fd5"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#ac31c936b2ec3c6a63f979aca51a92fd5">FileActionLog</a> (std::filesystem::path path)</td></tr>
-<tr class="memdesc:ac31c936b2ec3c6a63f979aca51a92fd5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (creating if necessary) <code class="param">path</code> for appending.  <br /></td></tr>
+<tr class="memitem:a713f31e9794ab864d6ede7037ee78482" id="r_a713f31e9794ab864d6ede7037ee78482"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a713f31e9794ab864d6ede7037ee78482">FileActionLog</a> (std::filesystem::path path, <a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a> ioOps={})</td></tr>
+<tr class="memdesc:a713f31e9794ab864d6ede7037ee78482"><td class="mdescLeft">&#160;</td><td class="mdescRight">Opens (creating if necessary) <code class="param">path</code> for appending.  <br /></td></tr>
 <tr class="memitem:a9a84c25f2d2b8c8bf8354a4070b0bac1" id="r_a9a84c25f2d2b8c8bf8354a4070b0bac1"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a9a84c25f2d2b8c8bf8354a4070b0bac1">~FileActionLog</a> () override</td></tr>
 <tr class="memdesc:a9a84c25f2d2b8c8bf8354a4070b0bac1"><td class="mdescLeft">&#160;</td><td class="mdescRight">Closes the underlying file.  <br /></td></tr>
 <tr class="memitem:ab8176a5bea20d523b7e21637904f8130" id="r_ab8176a5bea20d523b7e21637904f8130"><td class="memItemLeft"><a id="ab8176a5bea20d523b7e21637904f8130" name="ab8176a5bea20d523b7e21637904f8130"></a>
 &#160;</td><td class="memItemRight"><b>FileActionLog</b> (const FileActionLog &amp;)=delete</td></tr>
 <tr class="memitem:a56bc838003b8ac65a287cf4291103018" id="r_a56bc838003b8ac65a287cf4291103018"><td class="memItemLeft"><a id="a56bc838003b8ac65a287cf4291103018" name="a56bc838003b8ac65a287cf4291103018"></a>
-<a class="el" href="#ac31c936b2ec3c6a63f979aca51a92fd5">FileActionLog</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#ac31c936b2ec3c6a63f979aca51a92fd5">FileActionLog</a> &amp;)=delete</td></tr>
+<a class="el" href="#a713f31e9794ab864d6ede7037ee78482">FileActionLog</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a713f31e9794ab864d6ede7037ee78482">FileActionLog</a> &amp;)=delete</td></tr>
 <tr class="memitem:a8e9af0ee5a1ff3dc9d0cebdb1412bc2e" id="r_a8e9af0ee5a1ff3dc9d0cebdb1412bc2e"><td class="memItemLeft"><a id="a8e9af0ee5a1ff3dc9d0cebdb1412bc2e" name="a8e9af0ee5a1ff3dc9d0cebdb1412bc2e"></a>
 &#160;</td><td class="memItemRight"><b>FileActionLog</b> (FileActionLog &amp;&amp;)=delete</td></tr>
 <tr class="memitem:a06cc378133adbce6664bf008274c0bc5" id="r_a06cc378133adbce6664bf008274c0bc5"><td class="memItemLeft"><a id="a06cc378133adbce6664bf008274c0bc5" name="a06cc378133adbce6664bf008274c0bc5"></a>
-<a class="el" href="#ac31c936b2ec3c6a63f979aca51a92fd5">FileActionLog</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#ac31c936b2ec3c6a63f979aca51a92fd5">FileActionLog</a> &amp;&amp;)=delete</td></tr>
+<a class="el" href="#a713f31e9794ab864d6ede7037ee78482">FileActionLog</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a713f31e9794ab864d6ede7037ee78482">FileActionLog</a> &amp;&amp;)=delete</td></tr>
 <tr class="memitem:ae5f2328fc8fdc456e2592b610ec2feea" id="r_ae5f2328fc8fdc456e2592b610ec2feea"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea">append</a> (<a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html">LogEntry</a> entry) override</td></tr>
 <tr class="memdesc:ae5f2328fc8fdc456e2592b610ec2feea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">entry</code> as one JSON line. Buffered until <span class="tt"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3" title="Flushes stdio&#39;s buffer, then fsyncs the file descriptor. Thread-safe.">flush()</a></span>. Thread-safe.  <br /></td></tr>
 <tr class="memitem:a9ae4ceee86a705a0dab6388abc8c87a3" id="r_a9ae4ceee86a705a0dab6388abc8c87a3"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a9ae4ceee86a705a0dab6388abc8c87a3">flush</a> () override</td></tr>
@@ -165,10 +165,10 @@ Public Member Functions</h2></td></tr>
 <dl class="section user"><dt>Thread safety</dt><dd>All public methods are thread-safe (guarded by an internal mutex). Safe to use from multiple threads within one process; not safe for multiple processes to append to the same path concurrently.</dd></dl>
 <dl class="section user"><dt>Rotation</dt><dd><span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span> seals the active file (rename to a host-chosen path) and reopens a fresh, empty one at the original path — the seam a host uses to implement its own retention policy. See <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span>'s own docs. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00052">52</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00053">53</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
-<a id="ac31c936b2ec3c6a63f979aca51a92fd5" name="ac31c936b2ec3c6a63f979aca51a92fd5"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#ac31c936b2ec3c6a63f979aca51a92fd5">&#9670;&#160;</a></span>FileActionLog()</h2>
+<a id="a713f31e9794ab864d6ede7037ee78482" name="a713f31e9794ab864d6ede7037ee78482"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a713f31e9794ab864d6ede7037ee78482">&#9670;&#160;</a></span>FileActionLog()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -179,8 +179,12 @@ Public Member Functions</h2></td></tr>
         <tr>
           <td class="memname">morph::journal::FileActionLog::FileActionLog </td>
           <td>(</td>
-          <td class="paramtype">std::filesystem::path</td>          <td class="paramname"><span class="paramname"><em>path</em></span></td><td>)</td>
+          <td class="paramtype">std::filesystem::path</td>          <td class="paramname"><span class="paramname"><em>path</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
           <td></td>
+          <td class="paramtype"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html">::morph::core::FileIoOps</a></td>          <td class="paramname"><span class="paramname"><em>ioOps</em></span><span class="paramdefsep"> = </span><span class="paramdefval">{}</span>&#160;)</td>
         </tr>
       </table>
   </td>
@@ -194,6 +198,7 @@ Public Member Functions</h2></td></tr>
 <p>Also rebuilds the <span class="tt">idempotencyKey</span> dedup set (see <span class="tt"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea" title="Appends entry as one JSON line. Buffered until flush(). Thread-safe.">append()</a></span>) from whatever is already on disk at <code class="param">path</code> — an O(n) scan of the existing file's contents, paid once here, not on every <span class="tt"><a class="el" href="#ae5f2328fc8fdc456e2592b610ec2feea" title="Appends entry as one JSON line. Buffered until flush(). Thread-safe.">append()</a></span>. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">path</td><td>File to append entries to. </td></tr>
+    <tr><td class="paramname">ioOps</td><td>Injectable file-I/O primitives; defaults to the real syscalls. Test-only seam — see <span class="tt"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html" title="The raw file-I/O primitives morph::journal::FileActionLog and morph::offline::FileOfflineQueue both c...">morph::core::FileIoOps</a></span>'s own docs — for forcing the failure branches that need a real OS-level I/O error to reach. </td></tr>
   </table>
   </dd>
 </dl>
@@ -205,7 +210,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00069">69</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +240,7 @@ Public Member Functions</h2></td></tr>
 <p>Closes the underlying file. </p>
 <p><span class="tt">_file</span> is normally non-null: the constructor either finishes with a valid handle or throws before completing (in which case this destructor never runs), and copy/move are deleted. The one exception is a <span class="tt"><a class="el" href="#a8bf8b47e8ea1b01f4b30e5eea819b5bb" title="Seals the active file and reopens a fresh, empty one at the same path.">rotate()</a></span> whose reopen failed after the rename succeeded — it throws with the handle left null rather than dangling, so the null check here is reachable and load-bearing, not defensive noise. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00112">112</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -280,7 +285,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac49e1e4a818057762c752994295549db">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00142">142</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -357,7 +362,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../df/d4e/structmorph_1_1journal_1_1IActionLog.html#ac13399c56e34fdd944a9a75cd8df4cda">morph::journal::IActionLog</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00213">213</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00202">202</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
@@ -400,7 +405,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00283">283</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html#l00272">272</a> of file <a class="el" href="../../d7/da9/file__action__log_8hpp_source.html">file_action_log.hpp</a>.</p>
 
 </div>
 </div>
