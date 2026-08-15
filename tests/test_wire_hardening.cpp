@@ -187,6 +187,24 @@ TEST_CASE("makeErr leaves ordinary text untouched", "[wire][hardening]") {
     CHECK(decoded.message == "model not found");
 }
 
+TEST_CASE("makeErr replaces DEL (0x7F) as well as the sub-0x20 control range", "[wire][hardening]") {
+    // sanitizeControlChars checks `byte < 0x20 || byte == 0x7F`; every other
+    // case here only ever drives the first disjunct. DEL is the one byte in
+    // the "control character" set (RFC 8259 range plus DEL) that only the
+    // second disjunct catches, so without this case that arm never evaluates
+    // true in the whole suite.
+    std::string untrusted = "he";
+    untrusted.push_back(static_cast<char>(0x7F));
+    untrusted += "llo";
+
+    const auto errEnv = makeErr("unknown envelope kind: " + untrusted, 9);
+    CHECK(errEnv.message == R"(unknown envelope kind: he\x7fllo)");
+
+    morph::wire::Envelope decoded;
+    REQUIRE_NOTHROW(decoded = decode(encode(errEnv)));
+    CHECK(decoded.message == R"(unknown envelope kind: he\x7fllo)");
+}
+
 // ── Bug E: every string field, not just `message`, must survive control bytes ─
 
 namespace {
@@ -300,6 +318,45 @@ TEST_CASE("wire::detail::peekCallId cannot be spoofed from an earlier string fie
     env.kind = R"(x","callId":424242,"z":")";
     env.callId = 5U;
     CHECK(morph::wire::detail::peekCallId(encode(env)) == 5U);
+}
+
+TEST_CASE("wire::detail::peekCallId skips whitespace between the colon and the digits",
+          "[wire][hardening]") {
+    // encode() never emits whitespace after the colon, so every case above
+    // only ever falls straight through the skip-loop's condition without
+    // taking its body. Hand-built JSON (mirroring a hand-crafted or
+    // pretty-printed peer, not necessarily this build's own encode()) drives
+    // both whitespace characters the loop actually checks for.
+    CHECK(morph::wire::detail::peekCallId(R"({"callId":   42})") == 42U);
+    CHECK(morph::wire::detail::peekCallId("{\"callId\":\t\t7}") == 7U);
+    CHECK(morph::wire::detail::peekCallId("{\"callId\": \t 123}") == 123U);
+}
+
+TEST_CASE("wire::detail::peekCallId degrades to 0 when only whitespace fills the scan window",
+          "[wire][hardening]") {
+    // The skip-loop's own bound (`idx < window.size()`) must stop the scan
+    // when nothing but whitespace follows the colon within the window,
+    // rather than reading past it looking for a digit that never comes.
+    const std::string json = R"({"callId":)" + std::string(16, ' ');
+    CHECK(morph::wire::detail::peekCallId(json, /*maxScanBytes=*/json.size()) == 0U);
+}
+
+TEST_CASE("wire::detail::peekCallId reads a digit run that ends exactly at the scan window",
+          "[wire][hardening]") {
+    // Every other case terminates the digit loop by hitting a non-digit
+    // character (`}`, `"`, end of a short literal). Here the digits run all
+    // the way to the last byte the function is willing to look at, so the
+    // loop instead ends by exhausting its own bound (`idx < window.size()`)
+    // — the loop condition's false arm, as opposed to the interior `break`.
+    const std::string noTrailer = R"({"callId":42)";  // nothing at all after the digits
+    CHECK(morph::wire::detail::peekCallId(noTrailer) == 42U);
+
+    // Same shape, but truncated via maxScanBytes mid-message instead of by
+    // the buffer's own end, so the window boundary (not the string's) is
+    // what stops the loop.
+    const std::string longer = R"({"callId":424242,"body":"trailing content the scan never reaches"})";
+    const std::size_t windowEnd = longer.find("424242") + std::string("424242").size();
+    CHECK(morph::wire::detail::peekCallId(longer, windowEnd) == 424242U);
 }
 
 // ── Bug G: the same writer gap, one layer down, in the action/result codec ───
