@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Rewrite an lcov file's branch records to llvm-cov's *aggregate* coverage,
-and drop phantom zero-line function records for implicit-special-member-only
-headers.
+and drop stray per-line records for files llvm-cov itself doesn't count.
 
 `llvm-cov export -format=lcov` emits branch data (BRDA) once per template
 instantiation. A branch that is fully covered in aggregate is therefore still
@@ -16,24 +15,28 @@ branch's source location taken from the JSON export. The result mirrors exactly
 what `llvm-cov report` counts, so genuinely-uncovered branches stay uncovered
 and only the per-instantiation noise disappears.
 
-It also strips a second, unrelated kind of noise (see morph#93): a header that
-declares a class with no user-provided special members (no explicit
-destructor, e.g. a `QObject`-derived adapter whose body lives entirely in a
-matching .cpp) gets an implicitly-defined destructor synthesized by the
-compiler. On the Itanium ABI that implicit destructor gets its own
-coverage-map function/region record, attributed back to the class's
-declaration in the header, but -- being compiler-synthesized rather than
-user-written -- it carries no real line span of its own and is scored
-permanently "missed" regardless of how many times the class is actually
-destroyed. `llvm-cov report` already discounts this (such a file shows
-`Lines: 0, Cover: -`, excluded from the percentage rather than scored against
-it), but `llvm-cov export -format=lcov` still emits the FN/FNDA records for
-these phantom functions, so Codecov counts them as real uncovered lines/
-functions in the diff. A file with functions but zero real instrumented lines
-is exactly `llvm-cov report`'s own "Lines: 0" signal, so this script uses that
-same signal to drop the file's FN/FNDA/FNF/FNH records -- the file's DA/BRDA
-records are untouched (there are none to touch: zero lines means the JSON
-export has no `segments` for it either).
+It also strips a second, unrelated kind of noise (see morph#93): `Q_OBJECT`
+implicitly declares a static `tr()` overload for the enclosing class, whose
+coverage-map region llvm-cov attributes starting at the `Q_OBJECT` line and
+running to the start of whatever comes next in the file (the next class, or
+EOF) -- easily dozens of lines, spanning doc comments, blank lines and access
+specifiers that were never executable in the first place. `tr()` itself is
+practically never called directly (Qt's own i18n machinery calls it, not
+application code), so this region is always "uncovered", and `llvm-cov show`/
+`export -format=lcov` faithfully emit a `DA:<line>,0` for every line inside
+it. Crucially, `llvm-cov`'s own line-count aggregation *disagrees* with its
+own per-line export here: every such file's `LF`/`LH` totals are `0`, i.e.
+llvm-cov report itself doesn't consider these "real" lines at all (hence
+these files show `Lines: 0, Cover: -` in its report table) -- but the raw
+per-line `DA:` records get emitted anyway, and Codecov faithfully counts
+each stray `DA:<line>,0` as a real missed line, inflating the diff's miss
+count with lines nothing could ever have exercised (`Q_OBJECT`'s macro line
+itself, its class's doc comments, blank lines, `public:`/`signals:`/
+`private:`). This script uses llvm-cov's own verdict -- a file whose block
+ends with `LF:0`/`LH:0` -- to drop every `DA:`/`FN:`/`FNDA:`/`FNF:`/`FNH:`
+record for that file, matching what `llvm-cov report` already shows. No
+JSON lookup is needed for this part: `LF:`/`LH:` are already present in the
+raw lcov itself, once each file's whole record is buffered.
 
 Usage: aggregate_lcov_branches.py <in.lcov> <cov.json> <out.lcov>
 """
@@ -61,60 +64,61 @@ def load_branch_aggregate(json_path):
     return per_file
 
 
-def load_files_with_no_real_lines(json_path):
-    """Filenames (as they appear in the JSON export) that have zero
-    instrumented source lines but at least one function record --
-    `llvm-cov report`'s own "Lines: 0" files (shown with `Cover: -`,
-    excluded from its percentage). A file with any real, user-written
-    function body has `summary.lines.count > 0`; the only way to have
-    function records with zero lines is a phantom implicit-special-member
-    record (morph#93).
-    """
-    data = json.load(open(json_path))
-    no_lines = set()
-    for f in data["data"][0]["files"]:
-        summary = f.get("summary", {})
-        if summary.get("lines", {}).get("count", 0) == 0 and summary.get("functions", {}).get("count", 0) > 0:
-            no_lines.add(f["filename"])
-    return no_lines
-
-
 def main():
     in_lcov, json_path, out_lcov = sys.argv[1], sys.argv[2], sys.argv[3]
     branches = load_branch_aggregate(json_path)
-    phantom_only_files = load_files_with_no_real_lines(json_path)
 
     out = []
+    # Each file's record is buffered so it can be dropped in its entirety
+    # (line/function noise) once LF:/LH: -- which only appear at the very
+    # end of the block, right before end_of_record -- are known.
+    block = []
     cur = None
-    cur_is_phantom_only = False
     for raw in open(in_lcov):
         line = raw.rstrip("\n")
         if line.startswith("SF:"):
             cur = line[3:]
-            cur_is_phantom_only = cur in phantom_only_files
-            out.append(line)
-        elif line.startswith(("FN:", "FNDA:", "FNF:", "FNH:")) and cur_is_phantom_only:
-            continue  # drop phantom implicit-special-member function records (morph#93)
+            block = [line]
         elif line.startswith(("BRDA:", "BRF:", "BRH:")):
             continue  # drop per-instantiation branch data; re-emitted below
         elif line == "end_of_record":
             by_line = branches.get(cur, {})
             brf = brh = 0
+            branch_records = []
             idx = 0
             for ln in sorted(by_line):
                 for (_c0, _c0b, t, fc) in by_line[ln]:
                     for taken in (t, fc):
-                        out.append(f"BRDA:{ln},0,{idx},{taken}")
+                        branch_records.append(f"BRDA:{ln},0,{idx},{taken}")
                         idx += 1
                         brf += 1
                         if taken > 0:
                             brh += 1
             if brf:
-                out.append(f"BRF:{brf}")
-                out.append(f"BRH:{brh}")
-            out.append(line)
+                branch_records.append(f"BRF:{brf}")
+                branch_records.append(f"BRH:{brh}")
+
+            lf = lh = None
+            for bline in block:
+                if bline.startswith("LF:"):
+                    lf = int(bline[3:])
+                elif bline.startswith("LH:"):
+                    lh = int(bline[3:])
+            if lf == 0 and lh == 0:
+                # llvm-cov's own verdict is "nothing here to count" (matches
+                # `llvm-cov report`'s "Lines: 0, Cover: -"), but it still
+                # emitted stray FN/FNDA/DA records for this file (morph#93).
+                # Keep only SF:, drop everything the block carried, including
+                # the branch records just built above.
+                out.append(block[0])
+                out.append("end_of_record")
+            else:
+                out.extend(block)  # BRDA:/BRF:/BRH: never reach `block` -- filtered out above
+                out.extend(branch_records)
+                out.append(line)
+            block = []
         else:
-            out.append(line)
+            block.append(line)
 
     open(out_lcov, "w").write("\n".join(out) + "\n")
 
