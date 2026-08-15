@@ -62,6 +62,19 @@ struct FlowStepExplodesResult {
     std::int64_t id = 0;
 };
 
+// A step whose execute() throws a type that does not derive from
+// std::exception, so logUnhandledError's `catch (...)` arm (as opposed to
+// its `catch (const std::exception&)` sibling, already exercised by
+// FlowStepExplodes above) gets driven -- mirrors test_executor_extra.cpp's
+// and test_timeout_scheduler.cpp's `throw 42;` non-std::exception pattern.
+struct FlowStepExplodesNonStd {
+    std::string label;
+    [[nodiscard]] bool validate() const { return !label.empty(); }
+};
+struct FlowStepExplodesNonStdResult {
+    std::int64_t id = 0;
+};
+
 struct FlowTestModel {
     std::int64_t nextId = 1;
 
@@ -81,12 +94,16 @@ struct FlowTestModel {
     static FlowStepExplodesResult execute(const FlowStepExplodes& /*action*/) {
         throw std::runtime_error{"boom"};
     }
+    static FlowStepExplodesNonStdResult execute(const FlowStepExplodesNonStd& /*action*/) {
+        throw 42;  // NOLINT(hicpp-exception-baseclass) — exercises logUnhandledError's catch(...) arm
+    }
 };
 
 BRIDGE_REGISTER_MODEL(FlowTestModel, "FlowsTest_FlowTestModel")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepOne, "FlowsTest_FlowStepOne")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepTwo, "FlowsTest_FlowStepTwo")
 BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepExplodes, "FlowsTest_FlowStepExplodes")
+BRIDGE_REGISTER_ACTION(FlowTestModel, FlowStepExplodesNonStd, "FlowsTest_FlowStepExplodesNonStd")
 
 using DemoWizard = morph::flows::Wizard<
     "Demo flow", morph::flows::WizardStep<FlowStepOne, "Step one">,
@@ -308,6 +325,39 @@ TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]"
         std::scoped_lock const lock{loggedMtx};
         return std::ranges::any_of(
             logged, [](const std::string& line) { return line.contains("FlowsTest_FlowStepExplodes"); });
+    }));
+    CHECK_FALSE(flow.ready());
+}
+
+TEST_CASE("FlowSession: no onError callback logs a non-std::exception failure as unknown", "[flows]") {
+    morph::exec::ThreadPoolExecutor pool{2};
+    SyncExecutor cbExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(pool)};
+    morph::bridge::BridgeHandler<FlowTestModel> handler{bridge, &cbExec};
+
+    // No onError given, and the step throws a type that is not a
+    // std::exception -- drives logUnhandledError's `catch (...)` arm, the
+    // sibling of the `catch (const std::exception&)` arm the test above
+    // already exercises via std::runtime_error.
+    morph::flows::FlowSession<FlowTestModel, FlowStepExplodesNonStd> flow{handler};
+
+    std::mutex loggedMtx;
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) {
+            std::scoped_lock const lock{loggedMtx};
+            logged.emplace_back(msg);
+        },
+        morph::log::LogLevel::error,
+    };
+
+    flow.set<&FlowStepExplodesNonStd::label>(std::string{"trigger"});
+
+    REQUIRE(morph::testing::waitUntil([&] {
+        std::scoped_lock const lock{loggedMtx};
+        return std::ranges::any_of(logged, [](const std::string& line) {
+            return line.contains("FlowsTest_FlowStepExplodesNonStd") && line.contains("unknown exception");
+        });
     }));
     CHECK_FALSE(flow.ready());
 }
