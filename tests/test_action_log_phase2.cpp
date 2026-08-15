@@ -14,6 +14,7 @@
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#include <morph/core/file_io_ops.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/core/remote.hpp>
 #include <morph/core/wire.hpp>
@@ -606,4 +607,200 @@ TEST_CASE("FileActionLog::rotate: promotes unflushed idempotencyKeys into durabl
     auto sealedEntries = sealedReader.entries();
     REQUIRE(sealedEntries.size() == 1);
     REQUIRE(sealedEntries[0].idempotencyKey == "row-1");
+}
+
+// ── FileIoOps fault injection (LASTRADA-Software/morph#97) ─────────────────
+//
+// Every branch below only runs when a real OS-level file-I/O call fails
+// partway through an otherwise-successful operation -- previously
+// unreachable from a portable unit test (see each site's prior in-code
+// comment, now removed since these tests close them for real). FileIoOps
+// (morph/core/file_io_ops.hpp) makes each call injectable; every test here
+// overrides exactly one member and leaves the rest at their real defaults,
+// so the surrounding I/O still touches the real filesystem normally.
+
+TEST_CASE("FileActionLog::append: a short fwrite() throws and does not record the idempotencyKey as unflushed",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_append_short_write"};
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [](const void*, std::size_t size, std::FILE*) { return size - 1; };  // always short by one byte
+
+    FileActionLog log{tmp.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    entry.idempotencyKey = "row-1";
+    REQUIRE_THROWS_AS(log.append(entry), std::runtime_error);
+
+    // The failed write must not have left the key recorded as unflushed --
+    // a retry of the same row must not be silently deduplicated away.
+    morph::core::FileIoOps realOps;  // the retry itself must actually succeed
+    FileActionLog log2{tmp.path, realOps};
+    log2.append(entry);
+    log2.flush();
+    REQUIRE(log2.entries().size() == 1);
+}
+
+TEST_CASE("FileActionLog::flush: a failing fflush() throws and forgets the unflushed idempotencyKeys",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_flush_fflush"};
+    // `log` stores its own copy of ioOps by value (FileIoOps's whole point is
+    // to be a plain, copyable strategy) -- mutating this local `ioOps` after
+    // construction has no effect on what `log` already captured. A shared
+    // `shouldFail` flag the lambda itself reads is what lets one FileIoOps
+    // instance flip from failing to succeeding mid-test.
+    auto shouldFail = std::make_shared<bool>(true);
+    morph::core::FileIoOps ioOps;
+    ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
+
+    FileActionLog log{tmp.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    entry.idempotencyKey = "row-1";
+    log.append(entry);
+    REQUIRE_THROWS_AS(log.flush(), std::runtime_error);
+
+    // Forgotten, not durably deduplicated: a retry must actually re-append.
+    *shouldFail = false;
+    log.append(entry);
+    log.flush();
+    REQUIRE(log.entries().size() == 2);
+}
+
+TEST_CASE("FileActionLog::flush: a failing fsync() throws and forgets the unflushed idempotencyKeys",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_flush_fsync"};
+    auto shouldFail = std::make_shared<bool>(true);
+    morph::core::FileIoOps ioOps;
+    morph::core::FileIoOps const realOps;  // captures the real default fsync callback to fall back to
+    ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
+
+    FileActionLog log{tmp.path, ioOps};
+    auto entry = makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10");
+    entry.idempotencyKey = "row-1";
+    log.append(entry);
+    REQUIRE_THROWS_AS(log.flush(), std::runtime_error);
+
+    *shouldFail = false;
+    log.append(entry);
+    log.flush();
+    REQUIRE(log.entries().size() == 2);
+}
+
+TEST_CASE("FileActionLog::rotate: a failing pre-rotation fflush() throws before anything is closed or renamed",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_fflush_active"};
+    TempFile const sealed{"file_fault_rotate_fflush_sealed"};
+    auto shouldFail = std::make_shared<bool>(true);
+    morph::core::FileIoOps ioOps;
+    ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
+
+    FileActionLog log{active.path, ioOps};
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
+
+    // Nothing was closed or renamed: the active file is exactly as it was,
+    // and no sealed file was ever created.
+    REQUIRE_FALSE(std::filesystem::exists(sealed.path));
+    *shouldFail = false;
+    log.flush();
+    REQUIRE(log.entries().size() == 1);
+}
+
+TEST_CASE("FileActionLog::rotate: a failing pre-rotation fsync() throws before anything is closed or renamed",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const active{"file_fault_rotate_fsync_active"};
+    TempFile const sealed{"file_fault_rotate_fsync_sealed"};
+    auto shouldFail = std::make_shared<bool>(true);
+    morph::core::FileIoOps ioOps;
+    morph::core::FileIoOps const realOps;
+    ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
+
+    FileActionLog log{active.path, ioOps};
+    log.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    REQUIRE_THROWS_AS(log.rotate(sealed.path), std::runtime_error);
+
+    REQUIRE_FALSE(std::filesystem::exists(sealed.path));
+    *shouldFail = false;
+    log.flush();
+    REQUIRE(log.entries().size() == 1);
+}
+
+TEST_CASE(
+    "FileActionLog::rotate: a failing reopen after a successful rename leaves the log closed, "
+    "requireOpen()'s throwing arm reachable, and the destructor's null check load-bearing",
+    "[action_log][phase2][file][fault-injection]") {
+    // The one scenario morph#97 called out as needing the *most* real-world
+    // contortion to reach without this seam: fopen() failing on the reopen
+    // right after the rename to sealedPath already succeeded. With FileIoOps,
+    // this is just "let the constructor's own fopen() through for real, then
+    // fail every fopen() call after it" -- a call counter, since rotator's
+    // own construction needs a real, valid handle before rotate() ever runs.
+    // A single FileActionLog instance for the whole test: a second instance
+    // on the same path would hold its own competing file handle open, which
+    // is exactly the kind of extra concurrency this test does not need.
+    TempFile const active{"file_fault_rotate_reopen_active"};
+    TempFile const sealed{"file_fault_rotate_reopen_sealed"};
+
+    auto callCount = std::make_shared<int>(0);
+    morph::core::FileIoOps ioOps;
+    morph::core::FileIoOps const realOps;
+    ioOps.fopen = [callCount, realOps](const std::string& path, const char* mode) -> std::FILE* {
+        return (*callCount)++ == 0 ? realOps.fopen(path, mode) : nullptr;
+    };
+    FileActionLog rotator{active.path, ioOps};
+    rotator.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "10"));
+    rotator.flush();
+
+    REQUIRE_THROWS_AS(rotator.rotate(sealed.path), std::runtime_error);
+    // The rename itself succeeded (fflush/fsync were untouched -- only fopen
+    // fails), so the sealed file now holds every entry that was on disk.
+    REQUIRE(std::filesystem::exists(sealed.path));
+
+    // The log is left with no open file: append()/flush()/a further rotate()
+    // must all throw via requireOpen(), not dereference a null handle.
+    REQUIRE_THROWS_AS(rotator.append(makeEntry("P2_Model", "acct-1", "P2_Deposit", "{}", "20")), std::runtime_error);
+    REQUIRE_THROWS_AS(rotator.flush(), std::runtime_error);
+    REQUIRE_THROWS_AS(rotator.rotate(sealed.path), std::runtime_error);
+
+    // Destruction with _file == nullptr must be safe (the null check in the
+    // destructor is load-bearing, not defensive noise) -- rotator's own
+    // scope exit below exercises exactly that.
+}
+
+TEST_CASE("FileActionLog: a torn trailing record whose path becomes unreadable is left untouched",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_repair_unreadable"};
+    {
+        std::ofstream out{tmp.path, std::ios::binary};
+        out << R"({"seq":1,"modelType":"P2_Model","entityKey":"acct-1","actionType":"P2_Deposit","payload":"{}","result":"10","principal":"","timestampMs":0})"
+            << "\n";
+        out << R"({"seq":2,"modelType":"P2_Model")";  // torn trailing record, no newline
+    }
+    auto const sizeBefore = std::filesystem::file_size(tmp.path);
+
+    morph::core::FileIoOps ioOps;
+    ioOps.canOpenForRead = [](const std::filesystem::path&) { return false; };
+    FileActionLog log{tmp.path, ioOps};  // repairTornTail() must skip the truncation
+
+    REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
+}
+
+TEST_CASE("FileActionLog: a torn trailing record whose resize_file() fails is logged, not silently swallowed",
+          "[action_log][phase2][file][fault-injection]") {
+    TempFile const tmp{"file_fault_repair_resize_fails"};
+    {
+        std::ofstream out{tmp.path, std::ios::binary};
+        out << R"({"seq":1,"modelType":"P2_Model","entityKey":"acct-1","actionType":"P2_Deposit","payload":"{}","result":"10","principal":"","timestampMs":0})"
+            << "\n";
+        out << R"({"seq":2,"modelType":"P2_Model")";  // torn trailing record, no newline
+    }
+    auto const sizeBefore = std::filesystem::file_size(tmp.path);
+
+    morph::core::FileIoOps ioOps;
+    ioOps.resizeFile = [](const std::filesystem::path&, std::uintmax_t, std::error_code& errorCode) {
+        errorCode = std::make_error_code(std::errc::permission_denied);
+    };
+    FileActionLog log{tmp.path, ioOps};  // repairTornTail() logs a warning and returns, does not throw
+
+    // The failed truncation left the file exactly as it was -- not repaired,
+    // but not corrupted further either.
+    REQUIRE(std::filesystem::file_size(tmp.path) == sizeBefore);
 }

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <morph/core/file_io_ops.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <string>
 #include <vector>
@@ -405,4 +406,104 @@ TEST_CASE("morph::offline::FileOfflineQueue: construction throws if the compacti
     // append-mode _file handle is ever opened.
     auto const path = std::filesystem::path{"/no/such/directory/at/all/queue.ndjson"};
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path), std::runtime_error);
+}
+
+// ── FileIoOps fault injection (LASTRADA-Software/morph#97) ─────────────────
+//
+// Same seam FileActionLog's own fault-injection tests use (morph/core/
+// file_io_ops.hpp) -- FileOfflineQueue has the identical class of gap:
+// several branches only run when a real OS-level file-I/O call fails
+// partway through an otherwise-successful operation.
+
+TEST_CASE("morph::offline::FileOfflineQueue: the constructor's own append-mode fopen() failing throws",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    morph::core::FileIoOps ioOps;
+    ioOps.fopen = [](const std::string&, const char*) -> std::FILE* { return nullptr; };
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a short fwrite() to the append-mode file throws",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [shouldFail](const void* buffer, std::size_t size, std::FILE* file) {
+        return *shouldFail ? size - 1 : std::fwrite(buffer, 1, size, file);
+    };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
+    }  // queue's own file handle must close before remove() -- Windows cannot delete an open file
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a failing fflush() on the append-mode file throws",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    ioOps.fflush = [shouldFail](std::FILE* file) { return *shouldFail ? -1 : std::fflush(file); };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue::enqueue: a failing fsync() on the append-mode file throws",
+          "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    auto shouldFail = std::make_shared<bool>(false);
+    morph::core::FileIoOps ioOps;
+    morph::core::FileIoOps const realOps;
+    ioOps.fsync = [shouldFail, realOps](std::FILE* file) { return *shouldFail ? -1 : realOps.fsync(file); };
+
+    {
+        morph::offline::FileOfflineQueue queue{path, ioOps};
+        *shouldFail = true;
+        REQUIRE_THROWS_AS(queue.enqueue("payload"), std::runtime_error);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE(
+    "morph::offline::FileOfflineQueue: a short fwrite() during construction-time compaction throws before the "
+    "append-mode file is ever opened",
+    "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    {
+        // Seed one surviving item so compact() has at least one "put" line to
+        // write -- an empty queue's compact() writes nothing and never calls
+        // fwrite at all.
+        std::ofstream out{path};
+        out << R"({"op":"put","id":1,"payload":"seed","idempotencyKey":"","attempts":0})" << "\n";
+    }
+    morph::core::FileIoOps ioOps;
+    ioOps.fwrite = [](const void*, std::size_t size, std::FILE*) { return size - 1; };
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    std::filesystem::remove(path);
+}
+
+TEST_CASE(
+    "morph::offline::FileOfflineQueue: a failing fflush() during construction-time compaction throws",
+    "[file_queue][fault-injection]") {
+    auto path = tempQueuePath();
+    {
+        std::ofstream out{path};
+        out << R"({"op":"put","id":1,"payload":"seed","idempotencyKey":"","attempts":0})" << "\n";
+    }
+    morph::core::FileIoOps ioOps;
+    ioOps.fflush = [](std::FILE*) { return -1; };
+    REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    std::filesystem::remove(path);
 }
