@@ -8,6 +8,7 @@
 #include <exception>
 #include <glaze/glaze.hpp>
 #include <memory>
+#include <mutex>
 #include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -286,15 +287,25 @@ TEST_CASE("FlowSession: no onError callback logs the failure instead", "[flows]"
     // morph::log::logError (logUnhandledError) instead of a callback.
     morph::flows::FlowSession<FlowTestModel, FlowStepExplodes> flow{handler};
 
+    // logUnhandledError's call site runs wherever the dispatched action's
+    // exception is actually caught -- a `pool` worker thread, not this test's
+    // own thread -- so `logged` is written cross-thread while this test's
+    // waitUntil polls it; a plain std::vector needs a mutex for that, same
+    // idiom as test_concurrency_invariants.cpp's own logger-override tests.
+    std::mutex loggedMtx;
     std::vector<std::string> logged;
     morph::log::ScopedLoggerOverride guard{
-        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        [&](morph::log::LogLevel, std::string_view msg) {
+            std::scoped_lock const lock{loggedMtx};
+            logged.emplace_back(msg);
+        },
         morph::log::LogLevel::error,
     };
 
     flow.set<&FlowStepExplodes::label>(std::string{"trigger"});
 
     REQUIRE(morph::testing::waitUntil([&] {
+        std::scoped_lock const lock{loggedMtx};
         return std::ranges::any_of(
             logged, [](const std::string& line) { return line.contains("FlowsTest_FlowStepExplodes"); });
     }));
