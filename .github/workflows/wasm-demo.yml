@@ -107,6 +107,18 @@ jobs:
           mkdir -p site
           BIN=build-wasm/examples/bank/gui_wasm
           cp "$BIN"/bank_gui_wasm.js "$BIN"/bank_gui_wasm.wasm "$BIN"/qtloader.js site/
+          # GitHub rejects any single file over 100 MB on push (confirmed:
+          # bank_gui_wasm.wasm hit 108.29 MB before this workflow set
+          # CMAKE_BUILD_TYPE, silently breaking every gh-pages deploy since
+          # this workflow was introduced). Fail fast here, in the build log,
+          # rather than lose that signal in the deploy step's git-push error.
+          ls -la site/
+          WASM_BYTES=$(stat -c%s site/bank_gui_wasm.wasm)
+          echo "bank_gui_wasm.wasm: $WASM_BYTES bytes"
+          if [ "$WASM_BYTES" -gt 104857600 ]; then
+            echo "::error::bank_gui_wasm.wasm is $WASM_BYTES bytes, over GitHub's 100 MB push limit"
+            exit 1
+          fi
           # Serve the Qt loader page as the directory index.
           cp "$BIN"/bank_gui_wasm.html site/index.html
 
