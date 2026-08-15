@@ -78,6 +78,11 @@ struct FeedControl {
     std::atomic<int> callCount{0};
     std::atomic<bool> blockFirstCall{false};
     std::atomic<bool> throwNotFound{false};
+    // Unlike throwNotFound (which throws immediately, before any block), this
+    // throws only after a blockFirstCall wait is released -- lets a test drive
+    // the *error* side of a call that was genuinely in flight, the same way
+    // blockFirstCall + a plain return already drives the success side.
+    std::atomic<bool> throwAfterRelease{false};
     std::mutex releaseMutex;
     std::condition_variable releaseCv;
     bool released = false;
@@ -113,6 +118,10 @@ struct FeedModel {
             // hang on a permanently blocked worker.
             std::unique_lock lock{control.releaseMutex};
             control.releaseCv.wait(lock, [] { return control.released; });
+            lock.unlock();
+            if (control.throwAfterRelease.load()) {
+                throw std::runtime_error{"boom: failed after release"};
+            }
         }
         GetFeedSinceResult result;
         for (const auto& event : control.events) {
@@ -135,6 +144,7 @@ void resetFeedControl() {
     control.callCount.store(0);
     control.blockFirstCall.store(false);
     control.throwNotFound.store(false);
+    control.throwAfterRelease.store(false);
     // Under releaseMutex, matching releaseBlockedCall()'s own write: a worker
     // thread left blocked in FeedModel::execute() by a *previous* test case
     // can still be reading this flag under the same mutex, so an unguarded
@@ -492,4 +502,139 @@ TEST_CASE("EventPoller::resume clears a fatal error and polls again from a new c
     CHECK(appliedIds == std::vector<int>{3});  // only what is after the new cursor
     CHECK(poller.lastEventId() == 3);
     CHECK(fatalCount == 1);
+}
+
+TEST_CASE("EventPoller destroyed with a tick in flight suppresses the orphaned error callback",
+          "[gui][event-poller]") {
+    // The onError sibling of "EventPoller destroyed with a tick in flight
+    // suppresses the orphaned completion callback" above: that test only ever
+    // drives the onSuccess lambda's `alive.expired()` check (pollOnce()'s
+    // .then() branch), never the onError lambda's own, separate
+    // `alive.expired()` check (event_poller.hpp's onError callback) --  a
+    // dispatch that is still outstanding when the poller is destroyed, and
+    // that goes on to *fail* rather than succeed, is a different code path
+    // and was never exercised. throwAfterRelease makes FeedModel::execute()
+    // throw only once the blockFirstCall wait is released, so the failure
+    // happens strictly after the poller is gone, exactly like the
+    // success-side regression test.
+    resetFeedControl();
+    FeedModel::control.events = {{.id = 1, .summary = "a"}};
+    FeedModel::control.blockFirstCall = true;
+    FeedModel::control.throwAfterRelease = true;
+
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto handler = std::make_shared<morph::bridge::BridgeHandler<FeedModel>>(ctx.bridge(), ctx.executor());
+
+    // Both deliberately outlive the poller, matching the success-side test's
+    // own rationale for the same two flags.
+    auto errorObserved = std::make_shared<std::atomic<bool>>(false);
+    auto completionDelivered = std::make_shared<std::atomic<bool>>(false);
+
+    Poller::Dispatch dispatch = [handler, completionDelivered](int lastEventId, Poller::OnSuccess onSuccess,
+                                                              Poller::OnError onError) {
+        handler->execute(GetFeedSince{.lastEventId = lastEventId})
+            .then([handler, lastEventId, onSuccess, completionDelivered](GetFeedSinceResult result) {
+                completionDelivered->store(true);
+                const int newLastEventId = result.events.empty() ? lastEventId : result.events.back().id;
+                onSuccess(std::move(result.events), newLastEventId);
+            })
+            .onError([handler, onError, completionDelivered](std::exception_ptr err) {
+                completionDelivered->store(true);
+                onError(std::move(err));
+            });
+    };
+
+    // Hour-long interval and executeDeadline: only this test's own
+    // release/throw sequence resolves the dispatch, never the timer or
+    // Bridge's own TimeoutScheduler.
+    auto poller = std::make_unique<Poller>(
+        ctx.bridge(), /*startingCursor=*/0, dispatch, [](const FeedEvent&) { FAIL("onEvent must not run"); },
+        [errorObserved](const QString&) { errorObserved->store(true); }, std::chrono::hours{1},
+        std::chrono::hours{1});
+
+    poller->pollOnce();
+    REQUIRE(poller->busy());
+
+    // Destroy while the dispatch is genuinely outstanding: the worker thread
+    // is still parked inside FeedModel::execute().
+    poller.reset();
+
+    // Now let the model call return -- it throws, so the Completion resolves
+    // via onError and posts the now-orphaned error callback as a queued Qt
+    // event.
+    releaseBlockedCall();
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return completionDelivered->load(); }));
+    // Keep pumping a while longer so any straggler queued event definitely
+    // gets its turn (never-true predicate == "pump for this long").
+    static_cast<void>(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
+
+    CHECK_FALSE(errorObserved->load());
+}
+
+TEST_CASE("EventPoller::handleError ignores a second failure once already fatal", "[gui][event-poller]") {
+    // handleError's own `if (_fatal) return;` guard (event_poller.hpp) is
+    // documented as protecting against a Dispatch that violates its "call
+    // exactly one of onSuccess/onError, exactly once" contract -- e.g. one
+    // wired to a signal that fires twice. pollOnce() itself cannot exercise
+    // this: it refuses to start a *new* tick once _fatal is set, so a
+    // Dispatch that behaves correctly never reaches handleError a second
+    // time. This test drives a Dispatch that double-reports directly on a
+    // single pollOnce() call, bypassing that guard, so `_fatal` is genuinely
+    // already true the second time handleError runs.
+    resetFeedControl();
+
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+
+    int fatalCount = 0;
+    QString firstMessage;
+    // Reports failure twice from the same dispatch call, synchronously --
+    // simulating the double-report hazard the class doc comment describes.
+    Poller::Dispatch dispatch = [](int /*lastEventId*/, Poller::OnSuccess /*onSuccess*/, Poller::OnError onError) {
+        onError(std::make_exception_ptr(std::runtime_error{"first failure"}));
+        onError(std::make_exception_ptr(std::runtime_error{"second failure, must be ignored"}));
+    };
+
+    Poller poller{ctx.bridge(), /*startingCursor=*/0, dispatch, [](const FeedEvent&) { FAIL("onEvent must not run"); },
+                  [&](const QString& message) {
+                      ++fatalCount;
+                      if (fatalCount == 1) {
+                          firstMessage = message;
+                      }
+                  },
+                  std::chrono::hours{1}};
+
+    poller.pollOnce();
+
+    // Both onError calls above run synchronously inside pollOnce() (the
+    // dispatch never defers), so no pump is needed: by the time pollOnce()
+    // returns, handleError has already run twice.
+    CHECK(fatalCount == 1);
+    CHECK(poller.fatalErrorReported());
+    CHECK(firstMessage.toStdString().find("first failure") != std::string::npos);
+}
+
+TEST_CASE("EventPoller tolerates an empty onFatalError callback on a non-timeout failure", "[gui][event-poller]") {
+    // handleError's `if (_onFatalError)` guard (event_poller.hpp) exists
+    // because OnFatalError is a plain std::function a caller supplies --
+    // nothing requires it be non-empty. Every other test in this file passes
+    // a real lambda; this is the one that passes a default-constructed
+    // (falsy) std::function, so the guard's false arm -- "there is nothing to
+    // call" -- is genuinely exercised instead of merely assumed safe.
+    resetFeedControl();
+    FeedModel::control.throwNotFound = true;
+
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto handler = std::make_shared<morph::bridge::BridgeHandler<FeedModel>>(ctx.bridge(), ctx.executor());
+
+    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler),
+                  [](const FeedEvent&) { FAIL("onEvent must not run when the dispatch itself failed"); },
+                  Poller::OnFatalError{},  // deliberately empty
+                  std::chrono::hours{1}};
+
+    poller.pollOnce();
+    // Must not crash calling an empty std::function, and must still record
+    // the fatal state and stop the timer exactly as with a real callback.
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
+    CHECK(poller.fatalErrorReported());
+    CHECK_FALSE(poller.running());
 }
