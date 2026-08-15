@@ -104,6 +104,19 @@ void App::sweepExpiredOnce() {
         inFlight->fetch_add(1);
         handler->execute(ExpirePaste{.id = PasteId{id}})
             .then([handler, inFlight](Ack) { inFlight->fetch_sub(1); })
+            // Not covered by this file's own test suite: forcing this path
+            // needs a real SQLITE_BUSY inside sweepExpiredOnce()'s own
+            // worker-thread-dispatched execute(), which requires
+            // drainPoolIdleMappers()'s "next Acquire() is fresh" guarantee to
+            // hold across that async dispatch -- confirmed by direct
+            // instrumentation that it currently does not (some other,
+            // unidentified Acquire()/Return() pair repopulates the idle pool
+            // in between), and Lightweight has no built-in way to observe
+            // which path a given Acquire() took to root-cause that further
+            // (see LASTRADA-Software/Lightweight#548, requesting
+            // SqlLogger::OnConnectionIdle/OnConnectionReuse actually get
+            // wired up). Left uncovered rather than shipping a ~60-second
+            // test or ad hoc printf instrumentation.
             .onError([handler, inFlight, id](const std::exception_ptr&) {
                 inFlight->fetch_sub(1);
                 ::morph::log::logError("[pastebin::App] expiry sweep: ExpirePaste failed for " + id);

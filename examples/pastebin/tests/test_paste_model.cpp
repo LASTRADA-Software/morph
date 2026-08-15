@@ -609,6 +609,193 @@ TEST_CASE("A concurrent write between EditPaste's read and its write is a Confli
     CHECK(seedModel.execute(pastebin::GetPaste{.id = id}).content == "concurrent writer");
 }
 
+TEST_CASE("A concurrent delete between EditPaste's read and its guarded write is a NotFound, "
+          "not a lost update or a Conflict",
+          "[pastebin][model]") {
+    // Same forced-interleaving idiom as "A concurrent write between
+    // EditPaste's read and its write is a Conflict" above, but the
+    // concurrent writer deletes the row outright instead of editing its
+    // content. This exercises EditPaste's *post-CAS-miss* classification
+    // path (paste_model.cpp's "Zero rows matched: classify why" block) --
+    // distinct from the earlier, pre-CAS existing.empty() check the "refuses
+    // an unknown id" test above already covers, since that one never reaches
+    // the guarded UPDATE at all (the row was never there to begin with). This
+    // one has the row present and readable at EditPaste's first SELECT, and
+    // only disappears in the window the CAS UPDATE itself is blocked in.
+    class WaitForGuardedUpdate : public ::Lightweight::SqlLogger::Null {
+      public:
+        void OnExecute(std::string_view const& query) override {
+            if (query.find("SET content = ?, syntax = ?") == std::string_view::npos) {
+                return;
+            }
+            {
+                const std::lock_guard lock{_mutex};
+                _reached = true;
+            }
+            _cv.notify_all();
+        }
+
+        void wait() {
+            std::unique_lock lock{_mutex};
+            _cv.wait(lock, [this] { return _reached; });
+        }
+
+      private:
+        std::mutex _mutex;
+        std::condition_variable _cv;
+        bool _reached = false;
+    };
+
+    DbFixture fixture;
+    pastebin::PasteModel seedModel;
+
+    auto create = makeCreate("about to vanish", "text");
+    create.editability = pastebin::Editability::Editable;
+    const auto id = seedModel.execute(create).id;
+
+    const ScopedShortBusyTimeout shortTimeout{5000};
+    auto drained = drainPoolIdleMappers();
+    pastebin::PasteModel contendedModel;
+
+    ::Lightweight::SqlConnection lockingConnection;
+    {
+        ::Lightweight::SqlStatement stmt{lockingConnection};
+        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void) stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
+    }
+
+    WaitForGuardedUpdate probe;
+    ::Lightweight::SqlLogger& previousLogger = ::Lightweight::SqlLogger::GetLogger();
+    ::Lightweight::SqlLogger::SetLogger(probe);
+
+    std::optional<pastebin::PasteView> succeeded;
+    std::exception_ptr failure;
+    std::thread editor{[&] {
+        try {
+            succeeded = contendedModel.execute(pastebin::EditPaste{.id = id, .content = "mine", .syntax = "text"});
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    }};
+
+    probe.wait();
+
+    {
+        ::Lightweight::SqlStatement stmt{lockingConnection};
+        (void) stmt.ExecuteDirect("DELETE FROM pastes WHERE id = '" + *id + "'");
+        (void) stmt.ExecuteDirect("COMMIT");
+    }
+
+    editor.join();
+    drained.clear();
+    ::Lightweight::SqlLogger::SetLogger(previousLogger);
+
+    REQUIRE_FALSE(succeeded.has_value());
+    REQUIRE(failure);
+    bool sawNotFound = false;
+    try {
+        std::rethrow_exception(failure);
+    } catch (const pastebin::NotFound&) {
+        sawNotFound = true;
+    } catch (...) {
+        // Falls through to the REQUIRE below with sawNotFound still false.
+    }
+    REQUIRE(sawNotFound);
+}
+
+TEST_CASE("A concurrent DeletePaste is not the only way to reach EditPaste's post-CAS \"not editable\" "
+          "classification, but flipping is_editable underneath a pending edit reaches it too",
+          "[pastebin][model]") {
+    // Mirrors the delete case above, but the concurrent writer clears
+    // is_editable instead of removing the row -- the other branch of the
+    // same "Zero rows matched: classify why" block (paste_model.cpp).
+    // is_editable has no ordinary action that flips it after creation (only
+    // CreatePaste sets it, permanently, in this rung), so this reaches into
+    // the row directly through the locking connection, the same way the
+    // Conflict/NotFound tests above simulate "some other write landed" --
+    // there is no in-API way to un-edit a paste, which is exactly why this
+    // classification branch has no other route to it.
+    class WaitForGuardedUpdate : public ::Lightweight::SqlLogger::Null {
+      public:
+        void OnExecute(std::string_view const& query) override {
+            if (query.find("SET content = ?, syntax = ?") == std::string_view::npos) {
+                return;
+            }
+            {
+                const std::lock_guard lock{_mutex};
+                _reached = true;
+            }
+            _cv.notify_all();
+        }
+
+        void wait() {
+            std::unique_lock lock{_mutex};
+            _cv.wait(lock, [this] { return _reached; });
+        }
+
+      private:
+        std::mutex _mutex;
+        std::condition_variable _cv;
+        bool _reached = false;
+    };
+
+    DbFixture fixture;
+    pastebin::PasteModel seedModel;
+
+    auto create = makeCreate("about to be locked", "text");
+    create.editability = pastebin::Editability::Editable;
+    const auto id = seedModel.execute(create).id;
+
+    const ScopedShortBusyTimeout shortTimeout{5000};
+    auto drained = drainPoolIdleMappers();
+    pastebin::PasteModel contendedModel;
+
+    ::Lightweight::SqlConnection lockingConnection;
+    {
+        ::Lightweight::SqlStatement stmt{lockingConnection};
+        (void) stmt.ExecuteDirect("BEGIN IMMEDIATE");
+        (void) stmt.ExecuteDirect("UPDATE pastes SET id = id WHERE id = '" + *id + "'");
+    }
+
+    WaitForGuardedUpdate probe;
+    ::Lightweight::SqlLogger& previousLogger = ::Lightweight::SqlLogger::GetLogger();
+    ::Lightweight::SqlLogger::SetLogger(probe);
+
+    std::optional<pastebin::PasteView> succeeded;
+    std::exception_ptr failure;
+    std::thread editor{[&] {
+        try {
+            succeeded = contendedModel.execute(pastebin::EditPaste{.id = id, .content = "mine", .syntax = "text"});
+        } catch (...) {
+            failure = std::current_exception();
+        }
+    }};
+
+    probe.wait();
+
+    {
+        ::Lightweight::SqlStatement stmt{lockingConnection};
+        (void) stmt.ExecuteDirect("UPDATE pastes SET is_editable = 0 WHERE id = '" + *id + "'");
+        (void) stmt.ExecuteDirect("COMMIT");
+    }
+
+    editor.join();
+    drained.clear();
+    ::Lightweight::SqlLogger::SetLogger(previousLogger);
+
+    REQUIRE_FALSE(succeeded.has_value());
+    REQUIRE(failure);
+    bool sawValidationError = false;
+    try {
+        std::rethrow_exception(failure);
+    } catch (const pastebin::ValidationError&) {
+        sawValidationError = true;
+    } catch (...) {
+        // Falls through to the REQUIRE below with sawValidationError still false.
+    }
+    REQUIRE(sawValidationError);
+}
+
 TEST_CASE("DeletePaste removes the paste, and a follow-up GetPaste throws NotFound", "[pastebin][model]") {
     DbFixture fixture;
     pastebin::PasteModel model;
