@@ -372,6 +372,12 @@ private:
                 value, [&]<std::size_t I>(std::string_view name, const auto& member) {
                     static_cast<void>(I);
                     std::string json;
+                    // The `!write_json(...)` guard's false arm (write failure)
+                    // is not exercised by this file's own test suite: every
+                    // step action's fields are plain, well-formed data glaze's
+                    // JSON writer cannot fail on, matching the same
+                    // "untestable line" already accepted for forms.hpp's own
+                    // `write_json(dom)` call in `schemaJson`.
                     if (!glz::write_json(member, json)) {
                         _resolvedValues[std::string{typeId} + "." + std::string{name}] = std::move(json);
                     }
