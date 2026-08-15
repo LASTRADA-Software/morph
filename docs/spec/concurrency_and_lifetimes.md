@@ -354,6 +354,14 @@ Constraints:
   detects `this_thread == probe thread` and **detaches** instead; the destructor
   then spin-waits on `_runExited` until the thread exits. `stop()` is idempotent.
 - `isOnline()` reads an `std::atomic<bool>` — safe from any thread at any time.
+- **Destroying the monitor itself from within a callback is not supported** —
+  only calling `stop()` from the callback is. The destructor's spin-wait blocks
+  until `run()` stores `_runExited`, but `run()` cannot reach that store while
+  paused lower on the same thread's stack inside the callback (and the
+  destructor call within it); triggering `~NetworkMonitor()` synchronously from
+  a callback on the probe thread deadlocks there by construction. A callback
+  that wants to tear the monitor down should call `stop()` and let the actual
+  object destruction happen later, from a different thread.
 
 ### `ReconnectCoordinator` — mutex held across the whole retry loop
 

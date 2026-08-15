@@ -71,6 +71,20 @@ public:
     /// Calls `stop()` internally. The destructor spin-waits on `_runExited` to
     /// handle the case where `stop()` was called from within a probe callback
     /// (which would deadlock a `join()`).
+    ///
+    /// The destructor itself must not run on the probe thread: this spin-wait
+    /// blocks until `run()` sets `_runExited`, but `run()` cannot reach that
+    /// store while it is paused lower on the same thread's call stack waiting
+    /// for a callback (and this destructor, called from within it) to return.
+    /// A callback that drops the owning object's last reference and thereby
+    /// triggers this destructor synchronously, on the probe thread, deadlocks
+    /// here by construction — not a supported lifetime. The supported,
+    /// documented seam for a self-thread teardown request is calling `stop()`
+    /// itself from the callback (see its doc comment and `_thread.get_id() ==
+    /// std::this_thread::get_id()` below): that only detaches and returns,
+    /// letting `run()` continue and exit on its own; the actual destructor
+    /// runs later, from a different thread, once the owner is done reacting
+    /// to the callback.
     ~NetworkMonitor() {
         stop();
         while (!_runExited.load()) {
