@@ -148,6 +148,23 @@ struct CsEnv {
     morph::model::detail::ModelRegistryFactory registry;
 };
 
+// A model whose registered factory sleeps once (exchange-guarded, same idiom
+// as test_remote_execute_ordering.cpp's SlowFirstAuthorizer) before returning
+// a plain ModelHolder. Used to force the exact interleaving
+// acquireSharedInstance's second attachExistingLocked check (remote.hpp) is
+// for: two attaches to the same not-yet-existing key racing each other,
+// where only one of the two _registry.create() calls can win the insert.
+struct CsRaceModel {
+    static inline std::atomic<bool> slowFactoryTaken{false};
+
+    int execute(const CsSquareAction& act) { return act.x * act.x; }
+};
+
+template <>
+struct morph::model::ModelTraits<CsRaceModel> {
+    static constexpr std::string_view typeId() { return "CS_RaceModel"; }
+};
+
 static CsEnv& csEnv() {
     static CsEnv env = [] {
         CsEnv env2;
@@ -156,6 +173,14 @@ static CsEnv& csEnv() {
         env2.dispatcher.registerAction<CsSquareModel, CsSquareFail>("CS_SquareModel", "CS_SquareFail");
         env2.registry.registerModel<CsSlowModel>("CS_SlowModel");
         env2.dispatcher.registerAction<CsSlowModel, CsSlowAction>("CS_SlowModel", "CS_SlowAction");
+        env2.registry.registerModel<CsRaceModel>(
+            "CS_RaceModel", []() -> std::unique_ptr<::morph::model::detail::IModelHolder> {
+                if (!CsRaceModel::slowFactoryTaken.exchange(true)) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds{200});
+                }
+                return std::make_unique<morph::model::detail::ModelHolder<CsRaceModel> >();
+            });
+        env2.dispatcher.registerAction<CsRaceModel, CsSquareAction>("CS_RaceModel", "CS_SquareAction");
         return env2;
     }();
     return env;
@@ -749,6 +774,52 @@ TEST_CASE("morph::backend::RemoteServer: assign never displaces the incumbent ho
     REQUIRE(again.env.modelId == incumbent.env.modelId);
 }
 
+TEST_CASE("morph::backend::RemoteServer: assign with an empty primary or an unregistered modelId is a silent "
+          "no-op, still reporting \"ok\"",
+          "[remote][connection-scope][shared-instances]") {
+    // applyAssignLocked's own early-return guard (env.primary.empty() ||
+    // !_models.contains(mid)) never actually fires in any of this file's
+    // other assign tests -- every one of them assigns a real, just-created
+    // mid onto a non-empty primary. The wire handler replies "ok"
+    // unconditionally after applyAssignLocked() returns, whether it filed
+    // anything or silently declined to, so this is the one place that
+    // distinction is externally observable: check what a subsequent
+    // register-shared onto the same key actually reaches.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    auto cid = server->openConnection();
+
+    WaitReply anon;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(anon), cid);
+    REQUIRE(anon.await());
+    REQUIRE(anon.env.kind == "ok");
+
+    // Empty primary: the guard's first disjunct.
+    WaitReply emptyPrimary;
+    server->handle(morph::wire::encode(morph::wire::makeAssign("CS_SquareModel", "", anon.env.modelId)),
+                   std::ref(emptyPrimary), cid);
+    REQUIRE(emptyPrimary.await());
+    REQUIRE(emptyPrimary.env.kind == "ok");
+
+    // An unregistered modelId: the guard's second disjunct. 0 is never a real
+    // id (nextOpaqueId() never hands it out), so _models never contains it.
+    WaitReply unknownMid;
+    server->handle(morph::wire::encode(morph::wire::makeAssign("CS_SquareModel", "300", 0)), std::ref(unknownMid),
+                   cid);
+    REQUIRE(unknownMid.await());
+    REQUIRE(unknownMid.env.kind == "ok");
+
+    // Neither call filed anything: a fresh register-shared under "300" gets
+    // its own new instance, not anon's -- had the guard been bypassed, this
+    // would instead reach anon.env.modelId.
+    WaitReply attached;
+    server->handle(morph::wire::encode(morph::wire::makeRegisterShared("CS_SquareModel", "300")), std::ref(attached),
+                   cid);
+    REQUIRE(attached.await());
+    REQUIRE(attached.env.modelId != anon.env.modelId);
+}
+
 TEST_CASE("morph::backend::RemoteServer: assign stamps the caller's authenticated principal, not just the "
           "unauthenticated-empty case",
           "[remote][connection-scope][shared-instances][auth]") {
@@ -930,4 +1001,185 @@ TEST_CASE("morph::backend::SimulatedRemoteBackend: deregisterModel releases this
     // finally releases the last reference.
     server->closeConnection(cidB);
     REQUIRE(server->health().liveModels == 0U);
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: two attaches racing the creation of the same not-yet-existing "
+    "shared key still resolve to one instance",
+    "[remote][connection-scope][shared-instances]") {
+    // acquireSharedInstance's create path (remote.hpp) builds a holder
+    // *outside* _regMtx, then re-checks the directory under the lock before
+    // inserting -- because a concurrent request for the same key may have
+    // already won that insert while this one's holder was under
+    // construction. CsRaceModel's factory sleeps once (exchange-guarded), so
+    // of two attaches fired back-to-back for the same brand-new key, the
+    // first one dispatched is reliably the one still sleeping in
+    // _registry.create() when the second (unslowed) one's own create/insert
+    // completes -- forcing the first to find the directory already
+    // populated on its own re-check, rather than hoping real thread
+    // scheduling happens to interleave that way.
+    CsRaceModel::slowFactoryTaken.store(false);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key")), std::ref(first));
+
+    WaitReply second;
+    server->handle(morph::wire::encode(morph::wire::makeAttach("CS_RaceModel", "race-key")), std::ref(second));
+
+    REQUIRE(first.await(std::chrono::milliseconds{2000}));
+    REQUIRE(second.await(std::chrono::milliseconds{2000}));
+    REQUIRE(first.env.kind == "ok");
+    REQUIRE(second.env.kind == "ok");
+
+    // One instance, not two, regardless of which call's create() actually won
+    // the race -- the load-bearing assertion this test exists for.
+    REQUIRE(first.env.modelId == second.env.modelId);
+    REQUIRE(server->health().liveModels == 1U);
+}
+
+TEST_CASE(
+    "morph::backend::RemoteServer: maxLiveModels' authoritative re-test under the insert lock rejects a "
+    "register the advisory pre-check let through",
+    "[remote][connection-scope][limits]") {
+    // The private register path checks maxLiveModels twice: an early,
+    // advisory load (before authorize()/authenticate()/_registry.create()
+    // run, so it can reject a request cheaply without paying for any of
+    // that) and an authoritative re-test in the same locked section as the
+    // actual insert. The comment right above that second check explains why
+    // the first one alone is not a real bound: every concurrent register
+    // that passes the advisory check while the server is still under cap
+    // proceeds to authenticate/create, so a burst can overshoot the cap by
+    // up to the worker pool's width -- exactly what the authoritative
+    // re-test exists to catch. CsRaceModel's factory sleeps once
+    // (exchange-guarded), so the first of two back-to-back registers is
+    // reliably the one still in _registry.create() when the second's
+    // fast create()+insert completes, forcing the first to find the cap
+    // already reached at its own authoritative re-test.
+    CsRaceModel::slowFactoryTaken.store(false);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    morph::backend::LimitPolicy policy;
+    policy.maxLiveModels = 1;
+    server->setLimitPolicy(policy);
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_RaceModel")), std::ref(first));
+
+    WaitReply second;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_RaceModel")), std::ref(second));
+
+    REQUIRE(first.await(std::chrono::milliseconds{2000}));
+    REQUIRE(second.await(std::chrono::milliseconds{2000}));
+
+    // Exactly one of the two must have won the single slot; the other must
+    // have been rejected by the authoritative re-test, not silently admitted
+    // past the cap.
+    const bool firstOk = first.env.kind == "ok";
+    const bool secondOk = second.env.kind == "ok";
+    REQUIRE(firstOk != secondOk);
+    const auto& loser = firstOk ? second : first;
+    REQUIRE(loser.env.kind == "err");
+    REQUIRE(loser.env.message == "too many models");
+    REQUIRE(server->health().liveModels == 1U);
+}
+
+namespace {
+
+/// @brief Allow-all authorizer whose `authorize()` sleeps once, for the first
+///        call it sees -- every later call returns immediately. Same idiom as
+///        test_remote_execute_ordering.cpp's SlowFirstAuthorizer, reused here
+///        to force a different race: two executes reaching
+///        dispatchExecute's maxInFlightExecutes compare-exchange loop
+///        (remote.hpp) close enough together that the first one dispatched
+///        is reliably still held up in authorize() when the second's own
+///        pre-CAS work finishes and wins the increment.
+class CsSlowFirstAuthorizer : public morph::session::IAuthorizer {
+  public:
+    [[nodiscard]] bool authorize(const morph::session::Context&, std::string_view, std::string_view) const override {
+        if (!_slowCallTaken.exchange(true)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{200});
+        }
+        return true;
+    }
+
+  private:
+    mutable std::atomic<bool> _slowCallTaken{false};
+};
+
+}  // namespace
+
+TEST_CASE(
+    "morph::backend::RemoteServer: maxInFlightExecutes' compare-exchange loop rejects an execute that "
+    "loses the race for the last slot",
+    "[remote][connection-scope][limits]") {
+    // Distinct from test_limit_policy.cpp's "rejects a second execute while
+    // the first is in flight" case: that test deliberately waits for the
+    // first execute to have already started (and therefore already
+    // incremented _inFlightExecutes) before sending the second, so the
+    // second is rejected by the plain load further up dispatchExecute, never
+    // reaching the compare-exchange loop's own reject branch at all. This
+    // test forces the two executes to race the increment itself.
+    CsSlowModel::started.store(false);
+    CsSlowModel::proceed.store(false);
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto& env = csEnv();
+    auto authorizer = std::make_shared<CsSlowFirstAuthorizer>();
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, authorizer, env.dispatcher, env.registry);
+    morph::backend::LimitPolicy policy;
+    policy.maxInFlightExecutes = 1;
+    server->setLimitPolicy(policy);
+
+    WaitReply reg;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SlowModel")), std::ref(reg));
+    REQUIRE(reg.await());
+    auto modelId = reg.env.modelId;
+
+    // CS_SlowModel, not CS_SquareModel: the slot must still be held (i.e. the
+    // winner's own decrement must not yet have run) by the time the loser's
+    // CAS loop checks it -- an instantly-completing action can finish its
+    // whole execute (including the decrement) before the other side ever
+    // gets scheduled, which starves this race of the window it needs.
+    morph::wire::Envelope reqA;
+    reqA.kind = "execute";
+    reqA.callId = 1;
+    reqA.modelId = modelId;
+    reqA.modelType = "CS_SlowModel";
+    reqA.actionType = "CS_SlowAction";
+    reqA.body = R"({})";
+    WaitReply replyA;
+    server->handle(morph::wire::encode(reqA), std::ref(replyA));
+
+    morph::wire::Envelope reqB = reqA;
+    reqB.callId = 2;
+    WaitReply replyB;
+    server->handle(morph::wire::encode(reqB), std::ref(replyB));
+
+    // Whichever call wins the slot is now blocked inside CS_SlowModel::execute
+    // until proceed is set, holding the slot open long enough for the loser's
+    // CAS loop to observe it -- unlike the plain-CS_SquareModel version of
+    // this test, which raced the decrement itself and was flaky (~40%
+    // failure across repeated local runs) for exactly that reason.
+    REQUIRE(morph::testing::waitUntil([] { return CsSlowModel::started.load(); }));
+
+    // Exactly one of the two already has its reply: the CAS loop rejects
+    // synchronously, before ever reaching the strand, so the loser's
+    // WaitReply settles immediately -- well before the winner's, which is
+    // still blocked in execute() until released below.
+    REQUIRE(morph::testing::waitUntil(
+        [&] { return replyA.env.kind == "err" || replyB.env.kind == "err"; }, std::chrono::milliseconds{2000}));
+
+    const bool aErr = replyA.env.kind == "err";
+    const bool bErr = replyB.env.kind == "err";
+    REQUIRE(aErr != bErr);
+    const auto& loser = aErr ? replyA : replyB;
+    REQUIRE(loser.env.message == "server busy");
+
+    CsSlowModel::proceed.store(true);
+    auto& winner = aErr ? replyB : replyA;
+    REQUIRE(winner.await(std::chrono::milliseconds{2000}));
+    REQUIRE(winner.env.kind == "ok");
 }
