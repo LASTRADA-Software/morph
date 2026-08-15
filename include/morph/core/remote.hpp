@@ -1739,6 +1739,23 @@ public:
             throw std::runtime_error("instances failed: " + reply.message);
         }
         std::vector<std::string> keys;
+        // Not covered by this file's own test suite: `_server` here is always
+        // the same in-process `RemoteServer` this backend was constructed
+        // against, and `handleInstances` (this file, above) only ever builds
+        // `reply.body` via `glz::write_json` of a `std::vector<std::string>`
+        // populated straight from `_directory`'s own keys -- themselves just
+        // `env.primary` values that already round-tripped through a
+        // successful envelope decode, so they are valid UTF-8 by
+        // construction. There is no path through `SimulatedRemoteBackend` +
+        // `RemoteServer` that hands this call a syntactically malformed
+        // body, so this branch cannot be forced without directly fabricating
+        // a fake "ok" reply -- not a real scenario for this backend. The
+        // identical decode-failure shape is genuinely reachable (and
+        // covered separately) on a backend that talks to an actual external
+        // peer -- see `QtWebSocketBackend::listInstances`
+        // (qt_websocket_backend.hpp) and `socket_backend.hpp`'s own
+        // equivalent, both of which face a real wire and a peer this
+        // process does not control.
         if (auto errCode = glz::read_json(keys, reply.body)) {
             throw std::runtime_error("instances decode failed: " + glz::format_error(errCode, reply.body));
         }
