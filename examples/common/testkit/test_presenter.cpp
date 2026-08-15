@@ -5,10 +5,19 @@
 #include "gui/presenter.hpp"
 #include "testkit/backend_rig.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/strand_interleaver.hpp"
 
+#include <morph/core/backend.hpp>
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
+#include <morph/qt/qt_executor.hpp>
+#include <morph/qt/qt_websocket_backend.hpp>
 
+#include <QUrl>
+
+#include <memory>
 #include <stdexcept>
+#include <vector>
 
 // Deliberately at namespace scope, not inside an anonymous namespace: glz's
 // reflection (which BRIDGE_REGISTER_MODEL/BRIDGE_REGISTER_ACTION rely on to
@@ -105,8 +114,20 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
             [](const std::exception_ptr&) -> void { throw std::runtime_error{"presenter probe: onErr threw"}; });
     }
 
+    /// @brief Drives the probe action without waiting for it to settle --
+    ///        lets a test call this twice back-to-back so two `track()`
+    ///        calls are in flight at once. Records each settlement in
+    ///        arrival order (`settledOrder`) rather than a single
+    ///        `lastResult`, so a test can tell "the first completion settled
+    ///        without the second" apart from "both settled".
+    void bumpConcurrent(int value) {
+        track<int>(_handler.execute(PresenterProbeAction{value}),
+                   [this](int result) { settledOrder.push_back(result); });
+    }
+
     int lastResult = -1;
     bool errorHandlerFired = false;
+    std::vector<int> settledOrder;
 
   private:
     morph::bridge::BridgeHandler<PresenterProbeModel> _handler;
@@ -302,4 +323,98 @@ TEST_CASE("Presenter::trackBound() still emits bound() when the presenter is des
     // so the posted completion actually runs while the presenter is gone.
     REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
     SUCCEED("posted whenBound() completion resolved after destruction without crashing");
+}
+
+TEST_CASE("Presenter::busy() stays true while a second tracked completion is still in flight",
+          "[ladder][testkit][gui][presenter]") {
+    // Every other track()-driving test in this file starts exactly one
+    // in-flight completion, so finishOne()'s `_inFlight.fetch_sub(1) == 1`
+    // check is always true there -- the counter only ever goes 0 -> 1 -> 0.
+    // Pinning the *false* arm (2 -> 1, no idle()) needs the two completions'
+    // callbacks delivered one at a time, under this test's own control --
+    // `QtExecutor`'s real Qt-event-loop posting can't promise that ordering
+    // (both callbacks may already be queued by the time the first
+    // `processEvents` slice runs, draining both before either is observed).
+    // `DeterministicExecutor` (testkit/strand_interleaver.hpp -- the
+    // established "control exactly which posted task runs next" harness,
+    // same one `test_strand_interleaver.cpp` drives a `StrandExecutor`
+    // through) is a plain `IExecutor`, so it can stand in as the presenter's
+    // own client-facing executor: `step()` runs exactly the oldest-queued
+    // callback and nothing else.
+    morph::exec::ThreadPoolExecutor workerPool{2};
+    morph::ladder::testkit::DeterministicExecutor clientExec;
+    morph::bridge::Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    ProbePresenter presenter{bridge, &clientExec};
+
+    int idleCount = 0;
+    QObject::connect(&presenter, &morph::ladder::gui::Presenter::idle, [&] { ++idleCount; });
+
+    REQUIRE_FALSE(presenter.busy());
+    presenter.bumpConcurrent(1);
+    presenter.bumpConcurrent(2);
+
+    // Both actions run on the pool and post onto clientExec as they finish --
+    // wait until both have queued *something* there before stepping, so the
+    // pool's own scheduling can't race this test. Each action's full
+    // settlement is actually two chained posts on clientExec, not one:
+    // Bridge::executeVia's raw backend Completion resolves first (queuing its
+    // own .then() translation lambda), and *that* lambda -- once it runs --
+    // is what calls the typed CompletionState::setValue() that queues
+    // track()'s own .then() callback in turn. The two actions' chains can
+    // interleave in either order (both settle on the pool independently), so
+    // this steps one at a time and watches settledOrder itself rather than
+    // assuming a fixed step count per action.
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return clientExec.pending() >= 2; }));
+    REQUIRE(presenter.busy());  // both queued before either callback ran
+
+    // Step until exactly one action's track() callback has actually run --
+    // this is finishOne()'s fetch_sub(1) returning 2, not 1, the branch no
+    // other test in this suite reaches.
+    while (presenter.settledOrder.empty()) {
+        REQUIRE(clientExec.pending() > 0);
+        clientExec.step();
+    }
+    REQUIRE(presenter.settledOrder.size() == 1);
+    REQUIRE(presenter.busy());   // one completion settled, one still in flight -- idle() must not fire
+    REQUIRE(idleCount == 0);
+
+    while (presenter.busy()) {
+        REQUIRE(clientExec.pending() > 0);
+        clientExec.step();
+    }
+    REQUIRE(idleCount == 1);  // idle() fires exactly once, when the counter actually reaches zero
+    REQUIRE(presenter.settledOrder.size() == 2);
+}
+
+TEST_CASE("Presenter::trackBound() emits bound() on the .onError path when registration never settles",
+          "[ladder][testkit][gui][presenter][socket-only]") {
+    // Every other trackBound() test in this file runs in Local mode, where
+    // whenBound()'s Completion<bool> always resolves via .then() -- Local's
+    // handler is bound by construction (presenter.hpp's own doc comment), so
+    // trackBound()'s .onError() branch (and the `if (self)` guard inside it)
+    // is otherwise never reached by this suite at all.
+    //
+    // ws://127.0.0.1:1 is a reserved, never-listening port -- the same
+    // deterministic "connection never comes up" seam
+    // tests/qt/test_qt_websocket.cpp's issue26/issue54 cases use, chosen so
+    // this is a real onError delivery rather than a timing race. With
+    // asyncRegistrationEnabled set, constructing the handler queues its
+    // registration (issue #54's pre-connect queueing); QtWebSocketBackend's
+    // own disconnect/never-connected handling then drains that queue through
+    // cancelPending(DisconnectedError), which is whenBound()'s only route to
+    // .onError() -- see qt_websocket_backend.cpp's cancelPending().
+    morph::qt::QtExecutor qtExec;
+    QUrl const url{QStringLiteral("ws://127.0.0.1:1")};
+    auto backendPtr = std::make_unique<morph::qt::QtWebSocketBackend>(
+        url, std::nullopt, morph::qt::QtWebSocketBackend::Config{.asyncRegistrationEnabled = true});
+    morph::bridge::Bridge bridge{std::move(backendPtr)};
+
+    ProbePresenter presenter{bridge, &qtExec};
+
+    int boundCount = 0;
+    QObject::connect(&presenter, &morph::ladder::gui::Presenter::bound, [&] { ++boundCount; });
+
+    presenter.hookBound();
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return boundCount == 1; }));
+    REQUIRE(boundCount == 1);  // bound() still fires exactly once, from the error branch this time
 }
