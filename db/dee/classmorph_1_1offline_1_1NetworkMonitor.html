@@ -293,9 +293,11 @@ Public Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Stops the monitor and waits for the probe thread to exit. </p>
-<p>Calls <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> internally. The destructor spin-waits on <span class="tt">_runExited</span> to handle the case where <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> was called from within a probe callback (which would deadlock a <span class="tt">join()</span>). </p>
+<p>Calls <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> internally. The destructor spin-waits on <span class="tt">_runExited</span> to handle the case where <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> was called from within a probe callback (which would deadlock a <span class="tt">join()</span>).</p>
+<p>The destructor itself must not run on the probe thread: this spin-wait blocks until <span class="tt">run()</span> sets <span class="tt">_runExited</span>, but <span class="tt">run()</span> cannot reach that store while it is paused lower on the same thread's call stack waiting for a callback (and this destructor, called from within it) to return. A callback that drops the owning object's last reference and thereby triggers this destructor synchronously, on the probe thread, deadlocks here by construction — not a supported lifetime. The supported, documented seam for a self-thread teardown request is calling <span class="tt"><a class="el" href="#ac4251df7c4776d6cd0c68f4751952d45" title="Signals the probe thread to stop and, if possible, joins it.">stop()</a></span> itself from the callback (see its doc comment and <span class="tt">_thread.get_id() ==
+std::this_thread::get_id()</span> below): that only detaches and returns, letting <span class="tt">run()</span> continue and exit on its own; the actual destructor runs later, from a different thread, once the owner is done reacting to the callback. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00088">88</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -327,7 +329,7 @@ Public Member Functions</h2></td></tr>
 <p>Reads an atomic flag — safe to call from any thread at any time.</p>
 <dl class="section return"><dt>Returns</dt><dd>Current online state. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00091">91</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>
@@ -358,7 +360,7 @@ Public Member Functions</h2></td></tr>
 <p>Idempotent — subsequent calls are no-ops. If called from inside the probe thread (e.g. from a probe callback), the thread is detached instead of joined to avoid a deadlock; the destructor then spin-waits for it to exit.</p>
 <p>Thread-safe. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00100">100</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../d1/d6f/network__monitor_8hpp_source.html">network_monitor.hpp</a>.</p>
 
 </div>
 </div>

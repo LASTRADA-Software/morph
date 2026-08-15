@@ -208,7 +208,7 @@ Functions</h2></td></tr>
 <div class="line"><span class="keyword">namespace </span>{                                                                                        \</div>
 <div class="line">[[maybe_unused]] <span class="keyword">const</span> <span class="keywordtype">bool</span> bridge_view_reg_##V = morph::views::detail::registerViewOnce&lt;V&gt;(NAME); \</div>
 <div class="line">}</div>
-<div class="ttc" id="astructmorph_1_1views_1_1ViewTraits_html"><div class="ttname"><a href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html">morph::views::ViewTraits</a></div><div class="ttdoc">Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...</div><div class="ttdef"><b>Definition</b> <a href="../../de/d49/views_8hpp_source.html#l00382">views.hpp:382</a></div></div>
+<div class="ttc" id="astructmorph_1_1views_1_1ViewTraits_html"><div class="ttname"><a href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html">morph::views::ViewTraits</a></div><div class="ttdoc">Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...</div><div class="ttdef"><b>Definition</b> <a href="../../de/d49/views_8hpp_source.html#l00395">views.hpp:395</a></div></div>
 </div><!-- fragment -->
 <p>Registers view descriptor <code class="param">V</code> with the string id <code class="param">NAME</code>. </p>
 <p>Specialises <span class="tt"><a class="el" href="../../db/db9/structmorph_1_1views_1_1ViewTraits.html" title="Traits specialisation that maps a view descriptor type to its string type-id. Specialise via BRIDGE_R...">morph::views::ViewTraits</a>&lt;V&gt;</span> and registers <code class="param">V's</code> <span class="tt">viewSchemaJson&lt;V&gt;()</span> provider with the process-level <span class="tt">ViewRegistry</span> at static-init time — parallels <span class="tt">BRIDGE_REGISTER_ACTION</span> (<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>), but a view has no dispatch path: it is metadata only, so this macro needs only <span class="tt">&lt;<a class="el" href="../../d1/da2/registry_8hpp_source.html">morph/core/registry.hpp</a>&gt;</span>, never <span class="tt">&lt;<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">morph/core/bridge.hpp</a>&gt;</span>. </p><dl class="params"><dt>Parameters</dt><dd>
@@ -219,7 +219,7 @@ Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00467">467</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00480">480</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>
@@ -346,7 +346,7 @@ template&lt;typename V&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The view-schema JSON. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00373">373</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../de/d49/views_8hpp_source.html#l00386">386</a> of file <a class="el" href="../../de/d49/views_8hpp_source.html">views.hpp</a>.</p>
 
 </div>
 </div>

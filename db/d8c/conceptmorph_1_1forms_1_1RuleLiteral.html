@@ -129,11 +129,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('db/d8c/concept
 <div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> T&gt;</div>
 <div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html">RuleLiteral</a> = std::same_as&lt;T, std::int64_t&gt; || std::same_as&lt;T, bool&gt; || std::same_as&lt;T, std::string&gt; ||</div>
 <div class="line">                      std::same_as&lt;T, ::morph::math::Rational&gt; || detail::isLiteralString&lt;T&gt;</div>
-<div class="ttc" id="aconceptmorph_1_1forms_1_1RuleLiteral_html"><div class="ttname"><a href="../../db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html">morph::forms::RuleLiteral</a></div><div class="ttdoc">Constraint: literal types equals(...) accepts — the closed, JSON-representable scalar set a field can...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00954">forms.hpp:954</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1forms_1_1RuleLiteral_html"><div class="ttname"><a href="../../db/d8c/conceptmorph_1_1forms_1_1RuleLiteral.html">morph::forms::RuleLiteral</a></div><div class="ttdoc">Constraint: literal types equals(...) accepts — the closed, JSON-representable scalar set a field can...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l00960">forms.hpp:960</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Constraint: literal types <span class="tt">equals(...)</span> accepts — the closed, JSON-representable scalar set a field can hold. Restricting the literal type keeps <span class="tt">equals</span> losslessly serialisable into <span class="tt">x-rules</span>'s <span class="tt">value</span> key (see forms.md): a numeric literal is always the exact <span class="tt">math::Rational</span>, never a <span class="tt">double</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00954">954</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l00960">960</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
