@@ -59,6 +59,23 @@ TEST_CASE("morph::observe::detail::emitMetric: no sink installed is a silent no-
     REQUIRE_FALSE(morph::observe::metricsEnabled());
 }
 
+TEST_CASE("morph::observe::detail::emitMetric: falls back to no-op if metricsOn is set without a callable sink",
+          "[observability]") {
+    ObserveGuard guard;
+    // setMetricSink() only ever sets metricsOn together with a non-empty
+    // MetricSink, so this combination is unreachable through the public API --
+    // reach into the singleton directly to exercise emitMetric's own
+    // defensive check of state.metricSink, mirroring detail::beginSpan/endSpan's
+    // analogous defensive-branch tests above.
+    auto& state = morph::observe::detail::observeState();
+    {
+        std::scoped_lock const lock{state.metricMtx};
+        state.metricSink = std::make_shared<const morph::observe::MetricSink>();
+    }
+    state.metricsOn.store(true, std::memory_order_relaxed);
+    REQUIRE_NOTHROW(morph::observe::detail::emitMetric(morph::observe::Metric::registerCount, 1.0));
+}
+
 // ── morph::observe::setTraceSink / detail::beginSpan / detail::endSpan ───────
 
 TEST_CASE("morph::observe::detail::beginSpan: returns 0 sentinel with no trace sink installed", "[observability]") {
