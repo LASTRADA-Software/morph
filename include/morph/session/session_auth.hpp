@@ -332,6 +332,17 @@ namespace detail {
 /// @param errCode Result of a `glz::write` call.
 /// @param context Buffer passed to `glz::format_error` for the message.
 inline void throwOnGlazeError(const glz::error_ctx& errCode, std::string_view context) {
+    // Not covered by this file's own test suite: the only call site
+    // (`TokenIssuer::issue`) always writes a `SessionToken`, a flat aggregate
+    // of strings/integers with no tagged-variant member, so Glaze's writer has
+    // no reachable failure mode for it (unlike, e.g., a null smart pointer
+    // behind a tagged variant alternative -- see glaze's
+    // docs/variant-handling.md, "Variants with Smart Pointers"). Forcing this
+    // branch would mean giving `SessionToken` a variant member solely to break
+    // it, which is not a change this type should make. `journal::toJson`'s and
+    // `offline::detail::toJson`'s identical `throwOnGlazeError` call sites
+    // carry the same accepted, documented gap for the same reason (see
+    // `TokenIssuanceError`'s doc comment above).
     if (errCode) {
         throw TokenIssuanceError{glz::format_error(errCode, context)};
     }
