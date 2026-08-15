@@ -297,6 +297,20 @@ jobs:
           name: coverage-report
           path: build/clang-coverage/html/
 
+      # Temporary, for morph#93 root-cause diagnosis: the raw/JSON exports
+      # aren't otherwise saved anywhere, so the exact per-line coverage-map
+      # data behind the QObject-header discrepancy can't be inspected after
+      # the fact. Remove once #93 is resolved and confirmed.
+      - name: Upload raw coverage exports (temporary, morph#93)
+        if: matrix.preset == 'clang-coverage'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-raw-exports
+          path: |
+            build/clang-coverage/coverage.lcov.raw
+            build/clang-coverage/coverage.json
+            build/clang-coverage/coverage.lcov
+
       - name: Evict previous sccache entry
         if: always()
         continue-on-error: true
