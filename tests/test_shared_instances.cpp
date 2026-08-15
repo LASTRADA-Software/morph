@@ -1012,6 +1012,27 @@ TEST_CASE("an empty primary on the remote backend degrades to a private instance
     REQUIRE(backend.listInstances("SHI_CounterModel").empty());
 }
 
+TEST_CASE("an empty primary with no instance currently held registers privately without deregistering anything",
+          "[shared-instances]") {
+    // Distinct from the "degrades to a private instance" case just above: that
+    // one passes a live `held` id, so attachModel's empty-primary branch takes
+    // its `current.v != 0U` arm and calls deregisterModel on the way to
+    // registering fresh. A handler that has never attached anything yet (e.g.
+    // one whose first-ever action is keyless) calls attachModel with
+    // `current == ModelId{0}` -- there is nothing to release, so that branch
+    // must be skipped rather than deregistering the sentinel "no instance" id.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool);
+    morph::backend::SimulatedRemoteBackend backend{*server};
+
+    auto fresh = backend.attachModel(
+        "SHI_CounterModel", [] { return morph::model::detail::ModelFactory::create<ShiCounterModel>(); },
+        {.contextKey = {}, .primary = {}}, morph::exec::detail::ModelId{0});
+    REQUIRE(fresh.v != 0U);
+    REQUIRE(backend.listInstances("SHI_CounterModel").empty());
+    REQUIRE(server->health().liveModels == 1U);
+}
+
 TEST_CASE("execute() reports an attach failure through onError instead of throwing", "[shared-instances]") {
     morph::testing::InlineExecutor exec;
     morph::exec::ThreadPoolExecutor pool{2};

@@ -1146,6 +1146,49 @@ TEST_CASE(
     REQUIRE(server->health().liveModels == 1U);
 }
 
+TEST_CASE(
+    "morph::backend::RemoteServer: a shared register with an empty primary is not exempted from the "
+    "advisory maxLiveModels pre-check",
+    "[remote][connection-scope][limits]") {
+    // The comment above the advisory check in remote.hpp's register branch
+    // explains the exemption is for a shared register that "may well create
+    // nothing" -- true only when it names a real primary, since then a
+    // directory hit just takes another reference. `shared: true` with an
+    // *empty* primary carries no key to attach by, so it always falls through
+    // to the ordinary private-register path below (same as `shared: false`)
+    // and must still be counted against the cap here, not waved through as if
+    // it could resolve to an existing attachment. Every other test exercising
+    // this line's `!env.shared` operand uses a non-shared register, and every
+    // other test exercising `env.primary.empty()` uses a non-shared one too --
+    // none combine `shared: true` with an empty primary, which is the only way
+    // to reach this specific arm.
+    auto& env = csEnv();
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto server = std::make_shared<morph::backend::RemoteServer>(pool, env.dispatcher, env.registry);
+    morph::backend::LimitPolicy policy;
+    policy.maxLiveModels = 1;
+    server->setLimitPolicy(policy);
+
+    WaitReply first;
+    server->handle(morph::wire::encode(morph::wire::makeRegister("CS_SquareModel")), std::ref(first));
+    REQUIRE(first.await());
+    REQUIRE(first.env.kind == "ok");
+
+    // A hand-built envelope: `shared: true` but `primary` left empty --
+    // makeRegisterShared() always supplies a non-empty primary, so this
+    // combination can only be produced directly.
+    morph::wire::Envelope sharedNoKey;
+    sharedNoKey.kind = "register";
+    sharedNoKey.typeId = "CS_SquareModel";
+    sharedNoKey.shared = true;
+    WaitReply second;
+    server->handle(morph::wire::encode(sharedNoKey), std::ref(second));
+    REQUIRE(second.await());
+    REQUIRE(second.env.kind == "err");
+    REQUIRE(second.env.message == "too many models");
+    REQUIRE(server->health().liveModels == 1U);
+}
+
 namespace {
 
 /// @brief Allow-all authorizer whose `authorize()` sleeps once, for the first
