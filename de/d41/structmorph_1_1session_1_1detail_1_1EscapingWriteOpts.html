@@ -135,7 +135,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Write options that escape ASCII control bytes as <span class="tt">\\uXXXX</span> sequences. </p>
 <p>glaze 7.4 leaves control bytes (0x00-0x1F) unescaped by default, which breaks a <span class="tt"><a class="el" href="../../d8/dd5/structmorph_1_1session_1_1SessionToken.html" title="Verified claims carried by a session token.">SessionToken</a></span> carrying one in <span class="tt">principal</span>/<span class="tt">roles</span> two ways: RFC 8259 requires those bytes escaped, so the raw byte alone yields JSON this morph's own <span class="tt"><a class="el" href="../../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html" title="Verifies signed bearer tokens against a shared secret.">TokenVerifier</a></span> cannot decode — a signed token that fails to verify, a silent issue-succeeds/verify-fails asymmetry; worse, once the same string also contains an escaped <span class="tt">\\endiskip</span> or <span class="tt">"</span>, glaze's chunked writer path silently rewrites the control byte as two 0x00 bytes, corrupting the claims before they are ever signed. Mirrors <span class="tt"><a class="el" href="../../de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html" title="Write options that escape ASCII control bytes as \\uXXXX sequences.">morph::wire::detail::EscapingWriteOpts</a></span> (<span class="tt"><a class="el" href="../../dc/de4/wire_8hpp_source.html">core/wire.hpp</a></span>) exactly; duplicated here (rather than shared) so this header stays free of a <span class="tt">core/</span> dependency. Escaping is lossless, so any such byte still round-trips through <span class="tt"><a class="el" href="../../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#a79024fe3418bc13e73d4ce6aeec3a492" title="Verifies token&#39;s signature and expiry and returns its claims.">TokenVerifier::verify</a></span> unchanged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00354">354</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00365">365</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a189724b1bcf426227de6c8894cd41073" name="a189724b1bcf426227de6c8894cd41073"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a189724b1bcf426227de6c8894cd41073">&#9670;&#160;</a></span>escape_control_characters</h2>
@@ -151,7 +151,7 @@ Public Attributes</h2></td></tr>
 
 <p>Emit control bytes as <span class="tt">\\uXXXX</span> rather than raw. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00357">357</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00368">368</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>

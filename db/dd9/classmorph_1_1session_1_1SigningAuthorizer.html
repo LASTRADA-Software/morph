@@ -159,7 +159,7 @@ Public Member Functions</h2></td></tr>
 <p><span class="tt"><a class="el" href="#a998542ab6e7b9aeca272f2a05fc452a5" title="Allows the call iff ctx carries a valid token the policy admits.">authorize</a></span> returns <span class="tt">true</span> only for a token with a valid signature and unexpired claims (and, if a policy is supplied, one the policy admits). <span class="tt"><a class="el" href="#ab46b3d7dabef6cf09d31cf51023762ef" title="Returns the verified principal so the server can make it authoritative.">authenticate</a></span> returns the verified principal so <span class="tt">RemoteServer</span> makes it authoritative. Install it on the server: </p><div class="fragment"><div class="line"><span class="keyword">auto</span> authz = std::make_shared&lt;morph::session::SigningAuthorizer&gt;(sharedSecret);</div>
 <div class="line"><span class="keyword">auto</span> server = std::make_shared&lt;morph::backend::RemoteServer&gt;(pool, authz);</div>
 </div><!-- fragment --> 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00497">497</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00508">508</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="abe59e3f6f1cfa9772a9eaaa0bd003ad4" name="abe59e3f6f1cfa9772a9eaaa0bd003ad4"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#abe59e3f6f1cfa9772a9eaaa0bd003ad4">&#9670;&#160;</a></span>Policy</h2>
@@ -179,7 +179,7 @@ Public Member Functions</h2></td></tr>
 <p>Optional per-request policy over verified claims. </p>
 <p>Receives the verified token plus the target ids; return <span class="tt">false</span> to deny. The default (empty) admits any validly-signed, unexpired token. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00503">503</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00514">514</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -232,7 +232,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00525">525</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -282,7 +282,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a8e866ec952e0075389623c0d48fcb901">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00546">546</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
@@ -320,7 +320,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Reimplemented from <a class="el" href="../../d5/d07/structmorph_1_1session_1_1IAuthorizer.html#a639b6c6bfe77ba9143b0533788726568">morph::session::IAuthorizer</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00548">548</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html#l00559">559</a> of file <a class="el" href="../../d3/d6a/session__auth_8hpp_source.html">session_auth.hpp</a>.</p>
 
 </div>
 </div>
