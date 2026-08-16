@@ -1,28 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 
 /// @file
-/// kanban' standalone server process: `kanban::db::setup()` once, one
+/// kanban standalone server process: `kanban::db::setup()` once, one
 /// `kanban::app::App` (worker pool + `RemoteServer` with a real
-/// `auth::KanbanAuthorizer` + durable action log), and one
-/// `morph::qt::QtWebSocketServer` in front of it. Mirrors
-/// `bookmarks::src::server::main.cpp` closely, minus everything that server
-/// owns and this rung has no equivalent for: there is no
-/// `KANBAN_TOKEN_SECRET` (this rung mints no process-wide signed tokens at
-/// all -- `CreateBoard` generates bare admin/participant tokens per board,
-/// directly inside `BoardModel::execute()`, see
-/// `kanban/auth/kanban_authorizer.hpp`'s own `@file` comment), and there is no
-/// background worker to drain on shutdown (`kanban::app::App` is plain C++
-/// with no timer at all -- see that header's own `@file` comment).
+/// `auth::KanbanAuthorizer` + durable action log + process-global
+/// `TokenIssuer`), and one `morph::qt::QtWebSocketServer` in front of it.
+/// Mirrors `bookmarks::src::server::main.cpp` closely, minus the background
+/// worker to drain on shutdown (`kanban::app::App` is plain C++ with no timer
+/// at all -- see that header's own `@file` comment).
 ///
 /// Usage:
 /// @code
-/// KANBAN_DB=... KANBAN_PORT=8768 ladder_kanban_server
+/// KANBAN_TOKEN_SECRET=... KANBAN_DB=... KANBAN_PORT=8768 ladder_kanban_server
 /// @endcode
 
 #include "kanban/app/app.hpp"
+#include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/db/database.hpp"
 
 #include <morph/qt/qt_websocket_server.hpp>
+#include <morph/session/session_auth.hpp>
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -60,9 +57,28 @@ int main(int argc, char** argv) {
     QCoreApplication qtApp{argc, argv};
 
     for (int i = 1; i < argc; ++i) {
-        std::cerr << "kanban-server: unknown argument '" << argv[i] << "' (usage: ladder_kanban_server)\n";
+        std::cerr << "kanban-server: unknown argument '" << argv[i] << "' (usage: KANBAN_TOKEN_SECRET=... ladder_kanban_server)\n";
         return 2;
     }
+
+    // Required, with no default: the secret signs every token this server
+    // mints and verifies every token it is shown, so a built-in fallback
+    // would be a published signing key. Refusing to start is the only honest
+    // behavior (`docs/spec/security.md`).
+    const char* tokenSecretEnv = std::getenv("KANBAN_TOKEN_SECRET");
+    if (tokenSecretEnv == nullptr || *tokenSecretEnv == '\0') {
+        std::cerr << "kanban-server: KANBAN_TOKEN_SECRET must be set to a non-empty value\n";
+        return 2;
+    }
+    const std::string tokenSecret{tokenSecretEnv};
+    // Cleared from the environment the moment it has been copied. The
+    // environment block is readable for the process's whole lifetime — by
+    // anything that later calls `getenv`, by a crash dump, and on some
+    // platforms by other processes — and the secret has no business being
+    // there once this process holds it.
+#if __has_include(<unistd.h>)
+    static_cast<void>(::unsetenv("KANBAN_TOKEN_SECRET"));
+#endif
 
     const char* connectionString = std::getenv("KANBAN_DB");
     kanban::db::setup(connectionString != nullptr ? connectionString
@@ -89,6 +105,12 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
+        // Create and install the TokenIssuer before App constructs RemoteServer,
+        // which installs KanbanAuthorizer.
+        auto issuer = std::make_shared<::morph::session::TokenIssuer>(
+            tokenSecret, ::morph::session::hmacSha256);
+        kanban::auth::setTokenIssuer(issuer);
+
         kanban::app::App app{std::filesystem::current_path() / "kanban_actions.jsonl"};
 
         ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};

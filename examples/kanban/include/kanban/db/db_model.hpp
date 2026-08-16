@@ -20,7 +20,7 @@ namespace kanban::db {
 
 /// @brief Base providing `mapper()` — one lazily-constructed DataMapper per model.
 class WithMapper {
-protected:
+  protected:
     WithMapper() = default;
 
     /// @brief Returns this model's DataMapper, opening it on first use.
@@ -31,7 +31,7 @@ protected:
         return *_mapper;
     }
 
-private:
+  private:
     std::optional<Lightweight::DataMapper> _mapper;
 };
 
@@ -39,7 +39,7 @@ private:
 
 /// @brief Persistence-free base for the browser build. No `mapper()`.
 class WithMapper {
-protected:
+  protected:
     WithMapper() = default;
 };
 

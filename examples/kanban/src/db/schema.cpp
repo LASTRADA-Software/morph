@@ -18,5 +18,4 @@ void setup(const std::string& connectionString) {
 // ─── Schema migration ────────────────────────────────────────────────────────
 // LIGHTWEIGHT_SQL_MIGRATION auto-registers with the MigrationManager at
 // static-init time; linking this TU into the binary makes the schema known.
-
-using namespace Lightweight::SqlColumnTypeDefinitions;
+// Task 3+ will add migrations here using SqlColumnTypeDefinitions.

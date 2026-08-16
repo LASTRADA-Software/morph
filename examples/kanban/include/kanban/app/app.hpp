@@ -17,14 +17,9 @@
 /// closely, minus everything that rung's `App` owns and this one has no
 /// equivalent for:
 ///
-///  - No `TokenIssuer`/`AuthModel` wiring. This rung has no signed-token
-///    mechanism at all -- `CreateBoard` mints its own bare
-///    admin/participant tokens directly inside `BoardModel::execute()`
-///    (`kanban/auth/kanban_authorizer.hpp`'s own `@file` comment). There is
-///    nothing for this `App` to install process-wide beyond the action log.
 ///  - No background worker/timer, and therefore no `QObject`/`QTimer`
 ///    inheritance and no internal client `Bridge`. Every mutation this
-///    rung's `BoardModel` performs (manage cards, comments, finalize, undo) is
+///    rung's `BoardModel` performs (manage cards, comments, move tasks) is
 ///    synchronous, immediate, inside the calling `execute()` -- there is no
 ///    async job (no metadata fetch, no expiry sweep, no outbox relay) for a
 ///    timer to drive. `App` is therefore plain C++, not Qt-dependent at
@@ -35,17 +30,20 @@ namespace kanban::app {
 
 /// @brief Owns the server-side pieces this rung's deployment shares: the
 /// worker pool, the `RemoteServer` with a real `auth::KanbanAuthorizer`
-/// installed, and the durable `FileActionLog` (installed process-wide via
-/// `morph::journal::setActionLog`, so every `BoardModel` instance
-/// auto-attaches -- the same convention `bookmarks::app::App`/
-/// `pastebin::app::App` use). Nothing here decides deployment mode -- that
-/// stays `examples/common/gui::AppContext`'s job on the client side; this
-/// is exclusively the server side.
+/// (`SigningAuthorizer`-derived) installed, the durable `FileActionLog`
+/// (installed process-wide via `morph::journal::setActionLog`, so every
+/// `BoardModel` instance auto-attaches), and the process-global
+/// `TokenIssuer` (installed via `auth::setTokenIssuer`). Nothing here decides
+/// deployment mode -- that stays `examples/common/gui::AppContext`'s job on
+/// the client side; this is exclusively the server side.
 class App {
   public:
     /// @brief Wires up the whole server side: worker pool, `RemoteServer`
     ///        (with `auth::KanbanAuthorizer` and this rung's `maxLiveModels`
-    ///        cap installed), and the durable action log.
+    ///        cap installed), and the durable action log. The process-global
+    ///        `TokenIssuer` must be installed separately via
+    ///        `auth::setTokenIssuer` before this App constructs its `RemoteServer`
+    ///        (typically in `main.cpp` after reading `KANBAN_TOKEN_SECRET`).
     /// @param actionLogPath Where `FileActionLog` persists entries.
     /// @param workers       Size of the model worker pool.
     explicit App(std::filesystem::path actionLogPath, std::size_t workers = 4);

@@ -3,15 +3,19 @@
 
 namespace kanban::auth {
 
-bool KanbanAuthorizer::authorizeRegister(const ::morph::session::Context& /*ctx*/,
-                                        std::string_view /*modelType*/) const {
-    return true;
+namespace {
+std::shared_ptr<::morph::session::TokenIssuer>& issuerSlot() {
+    static std::shared_ptr<::morph::session::TokenIssuer> issuer;
+    return issuer;
+}
+}  // namespace
+
+void setTokenIssuer(std::shared_ptr<::morph::session::TokenIssuer> issuer) {
+    issuerSlot() = std::move(issuer);
 }
 
-bool KanbanAuthorizer::authorizeInstance(const ::morph::session::Context& /*ctx*/, std::string_view /*modelType*/,
-                                        std::string_view /*actionType*/, std::uint64_t /*modelId*/,
-                                        std::string_view /*ownerPrincipal*/) const {
-    return true;
+std::shared_ptr<::morph::session::TokenIssuer> tokenIssuer() {
+    return issuerSlot();
 }
 
 }  // namespace kanban::auth
