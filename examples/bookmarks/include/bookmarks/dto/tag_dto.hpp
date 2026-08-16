@@ -10,10 +10,11 @@
 
 namespace bookmarks {
 
-/// @brief Longest tag name, in bytes, this rung accepts — a `validate()`
-///        sanity bound only, not a storage-column width. See this task's
-///        own header comment for why `TagRecord::name` carries no
-///        `SqlAnsiString` capacity to check against.
+/// @brief Longest tag name, in bytes, this rung accepts — both a
+///        `validate()` sanity bound and the storage-column width:
+///        `TagRecord::name` (`tag_entity.hpp`) is `Light::SqlAnsiString<128>`,
+///        and `tag_model.cpp`'s static_assert pins that capacity to this
+///        same constant, so the two can never drift apart silently.
 inline constexpr std::size_t kMaxTagNameBytes = 128;
 
 struct RenameTag {

@@ -839,17 +839,26 @@ TEST_CASE("decodeLoginResult accepts a real Login reply and rejects anything tha
     }
 }
 
-TEST_CASE("decodeLoginResult reads back exactly what a real Login dispatch produced",
+TEST_CASE("decodeLoginResult reads back exactly what a real Login dispatch produced, redacted",
           "[bookmarks][gui][qml-bridges]") {
     // Pins the assumption the case above rests on: the reply shape asserted
     // there by hand is the shape the wire really carries. If `LoginResult`'s
     // reflection ever changed, this fails here rather than silently making the
     // hand-written literals above test nothing.
+    //
+    // `payload` here is `FormsBridge::submitIfValid`'s emitted
+    // `replyReceived` argument, not the model's raw wire reply -- and for a
+    // successful `Login` those two are deliberately different
+    // (`bookmark_qml_bridges.cpp`'s own comment on the `Login` branch): the
+    // token has already been installed onto the session by the time this
+    // signal fires, so the QML-facing payload has it redacted rather than
+    // broadcasting a live bearer credential to every bound handler.
     DbFixture fixture;
     const ScopedTokenIssuer issuer{
         std::make_shared<morph::session::TokenIssuer>(std::string{kSecret}, morph::session::hmacSha256)};
     BackendRig rig{Mode::Local, 1};
     bookmarks::gui::FormsBridge forms{rig.bridge(0), rig.executor()};
+    bookmarks::gui::BookmarkBridge bookmarkBridge{rig.bridge(0), rig.executor()};
 
     const auto [ok, payload] = submit(forms, QStringLiteral("Login"), QStringLiteral(R"({"username":"alice"})"));
     REQUIRE(ok);
@@ -857,6 +866,18 @@ TEST_CASE("decodeLoginResult reads back exactly what a real Login dispatch produ
     const auto decoded = bookmarks::gui::decodeLoginResult(payload.toStdString());
     REQUIRE(decoded.has_value());
     CHECK(decoded->principal == "alice");
-    REQUIRE(decoded->token.hasValue());
-    CHECK_FALSE((*decoded->token).empty());
+    CHECK_FALSE(decoded->token.hasValue());
+
+    // ...and the same bridge now works, which is the only observable proof
+    // that `setDefaultSession` was called with the *real* token -- the one
+    // this test just confirmed never left the process via `payload`.
+    QVariantList rows;
+    bool listed = false;
+    QObject::connect(&bookmarkBridge, &bookmarks::gui::BookmarkBridge::listed, [&](const QVariantList& page) {
+        rows = page;
+        listed = true;
+    });
+    bookmarkBridge.refresh();
+    REQUIRE(pumpUntil([&] { return listed; }));
+    CHECK(rows.isEmpty());  // a real, empty collection — not an error
 }

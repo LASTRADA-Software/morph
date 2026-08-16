@@ -21,6 +21,8 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace bookmarks {
 
@@ -194,18 +196,34 @@ ListTagsResult TagModel::execute(const ListTags&) {
     auto rows =
         mapper->Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::ownerPrincipal>, "=", owner).All();
 
+    // Batched, not per-tag: one query for every junction row across all of
+    // this owner's tags, counted in-memory below -- instead of a `COUNT`
+    // query *per tag* (N+1, and each one still pulls full rows just to
+    // discard everything but `.size()`), this owner's whole tag list costs
+    // exactly 1 extra query regardless of how many tags they have.
+    std::vector<std::uint64_t> tagIds;
+    tagIds.reserve(rows.size());
+    for (const auto& rec : rows) {
+        tagIds.push_back(rec.id.Value());
+    }
+    auto junctionRows = mapper->Query<db::BookmarkTagRecord>()
+                            .WhereIn(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, tagIds)
+                            .All();
+    std::unordered_map<std::uint64_t, std::uint64_t> countByTagId;
+    countByTagId.reserve(tagIds.size());
+    for (const auto& jrow : junctionRows) {
+        ++countByTagId[jrow.tag.Value()];
+    }
+
     ListTagsResult result;
     for (const auto& rec : rows) {
-        const auto count = mapper
-                                ->Query<db::BookmarkTagRecord>()
-                                .Where(::Lightweight::FieldNameOf<&db::BookmarkTagRecord::tag>, "=", rec.id.Value())
-                                .All()
-                                .size();
         TagSummary summary;
         summary.id = TagId{static_cast<std::int64_t>(rec.id.Value())};
         // `TagRecord::name` is `Light::SqlAnsiString<kMaxTagNameBytes>`;
         // `TagSummary::name` stays plain `std::string` on the wire.
         summary.name = std::string{rec.name.Value()};
+        const auto it = countByTagId.find(rec.id.Value());
+        const auto count = it != countByTagId.end() ? it->second : std::uint64_t{0};
         summary.bookmarkCount = Count::fromDouble(static_cast<double>(count));
         result.tags.push_back(std::move(summary));
     }

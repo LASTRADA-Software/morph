@@ -171,18 +171,21 @@ void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJs
                     return;
                 }
                 onLoginSucceeded(*result);
+                // The token has already done its one job -- installed onto
+                // the session above -- so it has no further reason to leave
+                // this function. `replyReceived` is broadcast to *every*
+                // bound QML handler, and a future handler that renders
+                // `payload` unconditionally would otherwise put a live
+                // bearer credential on screen (and into any screenshot or
+                // recording of it). Re-encoding a redacted copy keeps the
+                // signal's shape unchanged (still `(actionType, ok,
+                // payload)`) — only `Login`'s own payload stops carrying the
+                // token, rather than a public QML surface change.
+                LoginResult redacted = *result;
+                redacted.token = AuthToken{};
+                emit replyReceived(actionType, true, QString::fromStdString(glz::write_json(redacted).value_or("{}")));
+                return;
             }
-            // NOTE: for `Login`, `resultJson` is the full `LoginResult`
-            // document — bearer token included — and this signal is broadcast
-            // to *every* bound QML handler. Both handlers this rung ships
-            // keep it off screen: BookmarkListView.qml returns early for
-            // `Login`, and LoginView.qml renders `payload` only when `ok` is
-            // false — and a failed login carries no token. A future handler
-            // must not render `payload`
-            // unconditionally: doing so would put a live credential on screen
-            // (and into any screenshot or screen recording of it). Narrowing
-            // the signal itself is the real fix and is deliberately not made
-            // here — it is a public QML surface change, not a review tweak.
             emit replyReceived(actionType, true, QString::fromStdString(resultJson));
         },
         [this, actionType](const std::exception_ptr& err) {
