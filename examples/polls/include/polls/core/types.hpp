@@ -35,9 +35,14 @@ struct OptionId {
     /// @return `true` if the payload is non-zero.
     [[nodiscard]] constexpr bool hasValue() const { return value != 0; }
 
-    /// @brief Unchecked access to the engaged value (UB when empty, exactly
-    ///        like `std::optional::operator*`).
-    /// @return The engaged value.
+    /// @brief Returns the payload as-is. Never UB, unlike
+    ///        `std::optional::operator*` -- `value` is a plain
+    ///        `std::int64_t` with `0` as its own "not entered" sentinel, not
+    ///        a `std::optional` this wraps, so there is no engaged/empty
+    ///        state distinction below the surface for this to violate. Check
+    ///        `hasValue()` first when `0` vs. a real id matters to the
+    ///        caller; this always returns whatever `value` holds either way.
+    /// @return The payload, verbatim.
     [[nodiscard]] constexpr std::int64_t operator*() const { return value; }
 
     /// @brief Equality on the payload.
@@ -55,9 +60,14 @@ struct PollEventId {
     /// @return `true` if the payload is non-zero.
     [[nodiscard]] constexpr bool hasValue() const { return value != 0; }
 
-    /// @brief Unchecked access to the engaged value (UB when empty, exactly
-    ///        like `std::optional::operator*`).
-    /// @return The engaged value.
+    /// @brief Returns the payload as-is. Never UB, unlike
+    ///        `std::optional::operator*` -- `value` is a plain
+    ///        `std::int64_t` with `0` as its own "not entered" sentinel, not
+    ///        a `std::optional` this wraps, so there is no engaged/empty
+    ///        state distinction below the surface for this to violate. Check
+    ///        `hasValue()` first when `0` vs. a real id matters to the
+    ///        caller; this always returns whatever `value` holds either way.
+    /// @return The payload, verbatim.
     [[nodiscard]] constexpr std::int64_t operator*() const { return value; }
 
     /// @brief Equality on the payload.

@@ -194,21 +194,30 @@ Item {
                                 enabled: page.state && !page.state.finalized
                                 ButtonGroup.group: choiceGroup
                                 checked: page.pickFor(optionRow.modelData.id) === "Yes"
-                                onToggled: page.setPick(optionRow.modelData.id, "Yes")
+                                // `toggled` fires on both the newly-checked button
+                                // (checked -> true) and, since these three share one
+                                // exclusive ButtonGroup, on whichever button the
+                                // selection just left (checked -> false) -- only the
+                                // former should write a pick, or the unchecked
+                                // sibling's own unconditional setPick can overwrite
+                                // this click's selection right back to itself,
+                                // depending on which button's `toggled` QML fires
+                                // second.
+                                onToggled: if (checked) page.setPick(optionRow.modelData.id, "Yes")
                             }
                             RadioButton {
                                 text: "If need be"
                                 enabled: page.state && !page.state.finalized
                                 ButtonGroup.group: choiceGroup
                                 checked: page.pickFor(optionRow.modelData.id) === "IfNeedBe"
-                                onToggled: page.setPick(optionRow.modelData.id, "IfNeedBe")
+                                onToggled: if (checked) page.setPick(optionRow.modelData.id, "IfNeedBe")
                             }
                             RadioButton {
                                 text: "No"
                                 enabled: page.state && !page.state.finalized
                                 ButtonGroup.group: choiceGroup
                                 checked: page.pickFor(optionRow.modelData.id) === "No"
-                                onToggled: page.setPick(optionRow.modelData.id, "No")
+                                onToggled: if (checked) page.setPick(optionRow.modelData.id, "No")
                             }
                         }
                     }

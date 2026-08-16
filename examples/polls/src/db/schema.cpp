@@ -74,7 +74,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260808000001, "Create polls tables") {
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("poll_id", Bigint(), pollsRef)
         .RequiredColumn("participant_name", Varchar(80))
-        .RequiredColumn("previous_votes_json", Text())
+        .RequiredColumn("previous_votes_json", NVarchar(0))
         .RequiredColumn("created_at_ms", Bigint());
     // UndoLastVoteChange (Task 8) looks up the calling participant's most
     // recent row for this poll.
@@ -84,7 +84,7 @@ LIGHTWEIGHT_SQL_MIGRATION(20260808000001, "Create polls tables") {
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("poll_id", Bigint(), pollsRef)
         .RequiredColumn("kind", Varchar(32))
-        .RequiredColumn("summary", Text())
+        .RequiredColumn("summary", NVarchar(0))
         .RequiredColumn("created_at_ms", Bigint());
     // GetEventsSince (Task 9) lists every event for a poll after a cursor.
     plan.CreateIndex("idx_poll_events_poll", "poll_events", {"poll_id"});
