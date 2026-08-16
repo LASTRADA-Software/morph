@@ -564,6 +564,14 @@ public:
                                 "attach reply arrived from a backend switchBackend() already replaced"));
                         } else {
                             try {
+                                // Not covered by this file's own test suite:
+                                // the only way in is a std::string copy-
+                                // assignment throwing (std::bad_alloc from a
+                                // real allocation failure -- currentId.store()
+                                // on an atomic cannot throw). Forcing that
+                                // portably needs an OOM-injection allocator
+                                // seam this codebase does not have, and is
+                                // disproportionate for one defensive catch.
                                 strongBinding->contextKey = primaryCopy;
                                 strongBinding->primary = primaryCopy;
                                 strongBinding->currentId.store(newId.v);
@@ -599,6 +607,10 @@ public:
             std::exception_ptr failure = parked->failure;
             if (parked->succeeded) {
                 try {
+                    // Not covered by this file's own test suite: same
+                    // OOM-only catch as attachHandlerAsync's out-of-frame
+                    // callback above -- see its comment for why this is
+                    // left uncovered rather than forced.
                     binding->contextKey = primaryCopy;
                     binding->primary = std::move(primaryCopy);
                     binding->currentId.store(parked->modelId.v);

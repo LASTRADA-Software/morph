@@ -1057,6 +1057,30 @@ TEST_CASE(
     CHECK(binding->contextKey == "999");
 }
 
+TEST_CASE("Bridge::assignHandlerPrimary: a never-attached binding (currentId still 0) is a silent no-op",
+          "[bridge][registration][issue67]") {
+    // Every other assignHandlerPrimary test in this file calls ensureBound()
+    // first, so currentId is always non-zero going in -- the `raw == 0U`
+    // arm of the early-return guard (raw == 0U || primary.empty() ||
+    // !binding->primary.empty()) is otherwise never driven true. A handler
+    // that has never attached anything yet has no instance to promote a key
+    // onto, so this must return immediately: no assignPrimaryAsync dispatch,
+    // no pendingCount bump.
+    morph::exec::ThreadPoolExecutor pool{2};
+    auto backend = std::make_unique<AsyncAssignPrimaryBackend>(pool);
+    auto* rawBackend = backend.get();
+    morph::bridge::Bridge bridge{std::move(backend)};
+
+    auto binding = std::make_shared<morph::bridge::detail::HandlerBinding>();
+    binding->typeId = "AR_CreateModel";
+    binding->modelFactory = [] { return morph::model::detail::ModelFactory::create<ARCreateModel>(); };
+    REQUIRE(binding->currentId.load() == 0U);  // never bound
+
+    bridge.assignHandlerPrimary<ARCreateModel>(binding, "100");
+    CHECK(rawBackend->pendingCount() == 0);
+    CHECK(binding->primary.empty());
+}
+
 TEST_CASE(
     "Bridge::assignHandlerPrimary: a stale async reply after the binding itself is dropped is a safe no-op",
     "[bridge][registration][issue67]") {
