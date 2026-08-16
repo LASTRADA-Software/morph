@@ -12,12 +12,14 @@ morph_add_rung(NAME kanban)
 # morph_add_rung() only globs src/models/*.cpp, src/db/*.cpp and
 # src/app/*.cpp into ladder_kanban_lib (cmake/morph_add_rung.cmake:91-92)
 # — it does not know about this rung's src/auth/ (Tasks 1-10's
-# KanbanAuthorizer), so without an explicit target_sources() call the rung
-# fails to link with undefined kanban::auth::KanbanAuthorizer symbols.
+# KanbanAuthorizer) or src/dto/ (Task 8's Login::validate()), so without an
+# explicit target_sources() call the rung fails to link with undefined
+# kanban::auth::KanbanAuthorizer / kanban::Login::validate() symbols.
 # Mirrors bookmarks' own CMakeLists.txt treatment of src/import/ and src/dto/.
 # (src/db/schema.cpp needs no equivalent line here -- the glob above already
 # covers src/db/*.cpp.)
 if(TARGET ladder_kanban_lib)
     target_sources(ladder_kanban_lib PRIVATE
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/auth/kanban_authorizer.cpp")
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/auth/kanban_authorizer.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/dto/auth_dto.cpp")
 endif()

@@ -3,7 +3,9 @@
 
 #include <morph/session/session_auth.hpp>
 
+#include <cstddef>
 #include <memory>
+#include <string_view>
 
 /// @file
 /// Kanban's `IAuthorizer` -- `SigningAuthorizer`-derived, mirroring
@@ -24,6 +26,51 @@
 /// `ProjectAdminModel::execute()` via `requireRole()`.
 
 namespace kanban::auth {
+
+/// @brief Namespace prefix reserved for service principals. No human may log
+///        in under it -- see `isReservedPrincipal`. Mirrors
+///        `bookmarks::auth::kServicePrincipalPrefix`; kanban has no service
+///        worker of its own yet, but `AuthModel::execute(const Login&)`
+///        still refuses to mint a token in this namespace on request, same
+///        as bookmarks, as a defense-in-depth measure that costs nothing to
+///        keep even before a concrete service principal exists.
+inline constexpr std::string_view kServicePrincipalPrefix = "system:";
+
+/// @brief Longest principal this rung accepts, in bytes.
+inline constexpr std::size_t kMaxPrincipalBytes = 64;
+
+/// @brief Whether @p principal is acceptable as a login identity for this
+///        rung. Mirrors `bookmarks::auth::isValidPrincipal` exactly (see that
+///        function's own doc comment for the full rationale): non-empty, at
+///        most `kMaxPrincipalBytes` long, ASCII letters/digits/`.`/`_`/`:`/`-`
+///        only.
+/// @param principal Candidate principal string.
+/// @return `true` if @p principal is non-empty, at most `kMaxPrincipalBytes`
+///         long, and every byte is an ASCII letter, digit, `.`, `_`, `:`, or `-`.
+[[nodiscard]] inline bool isValidPrincipal(std::string_view principal) noexcept {
+    if (principal.empty() || principal.size() > kMaxPrincipalBytes) {
+        return false;
+    }
+    for (const char ch : principal) {
+        const auto byte = static_cast<unsigned char>(ch);
+        const bool ok = (byte >= 'a' && byte <= 'z') || (byte >= 'A' && byte <= 'Z') ||
+                       (byte >= '0' && byte <= '9') || byte == '.' || byte == '_' || byte == '-' ||
+                       byte == ':';
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Whether @p principal is reserved for the server's own internal
+///        workers and must never be handed to a caller. Mirrors
+///        `bookmarks::auth::isReservedPrincipal` exactly.
+/// @param principal Candidate principal string.
+/// @return `true` if @p principal begins with `kServicePrincipalPrefix`.
+[[nodiscard]] inline bool isReservedPrincipal(std::string_view principal) noexcept {
+    return principal.starts_with(kServicePrincipalPrefix);
+}
 
 /// @brief This rung's `IAuthorizer`: verifies HMAC-signed session tokens
 ///        (inherited `SigningAuthorizer::authorize`/`authenticate`), stays
