@@ -176,6 +176,14 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
     rec.wipLimit = action.wipLimit;
     rec.sortOrder = static_cast<std::int64_t>(existing.size());
     mapper->Create(rec);
+
+    db::BoardEventRecord event;
+    event.project = project;
+    event.kind = "column";
+    event.summary = "column created";
+    event.createdAtMs = nowMs();
+    mapper->Create(event);
+
     transaction.Commit();
 
     return buildState(mapper.Get(), project);
@@ -202,6 +210,14 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
     rec.name = action.name;
     rec.sortOrder = static_cast<std::int64_t>(existing.size());
     mapper->Create(rec);
+
+    db::BoardEventRecord event;
+    event.project = project;
+    event.kind = "swimlane";
+    event.summary = "swimlane created";
+    event.createdAtMs = nowMs();
+    mapper->Create(event);
+
     transaction.Commit();
 
     return buildState(mapper.Get(), project);
@@ -234,6 +250,14 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
     rec.position = static_cast<std::int64_t>(existing.size());
     rec.createdAtMs = nowMs();
     mapper->Create(rec);
+
+    db::BoardEventRecord event;
+    event.project = project;
+    event.kind = "task";
+    event.summary = "task created";
+    event.createdAtMs = nowMs();
+    mapper->Create(event);
+
     transaction.Commit();
 
     return buildState(mapper.Get(), project);
@@ -258,6 +282,14 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
     rec.body = action.body;
     rec.createdAtMs = nowMs();
     mapper->Create(rec);
+
+    db::BoardEventRecord event;
+    event.project = project;
+    event.kind = "comment";
+    event.summary = "comment added";
+    event.createdAtMs = nowMs();
+    mapper->Create(event);
+
     transaction.Commit();
 
     return buildState(mapper.Get(), project);
@@ -407,6 +439,34 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     }
 
     transaction.Commit();
+    return result;
+}
+
+GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetEventsSince: malformed request"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"GetEventsSince: handler was never attached via OpenBoard"};
+    }
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+
+    auto rows = mapper
+                    ->Query<db::BoardEventRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::BoardEventRecord::project>, "=", projectDbId)
+                    .Where(::Lightweight::FieldNameOf<&db::BoardEventRecord::id>, ">",
+                           static_cast<std::uint64_t>(*action.lastEventId))
+                    .OrderBy(::Lightweight::FieldNameOf<&db::BoardEventRecord::id>)
+                    .All();
+
+    GetEventsSinceResult result;
+    result.events.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.events.push_back({.id = BoardEventId{.value = static_cast<std::int64_t>(row.id.Value())},
+                                  .kind = std::string{row.kind.Value()},
+                                  .summary = std::string{row.summary.Value()}});
+    }
     return result;
 }
 

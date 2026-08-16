@@ -3,6 +3,7 @@
 
 #include "kanban/core/errors.hpp"
 #include "kanban/dto/board_dto.hpp"
+#include "kanban/dto/event_dto.hpp"
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
@@ -87,6 +88,16 @@ class BoardModel {
     ///         previously-applied `opId`, the replayed result).
     GetBoardResult execute(const MoveTaskPosition& action);
 
+    /// @brief Design spec §1's polling read side -- lists every
+    ///        `board_events` row after `action.lastEventId`, oldest first.
+    /// @param action The cursor to list events after; `{}` (its default)
+    ///        means "from the beginning".
+    /// @return Every matching event, oldest first.
+    /// @throws ValidationError if `action.validate()` rejects the request
+    ///         (a negative `lastEventId`).
+    /// @throws NotFound if this handler was never attached via `OpenBoard`.
+    GetEventsSinceResult execute(const GetEventsSince& action);
+
   private:
     /// @brief The project this handler is attached to, cached on the first
     ///        successful `execute(OpenBoard)`. Unset until then.
@@ -103,6 +114,7 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateSwimlane, "CreateSwimla
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateTask, "CreateTask")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddComment, "AddComment")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::MoveTaskPosition, "MoveTaskPosition")
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetEventsSince, "GetEventsSince", ::morph::model::Loggable::No)
 
 // `BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId)`
 // cannot be used verbatim here: that macro deduces the model's PrimaryKey as

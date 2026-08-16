@@ -82,6 +82,17 @@ enum class Role : std::uint8_t { Viewer, Member, Manager };
     return Role::Viewer;
 }
 
+/// @brief Strong identifier for one row in the `board_events` append-only
+///        log. Zero-sentinel shape (not `fromOptional`'s optional shape) --
+///        it is always looked up already-assigned, per `polls::PollEventId`'s
+///        identical precedent.
+struct BoardEventId {
+    std::int64_t value{0};
+    [[nodiscard]] constexpr bool hasValue() const { return value != 0; }
+    [[nodiscard]] constexpr std::int64_t operator*() const { return value; }
+    [[nodiscard]] constexpr bool operator==(const BoardEventId&) const = default;
+};
+
 }  // namespace kanban
 
 /// @brief On the wire a `ProjectId` is its nullable underlying integer.
@@ -113,6 +124,13 @@ template <>
 struct glz::meta<kanban::TagId> {
     static constexpr auto value = &kanban::TagId::value;
     static constexpr std::string_view name = "TagId";
+};
+
+/// @brief On the wire a `BoardEventId` is its underlying integer.
+template <>
+struct glz::meta<kanban::BoardEventId> {
+    static constexpr auto value = &kanban::BoardEventId::value;
+    static constexpr std::string_view name = "BoardEventId";
 };
 
 /// @brief On the wire a `Role` is its string name (`roleToString`).

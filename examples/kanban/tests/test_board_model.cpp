@@ -195,3 +195,23 @@ TEST_CASE("MoveTaskPosition into a column deleted mid-drag throws NotFound, not 
                                                             .opId = ""}),
                     kanban::NotFound);
 }
+
+TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0});
+    model.execute(kanban::CreateSwimlane{.name = "Default"});
+
+    const auto first = model.execute(kanban::GetEventsSince{.lastEventId = {}});
+    CHECK(first.events.size() >= 2);  // at least the column-create and swimlane-create events
+
+    const auto cursor = first.events.back().id;
+    const auto colId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.back().id;
+    (void) colId;
+
+    const auto second = model.execute(kanban::GetEventsSince{.lastEventId = cursor});
+    REQUIRE(second.events.size() == 1);
+}
