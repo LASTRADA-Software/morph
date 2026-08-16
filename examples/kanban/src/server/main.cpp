@@ -15,11 +15,9 @@
 /// @endcode
 
 #include "kanban/app/app.hpp"
-#include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/db/database.hpp"
 
 #include <morph/qt/qt_websocket_server.hpp>
-#include <morph/session/session_auth.hpp>
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -105,13 +103,10 @@ int main(int argc, char** argv) {
 
     int exitCode = 0;
     {
-        // Create and install the TokenIssuer before App constructs RemoteServer,
-        // which installs KanbanAuthorizer.
-        auto issuer = std::make_shared<::morph::session::TokenIssuer>(
-            tokenSecret, ::morph::session::hmacSha256);
-        kanban::auth::setTokenIssuer(issuer);
-
-        kanban::app::App app{std::filesystem::current_path() / "kanban_actions.jsonl"};
+        // App installs both the KanbanAuthorizer and the process-global
+        // TokenIssuer from the same tokenSecret -- see App's own constructor
+        // doc comment for why they must share one value.
+        kanban::app::App app{std::filesystem::current_path() / "kanban_actions.jsonl", tokenSecret};
 
         ::morph::qt::QtWebSocketServer wsServer{*app.server(), port};
         if (!wsServer.listen()) {

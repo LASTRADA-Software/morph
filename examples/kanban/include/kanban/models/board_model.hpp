@@ -159,7 +159,13 @@ class BoardModel {
     ///        of `IModelHolder::recordIfAttached` for a plain, non-holder-
     ///        wrapped `BoardModel` instance (see `attachActionLog`'s doc
     ///        comment for why this instance cannot rely on the framework's
-    ///        own auto-append instead).
+    ///        own auto-append instead). Flushes `_log` after appending, so a
+    ///        `GetActivity` call immediately afterward (the common case: a
+    ///        client polls right after its own mutating call) reliably sees
+    ///        the entry even when `_log` is a `FileActionLog` -- `append()`
+    ///        writes through buffered C stdio with no implicit flush, and
+    ///        `entries()` reads through a separate `ifstream` that cannot
+    ///        see unflushed bytes still sitting in that buffer.
     /// @tparam Action Concrete action type; used to look up
     ///         `morph::model::ActionTraits<Action>::typeId()`/`toJson()`.
     /// @tparam Result Concrete result type; used to look up

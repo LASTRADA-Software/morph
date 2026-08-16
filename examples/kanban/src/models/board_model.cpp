@@ -172,6 +172,19 @@ void BoardModel::logAction(const Action& action, const Result& result) const {
     }
     entry.timestampMs = nowMs();
     _log->append(std::move(entry));
+    // GetActivity reads this same log back via a fresh `entries()` call
+    // (design spec §4), and `FileActionLog::entries()`'s own doc comment is
+    // explicit that an unflushed `append()` is only visible "if the
+    // platform's stdio buffering has already handed it to the OS" --
+    // otherwise invisible to entries()'s separate ifstream, since append()
+    // writes through buffered C stdio (`fwrite`) with no implicit flush.
+    // Without this, a client polling GetActivity immediately after its own
+    // mutating call would nondeterministically miss the entry it just
+    // caused -- observed directly: `docs/spec/journal/journal.md`'s stated
+    // contract is not something GetActivity can rely on without calling it.
+    // `InMemoryActionLog::flush()` is a no-op, so this costs nothing for the
+    // log type most non-App tests actually attach.
+    _log->flush();
 }
 
 void BoardModel::requireRole(Role minimum) const {

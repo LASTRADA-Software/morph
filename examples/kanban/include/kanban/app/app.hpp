@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <memory>
+#include <string>
 
 /// @file
 /// `kanban::app::App` -- this rung's server bootstrap. Mirrors
@@ -32,23 +33,30 @@ namespace kanban::app {
 /// worker pool, the `RemoteServer` with a real `auth::KanbanAuthorizer`
 /// (`SigningAuthorizer`-derived) installed, the durable `FileActionLog`
 /// (installed process-wide via `morph::journal::setActionLog`, so every
-/// `BoardModel` instance auto-attaches), and the process-global
-/// `TokenIssuer` (installed via `auth::setTokenIssuer`). Nothing here decides
-/// deployment mode -- that stays `examples/common/gui::AppContext`'s job on
-/// the client side; this is exclusively the server side.
+/// default-constructed model auto-attaches, *and* wired as this server's
+/// `RemoteServer::LogProvider` so a registry-constructed, keyed `BoardModel`
+/// instance's own `attachActionLog` also sees it -- see `app.cpp`'s
+/// constructor comment for why both attach paths are needed), and the
+/// process-global `TokenIssuer` `AuthModel::execute(const Login&)` mints
+/// tokens from (`auth::setTokenIssuer`). Nothing here decides deployment
+/// mode -- that stays `examples/common/gui::AppContext`'s job on the client
+/// side; this is exclusively the server side.
 class App {
   public:
     /// @brief Wires up the whole server side: worker pool, `RemoteServer`
     ///        (with `auth::KanbanAuthorizer` and this rung's `maxLiveModels`
-    ///        cap installed), and the durable action log. The process-global
-    ///        `TokenIssuer` must be installed separately via
-    ///        `auth::setTokenIssuer` before this App constructs its `RemoteServer`
-    ///        (typically in `main.cpp` after reading `KANBAN_TOKEN_SECRET`).
+    ///        cap installed), the durable action log, and the process-global
+    ///        `TokenIssuer`.
     /// @param actionLogPath Where `FileActionLog` persists entries.
+    /// @param tokenSecret   Shared secret for the `auth::KanbanAuthorizer`
+    ///        this server installs and for the process-global `TokenIssuer`
+    ///        `AuthModel` mints user tokens from. Both must be the same
+    ///        value, which is why there is one parameter: a token minted by
+    ///        one has to verify against the other.
     /// @param workers       Size of the model worker pool.
-    explicit App(std::filesystem::path actionLogPath, std::size_t workers = 4);
+    explicit App(std::filesystem::path actionLogPath, std::string tokenSecret, std::size_t workers = 4);
 
-    /// @brief Detaches the process-wide default action log.
+    /// @brief Detaches the process-wide default action log and token issuer.
     ~App();
 
     App(const App&) = delete;
