@@ -146,6 +146,7 @@ var hierarchy =
         [ "morph::backend::DisconnectedError", "d3/d73/structmorph_1_1backend_1_1DisconnectedError.html", null ],
         [ "morph::backend::TimeoutError", "d5/d80/structmorph_1_1backend_1_1TimeoutError.html", null ],
         [ "morph::forms::QuantityDecodeError", "d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html", null ],
+        [ "morph::journal::NullSinkError", "d6/d55/structmorph_1_1journal_1_1NullSinkError.html", null ],
         [ "morph::journal::SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
         [ "morph::model::ValidationError", "d7/d1a/structmorph_1_1model_1_1ValidationError.html", null ],
         [ "morph::offline::FileOfflineQueueError", "d6/d90/structmorph_1_1offline_1_1FileOfflineQueueError.html", null ],

@@ -1,5 +1,6 @@
 var NAVTREEINDEX3 =
 {
+"de/d6e/structmorph_1_1offline_1_1SyncResult.html#ac961898bd488a98d989a3eb6bdce4d33":[2,0,0,15,11,1],
 "de/d75/ws__frame_8hpp_source.html":[3,0,0,4,0,3],
 "de/d87/structmorph_1_1flows_1_1detail_1_1AllDistinct_3_01T_00_01Rest_8_8_8_01_4.html":[2,0,0,7,0,1],
 "de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html":[2,0,0,22,0,0],

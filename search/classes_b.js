@@ -6,5 +6,6 @@ var searchData=
   ['nosharing_3',['NoSharing',['../d8/d38/structmorph_1_1bridge_1_1NoSharing.html',1,'morph::bridge']]],
   ['not_4',['Not',['../d1/db1/structmorph_1_1forms_1_1Not.html',1,'morph::forms']]],
   ['notengaged_5',['NotEngaged',['../d9/d86/structmorph_1_1forms_1_1NotEngaged.html',1,'morph::forms']]],
-  ['numerator_6',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]]
+  ['nullsinkerror_6',['NullSinkError',['../d6/d55/structmorph_1_1journal_1_1NullSinkError.html',1,'morph::journal']]],
+  ['numerator_7',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math']]]
 ];

@@ -25,8 +25,9 @@ var searchData=
   ['now_22',['now',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a0072664563c3df7e5ff8fe15b63558da',1,'morph::time::DateTime::now()'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a2cd34a7b7333b01fad971f0c5c6c4495',1,'morph::time::Timestamp::now()']]],
   ['nowoverridestate_23',['nowOverrideState',['../d7/d4a/datetime_8hpp.html#a6bbe2fc294eab5234e9625f0f633993a',1,'morph::time::detail']]],
   ['null_20callback_20executor_20drops_20the_20callback_20but_20not_20the_20orphan_20log_24',['A null callback executor drops the callback (but not the orphan log)',['../index.html#a-null-callback-executor-drops-the-callback-but-not-the-orphan-log',1,'']]],
-  ['num_25',['num',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a359f98d03a24ee27e54edb19eb586f54',1,'morph::units::UnitAlternative::num'],['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36',1,'morph::math::Rational::Wire::num']]],
-  ['numbers_20on_20the_20wire_26',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
-  ['numerator_27',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math::Numerator'],['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator::Numerator()']]],
-  ['numerator_28',['numerator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd',1,'morph::math::Rational']]]
+  ['nullsinkerror_25',['NullSinkError',['../d6/d55/structmorph_1_1journal_1_1NullSinkError.html',1,'morph::journal']]],
+  ['num_26',['num',['../d5/d23/structmorph_1_1units_1_1UnitAlternative.html#a359f98d03a24ee27e54edb19eb586f54',1,'morph::units::UnitAlternative::num'],['../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36',1,'morph::math::Rational::Wire::num']]],
+  ['numbers_20on_20the_20wire_27',['&lt;span class=&quot;tt&quot;&gt;morph::math::Rational&lt;/span&gt; — exact numbers on the wire',['../index.html#morphmathrational--exact-numbers-on-the-wire',1,'']]],
+  ['numerator_28',['Numerator',['../d7/d45/structmorph_1_1math_1_1Numerator.html',1,'morph::math::Numerator'],['../d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7',1,'morph::math::Numerator::Numerator()']]],
+  ['numerator_29',['numerator',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd',1,'morph::math::Rational']]]
 ];

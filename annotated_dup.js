@@ -86,6 +86,7 @@ var annotated_dup =
         [ "IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", "df/d4e/structmorph_1_1journal_1_1IActionLog" ],
         [ "InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog" ],
         [ "LogEntry", "de/d2a/structmorph_1_1journal_1_1LogEntry.html", "de/d2a/structmorph_1_1journal_1_1LogEntry" ],
+        [ "NullSinkError", "d6/d55/structmorph_1_1journal_1_1NullSinkError.html", null ],
         [ "OutboxRelay", "d9/d67/structmorph_1_1journal_1_1OutboxRelay.html", "d9/d67/structmorph_1_1journal_1_1OutboxRelay" ],
         [ "OutboxRelayResult", "d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html", "d8/da5/structmorph_1_1journal_1_1OutboxRelayResult" ],
         [ "ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", "de/d66/classmorph_1_1journal_1_1ScopedActionLog" ],

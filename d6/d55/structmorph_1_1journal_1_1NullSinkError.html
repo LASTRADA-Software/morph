@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::journal::OutboxRelayResult Struct Reference</title>
+<title>morph: morph::journal::NullSinkError Struct Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html','../../','dc/d85/structmorph_1_1journal_1_1OutboxRelayResult-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d55/structmorph_1_1journal_1_1NullSinkError.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,44 +117,26 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/da5/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::journal::OutboxRelayResult Struct Reference</div></div>
+  <div class="headertitle"><div class="title">morph::journal::NullSinkError Struct Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Outcome of one <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> call.  
+<p>Thrown by <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> when <span class="tt">sink</span> is null.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>&gt;</code></p>
-<table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
-Public Attributes</h2></td></tr>
-<tr class="memitem:aad7cc68f6dfeb636b309b94c2888f90d" id="r_aad7cc68f6dfeb636b309b94c2888f90d"><td class="memItemLeft">std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#aad7cc68f6dfeb636b309b94c2888f90d">relayed</a> = 0</td></tr>
-<tr class="memdesc:aad7cc68f6dfeb636b309b94c2888f90d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Outbox rows drained, appended to <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">OutboxRelay::sink</a></span>, and marked relayed in this call. Includes rows the sink silently deduped via <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> — a row is still marked relayed exactly once even when the sink treats its append as a no-op.  <br /></td></tr>
-</table>
+<div class="dynheader">
+Inheritance diagram for morph::journal::NullSinkError:</div>
+<div class="dyncontent">
+ <div class="center">
+  <img src="../../d6/d55/structmorph_1_1journal_1_1NullSinkError.png" alt=""/>
+ </div></div>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Outcome of one <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> call. </p>
+<div class="textblock"><p>Thrown by <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#a1248cb453951d71a0c28c7b3e5babf9c" title="Moves every row drainOutbox() currently reports to sink, then marks the whole batch relayed via markR...">OutboxRelay::relay()</a></span> when <span class="tt">sink</span> is null. </p>
+<p>A null <span class="tt">drainOutbox</span>/<span class="tt">markRelayed</span> already throws a catchable <span class="tt">std::bad_function_call</span> (invoking a null <span class="tt">std::function</span>); this makes a null <span class="tt">sink</span> consistent with that instead of a raw null-<span class="tt">shared_ptr</span> dereference (real undefined behavior, not portably catchable — see <span class="tt">LASTRADA-Software/morph#95</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
-</div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
-<a id="aad7cc68f6dfeb636b309b94c2888f90d" name="aad7cc68f6dfeb636b309b94c2888f90d"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#aad7cc68f6dfeb636b309b94c2888f90d">&#9670;&#160;</a></span>relayed</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::size_t morph::journal::OutboxRelayResult::relayed = 0</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Outbox rows drained, appended to <span class="tt"><a class="el" href="../../d9/d67/structmorph_1_1journal_1_1OutboxRelay.html#ae687340d723cfe17f30f8443ce5b2570" title="Durable audit sink rows are forwarded to.">OutboxRelay::sink</a></span>, and marked relayed in this call. Includes rows the sink silently deduped via <span class="tt"><a class="el" href="../../de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24" title="Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries (fr...">LogEntry::idempotencyKey</a></span> — a row is still marked relayed exactly once even when the sink treats its append as a no-op. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00033">33</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
-
-</div>
-</div>
-<hr/>The documentation for this struct was generated from the following file:<ul>
+<p class="definition">Definition at line <a class="el" href="../../d7/d20/outbox_8hpp_source.html#l00023">23</a> of file <a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a>.</p>
+</div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/journal/<a class="el" href="../../d7/d20/outbox_8hpp_source.html">outbox.hpp</a></li>
 </ul>
 </div><!-- contents -->
@@ -170,7 +152,7 @@ Public Attributes</h2></td></tr>
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>journal</b></li><li class="navelem"><a href="../../d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html">OutboxRelayResult</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>journal</b></li><li class="navelem"><a href="../../d6/d55/structmorph_1_1journal_1_1NullSinkError.html">NullSinkError</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

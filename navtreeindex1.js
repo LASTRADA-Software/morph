@@ -150,10 +150,11 @@ var NAVTREEINDEX1 =
 "d5/df5/file__offline__queue_8hpp_source.html":[3,0,0,5,0],
 "d6/d0e/structmorph_1_1app_1_1FormScreen.html":[2,0,0,0,1],
 "d6/d1e/bridge_8hpp_source.html":[3,0,0,0,1],
-"d6/d23/structmorph_1_1journal_1_1SerializationError.html":[2,0,0,9,8],
+"d6/d23/structmorph_1_1journal_1_1SerializationError.html":[2,0,0,9,9],
 "d6/d2c/app_8hpp.html":[3,0,0,2,0],
 "d6/d2c/app_8hpp.html#a510c4a33b970c608e8705e6b0b8703c3":[3,0,0,2,0,4],
 "d6/d2c/app_8hpp_source.html":[3,0,0,2,0],
+"d6/d55/structmorph_1_1journal_1_1NullSinkError.html":[2,0,0,9,5],
 "d6/d5e/backend_8hpp_source.html":[3,0,0,0,0],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html":[2,0,0,15,2],
 "d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a09bb85941338ca833b3815a9e77f2380":[2,0,0,15,2,1],
@@ -227,8 +228,8 @@ var NAVTREEINDEX1 =
 "d8/d94/structmorph_1_1flows_1_1WizardStep.html#a98d4a48c599245638cb6886b2033f800":[2,0,0,7,2,1],
 "d8/d94/structmorph_1_1flows_1_1WizardStep.html#aa0e8b6fc036635f8539d8ca8e3c2f314":[2,0,0,7,2,0],
 "d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html":[1,0,2,2],
-"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html":[2,0,0,9,6],
-"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html#aad7cc68f6dfeb636b309b94c2888f90d":[2,0,0,9,6,0],
+"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html":[2,0,0,9,7],
+"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html#aad7cc68f6dfeb636b309b94c2888f90d":[2,0,0,9,7,0],
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html":[2,0,0,19,0],
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a203bee57f41561c4ff8881cd64fda9f0":[2,0,0,19,0,2],
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f":[2,0,0,19,0,1],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a1bbaff0063b89c293f427e07da9f1424":[2,0,0,2,6,0],
 "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a29cc7bdc74c43b6f9b5e9db52f1b1977":[2,0,0,2,6,1],
 "d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a85c8f88e56660fb9d0e2b1b2de4b16ac":[2,0,0,2,6,2],
-"d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a8cd0f4114df7c7f9ff9b224bdba3f5e4":[2,0,0,2,6,8],
-"d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a9a539d67d97dbb987f5a644d2c6073d5":[2,0,0,2,6,5]
+"d8/dfd/classmorph_1_1backend_1_1LocalBackend.html#a8cd0f4114df7c7f9ff9b224bdba3f5e4":[2,0,0,2,6,8]
 };
