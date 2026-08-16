@@ -126,7 +126,8 @@ authorization at Kanboard's granularity (4), journal-derived activity + undo
   pool=4, 32 boards writing concurrently, WAL on and off; measure
   throughput collapse; assert no timeout-then-committed double-apply.
 - **Offline queue growth is unbounded**: no depth bound exists on any
-  shipped queue — define an overflow policy [framework gap]. (Scope
+  shipped queue — define an overflow policy
+  [framework gap, filed as morph#112]. (Scope
   correction from verification: the linear-scan/quadratic enqueue applies
   to `FileOfflineQueue` only; this rung's `SqliteOfflineQueue` dedups via
   an index. Measure depth growth on the SQLite queue; the 10⁴–10⁵-item
