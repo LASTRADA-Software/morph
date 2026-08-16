@@ -12,21 +12,14 @@ env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
   # Caps each leg's on-disk sccache blob so ~11 legs stay well under GitHub's
-  # 10 GB per-repo actions-cache budget. See each leg's cache step below:
-  # every key is per-commit (a `-${{ github.sha }}` suffix) with a
-  # `restore-keys:` prefix fallback, matching the ladder job's own
-  # already-correct pattern. A per-commit key lets `actions/cache@v4`'s
-  # single-step save run unconditionally (it only ever writes a *new* key,
-  # never overwrites one) — no separate delete-then-save dance is needed,
-  # and none is used: a prior "evict then save" version of these six legs
-  # shared one static key with no SHA suffix, deleted repo-wide by
-  # `gh cache delete <key>` (no `--ref`, so it isn't scoped to the calling
-  # branch) before saving, which any concurrent branch's own run could fire
-  # first and wipe out a just-warmed master cache before it was ever restored
-  # from. `restore-keys:`'s prefix match still finds the most recent
-  # generation regardless of which commit wrote it, so this loses nothing
-  # `actions/cache` isn't already built to reclaim on its own via its normal
-  # per-scope size/LRU eviction.
+  # 10 GB per-repo actions-cache budget. Every leg's cache step below uses a
+  # per-commit key (a `-${{ github.sha }}` suffix) with a `restore-keys:`
+  # prefix fallback: `actions/cache@v4`'s single-step save then always writes
+  # a *new* key (it never overwrites one), so no delete/evict step is needed
+  # and no branch can ever remove another branch's cache entry.
+  # `restore-keys:`'s prefix match still finds the most recent generation
+  # regardless of which commit wrote it, so each leg still gets its usual
+  # cross-run reuse via `actions/cache`'s normal per-scope size/LRU eviction.
   SCCACHE_CACHE_SIZE: "1G"
   CLANG_VERSION: "22"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
