@@ -49,8 +49,8 @@ fi
 # the same reason. AUTOMOC's generated
 # mocs_compilation.cpp lives under $OUT (the build tree), never under a
 # source-tree path named here, so moc output is excluded automatically —
-# no separate exclusion mechanism needed. Test files, demo src/, system
-# headers and fetched dependencies are excluded the same way.
+# no separate exclusion mechanism needed. Demo src/, system headers and
+# fetched dependencies are excluded the same way.
 SOURCES=(include/morph)
 if [ -x "$LADDER_TEST_EXE" ]; then
     SOURCES+=(examples/common)
@@ -66,6 +66,20 @@ if [ -x "$PASTEBIN_TEST_EXE" ]; then
     SOURCES+=(examples/pastebin/include examples/pastebin/src examples/pastebin/gui_lib)
 fi
 
+# examples/common/testkit/ mixes real, reusable test-support headers/.cpp
+# (backend_rig.hpp, db_fixture.hpp, strand_interleaver.hpp, ...) with actual
+# Catch2 test files (test_event_poller.cpp, test_presenter.cpp, ...) in the
+# same directory — unlike include/morph and examples/pastebin's SOURCES
+# entries above, which contain no test files at all. `SOURCES+=(examples/
+# common)` swept both in indiscriminately: a TEST_CASE body's own untaken
+# assertion/lambda branches (a REQUIRE's fail arm, a "must not run" callback
+# proving itself unreachable) were being measured as if they were product
+# code, manufacturing the exact "phantom uncovered branch" noise this
+# project has repeatedly had to hand-verify file by file. Test files
+# genuinely are not part of what examples/IMPLEMENTATION.md rule 5's 100%
+# bar means to hold to that standard — only the real testkit/GUI code is.
+IGNORE_REGEX='.*/testkit/test_[^/]+\.cpp$'
+
 PROFILES=$(find "$OUT" -name "*.profraw" 2>/dev/null | tr '\n' ' ')
 if [ -z "$PROFILES" ]; then
     echo "ERROR: No .profraw files found in $OUT." >&2
@@ -79,6 +93,7 @@ mkdir -p "$REPORT_DIR"
 ${LLVM_COV} show "$TEST_EXE" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
+    -ignore-filename-regex="$IGNORE_REGEX" \
     -format=html \
     -output-dir="$REPORT_DIR" \
     "${SOURCES[@]}"
@@ -88,11 +103,13 @@ echo "Coverage report: $REPORT_DIR/index.html"
 ${LLVM_COV} report "$TEST_EXE" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
+    -ignore-filename-regex="$IGNORE_REGEX" \
     "${SOURCES[@]}"
 
 ${LLVM_COV} export "$TEST_EXE" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
+    -ignore-filename-regex="$IGNORE_REGEX" \
     -format=lcov \
     "${SOURCES[@]}" \
     > "$OUT/coverage.lcov.raw"
@@ -106,6 +123,7 @@ ${LLVM_COV} export "$TEST_EXE" \
 ${LLVM_COV} export "$TEST_EXE" \
     "${OBJECT_ARGS[@]}" \
     -instr-profile="$MERGED" \
+    -ignore-filename-regex="$IGNORE_REGEX" \
     "${SOURCES[@]}" \
     > "$OUT/coverage.json"
 

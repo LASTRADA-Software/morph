@@ -167,6 +167,27 @@ TEST_CASE("log(level, msg) respects threshold and delegates to sink", "[logger]"
     REQUIRE(last == "emitted");
 }
 
+// ── logFormat (format-string level helpers) ───────────────────────────────────
+
+TEST_CASE("morph::log::logWarn(fmt, args...): suppressed below threshold without formatting or invoking the sink",
+          "[logger]") {
+    LogGuard guard;
+    int callCount = 0;
+    morph::log::setLogger([&](morph::log::LogLevel, std::string_view) { ++callCount; });
+    morph::log::setLogLevel(morph::log::LogLevel::error);
+
+    // Below the "error" threshold: logFormat's own level check must reject
+    // this before std::format runs or the sink is touched.
+    morph::log::logWarn("value={}", 42);
+    REQUIRE(callCount == 0);
+
+    morph::log::setLogLevel(morph::log::LogLevel::warn);
+    std::string last;
+    morph::log::setLogger([&](morph::log::LogLevel, std::string_view msg) { last = std::string{msg}; });
+    morph::log::logWarn("value={}", 42);
+    REQUIRE(last == "value=42");
+}
+
 // ── Thread safety ─────────────────────────────────────────────────────────────
 
 TEST_CASE("concurrent log calls are thread-safe", "[logger]") {

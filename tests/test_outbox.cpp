@@ -361,7 +361,37 @@ TEST_CASE("OutboxRelay::relay(): a null drainOutbox is logged, not rejected, at 
     REQUIRE(sink->entries().empty());  // drainOutbox() threw before anything reached the sink
 }
 
-// A null `sink` is deliberately NOT exercised into relay()'s body here: unlike
+TEST_CASE("OutboxRelay::relay(): a null sink is logged, not rejected, at call time", "[outbox][relay]") {
+    // Unlike the null-drainOutbox/markRelayed cases above, relay() must not
+    // actually dereference the null sink (sink->append() on a null
+    // shared_ptr<IActionLog> is a null-pointer virtual dispatch -- real UB,
+    // not a catchable exception -- see the comment below). Pairing the null
+    // sink with an empty drainOutbox() keeps relay() on its early-return path
+    // (`if (rows.empty()) return {};`), which runs *after*
+    // logIfAnyDepNull() but *before* any sink use -- so the null-sink warning
+    // fires without ever calling through the null pointer.
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::debug,
+    };
+
+    OutboxRelay relay;
+    relay.drainOutbox = [] { return std::vector<LogEntry>{}; };
+    relay.markRelayed = [](std::span<const LogEntry>) {};
+    // relay.sink left null on purpose.
+
+    auto result = relay.relay();
+    REQUIRE(result.relayed == 0);
+
+    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
+        return line.find("null sink") != std::string::npos;
+    });
+    REQUIRE(sawWarning);
+}
+
+// A null `sink` reaching relay()'s *sink-using* path (i.e. with drainOutbox()
+// returning rows) is deliberately NOT exercised here: unlike
 // `drainOutbox`/`markRelayed` (null std::function -> catchable
 // std::bad_function_call), `sink` is a std::shared_ptr<IActionLog>, so
 // `sink->append(row)` on a null sink is a null-pointer virtual dispatch --
@@ -373,10 +403,10 @@ TEST_CASE("OutboxRelay::relay(): a null drainOutbox is logged, not rejected, at 
 // unit test would need a signal/guard-page harness like
 // test_bridge_lifetime.cpp's POSIX-only hasSubscribers() case, which is far
 // more machinery than this one branch warrants and still would not run on
-// Windows/MSVC, where this suite also builds. The logIfAnyDepNull() call
-// itself (the actual branch under test) is still reached and its warning
-// still fires -- only the subsequent crash is left unexercised. Tracked as
-// LASTRADA-Software/morph#95.
+// Windows/MSVC, where this suite also builds. The logIfAnyDepNull() call's
+// null-sink warning line itself is now covered by the empty-drainOutbox test
+// above -- only the subsequent crash on a non-empty drain is left
+// unexercised. Tracked as LASTRADA-Software/morph#95.
 
 TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process restart dedups via the sink",
           "[outbox][relay][file_action_log]") {
