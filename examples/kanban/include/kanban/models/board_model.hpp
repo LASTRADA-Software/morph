@@ -102,6 +102,7 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateColumn, "CreateColumn")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateSwimlane, "CreateSwimlane")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateTask, "CreateTask")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddComment, "AddComment")
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::MoveTaskPosition, "MoveTaskPosition")
 
 // `BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId)`
 // cannot be used verbatim here: that macro deduces the model's PrimaryKey as

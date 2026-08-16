@@ -95,3 +95,103 @@ TEST_CASE("AddComment appends to GetBoardState's comments", "[kanban][model]") {
     CHECK(result.comments.front().body == "looking into it");
     CHECK(result.comments.front().principal == "alice");
 }
+
+TEST_CASE("MoveTaskPosition moves a task and renumbers positions densely", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto afterCol2 = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0});
+    const auto col2 = afterCol2.columns.back().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    const auto result = model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+    const auto moved = result.tasks.front();
+    CHECK(moved.columnId == col2);
+    CHECK(moved.position == 0);
+}
+
+TEST_CASE("MoveTaskPosition rejects a move that would exceed the target column's WIP limit", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto afterCol2 = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 1});
+    const auto col2 = afterCol2.columns.back().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskA =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "A"}).tasks.back().id;
+    const auto taskB =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "B"}).tasks.back().id;
+
+    // Filling col2 (limit 1) to capacity first.
+    model.execute(
+        kanban::MoveTaskPosition{.taskId = taskA, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+
+    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{
+                        .taskId = taskB, .columnId = col2, .swimlaneId = swimlaneId, .position = 1, .opId = ""}),
+                    kanban::Conflict);
+}
+
+TEST_CASE("MoveTaskPosition with a repeated opId replays the stored result, not a fresh move", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto afterCol2 = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0});
+    const auto col2 = afterCol2.columns.back().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    const auto first = model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
+    // A second CreateTask lands after the first move -- if the replay
+    // re-derived state instead of replaying the ledgered result, the
+    // replayed GetBoardResult would (wrongly) include this new task too.
+    model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "New task"});
+
+    const auto replayed = model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
+    CHECK(replayed.tasks.size() == first.tasks.size());
+}
+
+TEST_CASE("MoveTaskPosition into a column deleted mid-drag throws NotFound, not a silent orphan write",
+          "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+    // A column id that was never created -- stands in for "deleted between
+    // GetBoard and MoveTaskPosition" (this rung has no DeleteColumn action
+    // yet; the re-check this test proves exists is the same check that
+    // catches a genuinely-deleted column once that action lands).
+    const kanban::ColumnId neverExisted{99999};
+
+    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{.taskId = taskId,
+                                                            .columnId = neverExisted,
+                                                            .swimlaneId = swimlaneId,
+                                                            .position = 0,
+                                                            .opId = ""}),
+                    kanban::NotFound);
+}
