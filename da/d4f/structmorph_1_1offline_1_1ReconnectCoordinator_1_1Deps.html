@@ -146,7 +146,7 @@ Public Attributes</h2></td></tr>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Injected, host-supplied side effects. None may be null. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00083">83</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00089">89</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="adb8457d14b2b1bf531c6c070ea667403" name="adb8457d14b2b1bf531c6c070ea667403"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#adb8457d14b2b1bf531c6c070ea667403">&#9670;&#160;</a></span>tryReconnect</h2>
@@ -163,7 +163,7 @@ Public Attributes</h2></td></tr>
 <p>Attempt to (re)open the primary backend. </p>
 <dl class="section return"><dt>Returns</dt><dd>true once the backend is genuinely usable (not merely TCP-open). Must not throw; throwing is treated as a failed attempt. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00087">87</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00093">93</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -181,7 +181,7 @@ Public Attributes</h2></td></tr>
 
 <p>Make the freshly-reconnected primary the active backend. Called exactly once per successful <span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538" title="Run the reconnect → activate → bind → replay sequence.">onOnline()</a></span>, after <span class="tt"><a class="el" href="#adb8457d14b2b1bf531c6c070ea667403" title="Attempt to (re)open the primary backend.">tryReconnect()</a></span> succeeds and before <span class="tt"><a class="el" href="#a82801c7aca391405f55114206d4956ab" title="Rebind per-connection / per-session context to the active backend. Called after every activate* step....">bindContext()</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00098">98</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -199,7 +199,7 @@ Public Attributes</h2></td></tr>
 
 <p>Switch the active backend to the local/offline one. Called by <span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#a1e68df1af6563ea1295f8c48023ae6f5" title="Switch to the local backend and rebind context.">onOffline()</a></span>. Followed by <span class="tt"><a class="el" href="#a82801c7aca391405f55114206d4956ab" title="Rebind per-connection / per-session context to the active backend. Called after every activate* step....">bindContext()</a></span> so context tracks the now-active backend. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00097">97</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00103">103</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -217,7 +217,7 @@ Public Attributes</h2></td></tr>
 
 <p>Rebind per-connection / per-session context to the active backend. Called after every activate* step. Must not throw. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00101">101</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00107">107</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -235,7 +235,7 @@ Public Attributes</h2></td></tr>
 
 <p>Replay the offline queue against the now-active primary. Typically wraps <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a44f773b7cdbf93315cfd070e35eaf24b" title="Drains the queue, replaying each item via the replay function.">SyncWorker::run()</a></span>. Called last in <span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538" title="Run the reconnect → activate → bind → replay sequence.">onOnline()</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00105">105</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00111">111</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -253,7 +253,7 @@ Public Attributes</h2></td></tr>
 
 <p>Returns false to abort the current <span class="tt"><a class="el" href="../../d9/dc4/classmorph_1_1offline_1_1ReconnectCoordinator.html#aa4889816d1cbd2b8bbe07830b6940538" title="Run the reconnect → activate → bind → replay sequence.">onOnline()</a></span> sequence early (e.g. the monitor reports the backend went offline again mid-retry). Polled before each reconnect attempt and once more before replay. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00116">116</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>
@@ -271,7 +271,7 @@ Public Attributes</h2></td></tr>
 
 <p>Sleep for the given duration between failed attempts. Injected so tests can substitute a no-op / counter. Hosts wire this to <span class="tt">std::this_thread::sleep_for</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00115">115</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d1/d34/reconnect__coordinator_8hpp_source.html">reconnect_coordinator.hpp</a>.</p>
 
 </div>
 </div>

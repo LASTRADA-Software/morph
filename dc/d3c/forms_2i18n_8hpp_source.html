@@ -175,160 +175,166 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/d3c/forms_2
 <div class="line"><a id="l00050" name="l00050"></a><span class="lineno">   50</span>        <span class="keywordflow">case</span> <a class="code hl_enumvalue" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fa68753d36ec0c4d7768b20993268d68d1">FieldSlot::Placeholder</a>:</div>
 <div class="line"><a id="l00051" name="l00051"></a><span class="lineno">   51</span>            <span class="keywordflow">return</span> <span class="stringliteral">&quot;placeholder&quot;</span>;</div>
 <div class="line"><a id="l00052" name="l00052"></a><span class="lineno">   52</span>        <span class="keywordflow">default</span>:</div>
-<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>            <span class="keywordflow">return</span> <span class="stringliteral">&quot;label&quot;</span>;</div>
-<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>    }</div>
-<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>}</div>
+<div class="line"><a id="l00053" name="l00053"></a><span class="lineno">   53</span>            <span class="comment">// Unreachable through any real code path: FieldSlot is a closed</span></div>
+<div class="line"><a id="l00054" name="l00054"></a><span class="lineno">   54</span>            <span class="comment">// enum and every enumerator is already handled explicitly above.</span></div>
+<div class="line"><a id="l00055" name="l00055"></a><span class="lineno">   55</span>            <span class="comment">// This arm only exists to satisfy the compiler that the function</span></div>
+<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span>            <span class="comment">// returns on every enum value, including one manufactured by an</span></div>
+<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span>            <span class="comment">// out-of-range `static_cast` -- mirrors ruleKindName&#39;s identical</span></div>
+<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span>            <span class="comment">// default: arm in forms.hpp.</span></div>
+<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span>            <span class="keywordflow">return</span> <span class="stringliteral">&quot;label&quot;</span>;</div>
+<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span>    }</div>
+<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span>}</div>
 </div>
-<div class="line"><a id="l00056" name="l00056"></a><span class="lineno">   56</span><span class="comment"></span> </div>
-<div class="line"><a id="l00057" name="l00057"></a><span class="lineno">   57</span><span class="comment">/// @brief Appends `.&lt;slotName&gt;` to a message-key stem.</span></div>
-<div class="line"><a id="l00058" name="l00058"></a><span class="lineno">   58</span><span class="comment">/// @param stem A message-key stem: a derived `&lt;actionTypeId&gt;.&lt;wireField&gt;` or</span></div>
-<div class="line"><a id="l00059" name="l00059"></a><span class="lineno">   59</span><span class="comment">///             a host-declared override (a field&#39;s `x-i18nKey`).</span></div>
-<div class="line"><a id="l00060" name="l00060"></a><span class="lineno">   60</span><span class="comment">/// @param slot Which field text this key names.</span></div>
-<div class="line"><a id="l00061" name="l00061"></a><span class="lineno">   61</span><span class="comment">/// @return `&quot;&lt;stem&gt;.&lt;slotName&gt;&quot;`.</span></div>
-<div class="foldopen" id="foldopen00062" data-start="{" data-end="}">
-<div class="line"><a id="l00062" name="l00062"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">   62</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(std::string_view stem, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
-<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span>    std::string key{stem};</div>
-<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span>    key += <span class="charliteral">&#39;.&#39;</span>;</div>
-<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span>    key += <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa125cccbdb8e2e68958159c5a003b2c1">fieldSlotName</a>(slot);</div>
-<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span>}</div>
+<div class="line"><a id="l00062" name="l00062"></a><span class="lineno">   62</span><span class="comment"></span> </div>
+<div class="line"><a id="l00063" name="l00063"></a><span class="lineno">   63</span><span class="comment">/// @brief Appends `.&lt;slotName&gt;` to a message-key stem.</span></div>
+<div class="line"><a id="l00064" name="l00064"></a><span class="lineno">   64</span><span class="comment">/// @param stem A message-key stem: a derived `&lt;actionTypeId&gt;.&lt;wireField&gt;` or</span></div>
+<div class="line"><a id="l00065" name="l00065"></a><span class="lineno">   65</span><span class="comment">///             a host-declared override (a field&#39;s `x-i18nKey`).</span></div>
+<div class="line"><a id="l00066" name="l00066"></a><span class="lineno">   66</span><span class="comment">/// @param slot Which field text this key names.</span></div>
+<div class="line"><a id="l00067" name="l00067"></a><span class="lineno">   67</span><span class="comment">/// @return `&quot;&lt;stem&gt;.&lt;slotName&gt;&quot;`.</span></div>
+<div class="foldopen" id="foldopen00068" data-start="{" data-end="}">
+<div class="line"><a id="l00068" name="l00068"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">   68</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(std::string_view stem, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
+<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span>    std::string key{stem};</div>
+<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span>    key += <span class="charliteral">&#39;.&#39;</span>;</div>
+<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span>    key += <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa125cccbdb8e2e68958159c5a003b2c1">fieldSlotName</a>(slot);</div>
+<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00073" name="l00073"></a><span class="lineno">   73</span>}</div>
 </div>
-<div class="line"><a id="l00068" name="l00068"></a><span class="lineno">   68</span><span class="comment"></span> </div>
-<div class="line"><a id="l00069" name="l00069"></a><span class="lineno">   69</span><span class="comment">/// @brief The derived message-key stem for a field: `&lt;actionTypeId&gt;.&lt;wireField&gt;`.</span></div>
-<div class="line"><a id="l00070" name="l00070"></a><span class="lineno">   70</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the field belongs to.</span></div>
-<div class="line"><a id="l00071" name="l00071"></a><span class="lineno">   71</span><span class="comment">/// @param wireField    The field&#39;s wire key (its reflected member name).</span></div>
-<div class="line"><a id="l00072" name="l00072"></a><span class="lineno">   72</span><span class="comment">/// @return The stem, before the `.label` / `.help` / `.placeholder` suffix.</span></div>
-<div class="foldopen" id="foldopen00073" data-start="{" data-end="}">
-<div class="line"><a id="l00073" name="l00073"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">   73</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">fieldKeyStem</a>(std::string_view actionTypeId, std::string_view wireField) {</div>
-<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span>    std::string stem{actionTypeId};</div>
-<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span>    stem += <span class="charliteral">&#39;.&#39;</span>;</div>
-<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span>    stem += wireField;</div>
-<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span>    <span class="keywordflow">return</span> stem;</div>
-<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span>}</div>
+<div class="line"><a id="l00074" name="l00074"></a><span class="lineno">   74</span><span class="comment"></span> </div>
+<div class="line"><a id="l00075" name="l00075"></a><span class="lineno">   75</span><span class="comment">/// @brief The derived message-key stem for a field: `&lt;actionTypeId&gt;.&lt;wireField&gt;`.</span></div>
+<div class="line"><a id="l00076" name="l00076"></a><span class="lineno">   76</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the field belongs to.</span></div>
+<div class="line"><a id="l00077" name="l00077"></a><span class="lineno">   77</span><span class="comment">/// @param wireField    The field&#39;s wire key (its reflected member name).</span></div>
+<div class="line"><a id="l00078" name="l00078"></a><span class="lineno">   78</span><span class="comment">/// @return The stem, before the `.label` / `.help` / `.placeholder` suffix.</span></div>
+<div class="foldopen" id="foldopen00079" data-start="{" data-end="}">
+<div class="line"><a id="l00079" name="l00079"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">   79</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">fieldKeyStem</a>(std::string_view actionTypeId, std::string_view wireField) {</div>
+<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span>    std::string stem{actionTypeId};</div>
+<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span>    stem += <span class="charliteral">&#39;.&#39;</span>;</div>
+<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span>    stem += wireField;</div>
+<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span>    <span class="keywordflow">return</span> stem;</div>
+<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span>}</div>
 </div>
-<div class="line"><a id="l00079" name="l00079"></a><span class="lineno">   79</span><span class="comment"></span> </div>
-<div class="line"><a id="l00080" name="l00080"></a><span class="lineno">   80</span><span class="comment">/// @brief The fully-derived message key for one field text slot.</span></div>
-<div class="line"><a id="l00081" name="l00081"></a><span class="lineno">   81</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the field belongs to.</span></div>
-<div class="line"><a id="l00082" name="l00082"></a><span class="lineno">   82</span><span class="comment">/// @param wireField    The field&#39;s wire key.</span></div>
-<div class="line"><a id="l00083" name="l00083"></a><span class="lineno">   83</span><span class="comment">/// @param slot         Which of the field&#39;s texts this key names.</span></div>
-<div class="line"><a id="l00084" name="l00084"></a><span class="lineno">   84</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.&lt;wireField&gt;.&lt;slot&gt;&quot;`.</span></div>
-<div class="foldopen" id="foldopen00085" data-start="{" data-end="}">
-<div class="line"><a id="l00085" name="l00085"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">   85</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">fieldKey</a>(std::string_view actionTypeId, std::string_view wireField, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
-<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span>    <span class="keywordflow">return</span> <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(<a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">fieldKeyStem</a>(actionTypeId, wireField), slot);</div>
-<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span>}</div>
+<div class="line"><a id="l00085" name="l00085"></a><span class="lineno">   85</span><span class="comment"></span> </div>
+<div class="line"><a id="l00086" name="l00086"></a><span class="lineno">   86</span><span class="comment">/// @brief The fully-derived message key for one field text slot.</span></div>
+<div class="line"><a id="l00087" name="l00087"></a><span class="lineno">   87</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the field belongs to.</span></div>
+<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment">/// @param wireField    The field&#39;s wire key.</span></div>
+<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">/// @param slot         Which of the field&#39;s texts this key names.</span></div>
+<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.&lt;wireField&gt;.&lt;slot&gt;&quot;`.</span></div>
+<div class="foldopen" id="foldopen00091" data-start="{" data-end="}">
+<div class="line"><a id="l00091" name="l00091"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">   91</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">fieldKey</a>(std::string_view actionTypeId, std::string_view wireField, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
+<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span>    <span class="keywordflow">return</span> <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(<a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">fieldKeyStem</a>(actionTypeId, wireField), slot);</div>
+<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span>}</div>
 </div>
-<div class="line"><a id="l00088" name="l00088"></a><span class="lineno">   88</span><span class="comment"></span> </div>
-<div class="line"><a id="l00089" name="l00089"></a><span class="lineno">   89</span><span class="comment">/// @brief The explicit override key for one field text slot, when the field</span></div>
-<div class="line"><a id="l00090" name="l00090"></a><span class="lineno">   90</span><span class="comment">///        declares an `x-i18nKey` stem override.</span></div>
-<div class="line"><a id="l00091" name="l00091"></a><span class="lineno">   91</span><span class="comment">///</span></div>
-<div class="line"><a id="l00092" name="l00092"></a><span class="lineno">   92</span><span class="comment">/// A single `FieldMeta::i18nKey` override (see `gui_field_metadata.md`)</span></div>
-<div class="line"><a id="l00093" name="l00093"></a><span class="lineno">   93</span><span class="comment">/// replaces the derived `&lt;actionTypeId&gt;.&lt;wireField&gt;` stem for *all three* of</span></div>
-<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment">/// a field&#39;s text slots; the `.label` / `.help` / `.placeholder` suffix is</span></div>
-<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">/// still appended per slot, exactly as it is for the derived key.</span></div>
-<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">/// @param i18nKeyOverride The field&#39;s declared `FieldMeta::i18nKey` (empty = no override).</span></div>
-<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">/// @param slot            Which of the field&#39;s texts this key names.</span></div>
-<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">/// @return `std::nullopt` when @p i18nKeyOverride is empty; otherwise `&quot;&lt;i18nKeyOverride&gt;.&lt;slot&gt;&quot;`.</span></div>
-<div class="foldopen" id="foldopen00099" data-start="{" data-end="}">
-<div class="line"><a id="l00099" name="l00099"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">   99</a></span>[[nodiscard]] <span class="keyword">inline</span> std::optional&lt;std::string&gt; <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">explicitFieldKey</a>(std::string_view i18nKeyOverride, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
-<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span>    <span class="keywordflow">if</span> (i18nKeyOverride.empty()) {</div>
-<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span>        <span class="keywordflow">return</span> std::nullopt;</div>
-<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span>    }</div>
-<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span>    <span class="keywordflow">return</span> <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(i18nKeyOverride, slot);</div>
-<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span>}</div>
+<div class="line"><a id="l00094" name="l00094"></a><span class="lineno">   94</span><span class="comment"></span> </div>
+<div class="line"><a id="l00095" name="l00095"></a><span class="lineno">   95</span><span class="comment">/// @brief The explicit override key for one field text slot, when the field</span></div>
+<div class="line"><a id="l00096" name="l00096"></a><span class="lineno">   96</span><span class="comment">///        declares an `x-i18nKey` stem override.</span></div>
+<div class="line"><a id="l00097" name="l00097"></a><span class="lineno">   97</span><span class="comment">///</span></div>
+<div class="line"><a id="l00098" name="l00098"></a><span class="lineno">   98</span><span class="comment">/// A single `FieldMeta::i18nKey` override (see `gui_field_metadata.md`)</span></div>
+<div class="line"><a id="l00099" name="l00099"></a><span class="lineno">   99</span><span class="comment">/// replaces the derived `&lt;actionTypeId&gt;.&lt;wireField&gt;` stem for *all three* of</span></div>
+<div class="line"><a id="l00100" name="l00100"></a><span class="lineno">  100</span><span class="comment">/// a field&#39;s text slots; the `.label` / `.help` / `.placeholder` suffix is</span></div>
+<div class="line"><a id="l00101" name="l00101"></a><span class="lineno">  101</span><span class="comment">/// still appended per slot, exactly as it is for the derived key.</span></div>
+<div class="line"><a id="l00102" name="l00102"></a><span class="lineno">  102</span><span class="comment">/// @param i18nKeyOverride The field&#39;s declared `FieldMeta::i18nKey` (empty = no override).</span></div>
+<div class="line"><a id="l00103" name="l00103"></a><span class="lineno">  103</span><span class="comment">/// @param slot            Which of the field&#39;s texts this key names.</span></div>
+<div class="line"><a id="l00104" name="l00104"></a><span class="lineno">  104</span><span class="comment">/// @return `std::nullopt` when @p i18nKeyOverride is empty; otherwise `&quot;&lt;i18nKeyOverride&gt;.&lt;slot&gt;&quot;`.</span></div>
+<div class="foldopen" id="foldopen00105" data-start="{" data-end="}">
+<div class="line"><a id="l00105" name="l00105"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">  105</a></span>[[nodiscard]] <span class="keyword">inline</span> std::optional&lt;std::string&gt; <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">explicitFieldKey</a>(std::string_view i18nKeyOverride, <a class="code hl_enumeration" href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">FieldSlot</a> slot) {</div>
+<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span>    <span class="keywordflow">if</span> (i18nKeyOverride.empty()) {</div>
+<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span>        <span class="keywordflow">return</span> std::nullopt;</div>
+<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span>    }</div>
+<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span>    <span class="keywordflow">return</span> <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">withSlot</a>(i18nKeyOverride, slot);</div>
+<div class="line"><a id="l00110" name="l00110"></a><span class="lineno">  110</span>}</div>
 </div>
-<div class="line"><a id="l00105" name="l00105"></a><span class="lineno">  105</span><span class="comment"></span> </div>
-<div class="line"><a id="l00106" name="l00106"></a><span class="lineno">  106</span><span class="comment">/// @brief The derived message key for a layout group&#39;s title.</span></div>
-<div class="line"><a id="l00107" name="l00107"></a><span class="lineno">  107</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the group belongs to.</span></div>
-<div class="line"><a id="l00108" name="l00108"></a><span class="lineno">  108</span><span class="comment">/// @param groupIndex   The group&#39;s 0-based index into `x-layout.groups`.</span></div>
-<div class="line"><a id="l00109" name="l00109"></a><span class="lineno">  109</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.group.&lt;groupIndex&gt;&quot;`.</span></div>
-<div class="foldopen" id="foldopen00110" data-start="{" data-end="}">
-<div class="line"><a id="l00110" name="l00110"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">  110</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">groupKey</a>(std::string_view actionTypeId, std::size_t groupIndex) {</div>
-<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span>    std::string key{actionTypeId};</div>
-<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    key += <span class="stringliteral">&quot;.group.&quot;</span>;</div>
-<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>    key += std::to_string(groupIndex);</div>
-<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>}</div>
+<div class="line"><a id="l00111" name="l00111"></a><span class="lineno">  111</span><span class="comment"></span> </div>
+<div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span><span class="comment">/// @brief The derived message key for a layout group&#39;s title.</span></div>
+<div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the group belongs to.</span></div>
+<div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span><span class="comment">/// @param groupIndex   The group&#39;s 0-based index into `x-layout.groups`.</span></div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.group.&lt;groupIndex&gt;&quot;`.</span></div>
+<div class="foldopen" id="foldopen00116" data-start="{" data-end="}">
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">  116</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">groupKey</a>(std::string_view actionTypeId, std::size_t groupIndex) {</div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>    std::string key{actionTypeId};</div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    key += <span class="stringliteral">&quot;.group.&quot;</span>;</div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>    key += std::to_string(groupIndex);</div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span>}</div>
 </div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span><span class="comment"></span> </div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="comment">/// @brief The derived message key for a cross-field rule&#39;s violation message.</span></div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the rule belongs to.</span></div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span><span class="comment">/// @param ruleIndex    The rule&#39;s 0-based index into `x-rules`.</span></div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.rule.&lt;ruleIndex&gt;&quot;`.</span></div>
-<div class="foldopen" id="foldopen00121" data-start="{" data-end="}">
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">  121</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">ruleKey</a>(std::string_view actionTypeId, std::size_t ruleIndex) {</div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>    std::string key{actionTypeId};</div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>    key += <span class="stringliteral">&quot;.rule.&quot;</span>;</div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>    key += std::to_string(ruleIndex);</div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span>}</div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment"></span> </div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">/// @brief The derived message key for a cross-field rule&#39;s violation message.</span></div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">/// @param actionTypeId `ActionTraits&lt;A&gt;::typeId()` of the action the rule belongs to.</span></div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">/// @param ruleIndex    The rule&#39;s 0-based index into `x-rules`.</span></div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// @return `&quot;&lt;actionTypeId&gt;.rule.&lt;ruleIndex&gt;&quot;`.</span></div>
+<div class="foldopen" id="foldopen00127" data-start="{" data-end="}">
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">  127</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">ruleKey</a>(std::string_view actionTypeId, std::size_t ruleIndex) {</div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span>    std::string key{actionTypeId};</div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>    key += <span class="stringliteral">&quot;.rule.&quot;</span>;</div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>    key += std::to_string(ruleIndex);</div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>}</div>
 </div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment"></span> </div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// @brief The derived message key for a wizard&#39;s own title.</span></div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// @param wizardId The registered wizard id.</span></div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">/// @return `&quot;&lt;wizardId&gt;.title&quot;`.</span></div>
-<div class="foldopen" id="foldopen00131" data-start="{" data-end="}">
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">  131</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">wizardTitleKey</a>(std::string_view wizardId) {</div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>    std::string key{wizardId};</div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>}</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span><span class="comment"></span> </div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span><span class="comment">/// @brief The derived message key for a wizard&#39;s own title.</span></div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span><span class="comment">/// @param wizardId The registered wizard id.</span></div>
+<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment">/// @return `&quot;&lt;wizardId&gt;.title&quot;`.</span></div>
+<div class="foldopen" id="foldopen00137" data-start="{" data-end="}">
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">  137</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">wizardTitleKey</a>(std::string_view wizardId) {</div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>    std::string key{wizardId};</div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>}</div>
 </div>
-<div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span><span class="comment"></span> </div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span><span class="comment">/// @brief The derived message key for one wizard step&#39;s title.</span></div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span><span class="comment">/// @param wizardId  The registered wizard id.</span></div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span><span class="comment">/// @param stepIndex The step&#39;s 0-based index.</span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span><span class="comment">/// @return `&quot;&lt;wizardId&gt;.step.&lt;stepIndex&gt;.title&quot;`.</span></div>
-<div class="foldopen" id="foldopen00141" data-start="{" data-end="}">
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">  141</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">wizardStepTitleKey</a>(std::string_view wizardId, std::size_t stepIndex) {</div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    std::string key{wizardId};</div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>    key += <span class="stringliteral">&quot;.step.&quot;</span>;</div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>    key += std::to_string(stepIndex);</div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>}</div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment"></span> </div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">/// @brief The derived message key for one wizard step&#39;s title.</span></div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">/// @param wizardId  The registered wizard id.</span></div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">/// @param stepIndex The step&#39;s 0-based index.</span></div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">/// @return `&quot;&lt;wizardId&gt;.step.&lt;stepIndex&gt;.title&quot;`.</span></div>
+<div class="foldopen" id="foldopen00147" data-start="{" data-end="}">
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">  147</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">wizardStepTitleKey</a>(std::string_view wizardId, std::size_t stepIndex) {</div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>    std::string key{wizardId};</div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>    key += <span class="stringliteral">&quot;.step.&quot;</span>;</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>    key += std::to_string(stepIndex);</div>
+<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>}</div>
 </div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="comment"></span> </div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span><span class="comment">/// @brief The derived message key for an app shell&#39;s own title.</span></div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span><span class="comment">/// @param appId The registered app id.</span></div>
-<div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span><span class="comment">/// @return `&quot;&lt;appId&gt;.title&quot;`.</span></div>
-<div class="foldopen" id="foldopen00152" data-start="{" data-end="}">
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">  152</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">appTitleKey</a>(std::string_view appId) {</div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>    std::string key{appId};</div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span>}</div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment"></span> </div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">/// @brief The derived message key for an app shell&#39;s own title.</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">/// @param appId The registered app id.</span></div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">/// @return `&quot;&lt;appId&gt;.title&quot;`.</span></div>
+<div class="foldopen" id="foldopen00158" data-start="{" data-end="}">
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">  158</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">appTitleKey</a>(std::string_view appId) {</div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>    std::string key{appId};</div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span>    key += <span class="stringliteral">&quot;.title&quot;</span>;</div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span>}</div>
 </div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment"></span> </div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">/// @brief The derived message key for one app-menu entry&#39;s label.</span></div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">/// @param appId     The registered app id.</span></div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">/// @param menuIndex The menu entry&#39;s 0-based index.</span></div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">/// @return `&quot;&lt;appId&gt;.menu.&lt;menuIndex&gt;.label&quot;`.</span></div>
-<div class="foldopen" id="foldopen00162" data-start="{" data-end="}">
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">  162</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">appMenuLabelKey</a>(std::string_view appId, std::size_t menuIndex) {</div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    std::string key{appId};</div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    key += <span class="stringliteral">&quot;.menu.&quot;</span>;</div>
-<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>    key += std::to_string(menuIndex);</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span>    key += <span class="stringliteral">&quot;.label&quot;</span>;</div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span>    <span class="keywordflow">return</span> key;</div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span>}</div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="comment"></span> </div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span><span class="comment">/// @brief The derived message key for one app-menu entry&#39;s label.</span></div>
+<div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span><span class="comment">/// @param appId     The registered app id.</span></div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment">/// @param menuIndex The menu entry&#39;s 0-based index.</span></div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">/// @return `&quot;&lt;appId&gt;.menu.&lt;menuIndex&gt;.label&quot;`.</span></div>
+<div class="foldopen" id="foldopen00168" data-start="{" data-end="}">
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno"><a class="line" href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">  168</a></span>[[nodiscard]] <span class="keyword">inline</span> std::string <a class="code hl_function" href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">appMenuLabelKey</a>(std::string_view appId, std::size_t menuIndex) {</div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span>    std::string key{appId};</div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>    key += <span class="stringliteral">&quot;.menu.&quot;</span>;</div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span>    key += std::to_string(menuIndex);</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>    key += <span class="stringliteral">&quot;.label&quot;</span>;</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>    <span class="keywordflow">return</span> key;</div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span>}</div>
 </div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span> </div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span>}  <span class="comment">// namespace morph::forms::i18n</span></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_a52b0a6d2adb90854850b68521f94d006"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">morph::forms::i18n::appMenuLabelKey</a></div><div class="ttdeci">std::string appMenuLabelKey(std::string_view appId, std::size_t menuIndex)</div><div class="ttdoc">The derived message key for one app-menu entry&#39;s label.</div><div class="ttdef"><b>Definition</b> <a href="#l00162">i18n.hpp:162</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_a693c3607dd8f3d6b9bee22399a2651dd"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">morph::forms::i18n::appTitleKey</a></div><div class="ttdeci">std::string appTitleKey(std::string_view appId)</div><div class="ttdoc">The derived message key for an app shell&#39;s own title.</div><div class="ttdef"><b>Definition</b> <a href="#l00152">i18n.hpp:152</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_a750186d4fea8cf0fde65d3ec8588b0c5"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">morph::forms::i18n::fieldKey</a></div><div class="ttdeci">std::string fieldKey(std::string_view actionTypeId, std::string_view wireField, FieldSlot slot)</div><div class="ttdoc">The fully-derived message key for one field text slot.</div><div class="ttdef"><b>Definition</b> <a href="#l00085">i18n.hpp:85</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_a8da9e72cd7e319d6900211832537fc60"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">morph::forms::i18n::groupKey</a></div><div class="ttdeci">std::string groupKey(std::string_view actionTypeId, std::size_t groupIndex)</div><div class="ttdoc">The derived message key for a layout group&#39;s title.</div><div class="ttdef"><b>Definition</b> <a href="#l00110">i18n.hpp:110</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_a933140b57a3654423d47e00004fb04dc"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">morph::forms::i18n::ruleKey</a></div><div class="ttdeci">std::string ruleKey(std::string_view actionTypeId, std::size_t ruleIndex)</div><div class="ttdoc">The derived message key for a cross-field rule&#39;s violation message.</div><div class="ttdef"><b>Definition</b> <a href="#l00121">i18n.hpp:121</a></div></div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span> </div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span>}  <span class="comment">// namespace morph::forms::i18n</span></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_a52b0a6d2adb90854850b68521f94d006"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a52b0a6d2adb90854850b68521f94d006">morph::forms::i18n::appMenuLabelKey</a></div><div class="ttdeci">std::string appMenuLabelKey(std::string_view appId, std::size_t menuIndex)</div><div class="ttdoc">The derived message key for one app-menu entry&#39;s label.</div><div class="ttdef"><b>Definition</b> <a href="#l00168">i18n.hpp:168</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_a693c3607dd8f3d6b9bee22399a2651dd"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a693c3607dd8f3d6b9bee22399a2651dd">morph::forms::i18n::appTitleKey</a></div><div class="ttdeci">std::string appTitleKey(std::string_view appId)</div><div class="ttdoc">The derived message key for an app shell&#39;s own title.</div><div class="ttdef"><b>Definition</b> <a href="#l00158">i18n.hpp:158</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_a750186d4fea8cf0fde65d3ec8588b0c5"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a750186d4fea8cf0fde65d3ec8588b0c5">morph::forms::i18n::fieldKey</a></div><div class="ttdeci">std::string fieldKey(std::string_view actionTypeId, std::string_view wireField, FieldSlot slot)</div><div class="ttdoc">The fully-derived message key for one field text slot.</div><div class="ttdef"><b>Definition</b> <a href="#l00091">i18n.hpp:91</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_a8da9e72cd7e319d6900211832537fc60"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a8da9e72cd7e319d6900211832537fc60">morph::forms::i18n::groupKey</a></div><div class="ttdeci">std::string groupKey(std::string_view actionTypeId, std::size_t groupIndex)</div><div class="ttdoc">The derived message key for a layout group&#39;s title.</div><div class="ttdef"><b>Definition</b> <a href="#l00116">i18n.hpp:116</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_a933140b57a3654423d47e00004fb04dc"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#a933140b57a3654423d47e00004fb04dc">morph::forms::i18n::ruleKey</a></div><div class="ttdeci">std::string ruleKey(std::string_view actionTypeId, std::size_t ruleIndex)</div><div class="ttdoc">The derived message key for a cross-field rule&#39;s violation message.</div><div class="ttdef"><b>Definition</b> <a href="#l00127">i18n.hpp:127</a></div></div>
 <div class="ttc" id="aforms_2i18n_8hpp_html_aa125cccbdb8e2e68958159c5a003b2c1"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aa125cccbdb8e2e68958159c5a003b2c1">morph::forms::i18n::fieldSlotName</a></div><div class="ttdeci">constexpr std::string_view fieldSlotName(FieldSlot slot) noexcept</div><div class="ttdoc">The catalog-key suffix for slot.</div><div class="ttdef"><b>Definition</b> <a href="#l00044">i18n.hpp:44</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_aa4a7372304c57a81b26819c45b45479d"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">morph::forms::i18n::withSlot</a></div><div class="ttdeci">std::string withSlot(std::string_view stem, FieldSlot slot)</div><div class="ttdoc">Appends .&lt;slotName&gt; to a message-key stem.</div><div class="ttdef"><b>Definition</b> <a href="#l00062">i18n.hpp:62</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_aa6817c593a79e93122126e9b96e2a04e"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">morph::forms::i18n::fieldKeyStem</a></div><div class="ttdeci">std::string fieldKeyStem(std::string_view actionTypeId, std::string_view wireField)</div><div class="ttdoc">The derived message-key stem for a field: &lt;actionTypeId&gt;.&lt;wireField&gt;.</div><div class="ttdef"><b>Definition</b> <a href="#l00073">i18n.hpp:73</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_aa4a7372304c57a81b26819c45b45479d"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aa4a7372304c57a81b26819c45b45479d">morph::forms::i18n::withSlot</a></div><div class="ttdeci">std::string withSlot(std::string_view stem, FieldSlot slot)</div><div class="ttdoc">Appends .&lt;slotName&gt; to a message-key stem.</div><div class="ttdef"><b>Definition</b> <a href="#l00068">i18n.hpp:68</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_aa6817c593a79e93122126e9b96e2a04e"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aa6817c593a79e93122126e9b96e2a04e">morph::forms::i18n::fieldKeyStem</a></div><div class="ttdeci">std::string fieldKeyStem(std::string_view actionTypeId, std::string_view wireField)</div><div class="ttdoc">The derived message-key stem for a field: &lt;actionTypeId&gt;.&lt;wireField&gt;.</div><div class="ttdef"><b>Definition</b> <a href="#l00079">i18n.hpp:79</a></div></div>
 <div class="ttc" id="aforms_2i18n_8hpp_html_aafa2d1e1b4bdb76c816da1a326b6294f"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294f">morph::forms::i18n::FieldSlot</a></div><div class="ttdeci">FieldSlot</div><div class="ttdoc">Which of a field&#39;s three translatable texts a message key names.</div><div class="ttdef"><b>Definition</b> <a href="#l00035">i18n.hpp:35</a></div></div>
 <div class="ttc" id="aforms_2i18n_8hpp_html_aafa2d1e1b4bdb76c816da1a326b6294fa68753d36ec0c4d7768b20993268d68d1"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fa68753d36ec0c4d7768b20993268d68d1">morph::forms::i18n::FieldSlot::Placeholder</a></div><div class="ttdeci">@ Placeholder</div><div class="ttdoc">The field&#39;s empty-state placeholder text (&lt;stem&gt;.placeholder).</div><div class="ttdef"><b>Definition</b> <a href="#l00038">i18n.hpp:38</a></div></div>
 <div class="ttc" id="aforms_2i18n_8hpp_html_aafa2d1e1b4bdb76c816da1a326b6294fa6a26f548831e6a8c26bfbbd9f6ec61e0"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fa6a26f548831e6a8c26bfbbd9f6ec61e0">morph::forms::i18n::FieldSlot::Help</a></div><div class="ttdeci">@ Help</div><div class="ttdoc">The field&#39;s help/description text (&lt;stem&gt;.help).</div><div class="ttdef"><b>Definition</b> <a href="#l00037">i18n.hpp:37</a></div></div>
 <div class="ttc" id="aforms_2i18n_8hpp_html_aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#aafa2d1e1b4bdb76c816da1a326b6294fab021df6aac4654c454f46c77646e745f">morph::forms::i18n::FieldSlot::Label</a></div><div class="ttdeci">@ Label</div><div class="ttdoc">The field&#39;s display label (&lt;stem&gt;.label).</div><div class="ttdef"><b>Definition</b> <a href="#l00036">i18n.hpp:36</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_abe2d98a3991060091c63d1f8688ba9ec"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">morph::forms::i18n::explicitFieldKey</a></div><div class="ttdeci">std::optional&lt; std::string &gt; explicitFieldKey(std::string_view i18nKeyOverride, FieldSlot slot)</div><div class="ttdoc">The explicit override key for one field text slot, when the field declares an x-i18nKey stem override...</div><div class="ttdef"><b>Definition</b> <a href="#l00099">i18n.hpp:99</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_ac7eba434747903fea599b72b2337907d"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">morph::forms::i18n::wizardTitleKey</a></div><div class="ttdeci">std::string wizardTitleKey(std::string_view wizardId)</div><div class="ttdoc">The derived message key for a wizard&#39;s own title.</div><div class="ttdef"><b>Definition</b> <a href="#l00131">i18n.hpp:131</a></div></div>
-<div class="ttc" id="aforms_2i18n_8hpp_html_ad99d387ffb0f5f87ba7032580035fdea"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">morph::forms::i18n::wizardStepTitleKey</a></div><div class="ttdeci">std::string wizardStepTitleKey(std::string_view wizardId, std::size_t stepIndex)</div><div class="ttdoc">The derived message key for one wizard step&#39;s title.</div><div class="ttdef"><b>Definition</b> <a href="#l00141">i18n.hpp:141</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_abe2d98a3991060091c63d1f8688ba9ec"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#abe2d98a3991060091c63d1f8688ba9ec">morph::forms::i18n::explicitFieldKey</a></div><div class="ttdeci">std::optional&lt; std::string &gt; explicitFieldKey(std::string_view i18nKeyOverride, FieldSlot slot)</div><div class="ttdoc">The explicit override key for one field text slot, when the field declares an x-i18nKey stem override...</div><div class="ttdef"><b>Definition</b> <a href="#l00105">i18n.hpp:105</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_ac7eba434747903fea599b72b2337907d"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#ac7eba434747903fea599b72b2337907d">morph::forms::i18n::wizardTitleKey</a></div><div class="ttdeci">std::string wizardTitleKey(std::string_view wizardId)</div><div class="ttdoc">The derived message key for a wizard&#39;s own title.</div><div class="ttdef"><b>Definition</b> <a href="#l00137">i18n.hpp:137</a></div></div>
+<div class="ttc" id="aforms_2i18n_8hpp_html_ad99d387ffb0f5f87ba7032580035fdea"><div class="ttname"><a href="../../dc/d3c/forms_2i18n_8hpp.html#ad99d387ffb0f5f87ba7032580035fdea">morph::forms::i18n::wizardStepTitleKey</a></div><div class="ttdeci">std::string wizardStepTitleKey(std::string_view wizardId, std::size_t stepIndex)</div><div class="ttdoc">The derived message key for one wizard step&#39;s title.</div><div class="ttdef"><b>Definition</b> <a href="#l00147">i18n.hpp:147</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
