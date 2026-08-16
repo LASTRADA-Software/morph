@@ -59,9 +59,14 @@ Build order:
    model"), and `docs/spec/security.md` requires model-level enforcement
    regardless, since `authorizeInstance` never runs on the `LocalBackend` path
    at all — an `IAuthorizer`-only check would silently not exist for local
-   callers. `BoardModel` stays registered plain/permissive at the
-   `IAuthorizer` layer (like `PollsAuthorizer`); Kanboard enforces permissions
-   per procedure, so this rung mirrors that per action, at the model layer.
+   callers. `requireRole` needs a *trustworthy* `Context::principal` to key
+   its lookup on, though, which a permissive `AllowAllAuthorizer`-derived
+   authorizer cannot supply (`security.md`: an authorizer that never
+   authenticates has its principal cleared to empty before dispatch) — so
+   `KanbanAuthorizer` is `SigningAuthorizer`-derived, mirroring
+   `bookmarks::auth::BookmarksAuthorizer`'s shape, not `PollsAuthorizer`'s.
+   Kanboard enforces permissions per procedure, so this rung mirrors that per
+   action, at the model layer, on top of a verified identity.
 5. Activity stream — Kanboard's `project_activities` table is a journal
    cousin: derive the stream *from the morph journal* instead of a parallel
    table.
