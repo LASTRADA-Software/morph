@@ -47,9 +47,21 @@ Build order:
    many-clients stress test around exactly this action.
 3. WIP limit enforcement — server-side validation rejecting a move; the
    client renders the typed error.
-4. Per-project RBAC (viewer/member/manager) via `IAuthorizer` consulting
-   `project_has_roles` — Kanboard enforces permissions per procedure; mirror
-   that per action.
+4. Per-project RBAC (viewer/member/manager), enforced **inside
+   `BoardModel::execute()`** by a `requireRole(Role)` helper querying
+   `project_has_roles` directly — mirroring `polls::PollModel::requireAdmin()`'s
+   exact precedent, not a change to `IAuthorizer`.
+   `docs/spec/core/shared_instances.md` already settles this for shared
+   instances generally ("the alternative — teaching `authorizeInstance` about
+   a set of owners — makes a simple, shipped, verified hook substantially more
+   complex to serve a case the model layer can handle"; "an application that
+   needs per-instance ownership on a shared model must enforce it inside the
+   model"), and `docs/spec/security.md` requires model-level enforcement
+   regardless, since `authorizeInstance` never runs on the `LocalBackend` path
+   at all — an `IAuthorizer`-only check would silently not exist for local
+   callers. `BoardModel` stays registered plain/permissive at the
+   `IAuthorizer` layer (like `PollsAuthorizer`); Kanboard enforces permissions
+   per procedure, so this rung mirrors that per action, at the model layer.
 5. Activity stream — Kanboard's `project_activities` table is a journal
    cousin: derive the stream *from the morph journal* instead of a parallel
    table.
