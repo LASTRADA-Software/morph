@@ -5,23 +5,28 @@ on:
     branches: [main, master]
   pull_request:
 
-# actions: write lets the sccache save step evict the previous entry under
-# the same static key via `gh cache delete` before re-saving (actions/cache
-# never overwrites an existing key). On pull_request runs from a fork, the
-# token is read-only regardless of this declaration; the delete step is
-# best-effort (continue-on-error) for exactly that case.
 permissions:
   contents: read
-  actions: write
 
 env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
   # Caps each leg's on-disk sccache blob so ~11 legs stay well under GitHub's
-  # 10 GB per-repo actions-cache budget. See the cache save/restore steps
-  # below: keys are static per leg (no SHA/branch suffix) so the cache warms
-  # up once and is refreshed in place every run, instead of growing a new
-  # generation per commit that only gets reclaimed by GitHub's LRU eviction.
+  # 10 GB per-repo actions-cache budget. See each leg's cache step below:
+  # every key is per-commit (a `-${{ github.sha }}` suffix) with a
+  # `restore-keys:` prefix fallback, matching the ladder job's own
+  # already-correct pattern. A per-commit key lets `actions/cache@v4`'s
+  # single-step save run unconditionally (it only ever writes a *new* key,
+  # never overwrites one) — no separate delete-then-save dance is needed,
+  # and none is used: a prior "evict then save" version of these six legs
+  # shared one static key with no SHA suffix, deleted repo-wide by
+  # `gh cache delete <key>` (no `--ref`, so it isn't scoped to the calling
+  # branch) before saving, which any concurrent branch's own run could fire
+  # first and wipe out a just-warmed master cache before it was ever restored
+  # from. `restore-keys:`'s prefix match still finds the most recent
+  # generation regardless of which commit wrote it, so this loses nothing
+  # `actions/cache` isn't already built to reclaim on its own via its normal
+  # per-scope size/LRU eviction.
   SCCACHE_CACHE_SIZE: "1G"
   CLANG_VERSION: "22"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
@@ -100,11 +105,12 @@ jobs:
           sudo apt-get install -y ninja-build catch2
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-compilers-${{ matrix.preset }}
+          key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-compilers-${{ matrix.preset }}-
 
       - name: Install sccache
         run: |
@@ -133,24 +139,6 @@ jobs:
       - name: Test
         if: endsWith(matrix.preset, '-debug')
         run: ctest --preset ${{ matrix.preset }}
-
-      # actions/cache never overwrites an existing key, so the previous
-      # generation under this static key is evicted first (best-effort — a
-      # forked-PR token can't do this, and that's fine: the save below just
-      # no-ops with a warning instead of refreshing the cache).
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-compilers-${{ matrix.preset }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-compilers-${{ matrix.preset }}
 
   # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
   linux-sanitizers:
@@ -219,11 +207,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-sanitizers-${{ matrix.preset }}
+          key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-sanitizers-${{ matrix.preset }}-
 
       - name: Install sccache
         run: |
@@ -308,20 +297,6 @@ jobs:
           name: coverage-report
           path: build/clang-coverage/html/
 
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-sanitizers-${{ matrix.preset }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-sanitizers-${{ matrix.preset }}
-
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
     name: Linux / Qt6 WebSockets
@@ -347,11 +322,12 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-qt
+          key: sccache-qt-${{ github.sha }}
+          restore-keys: sccache-qt-
 
       - name: Install sccache
         run: |
@@ -372,20 +348,6 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug
-
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-qt"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-qt
 
   # ── Linux: application ladder testkit (path-filtered) ─────────────────
   ladder-tests:
@@ -586,11 +548,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-all-features-${{ matrix.compiler }}
+          key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
+          restore-keys: sccache-all-features-${{ matrix.compiler }}-
 
       - name: Install sccache
         run: |
@@ -671,20 +634,6 @@ jobs:
           done
           exit "$status"
 
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-all-features-${{ matrix.compiler }}"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-all-features-${{ matrix.compiler }}
-
   # ── Valgrind (memcheck) ───────────────────────────────────────────────
   valgrind:
     name: Valgrind memcheck
@@ -709,11 +658,12 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-valgrind
+          key: sccache-valgrind-${{ github.sha }}
+          restore-keys: sccache-valgrind-
 
       - name: Install sccache
         run: |
@@ -756,20 +706,6 @@ jobs:
           done
           exit "$status"
 
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-valgrind"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-valgrind
-
   # ── clang-tidy-diff (changed lines only) ──────────────────────────────
   clang-tidy:
     name: clang-tidy-diff
@@ -804,11 +740,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
+      - name: Cache sccache
+        uses: actions/cache@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy
+          key: sccache-clang-tidy-${{ github.sha }}
+          restore-keys: sccache-clang-tidy-
 
       - name: Install sccache
         run: |
@@ -871,20 +808,6 @@ jobs:
         with:
           name: clang-tidy-report
           path: clang-tidy-report.txt
-
-      - name: Evict previous sccache entry
-        if: always()
-        continue-on-error: true
-        run: gh cache delete "sccache-clang-tidy"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Save sccache
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy
 
   # ── Deprecation-marker format lint ────────────────────────────────────
   deprecation-lint:
