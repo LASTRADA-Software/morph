@@ -83,8 +83,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260808000001, "Create polls tables") {
     plan.CreateTableIfNotExists("poll_events")
         .PrimaryKeyWithAutoIncrement("id", Bigint())
         .RequiredForeignKey("poll_id", Bigint(), pollsRef)
-        .RequiredColumn("kind", Varchar(16))
-        .RequiredColumn("summary", Varchar(200))
+        .RequiredColumn("kind", Varchar(32))
+        .RequiredColumn("summary", Text())
         .RequiredColumn("created_at_ms", Bigint());
     // GetEventsSince (Task 9) lists every event for a poll after a cursor.
     plan.CreateIndex("idx_poll_events_poll", "poll_events", {"poll_id"});

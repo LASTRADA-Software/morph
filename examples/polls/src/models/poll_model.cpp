@@ -30,6 +30,40 @@
 
 namespace polls {
 
+// The one place each free-form text field's DTO-level bound and its real
+// storage-column capacity are checked against each other -- see
+// `pastebin::kMaxSyntaxBytes`'s identical `static_assert` (`paste_model.cpp`)
+// for the two harms this guards against (a widened column silently
+// outrunning the DTO's own reject-if-too-long check, or the reverse:
+// `CreatePoll`/`SubmitVotes`/`AddComment`'s `validate()` rejecting input that
+// would actually have fit). `PollEventRecord::kind`/`summary` have no DTO-level
+// constant to pin against (see poll_entity.hpp's doc comments on both) and so
+// are not asserted here.
+static_assert(decltype(db::PollRecord::title)::ValueType{}.capacity() == kMaxTitleBytes,
+              "polls::kMaxTitleBytes must equal PollRecord::title's SqlAnsiString capacity -- otherwise "
+              "CreatePoll either rejects a title that would have fit, or accepts one that gets silently "
+              "truncated on the way into the row.");
+static_assert(decltype(db::OptionRecord::label)::ValueType{}.capacity() == kMaxOptionLabelBytes,
+              "polls::kMaxOptionLabelBytes must equal OptionRecord::label's SqlAnsiString capacity -- otherwise "
+              "CreatePoll either rejects an option label that would have fit, or accepts one that gets silently "
+              "truncated on the way into the row.");
+static_assert(decltype(db::VoteRecord::participantName)::ValueType{}.capacity() == kMaxParticipantNameBytes,
+              "polls::kMaxParticipantNameBytes must equal VoteRecord::participantName's SqlAnsiString capacity -- "
+              "otherwise SubmitVotes/UpdateVotes either reject a participantName that would have fit, or accept "
+              "one that gets silently truncated on the way into the row.");
+static_assert(decltype(db::CommentRecord::participantName)::ValueType{}.capacity() == kMaxParticipantNameBytes,
+              "polls::kMaxParticipantNameBytes must equal CommentRecord::participantName's SqlAnsiString capacity "
+              "-- otherwise AddComment either rejects a participantName that would have fit, or accepts one that "
+              "gets silently truncated on the way into the row.");
+static_assert(decltype(db::VoteHistoryRecord::participantName)::ValueType{}.capacity() == kMaxParticipantNameBytes,
+              "polls::kMaxParticipantNameBytes must equal VoteHistoryRecord::participantName's SqlAnsiString "
+              "capacity -- otherwise applyVotes() either rejects a participantName that would have fit, or "
+              "accepts one that gets silently truncated on the way into the row.");
+static_assert(decltype(db::CommentRecord::body)::ValueType{}.capacity() == kMaxCommentBytes,
+              "polls::kMaxCommentBytes must equal CommentRecord::body's SqlAnsiString capacity -- otherwise "
+              "AddComment either rejects a body that would have fit, or accepts one that gets silently truncated "
+              "on the way into the row.");
+
 namespace {
 
 // ---------------------------------------------------------------------------
@@ -44,6 +78,30 @@ namespace {
 // ---------------------------------------------------------------------------
 [[nodiscard]] std::string textOf(const Light::SqlAnsiString<kTokenBytes>& stored) {
     return std::string{stored.str()};
+}
+
+// ---------------------------------------------------------------------------
+// Free-form Unicode text field conversions (title/label/participantName/body):
+// every one of these entity columns is `Light::SqlAnsiString<kMaxFooBytes>`,
+// bounded to the same constant `CreatePoll`/`SubmitVotes`/`AddComment`
+// (`polls/dto/poll_dto.hpp`, `polls/dto/vote_dto.hpp`) already validate
+// against at the DTO boundary -- the static_asserts right below pin entity
+// capacity and DTO bound together so a future change to one without the
+// other fails the build (see pastebin::PasteModel's `kMaxSyntaxBytes`
+// static_assert, `paste_model.cpp`, for the identical pattern). All four
+// share this one conversion pair since all four are the same
+// `SqlAnsiString<N>`-shaped case, just with different `N`.
+// ---------------------------------------------------------------------------
+template <std::size_t N>
+[[nodiscard]] std::string textOf(const Light::SqlAnsiString<N>& stored) {
+    return std::string{stored.str()};
+}
+
+// `previousVotesJson`/`summary` are `Light::SqlMaxDynamicAnsiString` (no
+// fixed bound -- see poll_entity.hpp's doc comments on each), so they get
+// their own conversion pair rather than the templated `textOf()` above.
+[[nodiscard]] std::string textOf(const Light::SqlMaxDynamicAnsiString& stored) {
+    return stored.ToString();
 }
 
 /// @brief The injectable-time convention rung 1/2 established
@@ -161,7 +219,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
 [[nodiscard]] GetPollStateResult buildState(::Lightweight::DataMapper& mapper, const db::PollRecord& poll) {
     GetPollStateResult result;
     result.pollId = textOf(poll.pollId.Value());
-    result.title = poll.title.Value();
+    result.title = textOf(poll.title.Value());
     result.finalized = poll.finalized.Value() ? Finalized::Yes : Finalized::No;
     if (result.finalized == Finalized::Yes) {
         result.finalizedOptionId = OptionId{.value = poll.finalizedOptionId.Value()};
@@ -178,7 +236,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
     for (const auto& opt : options) {
         PollOptionView view;
         view.id = OptionId{.value = static_cast<std::int64_t>(opt.id.Value())};
-        view.label = opt.label.Value();
+        view.label = textOf(opt.label.Value());
         // Explicit zero, not default-constructed: a default `Count{}` is
         // Quantity's *empty* state (no payload), and Quantity arithmetic
         // propagates empty (empty + fromDouble(1.0) == empty, forever) --
@@ -207,7 +265,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                 default:
                     break;
             }
-            result.votes.push_back({.participantName = vote.participantName.Value(),
+            result.votes.push_back({.participantName = textOf(vote.participantName.Value()),
                                      .optionId = view.id,
                                      .choice = static_cast<VoteChoice>(vote.choice.Value())});
         }
@@ -218,7 +276,7 @@ void requireOptionBelongsToPoll(::Lightweight::DataMapper& mapper, const db::Pol
                         .Where(::Lightweight::FieldNameOf<&db::CommentRecord::poll>, "=", pollDbId)
                         .All();
     for (const auto& c : comments) {
-        result.comments.push_back({.participantName = c.participantName.Value(), .body = c.body.Value()});
+        result.comments.push_back({.participantName = textOf(c.participantName.Value()), .body = textOf(c.body.Value())});
     }
 
     auto lastEvent = mapper.Query<db::PollEventRecord>()
@@ -603,7 +661,7 @@ UndoLastVoteChangeResult PollModel::execute(const UndoLastVoteChange& action) {
         throw Conflict{"nothing to undo for this participant"};
     }
 
-    const std::vector<OneVote> previousVotes = decodeVotesJson(history->previousVotesJson.Value());
+    const std::vector<OneVote> previousVotes = decodeVotesJson(textOf(history->previousVotesJson.Value()));
     const std::uint64_t historyRowId = history->id.Value();
 
     // Reuse applyVotes() (Task 6) directly for the restore itself, exactly
@@ -673,8 +731,8 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     result.events.reserve(rows.size());
     for (const auto& row : rows) {
         result.events.push_back({.id = PollEventId{.value = static_cast<std::int64_t>(row.id.Value())},
-                                  .kind = row.kind.Value(),
-                                  .summary = row.summary.Value()});
+                                  .kind = textOf(row.kind.Value()),
+                                  .summary = textOf(row.summary.Value())});
     }
     return result;
 }

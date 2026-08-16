@@ -6,6 +6,8 @@
 #endif
 
 #include "polls/core/types.hpp"
+#include "polls/dto/poll_dto.hpp"
+#include "polls/dto/vote_dto.hpp"
 
 #include <cstdint>
 #include <string>
@@ -38,16 +40,22 @@ struct PollRecord {
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     /// The shareable link id -- see this rung's Global Constraints. Fixed-width,
     /// ASCII, `kTokenBytes` long: the same ID/token-shaped case bank's `number`
-    /// and pastebin's `id` are, so `SqlAnsiString`, not plain `std::string`
-    /// (which this rung's own free-form Unicode text fields -- `title`,
-    /// `participantName`, `body`, etc. -- correctly use instead, matching
-    /// bookmarks' precedent for that different case).
+    /// and pastebin's `id` are, so `SqlAnsiString<kTokenBytes>` -- a fixed
+    /// capacity matching the token's own fixed length, unlike this rung's
+    /// free-form Unicode text fields (`title`, `participantName`, `body`,
+    /// etc.), each bounded instead to its own DTO-level `kMax*Bytes` cap
+    /// (see each field's own doc comment below).
     Light::Field<Light::SqlAnsiString<kTokenBytes>, Light::SqlRealName{"poll_id"}> pollId;  // 1
     /// Kept by the organizer only.
     Light::Field<Light::SqlAnsiString<kTokenBytes>, Light::SqlRealName{"admin_token"}> adminToken;  // 2
     /// Handed out with the shared link.
     Light::Field<Light::SqlAnsiString<kTokenBytes>, Light::SqlRealName{"participant_token"}> participantToken;  // 3
-    Light::Field<std::string, Light::SqlRealName{"title"}> title;  // 4
+    /// Free-form Unicode text, per this rung's own convention (see the
+    /// `pollId` doc comment above) -- bounded to `kMaxTitleBytes`
+    /// (`polls/dto/poll_dto.hpp`), the same cap `CreatePoll::validate()`
+    /// already enforces at the DTO boundary; `poll_model.cpp`'s
+    /// `static_assert` pins the two together.
+    Light::Field<Light::SqlAnsiString<kMaxTitleBytes>, Light::SqlRealName{"title"}> title;  // 4
     Light::Field<bool, Light::SqlRealName{"finalized"}> finalized{false};  // 5
     /// 0 = not finalized; FK-shaped but not FK-enforced (SQLite).
     Light::Field<std::int64_t, Light::SqlRealName{"finalized_option_id"}> finalizedOptionId{0};  // 6
@@ -60,7 +68,10 @@ struct OptionRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
-    Light::Field<std::string, Light::SqlRealName{"label"}> label;  // 2
+    /// Free-form Unicode text, bounded to `kMaxOptionLabelBytes`
+    /// (`polls/dto/poll_dto.hpp`) -- see `PollRecord::title`'s doc comment
+    /// for the same convention.
+    Light::Field<Light::SqlAnsiString<kMaxOptionLabelBytes>, Light::SqlRealName{"label"}> label;  // 2
     /// Preserves `CreatePoll`'s option order across storage/query.
     Light::Field<std::int64_t, Light::SqlRealName{"sort_order"}> sortOrder{0};  // 3
 };
@@ -75,7 +86,10 @@ struct VoteRecord {
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
     Light::BelongsTo<&OptionRecord::id, Light::SqlRealName{"option_id"}> option;  // 2
-    Light::Field<std::string, Light::SqlRealName{"participant_name"}> participantName;  // 3
+    /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
+    /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
+    /// for the same convention.
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 3
     /// `VoteChoice`'s underlying value.
     Light::Field<std::uint8_t, Light::SqlRealName{"choice"}> choice{std::uint8_t{0}};  // 4
 };
@@ -86,8 +100,14 @@ struct CommentRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
-    Light::Field<std::string, Light::SqlRealName{"participant_name"}> participantName;  // 2
-    Light::Field<std::string, Light::SqlRealName{"body"}> body;  // 3
+    /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
+    /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
+    /// for the same convention.
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 2
+    /// Free-form Unicode text, bounded to `kMaxCommentBytes`
+    /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
+    /// for the same convention.
+    Light::Field<Light::SqlAnsiString<kMaxCommentBytes>, Light::SqlRealName{"body"}> body;  // 3
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
 };
 
@@ -101,9 +121,19 @@ struct VoteHistoryRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
-    Light::Field<std::string, Light::SqlRealName{"participant_name"}> participantName;  // 2
-    /// The pre-change vote set, JSON-encoded.
-    Light::Field<std::string, Light::SqlRealName{"previous_votes_json"}> previousVotesJson;  // 3
+    /// Free-form Unicode text, bounded to `kMaxParticipantNameBytes`
+    /// (`polls/dto/vote_dto.hpp`) -- see `PollRecord::title`'s doc comment
+    /// for the same convention.
+    Light::Field<Light::SqlAnsiString<kMaxParticipantNameBytes>, Light::SqlRealName{"participant_name"}> participantName;  // 2
+    /// The pre-change vote set, JSON-encoded. Unbounded: no business limit
+    /// on this serialized form exists today, so this is
+    /// `Light::SqlMaxDynamicAnsiString`, not a fixed-capacity
+    /// `SqlAnsiString<N>` -- matching pastebin's `content` field precedent
+    /// for unbounded storage (`pastebin/db/paste_entity.hpp`), minus the
+    /// wide/UTF-8 concern that field carries (this JSON payload is
+    /// ASCII-safe base64/plain-integer content, produced only by
+    /// `encodeVotesJson()` in this same TU).
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"previous_votes_json"}> previousVotesJson;  // 3
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
 };
 
@@ -114,8 +144,17 @@ struct PollEventRecord {
 
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
     Light::BelongsTo<&PollRecord::id, Light::SqlRealName{"poll_id"}> poll;  // 1
-    Light::Field<std::string, Light::SqlRealName{"kind"}> kind;  // 2
-    Light::Field<std::string, Light::SqlRealName{"summary"}> summary;  // 3
+    /// A short internal enum-like tag ("vote"/"comment"/"finalize", see
+    /// `PollModel`'s writers) -- 32 bytes comfortably covers every literal
+    /// this TU emits today, with headroom, and there is no existing
+    /// DTO-level constant for it (this column is never validated at the DTO
+    /// boundary the way `title`/`label`/etc. are).
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"kind"}> kind;  // 2
+    /// Free text describing one event; unbounded, like
+    /// `VoteHistoryRecord::previousVotesJson` -- no existing bound applies
+    /// and none is invented here, since this is a human-readable summary
+    /// string, not a wire-validated field.
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"summary"}> summary;  // 3
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
 };
 
