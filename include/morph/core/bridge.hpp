@@ -570,8 +570,10 @@ public:
                                 // real allocation failure -- currentId.store()
                                 // on an atomic cannot throw). Forcing that
                                 // portably needs an OOM-injection allocator
-                                // seam this codebase does not have, and is
-                                // disproportionate for one defensive catch.
+                                // seam this codebase does not have (see
+                                // LASTRADA-Software/morph#108, requesting
+                                // one). Left uncovered rather than
+                                // exhausting process memory in a test.
                                 strongBinding->contextKey = primaryCopy;
                                 strongBinding->primary = primaryCopy;
                                 strongBinding->currentId.store(newId.v);
