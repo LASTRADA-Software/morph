@@ -22,6 +22,7 @@
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <mutex>
+#include <new>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -31,6 +32,7 @@
 #include <utility>
 #include <vector>
 
+#include "oom_injector.hpp"
 #include "test_support.hpp"
 
 namespace {
@@ -1821,4 +1823,147 @@ TEST_CASE("ensureBoundAsync's out-of-frame success callback is a genuine no-op o
 
     REQUIRE_NOTHROW(rawBackend->completeNext());
     SUCCEED("completing a registerModelSharedAsync reply after the binding itself is gone did not crash");
+}
+
+// ---------------------------------------------------------------------------
+// Coverage for LASTRADA-Software/morph#108: attachHandlerAsync's two
+// success-path `catch (...)` blocks (the out-of-frame callback below, and its
+// in-frame claimHandoff counterpart) only ever fire on std::bad_alloc from a
+// real allocation failure inside the strongBinding->contextKey/primary copy-
+// assignment. morph::testkit::OomInjector (see oom_injector.hpp) makes that
+// failure happen for real, on demand, instead of leaving both branches
+// permanently undocumented-but-untested.
+//
+// AOmKeyModel below is std::string-keyed (PrimaryKeyOf == std::string) so its
+// primary key is morph::model::keyToString's std::string pass-through, not a
+// std::to_string of an integer -- the test picks a key long enough (256
+// bytes) to defeat every supported standard library's short-string
+// optimization, so copying it genuinely allocates and OomInjector's size
+// predicate has a real allocation to catch.
+// NOLINTBEGIN(misc-use-internal-linkage) -- glaze's reflection needs these to
+// be externally linked, not file-local, unlike the anonymous-namespace types
+// above.
+struct AOmTouch {
+    std::string key;
+    int amount = 0;
+};
+
+struct AOmKeyModel {
+    using PrimaryKey = std::string;
+    int value = 0;
+    int execute(const AOmTouch& act) {
+        value += act.amount;
+        return value;
+    }
+};
+
+BRIDGE_REGISTER_MODEL(AOmKeyModel, "AOm_KeyModel")
+BRIDGE_REGISTER_ACTION(AOmKeyModel, AOmTouch, "AOm_Touch")
+BRIDGE_KEY_FROM(AOmTouch, &AOmTouch::key);
+// NOLINTEND(misc-use-internal-linkage)
+
+TEST_CASE(
+    "attachHandlerAsync's out-of-frame success callback surfaces a real allocation failure through onDone "
+    "(morph#108)",
+    "[bridge][registration][issue108]") {
+    SyncExec cbExec;
+    auto backend = std::make_shared<AsyncRegisterBackend>();
+    morph::bridge::Bridge bridge{std::make_unique<AsyncBackendShim>(backend)};
+    morph::bridge::BridgeHandler<AOmKeyModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    // 256 bytes defeats SSO on every supported standard library (libstdc++,
+    // libc++, and MSVC's implementations all inline at most ~23 bytes), so
+    // copying it into strongBinding->contextKey/primary genuinely allocates.
+    std::string const longKey(256, 'k');
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+    auto pending = handler.execute(AOmTouch{.key = longKey, .amount = 7});
+    pending.then([&](int val) { result.store(val); }).onError([&](const std::exception_ptr&) { failed.store(true); });
+
+    REQUIRE(backend->pendingCount() == 1);
+
+    // Arm right before the reply is completed: the attach's own dispatch
+    // machinery (registerModel/factory()) allocates plenty, but none of it
+    // copies `longKey` -- only the success callback's `strongBinding->
+    // contextKey = primaryCopy` does, and it is >= 128 bytes, so the
+    // threshold only ever matches that copy, not the setup noise before it.
+    {
+        morph::testkit::OomInjector inject{/*minSize=*/128};
+        backend->completeNext();
+    }
+
+    REQUIRE(morph::testing::waitUntil([&] { return result.load() != -1 || failed.load(); }));
+    CHECK(result.load() == -1);
+    CHECK(failed.load());
+    // The failed publish left the handler unattached, exactly like any other
+    // attach failure -- not a half-published, corrupted binding.
+    CHECK_FALSE(handler.primary().has_value());
+
+    // The handler is still usable afterward: a fresh attach with a normal,
+    // short key succeeds, proving the injected failure left no corruption
+    // behind (the injector already disarmed itself after firing once).
+    std::atomic<int> secondResult{-1};
+    handler.execute(AOmTouch{.key = "short", .amount = 3})
+        .then([&](int val) { secondResult.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+    REQUIRE(backend->pendingCount() == 1);
+    backend->completeNext();
+    REQUIRE(morph::testing::waitUntil([&] { return secondResult.load() != -1; }));
+    CHECK(secondResult.load() == 3);
+    CHECK(handler.primary().value_or("") == "short");
+}
+
+TEST_CASE(
+    "attachHandlerAsync's in-frame claimHandoff success path surfaces a real allocation failure through onDone "
+    "(morph#108)",
+    "[bridge][registration][issue108]") {
+    SyncExec cbExec;
+    auto backend = std::make_unique<InlineCompletingBackend>();
+    morph::bridge::Bridge bridge{std::move(backend)};
+    morph::bridge::BridgeHandler<AOmKeyModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
+
+    std::string const longKey(256, 'k');
+    std::atomic<int> result{-1};
+    std::atomic<bool> failed{false};
+
+    // InlineCompletingBackend answers attachModelAsync synchronously, inside
+    // execute()'s own dispatch frame -- this drives claimHandoff's success
+    // path (binding->contextKey = primaryCopy) rather than the out-of-frame
+    // callback the test above targets. Unlike that test, the whole call
+    // happens in one stack: attachHandlerAsync makes several of its own
+    // copies of `longKey` before ever reaching claimHandoff's try block (the
+    // by-value `primary` parameter, `auto primaryCopy = primary;`, the
+    // {.contextKey=, .primary=} aggregate's two fields, and the dispatch
+    // lambda's by-value capture) -- each is a >=260-byte allocation (272
+    // bytes measured: a 256-byte string plus its heap-block header), the
+    // same shape as the target copy itself, so minSize alone cannot tell
+    // them apart from `binding->contextKey = primaryCopy` below.
+    // matchToFail=5 skips the first 4 (confirmed empirically against this
+    // exact call path: 5 total size>=260 allocations occur end to end, with
+    // the 5th being the target -- verified by temporarily setting
+    // matchToFail far beyond 5 and observing every match still succeeds
+    // normally, then dropping to exactly 5 and confirming it throws inside
+    // claimHandoff's try, not anywhere earlier). This is still not a raw
+    // process-wide allocation count (which was rejected as fragile): it only
+    // counts allocations that already match minSize=260, and every
+    // unrelated smaller allocation in the dispatch chain (confirmed up to
+    // 224 bytes for shared_ptr control blocks and similar) never shifts
+    // which occurrence is "the 5th".
+    {
+        morph::testkit::OomInjector inject{/*minSize=*/260, /*matchToFail=*/5};
+        handler.execute(AOmTouch{.key = longKey, .amount = 7})
+            .then([&](int val) { result.store(val); })
+            .onError([&](const std::exception_ptr&) { failed.store(true); });
+    }
+
+    CHECK(result.load() == -1);
+    CHECK(failed.load());
+    CHECK_FALSE(handler.primary().has_value());
+
+    std::atomic<int> secondResult{-1};
+    handler.execute(AOmTouch{.key = "short", .amount = 3})
+        .then([&](int val) { secondResult.store(val); })
+        .onError([&](const std::exception_ptr&) { failed.store(true); });
+    CHECK(secondResult.load() == 3);
+    CHECK(handler.primary().value_or("") == "short");
 }
