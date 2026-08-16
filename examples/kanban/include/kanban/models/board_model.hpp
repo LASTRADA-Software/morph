@@ -3,14 +3,17 @@
 
 #include "kanban/core/errors.hpp"
 #include "kanban/core/types.hpp"
+#include "kanban/dto/activity_dto.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/event_dto.hpp"
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
 
@@ -111,7 +114,61 @@ class BoardModel {
     /// @throws NotFound if this handler was never attached via `OpenBoard`.
     GetEventsSinceResult execute(const GetEventsSince& action);
 
+    /// @brief Design spec §4's activity stream -- derived from `IActionLog::
+    ///        entries(entityKey)`, not a parallel table. Collapses consecutive
+    ///        `LogEntry` rows with identical `actionType`+`payload` on the read
+    ///        side, since a §1 ledger-hit replay re-appends the exact same
+    ///        entry the framework's own auto-append machinery cannot suppress
+    ///        (see `attachActionLog`'s doc comment and design spec §4).
+    /// @param action Unused -- carries no fields.
+    /// @return Every non-collapsed activity entry for this handler's attached
+    ///         board, oldest first. Empty (not an error) if this handler has
+    ///         no log attached.
+    /// @throws NotFound if this handler was never attached via `OpenBoard`.
+    GetActivityResult execute(const GetActivity& action);
+
+    /// @brief Attaches a durable action log and this instance's stable
+    ///        identity, so every subsequent mutating `execute()` records a
+    ///        `morph::journal::LogEntry` that `execute(GetActivity)` can
+    ///        later read back.
+    ///
+    /// This is a **model-level** mirror of `morph::model::detail::
+    /// IModelHolder::attachActionLog` -- not a call into that framework
+    /// method. `IModelHolder::attachActionLog`/`recordIfAttached` live on the
+    /// type-erased holder that wraps a *registry-constructed* model (created
+    /// via `ModelFactory::create<Model>()` and dispatched through
+    /// `ActionDispatcher`/`Bridge::executeVia`); a `BoardModel` a unit test
+    /// (or any caller) constructs directly with `kanban::BoardModel model;`
+    /// has no such holder wrapping it; `model.execute(action)` calls
+    /// `BoardModel::execute` straight, never touching `IModelHolder` or the
+    /// dispatcher's runner, so `recordIfAttached`'s auto-append never fires
+    /// for this path. `BoardModel` therefore keeps its own
+    /// `shared_ptr<IActionLog>` and appends its own `LogEntry` at the end of
+    /// every successful mutating `execute()` (see `logAction` below) --
+    /// functionally the same effect `recordIfAttached` gives a
+    /// holder-wrapped instance, achieved without one.
+    /// @param log Sink entries are forwarded to.
+    /// @param entityKey Stable identity stamped onto every `LogEntry` this
+    ///        instance produces (this rung's project id, as a string).
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
+
   private:
+    /// @brief Records @p action/@p result as a `LogEntry` if a log is
+    ///        attached; no-op otherwise. Called at the end of every
+    ///        successful mutating `execute()` -- the model-level equivalent
+    ///        of `IModelHolder::recordIfAttached` for a plain, non-holder-
+    ///        wrapped `BoardModel` instance (see `attachActionLog`'s doc
+    ///        comment for why this instance cannot rely on the framework's
+    ///        own auto-append instead).
+    /// @tparam Action Concrete action type; used to look up
+    ///         `morph::model::ActionTraits<Action>::typeId()`/`toJson()`.
+    /// @tparam Result Concrete result type; used to look up
+    ///         `morph::model::ActionTraits<Action>::resultToJson()`.
+    /// @param action The executed action, for its type-id and JSON payload.
+    /// @param result The action's result, for its JSON encoding.
+    template <typename Action, typename Result>
+    void logAction(const Action& action, const Result& result) const;
+
     /// @brief Throws `Forbidden` unless the calling principal's role on
     ///        this handler's attached project is at least `minimum`. Same
     ///        shape as `ProjectAdminModel::requireRole` -- not shared code
@@ -125,8 +182,21 @@ class BoardModel {
     void requireRole(Role minimum) const;
 
     /// @brief The project this handler is attached to, cached on the first
-    ///        successful `execute(OpenBoard)`. Unset until then.
+    ///        successful `execute(OpenBoard)`. Also set (independently) by
+    ///        `attachActionLog`, whose `entityKey` parameter is the string
+    ///        form of the same project id in every path this rung exercises
+    ///        -- `OpenBoard` overwrites it with the identical value, so the
+    ///        two writers never disagree in practice. Unset until the first
+    ///        of either call.
     std::optional<std::string> _projectIdStr;
+
+    /// @brief Durable action log this instance appends to, if any -- set by
+    ///        `attachActionLog`. Null (the default) for a handler that never
+    ///        had one attached; every `logAction` call is then a no-op and
+    ///        `execute(GetActivity)` returns an empty stream rather than
+    ///        throwing (design spec §4: "Local-mode-without-attach is a
+    ///        stated limitation", not an error).
+    std::shared_ptr<::morph::journal::IActionLog> _log;
 };
 
 }  // namespace kanban
@@ -140,6 +210,7 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateTask, "CreateTask")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddComment, "AddComment")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::MoveTaskPosition, "MoveTaskPosition")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetEventsSince, "GetEventsSince", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetActivity, "GetActivity", ::morph::model::Loggable::No)
 
 // `BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId)`
 // cannot be used verbatim here: that macro deduces the model's PrimaryKey as

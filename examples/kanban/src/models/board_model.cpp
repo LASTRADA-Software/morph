@@ -150,6 +150,30 @@ void requireColumnBelongsToProject(::Lightweight::DataMapper& mapper, const db::
 
 }  // namespace
 
+void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
+    _log = std::move(log);
+    _projectIdStr = std::move(entityKey);
+}
+
+template <typename Action, typename Result>
+void BoardModel::logAction(const Action& action, const Result& result) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "BoardModel";
+    entry.entityKey = _projectIdStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
+    entry.outcome = ::morph::journal::Outcome::Succeeded;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = nowMs();
+    _log->append(std::move(entry));
+}
+
 void BoardModel::requireRole(Role minimum) const {
     const auto& principal = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
@@ -212,7 +236,9 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
 
     transaction.Commit();
 
-    return buildState(mapper.Get(), project);
+    auto result = buildState(mapper.Get(), project);
+    logAction(action, result);
+    return result;
 }
 
 GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
@@ -247,7 +273,9 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
 
     transaction.Commit();
 
-    return buildState(mapper.Get(), project);
+    auto result = buildState(mapper.Get(), project);
+    logAction(action, result);
+    return result;
 }
 
 GetBoardResult BoardModel::execute(const CreateTask& action) {
@@ -288,7 +316,9 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
 
     transaction.Commit();
 
-    return buildState(mapper.Get(), project);
+    auto result = buildState(mapper.Get(), project);
+    logAction(action, result);
+    return result;
 }
 
 GetBoardResult BoardModel::execute(const AddComment& action) {
@@ -321,7 +351,9 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
 
     transaction.Commit();
 
-    return buildState(mapper.Get(), project);
+    auto result = buildState(mapper.Get(), project);
+    logAction(action, result);
+    return result;
 }
 
 GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
@@ -354,6 +386,14 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
             if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
                 throw ::kanban::KanbanError{"MoveTaskPosition: corrupt ledger entry"};
             }
+            // Design spec §4: a ledger-hit replay reproduces the exact prior
+            // action bit-for-bit (same payload, same result), so logging it
+            // here unconditionally -- the same way the framework's own
+            // auto-append would for a holder-wrapped instance -- is what
+            // creates the exactly-once-replay's *duplicate* journal entry
+            // that execute(GetActivity) must collapse on the read side,
+            // rather than trying to suppress the second write here.
+            logAction(action, replayed);
             return replayed;
         }
     }
@@ -470,6 +510,7 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     }
 
     transaction.Commit();
+    logAction(action, result);
     return result;
 }
 
@@ -497,6 +538,44 @@ GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
         result.events.push_back({.id = BoardEventId{.value = static_cast<std::int64_t>(row.id.Value())},
                                   .kind = std::string{row.kind.Value()},
                                   .summary = std::string{row.summary.Value()}});
+    }
+    return result;
+}
+
+GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"GetActivity: handler was never attached via OpenBoard"};
+    }
+    GetActivityResult result;
+    if (!_log) {
+        return result;  // no log attached (design spec §4: Local-mode-without-attach is a stated limitation)
+    }
+    // FileActionLog re-reads its whole backing file per call (LADDER.md's own
+    // journal-honesty note) -- acceptable at this rung's per-board scale
+    // (design spec §4), but not a pattern to copy at bigger scale without
+    // re-checking that cost.
+    auto entries = _log->entries(*_projectIdStr);
+    std::string lastActionType;
+    std::string lastPayload;
+    bool haveLast = false;
+    for (const auto& entry : entries) {
+        // Design spec §4's ledger-hit double-journal fix: a §1 ledger-hit
+        // replay re-appends the exact same actionType+payload bit-for-bit
+        // (it's the same serialized action replayed verbatim), since the
+        // framework has no way to mark it as a dedup at the point BoardModel
+        // records it (see logAction's caller in execute(MoveTaskPosition)).
+        // Collapsing consecutive identical rows here, on the read side, is
+        // the fix -- not preventing the second write.
+        if (haveLast && entry.actionType == lastActionType && entry.payload == lastPayload) {
+            continue;
+        }
+        result.events.push_back({.actionType = entry.actionType,
+                                  .principal = entry.principal,
+                                  .timestampMs = entry.timestampMs,
+                                  .summary = entry.actionType + " by " + entry.principal});
+        lastActionType = entry.actionType;
+        lastPayload = entry.payload;
+        haveLast = true;
     }
     return result;
 }

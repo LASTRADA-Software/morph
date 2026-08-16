@@ -3,9 +3,13 @@
 #include "kanban/models/project_admin_model.hpp"
 #include "testkit/db_fixture.hpp"
 
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <memory>
 
 using morph::ladder::testkit::DbFixture;
 
@@ -244,4 +248,64 @@ TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "
 
     const auto second = model.execute(kanban::GetEventsSince{.lastEventId = cursor});
     REQUIRE(second.events.size() == 1);
+}
+
+TEST_CASE("GetActivity lists journal entries for this board, collapsing an exactly-once replay's duplicate",
+          "[kanban][model]") {
+    DbFixture fixture;
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.attachActionLog(log, std::to_string(*projectId));
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0});
+
+    const auto activity = model.execute(kanban::GetActivity{});
+    // At least one entry for the CreateColumn call -- OpenBoard/GetBoardState
+    // are Loggable::No, so they never appear.
+    REQUIRE(activity.events.size() >= 1);
+    CHECK(activity.events.front().actionType == "CreateColumn");
+}
+
+TEST_CASE("GetActivity without an attached log returns an empty stream, not an error", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0});
+
+    const auto activity = model.execute(kanban::GetActivity{});
+    CHECK(activity.events.empty());
+}
+
+TEST_CASE("GetActivity collapses a repeated-opId MoveTaskPosition replay into a single entry", "[kanban][model]") {
+    DbFixture fixture;
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.attachActionLog(log, std::to_string(*projectId));
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto afterCol2 = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0});
+    const auto col2 = afterCol2.columns.back().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
+    // Replaying the identical opId must not double-journal (design spec §4's
+    // ledger-hit double-journal fix, collapsed on the read side).
+    model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
+
+    const auto activity = model.execute(kanban::GetActivity{});
+    const auto moveCount = std::ranges::count_if(
+        activity.events, [](const auto& event) { return event.actionType == "MoveTaskPosition"; });
+    CHECK(moveCount == 1);
 }
