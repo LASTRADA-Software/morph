@@ -6,6 +6,38 @@
 #include <new>
 #include <stdexcept>
 
+// ASan/TSan already define their own operator new/operator new[]/operator
+// delete/operator delete[] inside their runtime (libclang_rt.{asan,tsan}_cxx.a)
+// to track allocations for their own instrumentation. Defining this file's
+// own overloads under either sanitizer fails at *link* time with "multiple
+// definition of `operator new(unsigned long)'" against that runtime archive
+// -- ctest-level test exclusion (see .github/workflows/ci.yml) cannot help
+// here, since the conflict happens before any test ever runs.
+//
+// Detected via nested #ifdef/#if blocks (not one combined boolean
+// expression): MSVC's preprocessor does not define __has_feature at all, and
+// some preprocessors do not short-circuit `defined(__has_feature) &&
+// __has_feature(...)` on a single line the way C++ code would -- they can
+// still try to macro-expand `__has_feature` as a bare identifier and choke
+// on the unmatched parenthesis that follows (`__has_feature(address_
+// sanitizer)`) once `defined(__has_feature)` alone is false. Nesting avoids
+// ever writing `__has_feature` on a line MSVC actually preprocesses.
+//
+// GCC and Clang both define __SANITIZE_ADDRESS__/__SANITIZE_THREAD__
+// whenever the corresponding -fsanitize=address/thread flag is active, which
+// covers this repo's own clang-asan/clang-tsan presets without needing
+// __has_feature at all; the __has_feature branch below only matters for a
+// Clang invocation that enables a sanitizer through some other means.
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+#define MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
+#elif __has_feature(thread_sanitizer)
+#define MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
+#endif
+#endif
+
 namespace {
 
 // injectorArmed off means no injector active on this thread. While armed,
@@ -28,11 +60,26 @@ thread_local bool injectorArmed = false;
 namespace morph::testkit {
 
 OomInjector::OomInjector(std::size_t minSize) {
+#ifdef MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
+    // The operator new/delete overrides below are compiled out under this
+    // build (see the guard around them). Constructing an OomInjector here
+    // would silently do nothing, so this throws instead of letting a test
+    // misread that silence as "the injected failure never happened to
+    // trigger". In practice this never fires: every test using OomInjector
+    // is excluded from the clang-asan/clang-tsan CI legs by tag (see
+    // .github/workflows/ci.yml) -- this is a correctness backstop, not the
+    // primary mechanism.
+    (void)minSize;
+    throw std::logic_error(
+        "OomInjector: unusable under ASan/TSan (operator new/delete overrides are compiled out -- "
+        "see oom_injector.cpp)");
+#else
     if (injectorArmed) {
         throw std::logic_error("OomInjector: another instance is already active on this thread");
     }
     injectorArmed = true;
     minSizeToFail = minSize;
+#endif
 }
 
 OomInjector::~OomInjector() {
@@ -41,6 +88,8 @@ OomInjector::~OomInjector() {
 }
 
 }  // namespace morph::testkit
+
+#ifndef MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
 
 namespace {
 
@@ -117,3 +166,5 @@ void operator delete[](void* ptr, std::size_t size) noexcept {
 }
 // NOLINTEND(readability-inconsistent-declaration-parameter-name,
 // cppcoreguidelines-no-malloc, cppcoreguidelines-owning-memory)
+
+#endif  // !MORPH_TESTKIT_UNDER_ASAN_OR_TSAN
