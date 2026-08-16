@@ -463,6 +463,49 @@ TEST_CASE("EventPoller clears its in-flight flag even when onEvent throws", "[gu
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
 }
 
+TEST_CASE("EventPoller::start rearms the timer, but refuses once a fatal error has stopped it for good",
+          "[gui][event-poller]") {
+    // start()/stop() are the pause/resume pair a hidden poll view uses
+    // (event_poller.hpp's own doc comments on both) -- distinct from
+    // pollOnce() (drives one tick regardless of the timer) and from
+    // resume() (also clears _fatal). Nothing else in this file calls either
+    // one directly: every other test lets the constructor's own
+    // `_timer.start(interval)` and handleError's own `_timer.stop()` be the
+    // only callers, so start()'s `if (!_fatal)` guard -- the one branch
+    // start() has -- has never actually run either arm from here.
+    resetFeedControl();
+    FeedModel::control.events = {{.id = 1, .summary = "a"}};
+
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto handler = std::make_shared<morph::bridge::BridgeHandler<FeedModel>>(ctx.bridge(), ctx.executor());
+
+    int fatalCount = 0;
+    Poller poller{ctx.bridge(), /*startingCursor=*/0, makeDispatch(handler), [](const FeedEvent&) {},
+                  [&](const QString&) { ++fatalCount; }, std::chrono::hours{1}};
+
+    REQUIRE(poller.running());
+    poller.stop();
+    REQUIRE_FALSE(poller.running());
+
+    // Not fatal: start() rearms it, same as a poll view coming back into view.
+    poller.start();
+    CHECK(poller.running());
+
+    // Now drive a genuinely fatal failure, stopping the timer for good.
+    poller.stop();
+    FeedModel::control.throwNotFound = true;
+    poller.pollOnce();
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return !poller.busy(); }));
+    REQUIRE(fatalCount == 1);
+    REQUIRE(poller.fatalErrorReported());
+    REQUIRE_FALSE(poller.running());
+
+    // start()'s own guard refuses to rearm a fatally-stopped poller -- only
+    // resume() can undo that (see the dedicated resume() test below).
+    poller.start();
+    CHECK_FALSE(poller.running());
+}
+
 TEST_CASE("EventPoller::resume clears a fatal error and polls again from a new cursor", "[gui][event-poller]") {
     resetFeedControl();
     FeedModel::control.throwNotFound = true;
