@@ -274,14 +274,24 @@ std::size_t App::relayOutboxOnce() {
         entries.reserve(rows.size());
         for (const auto& row : rows) {
             ::morph::journal::LogEntry entry;
-            entry.modelType = row.modelType.Value();
-            entry.entityKey = row.entityKey.Value();
-            entry.actionType = row.actionType.Value();
-            entry.payload = row.payload.Value();
-            entry.result = row.result.Value();
-            entry.principal = row.principal.Value();
+            // `journal::LogEntry`'s fields are plain `std::string`; every
+            // `BookmarkOutboxRecord` string column is a Lightweight strong
+            // string type (`outbox_entity.hpp`'s file comment), so each read
+            // here goes through that type's explicit `std::string`
+            // conversion — `Field::Value()` returns a `T const&`, and
+            // `SqlAnsiString<N>`/`SqlMaxDynamicAnsiString`'s `operator
+            // std::string()` is `explicit` by design (Lightweight's own
+            // truncation-safety discipline: an implicit path here would let
+            // a bounded column silently narrow on assignment into
+            // unrelated code with no cast visible at the call site).
+            entry.modelType = std::string{row.modelType.Value()};
+            entry.entityKey = std::string{row.entityKey.Value()};
+            entry.actionType = std::string{row.actionType.Value()};
+            entry.payload = std::string{row.payload.Value()};
+            entry.result = std::string{row.result.Value()};
+            entry.principal = std::string{row.principal.Value()};
             entry.timestampMs = row.timestampMs.Value();
-            entry.idempotencyKey = row.idempotencyKey.Value();
+            entry.idempotencyKey = std::string{row.idempotencyKey.Value()};
             entries.push_back(std::move(entry));
         }
         return entries;

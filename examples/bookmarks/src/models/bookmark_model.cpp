@@ -31,6 +31,31 @@
 
 namespace bookmarks {
 
+// The one place each DTO-level string bound and the storage layer's real
+// column capacity are checked against each other -- the same discipline
+// `pastebin::kMaxSyntaxBytes`'s own assertion (`paste_model.cpp`)
+// established: widening a column without widening the constant, or the
+// reverse, fails the build here rather than silently reopening either harm
+// (`SqlAnsiString`'s `_size{std::min(N, s.size())}` truncating a value that
+// `validate()` had already accepted, or `validate()` rejecting a value that
+// would have fit in the real column).
+static_assert(decltype(db::BookmarkRecord::ownerPrincipal)::ValueType{}.capacity() == auth::kMaxPrincipalBytes,
+              "bookmarks::auth::kMaxPrincipalBytes must equal BookmarkRecord::ownerPrincipal's SqlAnsiString "
+              "capacity -- otherwise a principal the authorizer accepts could be silently truncated on the way "
+              "into the row.");
+static_assert(decltype(db::BookmarkRecord::url)::ValueType{}.capacity() == kMaxUrlBytes,
+              "bookmarks::kMaxUrlBytes must equal BookmarkRecord::url's SqlAnsiString capacity -- otherwise "
+              "CreateBookmark/EditBookmark either reject urls that would have fit, or accept ones that get "
+              "silently truncated on the way into the row.");
+static_assert(decltype(db::BookmarkRecord::title)::ValueType{}.capacity() == kMaxTitleBytes,
+              "bookmarks::kMaxTitleBytes must equal BookmarkRecord::title's SqlAnsiString capacity -- otherwise "
+              "CreateBookmark/EditBookmark either reject titles that would have fit, or accept ones that get "
+              "silently truncated on the way into the row.");
+static_assert(decltype(db::BookmarkRecord::faviconPath)::ValueType{}.capacity() == kMaxUrlBytes,
+              "bookmarks::kMaxUrlBytes must equal BookmarkRecord::faviconPath's SqlAnsiString capacity -- a "
+              "favicon path is itself a URL, so it shares url's bound; letting the two drift would let "
+              "RecordMetadata silently truncate a path CreateBookmark/EditBookmark would have accepted for url.");
+
 namespace {
 
 [[nodiscard]] std::int64_t nowMs() noexcept {
@@ -156,7 +181,12 @@ void writeOutboxEntry(::Lightweight::DataMapper& mapper, const std::string& owne
                             .Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", row.tag.Value())
                             .All();
         if (!tagRows.empty()) {
-            names.push_back(tagRows.front().name.Value());
+            // `TagRecord::name` is `Light::SqlAnsiString<kMaxTagNameBytes>`
+            // (`tag_entity.hpp`); `names` stays a plain `std::vector<std::string>`
+            // since tag names travel the wire as `std::string` per
+            // IMPLEMENTATION.md rule 4 -- the explicit `std::string{...}`
+            // conversion is the model-layer boundary that does that.
+            names.push_back(std::string{tagRows.front().name.Value()});
         }
     }
     return names;
@@ -205,10 +235,14 @@ static void applyTagSet(::Lightweight::DataMapper& mapper, std::uint64_t bookmar
 [[nodiscard]] static BookmarkView toView(const db::BookmarkRecord& rec, std::vector<std::string> tags) {
     BookmarkView view;
     view.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};
-    view.url = rec.url.Value();
-    view.title = rec.title.Value();
-    view.description = rec.description.Value();
-    view.notes = rec.notes.Value();
+    // Every `BookmarkRecord` string column is a Lightweight strong string
+    // type (`bookmark_entity.hpp`'s file comment); `BookmarkView`'s members
+    // stay plain `std::string` per IMPLEMENTATION.md rule 4, so each read
+    // here converts explicitly at this DTO boundary.
+    view.url = std::string{rec.url.Value()};
+    view.title = std::string{rec.title.Value()};
+    view.description = std::string{rec.description.Value()};
+    view.notes = std::string{rec.notes.Value()};
     view.tags = std::move(tags);
     view.createdAt = fromEpochMs(rec.createdAtMs.Value());
     view.updatedAt = fromEpochMs(rec.updatedAtMs.Value());
@@ -384,14 +418,17 @@ ListBookmarksResult BookmarkModel::execute(const ListBookmarks& action) {
         if (!action.tag.empty() && std::ranges::find(tags, action.tag) == tags.end()) {
             continue;
         }
-        if (!action.searchText.empty() && rec.title.Value().find(action.searchText) == std::string::npos &&
-            rec.url.Value().find(action.searchText) == std::string::npos) {
+        // `SqlAnsiString<N>` has no `.find()` member of its own; `.str()`
+        // (Lightweight's own view accessor) hands back the
+        // `std::basic_string_view` that does.
+        if (!action.searchText.empty() && rec.title.Value().str().find(action.searchText) == std::string_view::npos &&
+            rec.url.Value().str().find(action.searchText) == std::string_view::npos) {
             continue;
         }
         BookmarkSummary summary;
         summary.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};
-        summary.url = rec.url.Value();
-        summary.title = rec.title.Value();
+        summary.url = std::string{rec.url.Value()};
+        summary.title = std::string{rec.title.Value()};
         summary.tags = std::move(tags);
         summary.createdAt = fromEpochMs(rec.createdAtMs.Value());
         summary.updatedAt = fromEpochMs(rec.updatedAtMs.Value());
@@ -463,8 +500,8 @@ GetChangesSinceResult BookmarkModel::execute(const GetChangesSince& action) {
     for (const auto& rec : rows) {
         BookmarkSummary summary;
         summary.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};
-        summary.url = rec.url.Value();
-        summary.title = rec.title.Value();
+        summary.url = std::string{rec.url.Value()};
+        summary.title = std::string{rec.title.Value()};
         summary.tags = readTagNames(mapper.Get(), rec.id.Value());
         summary.createdAt = fromEpochMs(rec.createdAtMs.Value());
         summary.updatedAt = fromEpochMs(rec.updatedAtMs.Value());
@@ -678,8 +715,10 @@ ExportBookmarksResult BookmarkModel::execute(const ExportBookmarks&) {
                     .All();
     std::string html = "<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n";
     for (const auto& rec : rows) {
-        html += "    <DT><A HREF=\"" + ::bookmarks::import::escapeHtml(rec.url.Value()) + "\">" +
-               ::bookmarks::import::escapeHtml(rec.title.Value()) + "</A>\n";
+        // `escapeHtml` takes a `std::string_view`; `.str()` is `SqlAnsiString`'s
+        // own view accessor for exactly this (see this file's other reads).
+        html += "    <DT><A HREF=\"" + ::bookmarks::import::escapeHtml(rec.url.Value().str()) + "\">" +
+               ::bookmarks::import::escapeHtml(rec.title.Value().str()) + "</A>\n";
     }
     html += "</DL><p>\n";
     return ExportBookmarksResult{.html = std::move(html)};

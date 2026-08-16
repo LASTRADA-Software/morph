@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmarks/models/tag_model.hpp"
 
+#include "bookmarks/auth/bookmarks_authorizer.hpp"
 #include "bookmarks/db/bookmark_tag_entity.hpp"
 #include "bookmarks/db/outbox_entity.hpp"
 #include "bookmarks/db/tag_entity.hpp"
@@ -22,6 +23,19 @@
 #include <string>
 
 namespace bookmarks {
+
+// See `bookmark_model.cpp`'s identical static_asserts for the full
+// rationale this mirrors -- pinning `TagRecord`'s column capacities to the
+// same DTO-level constants that already gate `RenameTag`/`MergeTags`
+// input.
+static_assert(decltype(db::TagRecord::ownerPrincipal)::ValueType{}.capacity() == auth::kMaxPrincipalBytes,
+              "bookmarks::auth::kMaxPrincipalBytes must equal TagRecord::ownerPrincipal's SqlAnsiString capacity "
+              "-- otherwise a principal the authorizer accepts could be silently truncated on the way into the "
+              "row.");
+static_assert(decltype(db::TagRecord::name)::ValueType{}.capacity() == kMaxTagNameBytes,
+              "bookmarks::kMaxTagNameBytes must equal TagRecord::name's SqlAnsiString capacity -- otherwise "
+              "RenameTag either rejects names that would have fit, or accepts ones that get silently truncated "
+              "on the way into the row.");
 
 namespace {
 
@@ -189,7 +203,9 @@ ListTagsResult TagModel::execute(const ListTags&) {
                                 .size();
         TagSummary summary;
         summary.id = TagId{static_cast<std::int64_t>(rec.id.Value())};
-        summary.name = rec.name.Value();
+        // `TagRecord::name` is `Light::SqlAnsiString<kMaxTagNameBytes>`;
+        // `TagSummary::name` stays plain `std::string` on the wire.
+        summary.name = std::string{rec.name.Value()};
         summary.bookmarkCount = Count::fromDouble(static_cast<double>(count));
         result.tags.push_back(std::move(summary));
     }

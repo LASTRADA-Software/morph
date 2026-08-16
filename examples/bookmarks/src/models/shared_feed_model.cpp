@@ -65,13 +65,13 @@ ListSharedFeedResult SharedFeedModel::execute(const ListSharedFeed& action) {
             auto tagRows =
                 mapper->Query<db::TagRecord>().Where(::Lightweight::FieldNameOf<&db::TagRecord::id>, "=", jrow.tag.Value()).All();
             if (!tagRows.empty()) {
-                tags.push_back(tagRows.front().name.Value());
+                tags.push_back(std::string{tagRows.front().name.Value()});
             }
         }
         BookmarkSummary summary;
         summary.id = BookmarkId{static_cast<std::int64_t>(rec.id.Value())};
-        summary.url = rec.url.Value();
-        summary.title = rec.title.Value();
+        summary.url = std::string{rec.url.Value()};
+        summary.title = std::string{rec.title.Value()};
         summary.tags = std::move(tags);
         summary.createdAt = fromEpochMs(rec.createdAtMs.Value());
         summary.updatedAt = fromEpochMs(rec.updatedAtMs.Value());
