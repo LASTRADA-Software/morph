@@ -2,6 +2,7 @@
 #pragma once
 
 #include "kanban/core/errors.hpp"
+#include "kanban/core/types.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/event_dto.hpp"
 
@@ -47,6 +48,8 @@ class BoardModel {
     ///         (an empty or over-length name).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
     ///         or if the attached project no longer exists.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Member`.
     GetBoardResult execute(const CreateColumn& action);
 
     /// @brief Creates a new swimlane on this handler's attached board.
@@ -56,6 +59,8 @@ class BoardModel {
     ///         (an empty or over-length name).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
     ///         or if the attached project no longer exists.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Member`.
     GetBoardResult execute(const CreateSwimlane& action);
 
     /// @brief Creates a new task in the given column/swimlane on this
@@ -68,6 +73,8 @@ class BoardModel {
     ///         over-length title).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
     ///         or if the attached project no longer exists.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Member`.
     GetBoardResult execute(const CreateTask& action);
 
     /// @brief Appends a comment to the given task.
@@ -78,7 +85,8 @@ class BoardModel {
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
     ///         or if the attached project no longer exists.
     /// @throws Forbidden if no principal is authenticated on the calling
-    ///         session.
+    ///         session, or the caller's role on the attached project is
+    ///         below `Role::Member`.
     GetBoardResult execute(const AddComment& action);
 
     /// @brief Design spec §1's exactly-once centerpiece -- added in Task 10.
@@ -86,6 +94,11 @@ class BoardModel {
     ///        position) and optional idempotency key.
     /// @return The board's full state after the move (or, for a
     ///         previously-applied `opId`, the replayed result).
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Member`. Checked before the idempotency-ledger
+    ///         lookup, so a demoted caller replaying a known `opId` cannot
+    ///         retrieve a stored result their current role could no longer
+    ///         produce.
     GetBoardResult execute(const MoveTaskPosition& action);
 
     /// @brief Design spec §1's polling read side -- lists every
@@ -99,6 +112,18 @@ class BoardModel {
     GetEventsSinceResult execute(const GetEventsSince& action);
 
   private:
+    /// @brief Throws `Forbidden` unless the calling principal's role on
+    ///        this handler's attached project is at least `minimum`. Same
+    ///        shape as `ProjectAdminModel::requireRole` -- not shared code
+    ///        (design spec §3): `BoardModel` and `ProjectAdminModel` are
+    ///        separate classes with separate mapper/entity access, so each
+    ///        gets its own copy.
+    /// @param minimum The minimum role the caller must hold.
+    /// @throws Forbidden if no principal is authenticated, or the caller
+    ///         has no role on the attached project, or a role below
+    ///         `minimum`.
+    void requireRole(Role minimum) const;
+
     /// @brief The project this handler is attached to, cached on the first
     ///        successful `execute(OpenBoard)`. Unset until then.
     std::optional<std::string> _projectIdStr;

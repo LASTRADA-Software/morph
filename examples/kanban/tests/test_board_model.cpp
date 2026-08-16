@@ -196,6 +196,36 @@ TEST_CASE("MoveTaskPosition into a column deleted mid-drag throws NotFound, not 
                     kanban::NotFound);
 }
 
+TEST_CASE("A Viewer cannot CreateTask or MoveTaskPosition -- Forbidden, not a silent write", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectId, .principal = "bob", .role = kanban::Role::Viewer});
+    }
+
+    kanban::BoardModel model;
+    const ScopedPrincipal bob{"bob"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    CHECK_THROWS_AS(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}), kanban::Forbidden);
+}
+
+TEST_CASE("A Member can CreateTask; GetBoardState needs no role at all beyond Viewer", "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectId, .principal = "bob", .role = kanban::Role::Member});
+    }
+
+    kanban::BoardModel model;
+    const ScopedPrincipal bob{"bob"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    CHECK_NOTHROW(model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}));
+}
+
 TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "[kanban][model]") {
     DbFixture fixture;
     const auto projectId = createProjectAs("alice", "Sprint Board");

@@ -53,6 +53,21 @@ namespace {
     return std::move(rows.front());
 }
 
+/// @brief The caller's own role on @p projectDbId, or `std::nullopt` if
+///        they have none. Mirrors `ProjectAdminModel`'s identical helper
+///        (design spec §3: not shared code, each model gets its own copy).
+[[nodiscard]] std::optional<Role> loadCallerRole(::Lightweight::DataMapper& mapper, std::uint64_t projectDbId,
+                                                  const std::string& principal) {
+    auto rows = mapper.Query<db::ProjectRoleRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectDbId)
+                    .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
+                    .All();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return roleFromString(rows.front().role.Value().str());
+}
+
 /// @brief Confirms @p columnId names a real column belonging to @p project
 ///        -- design spec §2's cross-strand re-check: `ColumnRecord::project`
 ///        is FK-shaped but not FK-enforced by SQLite, and a column deleted
@@ -135,6 +150,16 @@ void requireColumnBelongsToProject(::Lightweight::DataMapper& mapper, const db::
 
 }  // namespace
 
+void BoardModel::requireRole(Role minimum) const {
+    const auto& principal = requireOwner();
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    const auto role = loadCallerRole(mapper.Get(), projectDbId, principal);
+    if (!role.has_value() || static_cast<std::uint8_t>(*role) < static_cast<std::uint8_t>(minimum)) {
+        throw Forbidden{"caller's role does not permit this action"};
+    }
+}
+
 GetBoardResult BoardModel::execute(const OpenBoard& action) {
     if (!action.validate()) {
         throw ValidationError{"OpenBoard: projectId is required"};
@@ -161,6 +186,7 @@ GetBoardResult BoardModel::execute(const CreateColumn& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"CreateColumn: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Member);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
@@ -196,6 +222,7 @@ GetBoardResult BoardModel::execute(const CreateSwimlane& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"CreateSwimlane: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Member);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
@@ -230,6 +257,7 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"CreateTask: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Member);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
@@ -270,6 +298,7 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"AddComment: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Member);
     const auto& principal = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
@@ -303,15 +332,17 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"MoveTaskPosition: handler was never attached via OpenBoard"};
     }
+    // Design spec §1: the role gate must run unconditionally, before the
+    // ledger lookup below -- a demoted caller replaying a known opId must
+    // not retrieve the stored result their current role could no longer
+    // produce.
+    requireRole(Role::Member);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
 
-    // Design spec §1: ledger lookup, after any identity gate (none exists
-    // on this action -- MoveTaskPosition is not role-gated, per the README's
-    // "What is actually gated" convention any un-mentioned action inherits
-    // from polls' equivalent statement: only structural/admin actions are
-    // role-gated, ordinary board moves are not), before any re-validation.
+    // Design spec §1: ledger lookup, after the role gate above, before any
+    // re-validation.
     if (!action.opId.empty()) {
         auto existingOp = mapper
                               ->Query<db::AppliedOpRecord>()
