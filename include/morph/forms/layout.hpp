@@ -51,6 +51,12 @@ enum class GroupKind : std::uint8_t {
         case GroupKind::Accordion:
             return "accordion";
         default:
+            // Unreachable through any real code path: GroupKind is a closed
+            // enum and every enumerator is already handled explicitly above.
+            // This arm only exists to satisfy the compiler that the function
+            // returns on every enum value, including one manufactured by an
+            // out-of-range `static_cast` -- mirrors ruleKindName's identical
+            // default: arm in forms.hpp.
             return "section";
     }
 }

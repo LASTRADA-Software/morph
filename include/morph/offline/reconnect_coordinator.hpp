@@ -33,6 +33,12 @@ constexpr std::string_view reconnectOutcomeName(ReconnectOutcome outcome) noexce
         case ReconnectOutcome::Aborted:
             return "Aborted";
         default:
+            // Unreachable through any real code path: ReconnectOutcome is a
+            // closed enum and every enumerator is already handled explicitly
+            // above. This arm only exists to satisfy the compiler that the
+            // function returns on every enum value, including one
+            // manufactured by an out-of-range `static_cast` -- mirrors
+            // ruleKindName's identical default: arm in forms.hpp.
             return "?";
     }
 }
