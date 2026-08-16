@@ -1913,57 +1913,22 @@ TEST_CASE(
     CHECK(handler.primary().value_or("") == "short");
 }
 
-TEST_CASE(
-    "attachHandlerAsync's in-frame claimHandoff success path surfaces a real allocation failure through onDone "
-    "(morph#108)",
-    "[bridge][registration][issue108]") {
-    SyncExec cbExec;
-    auto backend = std::make_unique<InlineCompletingBackend>();
-    morph::bridge::Bridge bridge{std::move(backend)};
-    morph::bridge::BridgeHandler<AOmKeyModel, morph::bridge::AllowShared> handler{bridge, &cbExec};
-
-    std::string const longKey(256, 'k');
-    std::atomic<int> result{-1};
-    std::atomic<bool> failed{false};
-
-    // InlineCompletingBackend answers attachModelAsync synchronously, inside
-    // execute()'s own dispatch frame -- this drives claimHandoff's success
-    // path (binding->contextKey = primaryCopy) rather than the out-of-frame
-    // callback the test above targets. Unlike that test, the whole call
-    // happens in one stack: attachHandlerAsync makes several of its own
-    // copies of `longKey` before ever reaching claimHandoff's try block (the
-    // by-value `primary` parameter, `auto primaryCopy = primary;`, the
-    // {.contextKey=, .primary=} aggregate's two fields, and the dispatch
-    // lambda's by-value capture) -- each is a >=260-byte allocation (272
-    // bytes measured: a 256-byte string plus its heap-block header), the
-    // same shape as the target copy itself, so minSize alone cannot tell
-    // them apart from `binding->contextKey = primaryCopy` below.
-    // matchToFail=5 skips the first 4 (confirmed empirically against this
-    // exact call path: 5 total size>=260 allocations occur end to end, with
-    // the 5th being the target -- verified by temporarily setting
-    // matchToFail far beyond 5 and observing every match still succeeds
-    // normally, then dropping to exactly 5 and confirming it throws inside
-    // claimHandoff's try, not anywhere earlier). This is still not a raw
-    // process-wide allocation count (which was rejected as fragile): it only
-    // counts allocations that already match minSize=260, and every
-    // unrelated smaller allocation in the dispatch chain (confirmed up to
-    // 224 bytes for shared_ptr control blocks and similar) never shifts
-    // which occurrence is "the 5th".
-    {
-        morph::testkit::OomInjector inject{/*minSize=*/260, /*matchToFail=*/5};
-        handler.execute(AOmTouch{.key = longKey, .amount = 7})
-            .then([&](int val) { result.store(val); })
-            .onError([&](const std::exception_ptr&) { failed.store(true); });
-    }
-
-    CHECK(result.load() == -1);
-    CHECK(failed.load());
-    CHECK_FALSE(handler.primary().has_value());
-
-    std::atomic<int> secondResult{-1};
-    handler.execute(AOmTouch{.key = "short", .amount = 3})
-        .then([&](int val) { secondResult.store(val); })
-        .onError([&](const std::exception_ptr&) { failed.store(true); });
-    CHECK(secondResult.load() == 3);
-    CHECK(handler.primary().value_or("") == "short");
-}
+// attachHandlerAsync's in-frame claimHandoff success path (binding->
+// contextKey = primaryCopy, reached when a backend's attachModelAsync
+// completes synchronously -- see InlineCompletingBackend above) has the
+// identical shape of catch (...) as the out-of-frame callback the test above
+// targets, and is deliberately NOT given its own forced-OOM test: the whole
+// call happens in one stack, so several of attachHandlerAsync's own earlier
+// copies of the same primary key (the by-value `primary` parameter, `auto
+// primaryCopy = primary;`, the {.contextKey=, .primary=} aggregate's two
+// fields, the dispatch lambda's by-value capture) are the same >=SSO-
+// defeating size as the target copy itself -- so a minSize-only OomInjector
+// can't distinguish them, and the number of such copies before the target
+// line is a real STL/compiler implementation detail (confirmed: an
+// occurrence-count value tuned against MSVC's allocator did not reproduce on
+// clang/libstdc++ or gcc/libstdc++ in CI, silently passing through instead
+// of catching the target allocation). Forcing this specific occurrence
+// portably would need either a structural change that gives the target copy
+// a distinguishable allocation shape, or a seam finer-grained than a global
+// allocator override can offer -- disproportionate machinery for one
+// branch. Tracked by the same morph#108, not a second, separate ask.
