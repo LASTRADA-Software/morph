@@ -19,6 +19,19 @@ namespace morph::testkit {
 /// app -- a real consumer's process must never get its allocator replaced
 /// by test-only code.
 ///
+/// @par Incompatible with ASan, TSan, and Valgrind
+/// ASan and TSan's own runtimes already interpose `operator new`/`operator
+/// delete` themselves; linking this seam's own definitions alongside either
+/// one fails at link time with "multiple definition of `operator
+/// new(unsigned long)'" (confirmed in CI). Valgrind's memcheck intercepts
+/// allocations at a layer this override does not reach, so the injector
+/// silently never fires under it (confirmed: even its own self-tests fail
+/// there). `.github/workflows/ci.yml` excludes every test tagged
+/// `[oom-injector]`/`[issue108]` on the `clang-asan`/`clang-tsan` legs (by
+/// `ctest -E`) and the Valgrind leg (by Catch2 tag filter) for exactly this
+/// reason -- a test using this seam must carry one of those tags so it is
+/// excluded consistently on every leg where the override cannot work.
+///
 /// @par Why this exists
 /// Several `catch (...)` blocks across the codebase (see
 /// `LASTRADA-Software/morph#108`) only ever fire on `std::bad_alloc` from a
