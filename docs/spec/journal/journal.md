@@ -544,6 +544,22 @@ void RemoteServer::setLogProvider(LogProvider provider);   // thread-safe
   returns `nullptr` also attaches no log; otherwise the returned sink is attached
   via `holder->attachActionLog(log, contextKey)`, so `contextKey` becomes the
   entry `entityKey`.
+- **Also reaches a model-level `attachActionLog`, if the model declares one.**
+  `IModelHolder::attachActionLog` forwards to a protected virtual hook,
+  `onActionLogAttached`, which `ModelHolder<Model>` overrides to call
+  `Model::attachActionLog(log, contextKey)` when `Model` structurally satisfies
+  `ModelLevelActionLogAttachable` (`morph/core/model.hpp`) — the same
+  "detect the hook structurally, forward only if present" shape
+  `onBackendChanged()`/`BackendChangedMixin` already use. This closes a real
+  gap for a model that keeps its own model-level `IActionLog` reference to
+  read back later (e.g. an activity-stream view over `entries(entityKey)`):
+  before this hook existed, `holder->attachActionLog(...)` populated only the
+  holder's own `_actionLog`/`_contextKey` (used by `recordIfAttached`'s
+  auto-append), never a model instance's own state, since a registry-
+  constructed model is always default-constructed and never otherwise
+  touched. A model with no `attachActionLog` of its own is unaffected — the
+  hook resolves to a no-op for it, exactly as before this existed. First
+  exercised by `kanban::BoardModel` (rung 4).
 - **Installing / removing.** `setLogProvider(nullptr)` removes a previously
   installed provider (subsequent registrations get no log). The provider slot is
   guarded by its own mutex, and the provider is copied out under that lock before

@@ -41,6 +41,27 @@ concept BackendChangedNotifiable = requires(M& model) {
     { model.onBackendChanged() } -> std::same_as<void>;
 };
 
+/// @brief Concept satisfied by model types that expose a model-level
+///        `attachActionLog(std::shared_ptr<IActionLog>, std::string)`.
+///
+/// A small number of keyed/shared models (e.g. `kanban::BoardModel`) cannot
+/// rely on `IModelHolder::recordIfAttached`'s auto-append alone (that
+/// mechanism serves plain fire-after-success journaling; a model that needs
+/// to read its own log back, e.g. for an activity-stream view, needs the
+/// *same* `IActionLog` instance available on `Model` itself, not only on the
+/// type-erased holder wrapping it) and so declares its own `attachActionLog`
+/// method with this exact shape, purely by structural convention — there is
+/// no shared base class or interface a model opts into. This concept is what
+/// lets `ModelHolder<Model>::onActionLogAttached` forward to it generically,
+/// the same "detect the hook structurally, forward only if present" shape
+/// `BackendChangedNotifiable`/`BackendChangedMixin` already establish for
+/// `onBackendChanged()`.
+template <typename M>
+concept ModelLevelActionLogAttachable = requires(M& model, std::shared_ptr<::morph::journal::IActionLog> log,
+                                                  std::string key) {
+    { model.attachActionLog(log, key) } -> std::same_as<void>;
+};
+
 // ── Conditional mixin ─────────────────────────────────────────────────────────
 
 /// @brief Empty base when `M` does not declare `onBackendChanged()`.
@@ -99,13 +120,23 @@ struct IModelHolder {
     /// @brief Attaches a durable action log and this instance's stable identity.
     ///
     /// Set once, typically from the same custom `HandlerBinding::modelFactory`
-    /// closure already used to inject other dependencies. @p contextKey is stamped
-    /// onto every `LogEntry` this instance produces (e.g. an account id) so log
-    /// entries are identifiable without parsing `payload`/`result` JSON.
+    /// closure already used to inject other dependencies, or from
+    /// `RemoteServer::LogProvider` for a registry-constructed remote instance
+    /// (see `docs/spec/journal/journal.md`, "Attaching a log to remote
+    /// instances"). @p contextKey is stamped onto every `LogEntry` this
+    /// instance produces (e.g. an account id) so log entries are identifiable
+    /// without parsing `payload`/`result` JSON.
+    ///
+    /// Also forwards @p log/@p contextKey to the wrapped model's own
+    /// `attachActionLog(log, contextKey)`, if it declares one matching
+    /// `ModelLevelActionLogAttachable` — see `onActionLogAttached`'s doc
+    /// comment for why this second call exists alongside the holder's own
+    /// `_actionLog`/`_contextKey` state below.
     /// @param log        Sink entries are forwarded to. Pass a `SessionLog` to also
     ///                   get undo/checkpoint support.
     /// @param contextKey Stable identity of this model instance.
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string contextKey) {
+        onActionLogAttached(log, contextKey);
         _actionLog = std::move(log);
         _contextKey = std::move(contextKey);
     }
@@ -156,6 +187,36 @@ struct IModelHolder {
         _actionLog->append(std::move(entry));
     }
 
+protected:
+    /// @brief Forwards @p log/@p contextKey to the wrapped model's own
+    ///        `attachActionLog`, if it declares one. No-op default, for the
+    ///        overwhelming majority of models that only ever rely on
+    ///        `recordIfAttached`'s auto-append and have no model-level state
+    ///        of their own to keep a log reference in.
+    ///
+    /// `ModelHolder<Model>` overrides this exactly like `onBackendChanged()`
+    /// (see `BackendChangedMixin`): detected structurally via
+    /// `ModelLevelActionLogAttachable<Model>`, not through a shared
+    /// interface a model opts into by inheritance. This closes the gap a
+    /// registry-constructed remote instance would otherwise have — before
+    /// this hook existed, `RemoteServer::LogProvider`'s `holder->
+    /// attachActionLog(log, contextKey)` populated only this holder's own
+    /// `_actionLog`/`_contextKey` (used by `recordIfAttached`'s auto-append),
+    /// never a `Model`-level `_log`-shaped member a model reads back from
+    /// itself (e.g. for an activity-stream view): the model instance
+    /// `into<Model>()` down-casts to is default-constructed by `ModelFactory::
+    /// create<Model>()` and never otherwise touched. A model with no
+    /// `attachActionLog` of its own is entirely unaffected — this call
+    /// resolves to the base's no-op body for it, same as before this hook
+    /// was added.
+    /// @param log        Sink entries are forwarded to.
+    /// @param contextKey Stable identity of this model instance.
+    virtual void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>& log,
+                                      const std::string& contextKey) {
+        (void) log;
+        (void) contextKey;
+    }
+
 private:
     std::shared_ptr<::morph::journal::IActionLog> _actionLog;
     std::string _contextKey;
@@ -194,6 +255,16 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
     void onBackendChanged() override {
         if constexpr (BackendChangedNotifiable<Model>) {
             model.onBackendChanged();
+        }
+    }
+
+  protected:
+    /// @brief Forwards to `Model::attachActionLog(log, contextKey)` iff `Model`
+    ///        declared one matching `ModelLevelActionLogAttachable`; no-op otherwise.
+    void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>& log,
+                              const std::string& contextKey) override {
+        if constexpr (ModelLevelActionLogAttachable<Model>) {
+            model.attachActionLog(log, contextKey);
         }
     }
 };

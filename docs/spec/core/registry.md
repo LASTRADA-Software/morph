@@ -339,7 +339,20 @@ struct IModelHolder {
 - `into<Model>()` down-casts to a concrete `Model&`; throws `std::bad_cast` on
   mismatch.
 - `attachActionLog` sets the durable log sink and the instance's stable identity
-  (stamped onto every `LogEntry`).
+  (stamped onto every `LogEntry`), then calls the protected virtual
+  `onActionLogAttached(log, contextKey)` (base default: no-op) before storing
+  either. `ModelHolder<Model>` overrides this to forward to
+  `Model::attachActionLog(log, contextKey)` when `Model` structurally
+  satisfies `ModelLevelActionLogAttachable` (`morph/core/model.hpp`) — the
+  same "detect the hook structurally, forward only if present" shape
+  `onBackendChanged()`/`BackendChangedMixin` use below. This is what lets a
+  model that keeps its own model-level `IActionLog` reference (to read its
+  own history back later, e.g. an activity-stream view) receive the same log
+  instance a registry-constructed, remote/keyed attach populates the holder
+  with — see [journal.md's "Attaching a log to remote
+  instances"](../journal/journal.md#attaching-a-log-to-remote-instances). A
+  model with no `attachActionLog` of its own is unaffected: the hook resolves
+  to the base's no-op body for it.
 - `recordIfAttached` is called automatically by `ActionDispatcher`'s runner and
   `Bridge::executeVia` — model code never calls it directly. It fills
   `entityKey`, `principal` (from `session::current()`), and `timestampMs` on the
@@ -363,6 +376,9 @@ struct ModelHolder : IModelHolder, BackendChangedMixin<Model> {
     std::type_index type() const noexcept override;
     bool isBackendChangeAware() const noexcept override;
     void onBackendChanged() override;
+  protected:
+    void onActionLogAttached(const std::shared_ptr<::morph::journal::IActionLog>&,
+                             const std::string& contextKey) override;
 };
 ```
 
