@@ -633,6 +633,10 @@ sink gives no re-relay protection.
 ### `journal::OutboxRelay`
 
 ```cpp
+struct NullSinkError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
+
 struct OutboxRelayResult {
     std::size_t relayed = 0;
 };
@@ -670,8 +674,13 @@ guarantee comes from the host's own transaction, not from `OutboxRelay`.
 
 Mirroring `ReconnectCoordinator::Deps`, a null `drainOutbox`/`markRelayed`/`sink`
 is logged (via `morph::log::logError`) at the start of every `relay()` call but
-does not reject the call — invoking a null member still throws
-(`std::bad_function_call`) or crashes as usual.
+does not reject the call by itself — invoking a null `drainOutbox`/`markRelayed`
+still throws `std::bad_function_call` as usual (a null `std::function` call). A
+null `sink` throws `NullSinkError`, a catchable `std::runtime_error`, once
+`drainOutbox()` reports at least one row to relay — thrown before `sink` is
+ever dereferenced, so no row is lost or marked relayed. `sink` being null is
+not itself rejected when there is nothing to relay: an empty outbox is still a
+no-op regardless of `sink`, exactly as it is when `sink` is real.
 
 ### What this does not do
 

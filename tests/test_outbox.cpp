@@ -390,23 +390,32 @@ TEST_CASE("OutboxRelay::relay(): a null sink is logged, not rejected, at call ti
     REQUIRE(sawWarning);
 }
 
-// A null `sink` reaching relay()'s *sink-using* path (i.e. with drainOutbox()
-// returning rows) is deliberately NOT exercised here: unlike
-// `drainOutbox`/`markRelayed` (null std::function -> catchable
-// std::bad_function_call), `sink` is a std::shared_ptr<IActionLog>, so
-// `sink->append(row)` on a null sink is a null-pointer virtual dispatch --
-// real UB that crashes the process (confirmed: SIGSEGV under this build), not
-// a C++ exception a REQUIRE_THROWS_AS could observe. This is the documented
-// contract (see outbox.hpp's class doc and docs/spec/journal/journal.md:
-// "invoking a null member still throws (std::bad_function_call) or crashes
-// as usual"), not an oversight -- forcing it into a portable, deterministic
-// unit test would need a signal/guard-page harness like
-// test_bridge_lifetime.cpp's POSIX-only hasSubscribers() case, which is far
-// more machinery than this one branch warrants and still would not run on
-// Windows/MSVC, where this suite also builds. The logIfAnyDepNull() call's
-// null-sink warning line itself is now covered by the empty-drainOutbox test
-// above -- only the subsequent crash on a non-empty drain is left
-// unexercised. Tracked as LASTRADA-Software/morph#95.
+TEST_CASE("OutboxRelay::relay(): a null sink reaching a non-empty drain throws NullSinkError, not UB",
+          "[outbox][relay]") {
+    // Unlike the empty-drainOutbox case above (which stays on relay()'s
+    // early-return path and never reaches sink at all), this drains a real
+    // row with sink still null -- morph#95's actual gap: sink->append(row)
+    // on a null shared_ptr<IActionLog> used to be a null-pointer virtual
+    // dispatch (real UB, a process crash, not a catchable exception). relay()
+    // now throws NullSinkError before ever dereferencing sink.
+    std::vector<std::string> logged;
+    morph::log::ScopedLoggerOverride guard{
+        [&](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::debug,
+    };
+
+    OutboxRelay relay;
+    relay.drainOutbox = [] { return std::vector<LogEntry>{makeEntry("OB_Model", "acct-1", "OB_Deposit", "row-1")}; };
+    relay.markRelayed = [](std::span<const LogEntry>) {};
+    // relay.sink left null on purpose.
+
+    REQUIRE_THROWS_AS(relay.relay(), morph::journal::NullSinkError);
+
+    bool sawWarning = std::any_of(logged.begin(), logged.end(), [](const std::string& line) {
+        return line.find("null sink") != std::string::npos;
+    });
+    REQUIRE(sawWarning);
+}
 
 TEST_CASE("OutboxRelay + FileActionLog: re-relay after a simulated process restart dedups via the sink",
           "[outbox][relay][file_action_log]") {

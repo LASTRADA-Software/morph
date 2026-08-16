@@ -5,12 +5,24 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 #include "../core/logger.hpp"
 #include "action_log.hpp"
 
 namespace morph::journal {
+
+/// @brief Thrown by `OutboxRelay::relay()` when `sink` is null.
+///
+/// A null `drainOutbox`/`markRelayed` already throws a catchable
+/// `std::bad_function_call` (invoking a null `std::function`); this makes a
+/// null `sink` consistent with that instead of a raw null-`shared_ptr`
+/// dereference (real undefined behavior, not portably catchable — see
+/// `LASTRADA-Software/morph#95`).
+struct NullSinkError : std::runtime_error {
+    using std::runtime_error::runtime_error;
+};
 
 /// @brief Outcome of one `OutboxRelay::relay()` call.
 struct OutboxRelayResult {
@@ -82,6 +94,11 @@ struct OutboxRelay {
     /// nothing reached the sink, and nothing would ever surface the loss.
     ///
     /// @return The number of rows relayed in this call.
+    /// @throws NullSinkError if `sink` is null and `drainOutbox()` reports at
+    ///         least one row — thrown before `sink` is ever dereferenced, so
+    ///         no row is lost or marked relayed. A null `sink` with nothing
+    ///         to relay is still a no-op, exactly like an empty outbox with a
+    ///         real `sink`: nothing would touch `sink` either way.
     /// @throws std::exception propagated from `sink->append()` or `sink->flush()`;
     ///         the batch is left unmarked and therefore retryable.
     OutboxRelayResult relay() {
@@ -89,6 +106,9 @@ struct OutboxRelay {
         auto rows = drainOutbox();
         if (rows.empty()) {
             return {};
+        }
+        if (!sink) {
+            throw NullSinkError("journal::OutboxRelay::relay: sink is null");
         }
         for (const auto& row : rows) {
             sink->append(row);
@@ -114,12 +134,11 @@ private:
             ::morph::log::logError("[journal::OutboxRelay] null sink");
         }
         // This branch itself is unit-tested (test_outbox.cpp asserts the
-        // warning fires). The crash relay() goes on to hit afterwards --
-        // sink->append() dispatching through a null shared_ptr -- is real UB
-        // and not exercised: no seam here turns it into something a portable
-        // unit test can catch instead of taking down the process (see
-        // LASTRADA-Software/morph#95, requesting either a catchable exception
-        // for this case or an observability hook logIfAnyDepNull() could feed).
+        // warning fires). relay() itself throws NullSinkError right after
+        // this call if sink is null and there is at least one row to relay
+        // (see LASTRADA-Software/morph#95) -- a null drainOutbox/markRelayed
+        // still throws std::bad_function_call as usual, invoking a null
+        // std::function.
     }
 };
 
