@@ -255,10 +255,22 @@ jobs:
           # on a runner with no display.
           QT_QPA_PLATFORM: offscreen
         run: |
+          # morph::testkit::OomInjector (tests/oom_injector.cpp) overrides
+          # the process-wide operator new/delete to force std::bad_alloc on
+          # demand -- ASan and TSan's own runtimes already interpose
+          # operator new/delete themselves, and linking a second, competing
+          # definition fails with "multiple definition of `operator
+          # new(unsigned long)'" (confirmed in CI). Excluded by test name on
+          # exactly these two legs; every other CI leg (plain clang/gcc,
+          # Windows, ubsan, coverage) runs these tests normally.
+          EXCLUDE_ARGS=()
+          if [ "${{ matrix.preset }}" = "clang-asan" ] || [ "${{ matrix.preset }}" = "clang-tsan" ]; then
+            EXCLUDE_ARGS+=(-E "OomInjector|morph#108")
+          fi
           if [ "${{ matrix.preset }}" = "clang-coverage" ]; then
-            LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage
+            LLVM_PROFILE_FILE="build/clang-coverage/%p.profraw" ctest --preset clang-coverage "${EXCLUDE_ARGS[@]}"
           else
-            ctest --preset ${{ matrix.preset }}
+            ctest --preset ${{ matrix.preset }} "${EXCLUDE_ARGS[@]}"
           fi
 
       - name: Generate coverage report
@@ -688,6 +700,18 @@ jobs:
               exit 1
             fi
             echo "── memcheck: $suite ──"
+            # [oom-injector]/[issue108]: morph::testkit::OomInjector
+            # overrides the process-wide operator new/delete
+            # (tests/oom_injector.cpp) to force std::bad_alloc on demand --
+            # Valgrind's own memcheck instrumentation intercepts allocations
+            # at a layer this override does not reach, so the injector
+            # silently never fires under Valgrind (confirmed: even its own
+            # self-tests fail here). Skipped for this leg only; every other
+            # CI leg (plain clang/gcc, Windows) runs these tests normally.
+            EXTRA_ARGS=()
+            if [ "$suite" = "tests/morph_tests" ]; then
+              EXTRA_ARGS=("~[oom-injector]" "~[issue108]")
+            fi
             valgrind \
               --tool=memcheck \
               --leak-check=full \
@@ -695,7 +719,7 @@ jobs:
               --errors-for-leak-kinds=definite,indirect \
               --error-exitcode=1 \
               --suppressions=cmake/valgrind.supp \
-              "$binary" || status=1
+              "$binary" "${EXTRA_ARGS[@]}" || status=1
           done
           exit "$status"
 
