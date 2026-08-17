@@ -563,20 +563,21 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
             .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
             .All();
 
-    // Assigning the loaded parent records here -- not the raw FK integers --
-    // is load-bearing, not stylistic: `Light::BelongsTo::operator=` has no
-    // overload for a bare integral key, only `operator=(ReferencedRecord&)`
-    // (which marks the field `_modified`) and the copy/move-assignment
-    // overloads. A bare `task.column = static_cast<std::uint64_t>(...)` on
-    // an already-loaded record compiles (it implicitly constructs a
-    // temporary `BelongsTo` and copy-assigns it), but that path never sets
-    // `_modified`, so the subsequent `mapper->Update(task)` below would
-    // silently omit `column_id`/`swimlane_id` from its `SET` clause and the
-    // move would not persist -- verified against
-    // `Lightweight/DataMapper/BelongsTo.hpp` and `DataMapper::Update()`'s
-    // `field.IsModified()` gate. `rec.project = project;` elsewhere in this
-    // file relies on exactly the same `operator=(ReferencedRecord&)` path
-    // for the identical reason.
+    // Assigning the loaded parent records here (rather than the raw FK
+    // integers) is a style choice, not a correctness requirement: both
+    // `targetColumn`/`targetSwimlane` are already loaded in scope from the
+    // ownership checks above, so reusing them avoids a redundant re-fetch a
+    // bare-integer assignment would otherwise need to name the same rows by
+    // id. `Light::BelongsTo::operator=(S&&)` (a bare key value) now marks
+    // the field modified correctly, same as `operator=(ReferencedRecord&)` --
+    // LASTRADA-Software/Lightweight#551 fixed the prior silent-modification-
+    // loss bug on that path (its variadic converting-constructor overload
+    // previously left `_modified` false, so `mapper->Update(task)` below
+    // would have silently omitted `column_id`/`swimlane_id` from its `SET`
+    // clause and the move would not have persisted). `CreateTask`'s
+    // `rec.column = static_cast<std::uint64_t>(...)` a few lines up uses the
+    // bare-integer form directly, since it has no already-loaded record to
+    // reuse and feeds a fresh `Create()` call either way.
     task.column = targetColumn;
     task.swimlane = targetSwimlane;
     std::int64_t pos = 0;

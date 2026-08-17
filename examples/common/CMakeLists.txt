@@ -113,8 +113,13 @@ set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_SHARED    OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(Lightweight
     GIT_REPOSITORY https://github.com/LASTRADA-Software/Lightweight.git
-    GIT_TAG        v0.20260625.0
-    GIT_SHALLOW    TRUE
+    # Pinned to master's tip commit, not the latest tag (v0.20260625.0) --
+    # LASTRADA-Software/Lightweight#551 (BelongsTo's silent-modification-loss
+    # bug this rung's MoveTaskPosition worked around) merged to master after
+    # that tag was cut, with no newer tag since. Bump this SHA when a new
+    # tag lands.
+    GIT_TAG        bbb972a78e1962b968a2c6ad93f7dade736eaa01
+    GIT_SHALLOW    FALSE
 )
 # Lightweight's own install() rules unconditionally reference
 # $<TARGET_PDB_FILE:Lightweight> on WIN32 (its CMakeLists.txt), which CMake
