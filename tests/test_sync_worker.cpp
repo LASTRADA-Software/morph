@@ -305,7 +305,7 @@ struct NonDurableQueue : morph::offline::IOfflineQueue {
         items.push_back(morph::offline::QueueItem{.id = itemId, .payload = std::move(payload), .idempotencyKey = {}});
         return itemId;
     }
-    std::vector<morph::offline::QueueItem> drain() override { return items; }
+    std::vector<morph::offline::QueueItem> drain() const override { return items; }
     void markDone(uint64_t itemId) override {
         std::erase_if(items, [itemId](const morph::offline::QueueItem& item) { return item.id == itemId; });
     }
@@ -362,4 +362,26 @@ TEST_CASE("morph::offline::SyncWorker: run() emits queueDepth with the pending c
 
     REQUIRE(samples.size() == 1);
     REQUIRE(samples[0] == 3.0);
+}
+
+TEST_CASE("morph::offline::SyncWorker: run() over a queue at maxDepth still drains and replays normally",
+          "[sync][overflow]") {
+    // maxDepth bounds enqueue(); it has no bearing on drain()/replay -- a
+    // full queue still drains and replays every pending item exactly as an
+    // unbounded one would.
+    morph::offline::InMemoryOfflineQueue queue{3};
+    queue.enqueue("a");
+    queue.enqueue("b");
+    queue.enqueue("c");
+    REQUIRE_THROWS_AS(queue.enqueue("d"), morph::offline::OfflineQueueFullError);
+
+    morph::offline::SyncWorker worker{queue, [](const std::string&) { return true; }};
+    auto result = worker.run();
+
+    REQUIRE(result.successful == 3);
+    REQUIRE(result.failed == 0);
+    REQUIRE(queue.drain().empty());
+
+    // Capacity freed up by the successful replay -- enqueue succeeds again.
+    REQUIRE_NOTHROW(queue.enqueue("e"));
 }

@@ -6,7 +6,9 @@
 #include <filesystem>
 #include <fstream>
 #include <morph/core/file_io_ops.hpp>
+#include <morph/core/observability.hpp>
 #include <morph/offline/file_offline_queue.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -505,5 +507,94 @@ TEST_CASE(
     morph::core::FileIoOps ioOps;
     ioOps.fflush = [](std::FILE*) { return -1; };
     REQUIRE_THROWS_AS(morph::offline::FileOfflineQueue(path, ioOps), std::runtime_error);
+    std::filesystem::remove(path);
+}
+
+// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+
+TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
+          "[file_queue][overflow]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 2};
+        queue.enqueue("a");
+        queue.enqueue("b");
+        REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
+        REQUIRE(queue.drain().size() == 2);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: maxDepth survives destroying and reopening over the same file",
+          "[file_queue][overflow]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        queue.enqueue("a");
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+    }
+    {
+        // Reopened with the same maxDepth argument -- still enforced. maxDepth
+        // is a per-construction parameter, not persisted in the file itself.
+        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        REQUIRE(queue.drain().size() == 1);
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: a dedup hit on a full queue does not throw", "[file_queue][overflow]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        auto id1 = queue.enqueue("first-payload", "op-1");
+        // The dedup scan runs before the capacity check, so a repeat of the
+        // same idempotencyKey on a full queue returns the existing id instead
+        // of throwing.
+        auto id2 = queue.enqueue("second-payload", "op-1");
+        REQUIRE(id1 == id2);
+        REQUIRE(queue.drain().size() == 1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: size() reflects live pending count", "[file_queue][overflow]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        REQUIRE(queue.size() == 0);
+        auto id1 = queue.enqueue("a");
+        queue.enqueue("b");
+        REQUIRE(queue.size() == 2);
+        queue.markDone(id1);
+        REQUIRE(queue.size() == 1);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
+          "[file_queue][overflow][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 1};
+        queue.enqueue("a");
+
+        std::vector<double> samples;
+        morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+            if (evt.metric == morph::observe::Metric::queueOverflow) {
+                samples.push_back(evt.value);
+            }
+        });
+
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+        REQUIRE(samples.size() == 1);
+        REQUIRE(samples[0] == 1.0);
+    }
     std::filesystem::remove(path);
 }

@@ -30,6 +30,9 @@ enum class Metric : std::uint8_t {
     reconnectAttempts,
     /// @brief Counter, tagged by outcome: `ReconnectCoordinator::onOnline` results.
     reconnectOutcome,
+    /// @brief Counter: an `IOfflineQueue::enqueue()` call rejected because the
+    ///        queue was at its configured `maxDepth()`.
+    queueOverflow,
 };
 
 /// @brief One metric observation delivered to the installed `MetricSink`.
