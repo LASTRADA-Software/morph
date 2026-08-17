@@ -222,6 +222,73 @@ TEST_CASE("IModelHolder: attachActionLog stamps entityKey and timestamp automati
     REQUIRE(entries[0].timestampMs > 0);
 }
 
+// ── ModelHolder<Model>::onActionLogAttached forwarding ──────────────────────
+//
+// ALModel above has no model-level attachActionLog of its own, so every test
+// above exercises only the ModelLevelActionLogAttachable<Model> == false arm
+// of ModelHolder<Model>::onActionLogAttached's `if constexpr`. ALLoggingModel
+// declares one matching the concept's exact shape, to exercise the == true
+// arm: IModelHolder::attachActionLog forwarding log/contextKey to the
+// wrapped model's own attachActionLog, the mechanism a keyed/shared model
+// (e.g. kanban::BoardModel) needs to read its own journal back for an
+// activity-stream-shaped view, since the type-erased holder's _actionLog is
+// otherwise never visible to Model::execute() itself.
+
+struct ALLoggingDeposit {
+    int amount = 0;
+};
+
+struct ALLoggingModel {
+    std::shared_ptr<IActionLog> log;
+    std::string contextKey;
+    int callCount = 0;
+
+    void attachActionLog(std::shared_ptr<IActionLog> attachedLog, std::string attachedContextKey) {
+        log = std::move(attachedLog);
+        contextKey = std::move(attachedContextKey);
+        ++callCount;
+    }
+
+    int execute(const ALLoggingDeposit& a) { return a.amount; }
+};
+
+BRIDGE_REGISTER_MODEL(ALLoggingModel, "AL_LoggingModel")
+BRIDGE_REGISTER_ACTION(ALLoggingModel, ALLoggingDeposit, "AL_LoggingDeposit")
+
+TEST_CASE("ModelHolder<Model>::onActionLogAttached forwards to a model-level attachActionLog when the model "
+          "declares one matching ModelLevelActionLogAttachable",
+          "[action_log][holder]") {
+    static_assert(morph::model::detail::ModelLevelActionLogAttachable<ALLoggingModel>);
+    static_assert(!morph::model::detail::ModelLevelActionLogAttachable<ALModel>);
+
+    auto holder = morph::model::detail::ModelFactory::create<ALLoggingModel>();
+    auto log = std::make_shared<InMemoryActionLog>();
+    holder->attachActionLog(log, "board-7");
+
+    // The holder's own auto-append state (recordIfAttached/hasActionLog)
+    // still works exactly as before -- this hook adds a second, independent
+    // forward, it doesn't replace the holder's own bookkeeping.
+    REQUIRE(holder->hasActionLog());
+
+    auto& typed = static_cast<morph::model::detail::ModelHolder<ALLoggingModel>&>(*holder);
+    REQUIRE(typed.model.callCount == 1);
+    REQUIRE(typed.model.log == log);
+    REQUIRE(typed.model.contextKey == "board-7");
+}
+
+TEST_CASE("IModelHolder::onActionLogAttached: the no-op default runs when a holder wraps a model with no "
+          "model-level attachActionLog",
+          "[action_log][holder]") {
+    // ALModel doesn't declare attachActionLog, so ModelHolder<ALModel>::
+    // onActionLogAttached resolves its `if constexpr` false and never calls
+    // into the model -- attachActionLog must still succeed and populate the
+    // holder's own state exactly as it did before this hook existed.
+    auto holder = morph::model::detail::ModelFactory::create<ALModel>();
+    auto log = std::make_shared<InMemoryActionLog>();
+    REQUIRE_NOTHROW(holder->attachActionLog(log, "acct-noop"));
+    REQUIRE(holder->hasActionLog());
+}
+
 TEST_CASE("IModelHolder: recordIfAttached captures the active session principal", "[action_log][holder]") {
     auto holder = morph::model::detail::ModelFactory::create<ALModel>();
     auto log = std::make_shared<InMemoryActionLog>();
