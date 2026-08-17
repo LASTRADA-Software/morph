@@ -211,7 +211,9 @@ public:
     std::vector<std::string> listInstances(const std::string& typeId) override {
         std::string replyJson;
         try {
-            replyJson = sendSync(::morph::wire::encode(::morph::wire::makeInstances(typeId)));
+            auto env = ::morph::wire::makeInstances(typeId);
+            env.session = currentSession();
+            replyJson = sendSync(::morph::wire::encode(env));
         } catch (const std::exception& exc) {
             throw std::runtime_error(std::string{"instances failed: "} + exc.what());
         }

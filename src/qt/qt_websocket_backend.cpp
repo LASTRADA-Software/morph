@@ -381,7 +381,9 @@ bool QtWebSocketBackend::assignPrimaryAsync(::morph::exec::detail::ModelId mid, 
 }
 
 std::vector<std::string> QtWebSocketBackend::listInstances(const std::string& typeId) {
-    auto reply = ::morph::wire::decode(sendSync(::morph::wire::encode(::morph::wire::makeInstances(typeId))));
+    auto env = ::morph::wire::makeInstances(typeId);
+    env.session = _session;
+    auto reply = ::morph::wire::decode(sendSync(::morph::wire::encode(env)));
     if (reply.kind != "ok") {
         throw std::runtime_error("instances failed: " + reply.message);
     }
