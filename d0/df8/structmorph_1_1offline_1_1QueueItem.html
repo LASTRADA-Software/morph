@@ -141,7 +141,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>An item stored in the offline queue. </p>
 <p>The payload is an opaque string — the caller controls the serialisation format (JSON, binary-hex, plain text, etc.). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00017">17</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00021">21</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a2a14f744ed7ff3f42104b17239932e84" name="a2a14f744ed7ff3f42104b17239932e84"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a2a14f744ed7ff3f42104b17239932e84">&#9670;&#160;</a></span>id</h2>
@@ -158,7 +158,7 @@ Public Attributes</h2></td></tr>
 <p>Stable identifier assigned at enqueue time. </p>
 <p>Local to <em>this</em> queue instance; it is <b>not</b> a cross-subsystem idempotency key (a durable queue re-presents the same logical op with a fresh <span class="tt"><a class="el" href="#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">id</a></span> after a restart, and the journal never sees it). Use <span class="tt"><a class="el" href="#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">idempotencyKey</a></span> to dedup a replay against already-applied ops. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00024">24</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00028">28</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -176,7 +176,7 @@ Public Attributes</h2></td></tr>
 
 <p>Opaque serialised representation of the queued action. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00027">27</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -195,7 +195,7 @@ Public Attributes</h2></td></tr>
 <p>Optional caller-supplied idempotency key that is <b>stable across subsystems and process restarts</b> for one logical operation. </p>
 <p>Empty by default. When set, it is the shared dedup token that lets a replay consumer recognise an op the journal (or a previous replay) has already applied and skip it, instead of double-applying. The offline queue and the journal replay have no shared identity otherwise — the queue's <span class="tt"><a class="el" href="#a2a14f744ed7ff3f42104b17239932e84" title="Stable identifier assigned at enqueue time.">id</a></span> is queue-local and the journal's <span class="tt">seq</span> is journal-local — so a host that replays through both paths must wire this key (see <span class="tt">docs/spec/offline.md</span>, "Idempotency key: deduping against the journal"). The value is opaque to the queue; a good choice is a stable content hash or a client-minted operation id (e.g. a UUID) reused if the same op is re-enqueued. The queue does not interpret, require, or enforce uniqueness on it — enforcement is the replay consumer's job. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00043">43</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00047">47</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -214,7 +214,7 @@ Public Attributes</h2></td></tr>
 <p>Durable retry count for this item, authoritative when the queue persists it. </p>
 <p>Defaults to <span class="tt">0</span>. A queue that overrides <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html#a73b028743be8af06c134dea7a73c8019" title="Persists an updated attempt count for an item. Default: no-op.">IOfflineQueue::setAttempts()</a></span> to store this value makes the retry budget survive a process restart: <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> seeds its own attempt counter from the larger of this field and its in-memory count, and writes the updated count back via <span class="tt">setAttempts()</span> after every failed replay. A queue that leaves <span class="tt">setAttempts()</span> as the default no-op never advances this field, so <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s in-memory counter stays authoritative — today's process-local retry behavior, unchanged. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00056">56</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

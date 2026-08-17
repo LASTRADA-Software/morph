@@ -145,7 +145,7 @@ Public Member Functions</h2></td></tr>
 <div class="textblock"><p>RAII helper that snapshots the global metric and trace sinks and restores them in the destructor. </p>
 <p>Mirrors <span class="tt"><a class="el" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html" title="RAII helper that swaps the global logger and level for the lifetime of the object,...">morph::log::ScopedLoggerOverride</a></span>'s snapshot-only constructor: designed for tests that install their own sink(s) mid-test via <span class="tt">setMetricSink()</span> / <span class="tt">setTraceSink()</span> and want automatic restoration, so a custom sink never leaks into a later test case. Because both sinks are <em>global</em> state, tests using this guard must run serially — the same constraint <span class="tt">ScopedLoggerOverride</span> documents. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00264">264</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="aeb75413a91143b4543503d59adb8553d" name="aeb75413a91143b4543503d59adb8553d"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#aeb75413a91143b4543503d59adb8553d">&#9670;&#160;</a></span>ScopedObserveOverride()</h2>
@@ -172,7 +172,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Snapshots the current metric and trace sinks without changing them. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00267">267</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00270">270</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 
 </div>
 </div>
@@ -201,7 +201,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Restores the saved metric and trace sinks. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00284">284</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00287">287</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 
 </div>
 </div>

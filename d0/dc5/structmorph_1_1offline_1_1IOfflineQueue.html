@@ -143,10 +143,14 @@ Public Member Functions</h2></td></tr>
 <tr class="memdesc:a580ca19c41a025fd3a6f45f2f7fb9490"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">payload</code> to the queue with no idempotency key.  <br /></td></tr>
 <tr class="memitem:adde4b8a1021e5bb0374f3843acc7fe40" id="r_adde4b8a1021e5bb0374f3843acc7fe40"><td class="memItemLeft">virtual uint64_t&#160;</td><td class="memItemRight"><a class="el" href="#adde4b8a1021e5bb0374f3843acc7fe40">enqueue</a> (std::string payload, std::string idempotencyKey)</td></tr>
 <tr class="memdesc:adde4b8a1021e5bb0374f3843acc7fe40"><td class="mdescLeft">&#160;</td><td class="mdescRight">Appends <code class="param">payload</code> carrying the cross-subsystem <code class="param">idempotencyKey</code>.  <br /></td></tr>
-<tr class="memitem:a7f244a0141c703a6f15972b39d8624b9" id="r_a7f244a0141c703a6f15972b39d8624b9"><td class="memItemLeft">virtual std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a7f244a0141c703a6f15972b39d8624b9">drain</a> ()=0</td></tr>
-<tr class="memdesc:a7f244a0141c703a6f15972b39d8624b9"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all pending items in enqueue order without removing them.  <br /></td></tr>
+<tr class="memitem:ad11f945b889e1f6d582a6bbd4fdfeaa5" id="r_ad11f945b889e1f6d582a6bbd4fdfeaa5"><td class="memItemLeft">virtual std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5">drain</a> () const =0</td></tr>
+<tr class="memdesc:ad11f945b889e1f6d582a6bbd4fdfeaa5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns all pending items in enqueue order without removing them.  <br /></td></tr>
 <tr class="memitem:a1399eda29916d144d93c728f1e0d06e5" id="r_a1399eda29916d144d93c728f1e0d06e5"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5">markDone</a> (uint64_t itemId)=0</td></tr>
 <tr class="memdesc:a1399eda29916d144d93c728f1e0d06e5"><td class="mdescLeft">&#160;</td><td class="mdescRight">Removes the item identified by <code class="param">itemId</code>.  <br /></td></tr>
+<tr class="memitem:ac534551aa850902cd9b8fd45e134ade3" id="r_ac534551aa850902cd9b8fd45e134ade3"><td class="memItemLeft">virtual std::size_t&#160;</td><td class="memItemRight"><a class="el" href="#ac534551aa850902cd9b8fd45e134ade3">size</a> () const</td></tr>
+<tr class="memdesc:ac534551aa850902cd9b8fd45e134ade3"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the number of pending items without removing them.  <br /></td></tr>
+<tr class="memitem:a5fd0dc329f73f72e5d64689c5956058d" id="r_a5fd0dc329f73f72e5d64689c5956058d"><td class="memItemLeft">virtual std::optional&lt; std::size_t &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a5fd0dc329f73f72e5d64689c5956058d">maxDepth</a> () const</td></tr>
+<tr class="memdesc:a5fd0dc329f73f72e5d64689c5956058d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded.  <br /></td></tr>
 <tr class="memitem:a73b028743be8af06c134dea7a73c8019" id="r_a73b028743be8af06c134dea7a73c8019"><td class="memItemLeft">virtual void&#160;</td><td class="memItemRight"><a class="el" href="#a73b028743be8af06c134dea7a73c8019">setAttempts</a> (uint64_t itemId, uint32_t attempts)</td></tr>
 <tr class="memdesc:a73b028743be8af06c134dea7a73c8019"><td class="mdescLeft">&#160;</td><td class="mdescRight">Persists an updated attempt count for an item. Default: no-op.  <br /></td></tr>
 </table><table class="memberdecls">
@@ -159,7 +163,7 @@ Protected Member Functions</h2></td></tr>
 <div class="textblock"><p>Interface for durable storage of actions that could not be delivered. </p>
 <p>Items accumulate while the system is offline and are replayed by <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> on reconnect. The interface is intentionally minimal so that implementations can range from in-memory (<span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span>) to SQLite or file-backed stores. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00067">67</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a580ca19c41a025fd3a6f45f2f7fb9490" name="a580ca19c41a025fd3a6f45f2f7fb9490"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a580ca19c41a025fd3a6f45f2f7fb9490">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/2]</span></h2>
@@ -237,12 +241,12 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#afa95d94e2a430047b9252c0f52d65fce">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a09bb85941338ca833b3815a9e77f2380">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00092">92</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
-<a id="a7f244a0141c703a6f15972b39d8624b9" name="a7f244a0141c703a6f15972b39d8624b9"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a7f244a0141c703a6f15972b39d8624b9">&#9670;&#160;</a></span>drain()</h2>
+<a id="ad11f945b889e1f6d582a6bbd4fdfeaa5" name="ad11f945b889e1f6d582a6bbd4fdfeaa5"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ad11f945b889e1f6d582a6bbd4fdfeaa5">&#9670;&#160;</a></span>drain()</h2>
 
 <div class="memitem">
 <div class="memproto">
@@ -254,7 +258,7 @@ Protected Member Functions</h2></td></tr>
           <td class="memname">virtual std::vector&lt; <a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html">QueueItem</a> &gt; morph::offline::IOfflineQueue::drain </td>
           <td>(</td>
           <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
-          <td></td>
+          <td> const</td>
         </tr>
       </table>
   </td>
@@ -265,9 +269,9 @@ Protected Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Returns all pending items in enqueue order without removing them. </p>
-<p>Items remain in the queue until <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> is called. It is safe to call <span class="tt"><a class="el" href="#a7f244a0141c703a6f15972b39d8624b9" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> multiple times — items survive a crash between <span class="tt"><a class="el" href="#a7f244a0141c703a6f15972b39d8624b9" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> and the corresponding <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> call. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of all pending items. </dd></dl>
+<p>Items remain in the queue until <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> is called. It is safe to call <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> multiple times — items survive a crash between <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> and the corresponding <span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> call. </p><dl class="section return"><dt>Returns</dt><dd>Snapshot of all pending items. </dd></dl>
 
-<p>Implemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a10231ff1a0842dc55a4078aacce2b59e">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af007406b08a1a2159ccef0683376c971">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a42c53f0104c6ef9f0bd09cf272990244">morph::offline::SqliteOfflineQueue</a>.</p>
+<p>Implemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ac85206bc18b57fcf9f75c8e541e27286">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5e86e43f6de125aacba972686352c6a3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a7d84c59b8a7487daff9ae3d10b8ae868">morph::offline::SqliteOfflineQueue</a>.</p>
 
 </div>
 </div>
@@ -306,6 +310,70 @@ Protected Member Functions</h2></td></tr>
 
 </div>
 </div>
+<a id="ac534551aa850902cd9b8fd45e134ade3" name="ac534551aa850902cd9b8fd45e134ade3"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#ac534551aa850902cd9b8fd45e134ade3">&#9670;&#160;</a></span>size()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::size_t morph::offline::IOfflineQueue::size </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns the number of pending items without removing them. </p>
+<p>Default implementation calls <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a>.<a class="el" href="#ac534551aa850902cd9b8fd45e134ade3" title="Returns the number of pending items without removing them.">size()</a></span> — correct but O(n) and allocates a full snapshot vector to answer a size query. Override for an O(1) or index-backed answer. </p><dl class="section return"><dt>Returns</dt><dd>Current pending item count. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af96a2cf6553f3a44390fe07629b2d4a2">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a60f482c2c96bcedf88298b9f4357d9f0">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a5fd0dc329f73f72e5d64689c5956058d" name="a5fd0dc329f73f72e5d64689c5956058d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a5fd0dc329f73f72e5d64689c5956058d">&#9670;&#160;</a></span>maxDepth()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">virtual std::optional&lt; std::size_t &gt; morph::offline::IOfflineQueue::maxDepth </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel virtual">virtual</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Returns the configured maximum depth, or <span class="tt">std::nullopt</span> if unbounded. </p>
+<p>Default: <span class="tt">std::nullopt</span> (unbounded) — preserves current behavior for any <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> subclass that predates this method. </p><dl class="section return"><dt>Returns</dt><dd>The capacity <span class="tt"><a class="el" href="#a580ca19c41a025fd3a6f45f2f7fb9490" title="Appends payload to the queue with no idempotency key.">enqueue()</a></span> enforces, or <span class="tt">std::nullopt</span> if none. </dd></dl>
+
+<p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue</a>.</p>
+
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+
+</div>
+</div>
 <a id="a73b028743be8af06c134dea7a73c8019" name="a73b028743be8af06c134dea7a73c8019"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a73b028743be8af06c134dea7a73c8019">&#9670;&#160;</a></span>setAttempts()</h2>
 
@@ -334,7 +402,7 @@ Protected Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Persists an updated attempt count for an item. Default: no-op. </p>
-<p>A durable queue overrides this to store the count so the retry budget survives a restart — <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> calls it after every failed replay, and reads the persisted value back through <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f" title="Durable retry count for this item, authoritative when the queue persists it.">QueueItem::attempts</a></span> on the next <span class="tt"><a class="el" href="#a7f244a0141c703a6f15972b39d8624b9" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> (this run, or after a restart). <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span> overrides it to update the in-deque item; a queue that leaves it as the default no-op keeps the pre-existing process-local retry behavior (<span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s own in-memory counter is then always authoritative, since <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f" title="Durable retry count for this item, authoritative when the queue persists it.">QueueItem::attempts</a></span> never advances). </p><dl class="params"><dt>Parameters</dt><dd>
+<p>A durable queue overrides this to store the count so the retry budget survives a restart — <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> calls it after every failed replay, and reads the persisted value back through <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f" title="Durable retry count for this item, authoritative when the queue persists it.">QueueItem::attempts</a></span> on the next <span class="tt"><a class="el" href="#ad11f945b889e1f6d582a6bbd4fdfeaa5" title="Returns all pending items in enqueue order without removing them.">drain()</a></span> (this run, or after a restart). <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span> overrides it to update the in-deque item; a queue that leaves it as the default no-op keeps the pre-existing process-local retry behavior (<span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span>'s own in-memory counter is then always authoritative, since <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a754a77e7cd4686a774162c837c56bb9f" title="Durable retry count for this item, authoritative when the queue persists it.">QueueItem::attempts</a></span> never advances). </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">itemId</td><td>Id of the item whose attempt count changed. </td></tr>
     <tr><td class="paramname">attempts</td><td>New cumulative attempt count to persist. </td></tr>
@@ -344,7 +412,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ae9a56e0f6a28daa3e4047ae8ecc052f5">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5c7f807ec5cddac608f8da633188b40d">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00125">125</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +454,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039">morph::offline::FileOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00136">136</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>

@@ -9,5 +9,6 @@ var searchData=
   ['conditions_6',['conditions',['../d3/d81/structmorph_1_1forms_1_1And.html#a15e3bf2b2182853288b2eb0290e0e6ec',1,'morph::forms::And::conditions'],['../d4/d8d/structmorph_1_1forms_1_1Or.html#a637fff1e1257ce2f4c099b77191b712b',1,'morph::forms::Or::conditions']]],
   ['confirm_7',['confirm',['../d0/d03/structmorph_1_1views_1_1ActionDescriptor.html#afa12c0a9a3ef26bbad7f4c0415544b53',1,'morph::views::ActionDescriptor']]],
   ['connecttimeout_8',['connectTimeout',['../db/d8e/structmorph_1_1net_1_1SocketBackendConfig.html#acd8e19b0807613d9c4d494b407115e1e',1,'morph::net::SocketBackendConfig']]],
-  ['contextkey_9',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]]
+  ['contextkey_9',['contextKey',['../d5/d77/structmorph_1_1wire_1_1Envelope.html#a8c17cefc14d6416071233de513237d50',1,'morph::wire::Envelope']]],
+  ['currentsize_10',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
 ];

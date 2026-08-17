@@ -137,7 +137,7 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Host-supplied hooks bracketing one dispatch, for distributed tracing. </p>
 <p>Both members must be set for the sink to take effect (see <span class="tt">setTraceSink</span>) — a sink with only one of the two is treated as not installed. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00061">61</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00064">64</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a3f992b8d7803c8f58f3230b3153eb495" name="a3f992b8d7803c8f58f3230b3153eb495"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a3f992b8d7803c8f58f3230b3153eb495">&#9670;&#160;</a></span>beginSpan</h2>
@@ -154,7 +154,7 @@ Public Attributes</h2></td></tr>
 <p>Called when an execute begins dispatch (on the model strand). </p>
 <p><code class="param">requestId</code> is <span class="tt">Context::requestId</span> (<span class="tt"><a class="el" href="../../d4/d5e/session_8hpp_source.html">session.hpp</a></span>), the caller's correlation id (empty if unset). Returns a <span class="tt">SpanId</span> the framework passes back to <span class="tt"><a class="el" href="#a64f1ad957ef8edd30cdc13b62482b618" title="Called when the dispatch resolves. ok is true for a successful (ok/resolved-value) outcome,...">endSpan</a></span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00068">68</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 
 </div>
 </div>
@@ -172,7 +172,7 @@ Public Attributes</h2></td></tr>
 
 <p>Called when the dispatch resolves. <code class="param">ok</code> is <span class="tt">true</span> for a successful (<span class="tt">ok</span>/resolved-value) outcome, <span class="tt">false</span> for an error. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00071">71</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/dfd/observability_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d2/dfd/observability_8hpp_source.html">observability.hpp</a>.</p>
 
 </div>
 </div>

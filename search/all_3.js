@@ -50,5 +50,6 @@ var searchData=
   ['core_20registry_20bridge_20backends_20wire_47',['&lt;span class=&quot;tt&quot;&gt;core/&lt;/span&gt; — async core, registry, bridge, backends, wire',['../index.html#core--async-core-registry-bridge-backends-wire',1,'']]],
   ['currentactiontype_48',['currentActionType',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a61cdd8f30ca4894ac6c3904762ab596e',1,'morph::flows::FlowSession']]],
   ['currentindex_49',['currentIndex',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a73caf65d6cf6436d6fbc35faa4bc008e',1,'morph::flows::FlowSession']]],
-  ['currentprincipal_50',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]]
+  ['currentprincipal_50',['currentPrincipal',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a6316aa3aa3f91f1e09449f42e68ca0ac',1,'morph::bridge::Bridge']]],
+  ['currentsize_51',['currentSize',['../d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0',1,'morph::offline::OfflineQueueFullError']]]
 ];
