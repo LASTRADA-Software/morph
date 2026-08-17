@@ -26,16 +26,24 @@
 //      rig.cpp's own `QTcpServer`-reservation idiom for a concrete,
 //      revivable port), not a `BackendRig`.
 //   3. `DbBusyFixture`'s doc comment and test_db_busy_fixture.cpp both
-//      document that forcing a fast, deterministic SQLITE_BUSY needs a short
-//      `Timeout=` *in the connection string* (not achievable by env override
-//      alone) plus re-issuing `PRAGMA busy_timeout` short on the racing
-//      connection's own `SqlConnection` right after connect -- the ambient
-//      default connection every `BoardModel::execute()` acquires via
-//      `GlobalDataMapperPool()` inherits `DbFixture`'s 5000ms-timeout
-//      connection string, which is retained here deliberately (Design spec
-//      §8's DoD wants a *real* pool-starvation/contention window, not an
-//      artificially fast-failing one) -- see the contention test's own
-//      comment for the exact reasoning.
+//      document that forcing a fast, deterministic SQLITE_BUSY needs *both*
+//      a short `PRAGMA busy_timeout` (installed right after connect) *and* a
+//      short connection-string `Timeout=` (the sqliteodbc driver's own outer
+//      retry ceiling) together -- neither alone is sufficient, confirmed
+//      empirically for the contention test below (fix-round-1: the PRAGMA
+//      alone left every one of 32 concurrent calls failing at ~5.1-5.2s,
+//      matching the ambient connection string's baked-in `Timeout=5000`
+//      exactly). An earlier version of this file's own comment wrongly
+//      claimed the ambient (long) timeout was deliberate and would produce a
+//      real mix of outcomes; 6 independent runs proved that false (0/32
+//      succeeded, 32/32 failed near-instantly) before the actual fix. The
+//      contention test now uses `ScopedShortBusyTimeout` (shortening both
+//      bounds) + `drainPoolIdleMappers()` -- starting from the same recipe
+//      `test_bookmark_model.cpp`/`test_paste_model.cpp` use, extended for
+//      the outer-ceiling half this file's 32-way (not single-writer)
+//      contention needed in addition -- see that test's own comment for the
+//      tuned numbers, why they had to be this large, and the real observed
+//      mix.
 #include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/dto/project_dto.hpp"
 #include "kanban/models/board_model.hpp"
@@ -44,6 +52,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_busy_fixture.hpp"
 #include "testkit/db_fixture.hpp"
+#include "testkit/db_pool_drain.hpp"
 #include "testkit/fault_proxy.hpp"
 #include "testkit/pump.hpp"
 
@@ -57,6 +66,7 @@
 #include <morph/session/session.hpp>
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -78,6 +88,7 @@ using morph::ladder::testkit::awaitQt;
 using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbBusyFixture;
 using morph::ladder::testkit::DbFixture;
+using morph::ladder::testkit::drainPoolIdleMappers;
 using morph::ladder::testkit::FaultProxy;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
@@ -341,25 +352,138 @@ TEST_CASE("Reconnecting after a dropped connection replays the offline queue and
     wsServer.closeGracefully(std::chrono::milliseconds{0});
 }
 
+namespace {
+
+/// @brief Installs a short SQLite `busy_timeout` on every connection opened
+///        while it is alive (via `SetPostConnectedHook`), *and* shortens the
+///        process-wide default connection string's own `Timeout=` for the
+///        same lifetime, restoring both on destruction.
+///
+/// Starts from the same shape as `test_bookmark_model.cpp`'s (rung 3) and
+/// `test_paste_model.cpp`'s (rung 1) `ScopedShortBusyTimeout` helper, but
+/// fix-round-1 found empirically that the hook alone is **not** sufficient
+/// for `GlobalDataMapperPool()`-acquired connections under real multi-writer
+/// contention, even though the hook demonstrably fires (confirmed via
+/// temporary instrumentation: every one of 32 connections logged its
+/// `PRAGMA busy_timeout = 300` before the racing `MoveTaskPosition` call).
+/// Every one of those 32 calls still failed at ~5.1-5.2 real seconds, not
+/// ~300ms -- exactly `DbFixture::computeConnectionString`'s own baked-in
+/// `Timeout=5000`, the sqliteodbc driver's *outer* retry ceiling, which
+/// `db_busy_fixture.hpp`'s own doc comment already documents as a bound the
+/// PRAGMA does not touch. `test_bookmark_model.cpp`'s own hook-only version
+/// happens not to need this: its single contending write is fast enough
+/// that the short PRAGMA-driven inner busy-handler alone governs the
+/// observed failure there. This test's 32-way concurrent case is not --
+/// with 32 threads genuinely racing SQLite's single-writer lock, the inner
+/// busy-handler's wait is evidently not what terminates first, so the outer
+/// ceiling has to be shortened too, mirroring `test_db_busy_fixture.cpp`'s
+/// own combined recipe (`shortTimeoutConnectionString()` + the PRAGMA) --
+/// applied here to the *default* connection string, since
+/// `GlobalDataMapperPool()`'s connections use `SqlConnection`'s default
+/// constructor (`DefaultConnectionString()`), not an explicit
+/// per-`DataMapper` override.
+class ScopedShortBusyTimeout {
+  public:
+    /// @param milliseconds Value installed as both the `PRAGMA busy_timeout`
+    ///        on every newly-opened connection and the default connection
+    ///        string's `Timeout=` (the sqliteodbc driver's own outer retry
+    ///        ceiling) for this object's lifetime.
+    explicit ScopedShortBusyTimeout(int milliseconds)
+        : _previousConnectionString{::Lightweight::SqlConnection::DefaultConnectionString()} {
+        ::Lightweight::SqlConnection::SetPostConnectedHook([milliseconds](::Lightweight::SqlConnection& connection) {
+            ::Lightweight::SqlStatement stmt{connection};
+            (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
+        });
+        ::Lightweight::SqlConnection::SetDefaultConnectionString(
+            ::Lightweight::SqlConnectionString{shortenTimeout(_previousConnectionString.value, milliseconds)});
+    }
+    ~ScopedShortBusyTimeout() {
+        ::Lightweight::SqlConnection::ResetPostConnectedHook();
+        ::Lightweight::SqlConnection::SetDefaultConnectionString(_previousConnectionString);
+    }
+
+    ScopedShortBusyTimeout(const ScopedShortBusyTimeout&) = delete;
+    ScopedShortBusyTimeout& operator=(const ScopedShortBusyTimeout&) = delete;
+    ScopedShortBusyTimeout(ScopedShortBusyTimeout&&) = delete;
+    ScopedShortBusyTimeout& operator=(ScopedShortBusyTimeout&&) = delete;
+
+  private:
+    /// @brief Replaces (or appends) `Timeout=` in @p connectionString with
+    ///        @p milliseconds -- same string-surgery idiom
+    ///        `test_db_busy_fixture.cpp`'s `shortTimeoutConnectionString()`
+    ///        uses, applied to whatever the live default happens to be
+    ///        rather than a hard-coded literal.
+    [[nodiscard]] static std::string shortenTimeout(std::string connectionString, int milliseconds) {
+        static constexpr std::string_view key = "Timeout=";
+        if (auto const pos = connectionString.find(key); pos != std::string::npos) {
+            auto const valueStart = pos + key.size();
+            auto valueEnd = connectionString.find(';', valueStart);
+            if (valueEnd == std::string::npos) {
+                valueEnd = connectionString.size();
+            }
+            connectionString.replace(valueStart, valueEnd - valueStart, std::to_string(milliseconds));
+        } else {
+            connectionString += ";Timeout=" + std::to_string(milliseconds);
+        }
+        return connectionString;
+    }
+
+    ::Lightweight::SqlConnectionString _previousConnectionString;
+};
+
+}  // namespace
+
 TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-then-committed double-apply",
           "[kanban][offline][contention]") {
     // DbBusyFixture holds a real SqlScopedLock-equivalent transaction (a raw
     // BEGIN IMMEDIATE on a second connection) on the `tasks` table to force
     // genuine SQLITE_BUSY contention -- see that fixture's own doc comment
-    // and test_db_busy_fixture.cpp's identical usage. Unlike that test, the
-    // connection under contention here is deliberately left at DbFixture's
-    // ambient (long, 5000ms) busy-timeout: design spec §8's DoD is about a
-    // *real* pool-starvation/contention window with genuine retries actually
-    // succeeding once the lock releases, not an artificially-short timeout
-    // that always fails fast. DbBusyFixture releases its lock (a plain
-    // ROLLBACK in its destructor) after a short, deterministic delay from a
-    // background thread -- started only after every board's MoveTaskPosition
-    // call is already in flight and blocked -- so every contending call
-    // either (a) throws "database is locked" because a shorter, per-call
-    // budget this test enforces on top elapsed first, or (b) blocks past
-    // that budget and is left running past the assertion point; either way,
-    // once every call has settled (thrown or returned), a fresh read proves
-    // no thrown call's move ever actually landed.
+    // and test_db_busy_fixture.cpp's identical usage.
+    //
+    // Fix-round-1 (see task-20-fix-round-1-report.md) replaced the original
+    // version's ambient, unshortened busy-timeout with `ScopedShortBusyTimeout`
+    // + `drainPoolIdleMappers()` below (the same recipe `test_bookmark_model.
+    // cpp`/`test_paste_model.cpp` use for the identical shape) after direct
+    // measurement showed the original left every one of the 32 concurrent
+    // calls failing near-instantly with a genuine `SQLITE_BUSY`, 0 ever
+    // succeeding -- so the "succeeded calls also apply correctly" half of
+    // this test's own invariant was never exercised. Two things had to be
+    // fixed, not one, both confirmed empirically before landing on the final
+    // numbers below (task-20-fix-round-1-report.md has the full account):
+    //
+    // 1. `ScopedShortBusyTimeout` alone (a `SetPostConnectedHook`-installed
+    //    `PRAGMA busy_timeout`) was not enough for `GlobalDataMapperPool()`-
+    //    acquired connections: every failure still arrived at ~5.1-5.2s,
+    //    matching `DbFixture`'s baked-in connection-string `Timeout=5000` --
+    //    the sqliteodbc driver's own *outer* retry ceiling, which the PRAGMA
+    //    does not touch (`db_busy_fixture.hpp`'s own doc comment already
+    //    names this bound). `ScopedShortBusyTimeout` now also shortens the
+    //    *default* connection string's `Timeout=` for its lifetime (mirroring
+    //    test_db_busy_fixture.cpp's combined recipe), confirmed via temporary
+    //    instrumentation to move real failures down to the intended
+    //    sub-second range.
+    // 2. A genuine bug, not just a tuning gap: the original code released
+    //    `DbBusyFixture`'s lock implicitly, by letting it go out of scope at
+    //    the very end of this `TEST_CASE` -- *after* every worker thread had
+    //    already been joined. The lock was therefore held for the entire
+    //    32-way contention phase, with no window in which any worker could
+    //    ever observe it released. `busy` is now a `std::unique_ptr` the
+    //    releaser thread itself `reset()`s after `kLockHold`, so the
+    //    `ROLLBACK` genuinely fires while workers are still running.
+    //
+    // With both fixed, 32 real `std::thread`s hammering SQLite's single
+    // writer lock (rollback-journal mode, no WAL) produces a severe, genuine
+    // thundering-herd: raising `kShortBusyTimeoutMs` well beyond a couple of
+    // seconds does not meaningfully change the outcome mix (confirmed up to
+    // 20s) -- almost every contender exhausts its own busy-wait budget
+    // together, and only one or two threads actually land their write in any
+    // given run. That skew is real SQLite behavior under this much raw
+    // concurrent contention, not a test defect: `kShortBusyTimeoutMs = 2000`
+    // / `kLockHold = 150ms` reliably (7 consecutive runs observed, including
+    // a fresh-DB cold run: task-20-fix-round-1-report.md) produces both
+    // `succeeded.load() > 0` (1-2 of 32) and `failed.load() > 0` (30-31 of
+    // 32) -- a small but genuine, reproducible mix that actually exercises
+    // both branches of this test's invariant, which is what the DoD needs.
     DbFixture fixture;
 
     constexpr int kBoards = 32;
@@ -369,27 +493,53 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
         boards.push_back(seedBoard("alice", "Contention Board " + std::to_string(i)));
     }
 
+    // Short, known busy-timeout (and outer connection-string ceiling -- see
+    // ScopedShortBusyTimeout's own doc comment) for every connection opened
+    // from here on -- installed only after seedBoard()'s own setup
+    // acquisitions above (those are uncontended and irrelevant to the race
+    // under test; leaving them on the ambient/default timeout keeps this
+    // hook's window as narrow as possible, the same discipline
+    // test_bookmark_model.cpp's TEST_CASE follows). See this test's opening
+    // comment for why 2000ms (not the smaller values a single-writer
+    // scenario would need) is what real measurement settled on here.
+    constexpr int kShortBusyTimeoutMs = 2000;
+    const ScopedShortBusyTimeout shortTimeout{kShortBusyTimeoutMs};
+
+    // Force every pool-idle mapper out so the *next* 32 concurrent
+    // Acquire() calls each construct a genuinely fresh SqlConnection under
+    // the hook just installed above (db_pool_drain.hpp's own doc comment:
+    // SetPostConnectedHook only fires for a newly-constructed connection,
+    // never for an idle one handed back as-is). This still guarantees every
+    // one of the 32 racing threads gets a connection created after the hook
+    // was installed even though kBoards (32) exceeds
+    // Lightweight::DefaultPoolConfig.maxSize (16, this project's configured
+    // LIGHTWEIGHT_POOL_MAX_SIZE): the pool's growth strategy is
+    // BoundedOverflow, whose non-blocking Acquire() (Pool.hpp) creates a
+    // brand-new DataMapper *whenever the idle list is empty*, with no cap on
+    // concurrent creation -- only Return() caps how many go back to idle at
+    // maxSize. Draining empties that idle list once; nothing this test does
+    // afterward returns a mapper to it before all 32 threads have already
+    // acquired their own (each board's MoveTaskPosition either throws or
+    // returns without any thread releasing its mapper back into another
+    // thread's path), so every single Acquire() among the 32 -- not just the
+    // first 16 -- observes an empty idle list and constructs fresh.
+    auto drained = drainPoolIdleMappers();
+
     // Hold the `tasks` table locked on a second connection for a short,
     // bounded window -- long enough that every board's own MoveTaskPosition
     // genuinely contends against it (each acquires its own connection via
     // GlobalDataMapperPool(), a real SQLite writer lock collision, not a
-    // simulated one), short enough that the ones which do end up blocked
-    // (rather than timing out) still resolve well within this test's own
-    // budget once the lock releases.
-    constexpr auto kLockHold = 300ms;
-    DbBusyFixture busy{"tasks"};
-    std::thread releaser{[kLockHold] {
+    // simulated one). `busy` is a `std::unique_ptr` the releaser thread
+    // itself `reset()`s after `kLockHold` -- not a plain local left to go out
+    // of scope at the end of the `TEST_CASE` -- so the lock is genuinely
+    // released while workers are still running rather than only after every
+    // one of them has already been joined (see this test's opening comment,
+    // point 2, for the real bug this replaces).
+    constexpr auto kLockHold = 150ms;
+    auto busy = std::make_unique<DbBusyFixture>("tasks");
+    std::thread releaser{[kLockHold, &busy] {
         std::this_thread::sleep_for(kLockHold);
-        // DbBusyFixture's own destructor issues the ROLLBACK that releases
-        // the lock -- nothing to do here beyond waiting; the actual release
-        // happens when `busy` goes out of scope below, after this thread is
-        // joined. This thread's only job is to prove the lock genuinely
-        // outlives at least one contending call's own busy-timeout window
-        // (kLockHold > each call's effective busy_timeout, asserted
-        // implicitly by at least one Conflict/failure being observed below
-        // in the common case -- but not REQUIRE'd, since a slow-enough CI
-        // box could have every call block past kLockHold and still succeed,
-        // which is equally a pass for this test's actual invariant).
+        busy.reset();  // ~DbBusyFixture() issues ROLLBACK here, releasing the lock now.
     }};
 
     // Fire all 32 boards' MoveTaskPosition concurrently, each on its own
@@ -398,7 +548,9 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
     // principal is scoped per-thread via ScopedContext (thread_local storage
     // -- see morph::session::detail::ScopedContext), so this is safe despite
     // sharing no state between threads beyond the boards vector (read-only
-    // after setup) and the atomics below.
+    // after setup) and the atomics below. `drained` (the batch drainPoolIdle
+    // Mappers() is holding) stays alive across this entire loop and the
+    // joins below, per its own contract -- released only afterward.
     std::vector<std::thread> workers;
     std::vector<bool> threw(kBoards, false);
     std::atomic<int> succeeded{0};
@@ -428,13 +580,21 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
         worker.join();
     }
     releaser.join();
+    // Every one of the 32 threads has now made (and released, on the
+    // Update()/throw path) its own pool acquisition -- safe to let the
+    // drained batch go now, before the hook itself is torn down at scope
+    // exit.
+    drained.clear();
     CAPTURE(succeeded.load());
     CAPTURE(failed.load());
-    // At least one call must have observed genuine contention -- otherwise
-    // this test would vacuously pass without ever exercising SQLITE_BUSY at
-    // all (DbBusyFixture's lock is held for kLockHold, comfortably longer
-    // than a single uncontended MoveTaskPosition takes).
+    // Both halves of this test's invariant must actually be exercised, not
+    // just the "never double-applies" half -- otherwise a regression that
+    // broke the *successful* path's exactly-once behavior would pass
+    // silently. Measured repeatedly at these tuned values
+    // (task-20-fix-round-1-report.md): both sides reliably fire.
     CHECK(failed.load() > 0);
+    CHECK(succeeded.load() > 0);
+    REQUIRE(succeeded.load() + failed.load() == kBoards);
 
     // The DoD invariant: re-read every board fresh, after every call has
     // settled and the lock is long gone, and confirm no board whose call
