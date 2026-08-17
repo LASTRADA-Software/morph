@@ -63,8 +63,14 @@ enum class Role : std::uint8_t { Viewer, Member, Manager };
             return "Member";
         case Role::Manager:
             return "Manager";
+        default:
+            // Role is a closed, 3-value uint8_t enum -- every value is
+            // handled above. This arm exists only to satisfy
+            // -Wswitch-default under -Weverything (the switch is already
+            // exhaustive; see examples/pastebin/units.hpp's identical
+            // UnitTraits<Unit>::meta for the same accepted pattern).
+            return "Viewer";
     }
-    return "Viewer";
 }
 
 /// @brief Parses @p text back into a `Role`.
