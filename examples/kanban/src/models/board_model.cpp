@@ -89,6 +89,47 @@ void requireColumnBelongsToProject(::Lightweight::DataMapper& mapper, const db::
     }
 }
 
+/// @brief Confirms @p swimlaneId names a real swimlane belonging to
+///        @p project -- sibling of `requireColumnBelongsToProject` above,
+///        same design spec §2 "trust nothing read before this call,
+///        re-check inside the transaction" discipline.
+void requireSwimlaneBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project,
+                                      SwimlaneId swimlaneId) {
+    if (!swimlaneId.hasValue() || *swimlaneId < 0) {
+        throw NotFound{"swimlane does not belong to this project"};
+    }
+    auto rows = mapper.Query<db::SwimlaneRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::id>, "=",
+                           static_cast<std::uint64_t>(*swimlaneId))
+                    .Where(::Lightweight::FieldNameOf<&db::SwimlaneRecord::project>, "=", project.id.Value())
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{"swimlane does not belong to this project"};
+    }
+}
+
+/// @brief Confirms @p taskId names a real task belonging to @p project --
+///        sibling of `requireColumnBelongsToProject` above, same design spec
+///        §2 "trust nothing read before this call, re-check inside the
+///        transaction" discipline: `TaskRecord::project` is FK-shaped but not
+///        FK-enforced by SQLite, and a task from another project must
+///        surface as a typed error here, not a silent cross-tenant read or
+///        write into a foreign row.
+void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project,
+                                  TaskId taskId) {
+    if (!taskId.hasValue() || *taskId < 0) {
+        throw NotFound{"task does not belong to this project"};
+    }
+    auto rows = mapper.Query<db::TaskRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
+                           static_cast<std::uint64_t>(*taskId))
+                    .Where(::Lightweight::FieldNameOf<&db::TaskRecord::project>, "=", project.id.Value())
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{"task does not belong to this project"};
+    }
+}
+
 [[nodiscard]] GetBoardResult buildState(::Lightweight::DataMapper& mapper, const db::ProjectRecord& project) {
     GetBoardResult result;
     result.projectId = ProjectId{static_cast<std::int64_t>(project.id.Value())};
@@ -187,14 +228,18 @@ void BoardModel::logAction(const Action& action, const Result& result) const {
     _log->flush();
 }
 
-void BoardModel::requireRole(Role minimum) const {
+void BoardModel::requireRoleOn(std::uint64_t projectDbId, Role minimum) const {
     const auto& principal = requireOwner();
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
-    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     const auto role = loadCallerRole(mapper.Get(), projectDbId, principal);
     if (!role.has_value() || static_cast<std::uint8_t>(*role) < static_cast<std::uint8_t>(minimum)) {
         throw Forbidden{"caller's role does not permit this action"};
     }
+}
+
+void BoardModel::requireRole(Role minimum) const {
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    requireRoleOn(projectDbId, minimum);
 }
 
 GetBoardResult BoardModel::execute(const OpenBoard& action) {
@@ -203,6 +248,15 @@ GetBoardResult BoardModel::execute(const OpenBoard& action) {
     }
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     auto project = loadProjectById(mapper.Get(), static_cast<std::uint64_t>(*action.projectId));
+    // C1 fix: gated against the *target* project (project.id), not
+    // `_projectIdStr` -- that member is what this very call is about to set
+    // on success, so `requireRole(Role minimum)`'s ambient-attach-state form
+    // cannot be used here. Checked after `loadProjectById` resolves the
+    // project (so a nonexistent project still reports NotFound, not
+    // Forbidden) but before `buildState` returns any board contents, so a
+    // principal with no standing on this project never observes its data by
+    // attaching to it.
+    requireRoleOn(project.id.Value(), Role::Viewer);
     _projectIdStr = std::to_string(project.id.Value());
     return buildState(mapper.Get(), project);
 }
@@ -211,6 +265,7 @@ GetBoardResult BoardModel::execute(const GetBoardState& /*action*/) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"GetBoardState: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Viewer);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     return buildState(mapper.Get(), loadProjectById(mapper.Get(), projectDbId));
@@ -303,6 +358,15 @@ GetBoardResult BoardModel::execute(const CreateTask& action) {
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
 
+    // C2 fix: re-check both destination FKs belong to this project before
+    // trusting them -- a Member of a different project must not be able to
+    // create a task pointing at this project's column/swimlane by id
+    // (design spec §2's "trust nothing read before this call" discipline,
+    // already applied to MoveTaskPosition's destination but previously
+    // missing here).
+    requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
+    requireSwimlaneBelongsToProject(mapper.Get(), project, action.swimlaneId);
+
     auto existing = mapper->Query<db::TaskRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=",
                                static_cast<std::uint64_t>(*action.columnId))
@@ -346,6 +410,11 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
     auto project = loadProjectById(mapper.Get(), projectDbId);
+
+    // C2 fix: without this, a Member of a different project could attach a
+    // comment to any task on the server by id, which then surfaces in that
+    // task's *other* project's board view (buildState's comment list).
+    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
     db::CommentRecord rec;
@@ -399,17 +468,25 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
             if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
                 throw ::kanban::KanbanError{"MoveTaskPosition: corrupt ledger entry"};
             }
-            // Design spec §4: a ledger-hit replay reproduces the exact prior
-            // action bit-for-bit (same payload, same result), so logging it
-            // here unconditionally -- the same way the framework's own
-            // auto-append would for a holder-wrapped instance -- is what
-            // creates the exactly-once-replay's *duplicate* journal entry
-            // that execute(GetActivity) must collapse on the read side,
-            // rather than trying to suppress the second write here.
-            logAction(action, replayed);
+            // Design spec §4 (corrected): a ledger hit means this call
+            // performed nothing new -- it only returned a previously-stored
+            // result -- so there is nothing to journal here. Verified against
+            // a live `FileActionLog` capture during real `RemoteServer`
+            // dispatch: the framework's own auto-append does not produce a
+            // second entry on this path, so logging a replay unconditionally
+            // was `BoardModel`'s own self-inflicted duplicate, not something
+            // the framework required compensating for.
             return replayed;
         }
     }
+
+    // C2 fix: without this, a Member of a different project could move any
+    // task on the server by id -- the checks below only ever verified the
+    // *destination* column/swimlane belong to this project, never the task
+    // being moved. Checked right after the ledger-hit branch and before the
+    // destination checks, so a Member of another project cannot move this
+    // project's task at all, regardless of what destination they name.
+    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
 
     requireColumnBelongsToProject(mapper.Get(), project, action.columnId);
 
@@ -575,6 +652,7 @@ GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"GetEventsSince: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Viewer);
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
 
@@ -600,6 +678,7 @@ GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
     if (!_projectIdStr.has_value()) {
         throw NotFound{"GetActivity: handler was never attached via OpenBoard"};
     }
+    requireRole(Role::Viewer);
     GetActivityResult result;
     if (!_log) {
         return result;  // no log attached (design spec §4: Local-mode-without-attach is a stated limitation)
@@ -609,27 +688,11 @@ GetActivityResult BoardModel::execute(const GetActivity& /*action*/) {
     // (design spec §4), but not a pattern to copy at bigger scale without
     // re-checking that cost.
     auto entries = _log->entries(*_projectIdStr);
-    std::string lastActionType;
-    std::string lastPayload;
-    bool haveLast = false;
     for (const auto& entry : entries) {
-        // Design spec §4's ledger-hit double-journal fix: a §1 ledger-hit
-        // replay re-appends the exact same actionType+payload bit-for-bit
-        // (it's the same serialized action replayed verbatim), since the
-        // framework has no way to mark it as a dedup at the point BoardModel
-        // records it (see logAction's caller in execute(MoveTaskPosition)).
-        // Collapsing consecutive identical rows here, on the read side, is
-        // the fix -- not preventing the second write.
-        if (haveLast && entry.actionType == lastActionType && entry.payload == lastPayload) {
-            continue;
-        }
         result.events.push_back({.actionType = entry.actionType,
                                   .principal = entry.principal,
                                   .timestampMs = entry.timestampMs,
                                   .summary = entry.actionType + " by " + entry.principal});
-        lastActionType = entry.actionType;
-        lastPayload = entry.payload;
-        haveLast = true;
     }
     return result;
 }

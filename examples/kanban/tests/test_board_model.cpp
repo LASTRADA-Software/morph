@@ -291,8 +291,7 @@ TEST_CASE("GetEventsSince returns every event after the cursor, oldest first", "
     REQUIRE(second.events.size() == 1);
 }
 
-TEST_CASE("GetActivity lists journal entries for this board, collapsing an exactly-once replay's duplicate",
-          "[kanban][model]") {
+TEST_CASE("GetActivity lists journal entries for this board", "[kanban][model]") {
     DbFixture fixture;
     auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
     const auto projectId = createProjectAs("alice", "Sprint Board");
@@ -321,7 +320,8 @@ TEST_CASE("GetActivity without an attached log returns an empty stream, not an e
     CHECK(activity.events.empty());
 }
 
-TEST_CASE("GetActivity collapses a repeated-opId MoveTaskPosition replay into a single entry", "[kanban][model]") {
+TEST_CASE("GetActivity shows a single entry for a repeated-opId MoveTaskPosition -- the replay journals nothing",
+          "[kanban][model]") {
     DbFixture fixture;
     auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
     const auto projectId = createProjectAs("alice", "Sprint Board");
@@ -340,8 +340,10 @@ TEST_CASE("GetActivity collapses a repeated-opId MoveTaskPosition replay into a 
 
     model.execute(kanban::MoveTaskPosition{
         .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
-    // Replaying the identical opId must not double-journal (design spec §4's
-    // ledger-hit double-journal fix, collapsed on the read side).
+    // Replaying the identical opId must not double-journal (design spec §4,
+    // corrected: a ledger hit performs nothing new and no longer logs
+    // anything -- verified here by confirming only one entry exists, not by
+    // a read-side collapse).
     model.execute(kanban::MoveTaskPosition{
         .taskId = taskId, .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = "op-1"});
 
@@ -349,4 +351,187 @@ TEST_CASE("GetActivity collapses a repeated-opId MoveTaskPosition replay into a 
     const auto moveCount = std::ranges::count_if(
         activity.events, [](const auto& event) { return event.actionType == "MoveTaskPosition"; });
     CHECK(moveCount == 1);
+}
+
+// C2: cross-tenant write re-checks. bob is a Member of project A only;
+// project B belongs to alice and bob has no standing on it whatsoever.
+// Each of these attempts a write against project B's own column/task ids
+// while bob's handler is attached to *project A* -- the attack C2
+// describes is supplying another project's row id by number, not attaching
+// to the wrong project (that is C1's attack, covered elsewhere). Every one
+// of these must throw NotFound, not silently corrupt or leak into the
+// other project's board.
+
+TEST_CASE("CreateTask rejects a columnId that belongs to a different project", "[kanban][model][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectA, .principal = "bob", .role = kanban::Role::Member});
+    }
+
+    // Seed project B's own column/swimlane as alice.
+    kanban::ColumnId columnOnB;
+    kanban::SwimlaneId swimlaneOnB;
+    {
+        kanban::BoardModel modelB;
+        const ScopedPrincipal alice{"alice"};
+        modelB.execute(kanban::OpenBoard{.projectId = projectB});
+        columnOnB = modelB.execute(kanban::CreateColumn{.name = "B's column", .wipLimit = 0}).columns.front().id;
+        swimlaneOnB = modelB.execute(kanban::CreateSwimlane{.name = "B's swimlane"}).swimlanes.front().id;
+    }
+
+    // bob attaches to project A (where he is a genuine Member) and tries to
+    // create a task pointing at project B's column/swimlane by id.
+    kanban::BoardModel modelA;
+    const ScopedPrincipal bob{"bob"};
+    modelA.execute(kanban::OpenBoard{.projectId = projectA});
+    CHECK_THROWS_AS(
+        modelA.execute(kanban::CreateTask{.columnId = columnOnB, .swimlaneId = swimlaneOnB, .title = "Sneaky task"}),
+        kanban::NotFound);
+}
+
+TEST_CASE("CreateTask rejects a swimlaneId that belongs to a different project, even with a valid columnId",
+          "[kanban][model][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectA, .principal = "bob", .role = kanban::Role::Member});
+    }
+
+    kanban::SwimlaneId swimlaneOnB;
+    {
+        kanban::BoardModel modelB;
+        const ScopedPrincipal alice{"alice"};
+        modelB.execute(kanban::OpenBoard{.projectId = projectB});
+        swimlaneOnB = modelB.execute(kanban::CreateSwimlane{.name = "B's swimlane"}).swimlanes.front().id;
+    }
+
+    kanban::BoardModel modelA;
+    const ScopedPrincipal bob{"bob"};
+    modelA.execute(kanban::OpenBoard{.projectId = projectA});
+    const auto columnOnA = modelA.execute(kanban::CreateColumn{.name = "A's column", .wipLimit = 0}).columns.front().id;
+    CHECK_THROWS_AS(
+        modelA.execute(kanban::CreateTask{.columnId = columnOnA, .swimlaneId = swimlaneOnB, .title = "Sneaky task"}),
+        kanban::NotFound);
+}
+
+TEST_CASE("AddComment rejects a taskId that belongs to a different project", "[kanban][model][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectA, .principal = "bob", .role = kanban::Role::Member});
+    }
+
+    kanban::TaskId taskOnB;
+    {
+        kanban::BoardModel modelB;
+        const ScopedPrincipal alice{"alice"};
+        modelB.execute(kanban::OpenBoard{.projectId = projectB});
+        const auto colB = modelB.execute(kanban::CreateColumn{.name = "B's column", .wipLimit = 0}).columns.front().id;
+        const auto swB = modelB.execute(kanban::CreateSwimlane{.name = "B's swimlane"}).swimlanes.front().id;
+        taskOnB = modelB.execute(kanban::CreateTask{.columnId = colB, .swimlaneId = swB, .title = "B's task"})
+                      .tasks.front()
+                      .id;
+    }
+
+    // bob, attached to project A, tries to inject a comment onto project
+    // B's task by id -- if this succeeded, the comment would surface in
+    // project B's own GetBoardState (buildState's comment list), a
+    // cross-tenant content injection into a board bob has no standing on.
+    kanban::BoardModel modelA;
+    const ScopedPrincipal bob{"bob"};
+    modelA.execute(kanban::OpenBoard{.projectId = projectA});
+    CHECK_THROWS_AS(modelA.execute(kanban::AddComment{.taskId = taskOnB, .body = "sneaky comment"}),
+                    kanban::NotFound);
+
+    // Confirm no injection happened: project B's own board still shows zero
+    // comments.
+    kanban::BoardModel checkB;
+    const ScopedPrincipal alice{"alice"};
+    const auto stateB = checkB.execute(kanban::OpenBoard{.projectId = projectB});
+    CHECK(stateB.comments.empty());
+}
+
+TEST_CASE("MoveTaskPosition rejects a taskId that belongs to a different project", "[kanban][model][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Project A");
+    const auto projectB = createProjectAs("alice", "Project B");
+    {
+        kanban::ProjectAdminModel admin;
+        const ScopedPrincipal alice{"alice"};
+        admin.execute(kanban::SetMemberRole{.projectId = projectA, .principal = "bob", .role = kanban::Role::Member});
+    }
+
+    kanban::TaskId taskOnB;
+    {
+        kanban::BoardModel modelB;
+        const ScopedPrincipal alice{"alice"};
+        modelB.execute(kanban::OpenBoard{.projectId = projectB});
+        const auto colB = modelB.execute(kanban::CreateColumn{.name = "B's column", .wipLimit = 0}).columns.front().id;
+        const auto swB = modelB.execute(kanban::CreateSwimlane{.name = "B's swimlane"}).swimlanes.front().id;
+        taskOnB = modelB.execute(kanban::CreateTask{.columnId = colB, .swimlaneId = swB, .title = "B's task"})
+                      .tasks.front()
+                      .id;
+    }
+
+    // bob, attached to project A, tries to move project B's task into one
+    // of project A's own columns by id.
+    kanban::BoardModel modelA;
+    const ScopedPrincipal bob{"bob"};
+    modelA.execute(kanban::OpenBoard{.projectId = projectA});
+    const auto colA = modelA.execute(kanban::CreateColumn{.name = "A's column", .wipLimit = 0}).columns.front().id;
+    const auto swA = modelA.execute(kanban::CreateSwimlane{.name = "A's swimlane"}).swimlanes.front().id;
+    CHECK_THROWS_AS(modelA.execute(kanban::MoveTaskPosition{
+                        .taskId = taskOnB, .columnId = colA, .swimlaneId = swA, .position = 0, .opId = ""}),
+                    kanban::NotFound);
+
+    // Confirm no orphaning happened: project B's task is still there, still
+    // in its own project's column.
+    kanban::BoardModel checkB;
+    const ScopedPrincipal alice{"alice"};
+    const auto stateB = checkB.execute(kanban::OpenBoard{.projectId = projectB});
+    const auto found = std::ranges::find_if(stateB.tasks, [&](const auto& t) { return t.id == taskOnB; });
+    REQUIRE(found != stateB.tasks.end());
+}
+
+// Ledger triage item #14: the swimlane-belongs-to-project check
+// (MoveTaskPosition's inline check next to requireColumnBelongsToProject)
+// had no dedicated unit test -- only ever exercised implicitly by every
+// other test supplying a real swimlane. Same shape as "MoveTaskPosition
+// into a column deleted mid-drag throws NotFound" above, but for the
+// swimlane half of the destination.
+TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, not a silent orphan write",
+          "[kanban][model]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+    // A swimlane id that was never created -- stands in for "deleted
+    // between GetBoard and MoveTaskPosition" (this rung has no
+    // DeleteSwimlane action yet, same rationale as the column-deleted test
+    // above).
+    const kanban::SwimlaneId neverExisted{99999};
+
+    CHECK_THROWS_AS(model.execute(kanban::MoveTaskPosition{.taskId = taskId,
+                                                            .columnId = col1,
+                                                            .swimlaneId = neverExisted,
+                                                            .position = 0,
+                                                            .opId = ""}),
+                    kanban::NotFound);
 }

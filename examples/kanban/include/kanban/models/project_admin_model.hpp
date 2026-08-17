@@ -44,6 +44,15 @@ class ProjectAdminModel {
 /// @brief Mints session tokens -- mirrors `bookmarks::AuthModel` exactly.
 class AuthModel {
   public:
+    /// @brief Mints a signed session token for @p action's username, with no
+    ///        registration or membership check (design spec's own stated
+    ///        scope cut, inherited from `bookmarks::AuthModel`: any
+    ///        syntactically valid username is accepted).
+    /// @param action The username to mint a token for.
+    /// @return The signed bearer token and the verified username.
+    /// @throws ValidationError if `action.validate()` rejects the username,
+    ///         if the username falls in the reserved `system:` principal
+    ///         namespace, or if no token issuer has been installed.
     LoginResult execute(const Login& action);
 };
 

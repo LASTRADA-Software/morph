@@ -35,6 +35,11 @@ class BoardModel {
     /// @throws ValidationError if `action.validate()` rejects the request
     ///         (an unset `projectId`).
     /// @throws NotFound if `action.projectId` names no project.
+    /// @throws Forbidden if the caller has no role (at least `Role::Viewer`)
+    ///         on `action.projectId` -- checked against the *target* project,
+    ///         not this handler's (not-yet-set) attach state, so an
+    ///         authenticated principal with no standing on the project
+    ///         cannot read it merely by attaching.
     GetBoardResult execute(const OpenBoard& action);
 
     /// @brief Returns the current state of this handler's attached board.
@@ -42,6 +47,8 @@ class BoardModel {
     /// @return The attached board's full state.
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
     ///         or if the attached project no longer exists.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Viewer` (i.e. the caller has no role at all).
     GetBoardResult execute(const GetBoardState& action);
 
     /// @brief Creates a new column on this handler's attached board.
@@ -75,7 +82,9 @@ class BoardModel {
     ///         (an unset `columnId`/`swimlaneId`, or an empty or
     ///         over-length title).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
-    ///         or if the attached project no longer exists.
+    ///         or if the attached project no longer exists, or if
+    ///         `action.columnId`/`action.swimlaneId` does not belong to the
+    ///         attached project.
     /// @throws Forbidden if the caller's role on the attached project is
     ///         below `Role::Member`.
     GetBoardResult execute(const CreateTask& action);
@@ -86,7 +95,8 @@ class BoardModel {
     /// @throws ValidationError if `action.validate()` rejects the request
     ///         (an unset `taskId` or an empty body).
     /// @throws NotFound if this handler was never attached via `OpenBoard`,
-    ///         or if the attached project no longer exists.
+    ///         or if the attached project no longer exists, or if
+    ///         `action.taskId` does not belong to the attached project.
     /// @throws Forbidden if no principal is authenticated on the calling
     ///         session, or the caller's role on the attached project is
     ///         below `Role::Member`.
@@ -102,6 +112,8 @@ class BoardModel {
     ///         lookup, so a demoted caller replaying a known `opId` cannot
     ///         retrieve a stored result their current role could no longer
     ///         produce.
+    /// @throws NotFound if `action.taskId` does not belong to the attached
+    ///         project, or if `action.columnId`/`action.swimlaneId` does not.
     GetBoardResult execute(const MoveTaskPosition& action);
 
     /// @brief Design spec §1's polling read side -- lists every
@@ -112,19 +124,19 @@ class BoardModel {
     /// @throws ValidationError if `action.validate()` rejects the request
     ///         (a negative `lastEventId`).
     /// @throws NotFound if this handler was never attached via `OpenBoard`.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Viewer` (i.e. the caller has no role at all).
     GetEventsSinceResult execute(const GetEventsSince& action);
 
     /// @brief Design spec §4's activity stream -- derived from `IActionLog::
-    ///        entries(entityKey)`, not a parallel table. Collapses consecutive
-    ///        `LogEntry` rows with identical `actionType`+`payload` on the read
-    ///        side, since a §1 ledger-hit replay re-appends the exact same
-    ///        entry the framework's own auto-append machinery cannot suppress
-    ///        (see `attachActionLog`'s doc comment and design spec §4).
+    ///        entries(entityKey)`, not a parallel table.
     /// @param action Unused -- carries no fields.
-    /// @return Every non-collapsed activity entry for this handler's attached
-    ///         board, oldest first. Empty (not an error) if this handler has
-    ///         no log attached.
+    /// @return Every activity entry for this handler's attached board,
+    ///         oldest first. Empty (not an error) if this handler has no log
+    ///         attached.
     /// @throws NotFound if this handler was never attached via `OpenBoard`.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Viewer` (i.e. the caller has no role at all).
     GetActivityResult execute(const GetActivity& action);
 
     /// @brief Attaches a durable action log and this instance's stable
@@ -180,12 +192,26 @@ class BoardModel {
     ///        shape as `ProjectAdminModel::requireRole` -- not shared code
     ///        (design spec §3): `BoardModel` and `ProjectAdminModel` are
     ///        separate classes with separate mapper/entity access, so each
-    ///        gets its own copy.
+    ///        gets its own copy. Delegates to `requireRoleOn` using this
+    ///        handler's own `_projectIdStr` as the target project -- every
+    ///        call site attached via `OpenBoard` keeps working unchanged.
     /// @param minimum The minimum role the caller must hold.
     /// @throws Forbidden if no principal is authenticated, or the caller
     ///         has no role on the attached project, or a role below
     ///         `minimum`.
     void requireRole(Role minimum) const;
+
+    /// @brief Throws `Forbidden` unless the calling principal's role on
+    ///        @p projectDbId is at least `minimum`. The explicit-project
+    ///        variant `requireRole(Role)` cannot use: `execute(OpenBoard)`
+    ///        must gate access to the project it is *attaching to*, before
+    ///        `_projectIdStr` (which `OpenBoard` itself sets) is available
+    ///        to read.
+    /// @param projectDbId The project to check the caller's role against.
+    /// @param minimum The minimum role the caller must hold.
+    /// @throws Forbidden if no principal is authenticated, or the caller
+    ///         has no role on @p projectDbId, or a role below `minimum`.
+    void requireRoleOn(std::uint64_t projectDbId, Role minimum) const;
 
     /// @brief The project this handler is attached to, cached on the first
     ///        successful `execute(OpenBoard)`. Also set (independently) by

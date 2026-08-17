@@ -307,11 +307,21 @@ TEST_CASE("A Viewer's role on one project does not grant Member-level access on 
     awaitQt(bobOnA.execute(OpenBoard{.projectId = projectA.id}));
     CHECK_NOTHROW(awaitQt(bobOnA.execute(CreateColumn{.name = "Bob's column on A", .wipLimit = 0})));
 
-    // alice has no role at all on project B -- her attempt to attach and
-    // write there must be Forbidden, not silently succeed just because she
-    // is a Manager elsewhere.
+    // alice has no role at all on project B -- her attempt to even attach
+    // (read) there must be Forbidden, not silently succeed just because she
+    // is a Manager elsewhere. C1 fix: OpenBoard itself is now gated
+    // (Role::Viewer minimum), so this must fail before any write is ever
+    // attempted -- this line used to succeed and only the subsequent write
+    // was asserted Forbidden, which demonstrated the read-side bypass rather
+    // than proving isolation.
     BridgeHandler<BoardModel, AllowShared> aliceOnB{rig.bridge(0), rig.executor()};
-    awaitQt(aliceOnB.execute(OpenBoard{.projectId = projectB.id}));
+    bool openFailed = false;
+    aliceOnB.execute(OpenBoard{.projectId = projectB.id}).onError([&openFailed](auto) { openFailed = true; });
+    REQUIRE(pumpUntil([&openFailed] { return openFailed; }));
+
+    // Even though OpenBoard failed, exercise the write path too -- a
+    // handler whose attach failed must not somehow still permit a write
+    // through the same primary.
     bool failed = false;
     aliceOnB.execute(CreateColumn{.name = "Should be forbidden", .wipLimit = 0})
         .onError([&failed](auto) { failed = true; });

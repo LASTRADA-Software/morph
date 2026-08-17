@@ -300,33 +300,28 @@ since none exists)**:
   rung's scale (per-board activity, not global) but worth a one-line note in
   the model's own doc comment so a future rung at bigger scale doesn't
   assume the same approach is free.
-- **Ledger hits (§1) must not double-journal.** The registrar that
-  auto-appends a `LogEntry` on every successful `execute()`
+- **Ledger hits (§1) must not double-journal — verified empirically, not
+  assumed.** A live `FileActionLog` was captured during real `RemoteServer`
+  dispatch (`test_app.cpp`'s own raw re-read of the on-disk file) and showed
+  **exactly one** `BoardModel` journal entry per dispatched action, including
+  across a ledger-hit replay: the framework's auto-append
   (`include/morph/core/registry.hpp`'s `ActionExecuteRegistry::
-  registerAction` runner) fires unconditionally on *any* successful return,
-  including a §1 ledger-hit replay that returns the stored result without
-  touching the database — so a retried `MoveTaskPosition` would otherwise
-  appear twice in the activity stream. `LogEntry::idempotencyKey` exists
-  precisely for this ("optional dedup token for outbox-relayed entries"),
-  and `InMemoryActionLog`/durable sinks already dedup on a non-empty one
-  (`IActionLog::append()`'s documented contract) — but the auto-append path
-  never populates it today (verified: it is not set anywhere in
-  `registry.hpp`'s runner), and setting `LogEntry::idempotencyKey = opId`
-  is not reachable from inside `execute(MoveTaskPosition)` itself: the
-  auto-append happens in the *caller* (the registrar's runner), after
-  `execute()` already returned, with no visibility into the action's own
-  `opId` field beyond what it already serializes into `payload`. **Decision**:
-  since the write side cannot be fixed without a framework change to the
-  registrar (out of scope for this rung's app code), `BoardModel` suppresses
-  the duplicate on the *read* side instead: `GetActivity`'s
-  `entries(projectId)`-to-`ActivityEvent` mapping collapses consecutive
-  `LogEntry` rows with identical `actionType`+`payload` (a ledger hit
-  reproduces the *exact* prior payload bit-for-bit, since it's the same
-  serialized action replayed verbatim) into one `ActivityEvent`, rather than
-  attempting to prevent the second journal write. This keeps the fix
-  entirely inside `BoardModel`, at the one place (the activity view) where
-  the duplicate is actually observable, instead of reaching into the
-  framework's auto-append path.
+  registerAction` runner → `IModelHolder::recordIfAttached`) does **not**
+  produce a second entry on this path. The original draft of this section
+  reasoned from the runner's source alone and concluded the opposite —
+  that a wrong premise. The actual duplicate seen in earlier testing was
+  `BoardModel`'s own doing: `execute(MoveTaskPosition)`'s ledger-hit branch
+  called `logAction(action, replayed)` before returning, claiming
+  `outcome: Succeeded` for an operation the call didn't perform this time (it
+  only returned a previously-stored result). **Fix**: that call was deleted —
+  a ledger hit performs nothing new and journals nothing. `GetActivity` no
+  longer needs (and no longer has) a read-side collapse: it maps
+  `entries(projectId)` to `ActivityEvent` directly, one entry per journal
+  row, with no consecutive-duplicate suppression. The earlier collapse
+  approach was also independently wrong on its own terms — it dropped *any*
+  two consecutive entries with identical `actionType`+`payload`, which would
+  have silently under-reported two genuinely distinct identical actions
+  (e.g. the same comment body submitted twice on purpose), not just replays.
 
 ## 5. Offline drag-a-card (step 7)
 
