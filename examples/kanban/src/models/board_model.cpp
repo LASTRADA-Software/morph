@@ -459,6 +459,19 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
 
     ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
 
+    // The task's (column, swimlane) before this move -- captured before
+    // `task.column`/`task.swimlane` are overwritten below, so the source-side
+    // renumbering query a few lines down can still tell which pair to
+    // re-tighten. A same-(column, swimlane) reorder has source == destination
+    // and needs no separate pass (the destination pass below already covers
+    // it, and re-running an identical renumber over the same rows would be
+    // redundant, not incorrect, but is skipped entirely for clarity).
+    const auto sourceColumnId = task.column.Value();
+    const auto sourceSwimlaneId = task.swimlane.Value();
+    const bool movesAcrossColumnOrSwimlane =
+        sourceColumnId != static_cast<std::uint64_t>(*action.columnId) ||
+        sourceSwimlaneId != static_cast<std::uint64_t>(*action.swimlaneId);
+
     // Position renumbering (design spec §2): delete-then-recreate every task
     // in the destination (column, swimlane), never an in-place index shift
     // -- mirrors polls::PollModel::applyVotes()'s vote-replacement idiom.
@@ -499,6 +512,34 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     }
     task.position = std::min(action.position, pos);
     mapper->Update(task);
+
+    // Source-side renumbering: a cross-(column, swimlane) move leaves a gap
+    // behind in the pair the task departed -- the destination-only pass above
+    // never touches those rows, since they never match its
+    // (columnId, swimlaneId) WHERE clause. Without this, design spec §2's
+    // "position is dense within its (columnId, swimlaneId) pair" invariant
+    // holds for the destination but silently drifts for the source (e.g.
+    // moving the task that sat at position 2 out of a 5-task column leaves
+    // the other four at {0, 1, 3, 4} forever, not renumbered to {0, 1, 2, 3},
+    // until some *other* move happens to touch that same pair again). A
+    // same-(column, swimlane) reorder has source == destination, so this
+    // pass is skipped for it -- the destination pass already renumbered every
+    // row in that pair, including what would otherwise be a redundant second
+    // pass over the identical rows.
+    if (movesAcrossColumnOrSwimlane) {
+        auto sourceTasks = mapper->Query<db::TaskRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::column>, "=", sourceColumnId)
+                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::swimlane>, "=", sourceSwimlaneId)
+                                .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "!=",
+                                       static_cast<std::uint64_t>(*action.taskId))
+                                .OrderBy(::Lightweight::FieldNameOf<&db::TaskRecord::position>)
+                                .All();
+        std::int64_t sourcePos = 0;
+        for (auto& t : sourceTasks) {
+            t.position = sourcePos++;
+            mapper->Update(t);
+        }
+    }
 
     db::BoardEventRecord event;
     event.project = project;

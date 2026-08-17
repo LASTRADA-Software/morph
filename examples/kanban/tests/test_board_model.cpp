@@ -122,6 +122,47 @@ TEST_CASE("MoveTaskPosition moves a task and renumbers positions densely", "[kan
     CHECK(moved.position == 0);
 }
 
+TEST_CASE("MoveTaskPosition across columns also renumbers the source column densely, not just the destination",
+          "[kanban][model]") {
+    // Regression test: the destination-only renumbering pass leaves a gap
+    // behind in the column a task departs from -- e.g. moving the task that
+    // sat at position 2 out of a 5-task column left the other four at
+    // {0, 1, 3, 4} forever instead of {0, 1, 2, 3}, silently violating design
+    // spec §2's "position is dense within its (columnId, swimlaneId) pair"
+    // invariant for the source side. Task 19's concurrent-move stress test
+    // (test_kanban_stress.cpp) caught this by chance via random cross-column
+    // moves; this is the minimal, deterministic single-threaded reproduction.
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto col1 = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto col2 = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.back().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+
+    // Five tasks in col1, at positions 0..4 in creation order.
+    std::vector<kanban::TaskId> taskIds;
+    for (int i = 0; i < 5; ++i) {
+        const auto after = model.execute(
+            kanban::CreateTask{.columnId = col1, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)});
+        taskIds.push_back(after.tasks.back().id);
+    }
+
+    // Move the task at position 2 (taskIds[2]) out to col2.
+    const auto result = model.execute(kanban::MoveTaskPosition{
+        .taskId = taskIds[2], .columnId = col2, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+
+    std::vector<std::int64_t> col1Positions;
+    for (const auto& task : result.tasks) {
+        if (task.columnId == col1) {
+            col1Positions.push_back(task.position);
+        }
+    }
+    std::sort(col1Positions.begin(), col1Positions.end());
+    CHECK(col1Positions == std::vector<std::int64_t>{0, 1, 2, 3});
+}
+
 TEST_CASE("MoveTaskPosition rejects a move that would exceed the target column's WIP limit", "[kanban][model]") {
     DbFixture fixture;
     const auto projectId = createProjectAs("alice", "Sprint Board");
