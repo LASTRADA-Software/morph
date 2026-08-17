@@ -15,6 +15,13 @@
 
 namespace kanban {
 
+static_assert(decltype(db::ProjectRoleRecord::principal)::ValueType{}.capacity() == auth::kMaxPrincipalBytes,
+              "kanban::auth::kMaxPrincipalBytes must equal ProjectRoleRecord::principal's SqlAnsiString capacity -- "
+              "otherwise SetMemberRole/RemoveMember either reject a principal that would have fit, or accept one "
+              "that gets silently truncated on the way into the row (Light::SqlFixedString's constructor is "
+              "noexcept and truncates rather than throwing), desyncing the stored row from the untruncated "
+              "principal RemoveMember's lookup queries by.");
+
 namespace {
 
 [[nodiscard]] const std::string& requireOwner() {
@@ -111,7 +118,8 @@ CreateProjectResult ProjectAdminModel::execute(const CreateProject& action) {
 
 Ack ProjectAdminModel::execute(const SetMemberRole& action) {
     if (!action.validate()) {
-        throw ValidationError{"SetMemberRole: projectId and principal are required"};
+        throw ValidationError{"SetMemberRole: projectId is required and principal must be a valid, bounded "
+                               "principal"};
     }
     requireRole(action.projectId, Role::Manager);
 
@@ -136,7 +144,8 @@ Ack ProjectAdminModel::execute(const SetMemberRole& action) {
 
 Ack ProjectAdminModel::execute(const RemoveMember& action) {
     if (!action.validate()) {
-        throw ValidationError{"RemoveMember: projectId and principal are required"};
+        throw ValidationError{"RemoveMember: projectId is required and principal must be a valid, bounded "
+                               "principal"};
     }
     requireRole(action.projectId, Role::Manager);
 

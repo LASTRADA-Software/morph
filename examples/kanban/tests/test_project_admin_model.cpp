@@ -76,3 +76,39 @@ TEST_CASE("RemoveMember deletes the role row; the removed principal can no longe
     REQUIRE(roles.roles.size() == 1);
     CHECK(roles.roles.front().principal == "alice");
 }
+
+TEST_CASE("SetMemberRole rejects a principal over auth::kMaxPrincipalBytes rather than silently truncating it",
+          "[kanban][model]") {
+    // ProjectRoleRecord::principal is a SqlAnsiString<auth::kMaxPrincipalBytes>
+    // column -- Light::SqlFixedString's constructor is noexcept and truncates
+    // rather than throwing, so without this bound in validate(), a caller
+    // could grant a role under an untruncated principal that gets silently
+    // stored truncated. RemoveMember's lookup then queries by the full,
+    // untruncated principal and never finds the (truncated) row -- the role
+    // becomes un-removable through this action. This test proves the bound
+    // itself; the un-removable consequence is exactly what it prevents.
+    DbFixture fixture;
+    kanban::ProjectAdminModel model;
+    const ScopedPrincipal alice{"alice"};
+    const auto projectId = model.execute(kanban::CreateProject{.name = "Sprint Board"}).id;
+
+    const std::string overLong(kanban::auth::kMaxPrincipalBytes + 1, 'b');
+    CHECK_THROWS_AS(
+        model.execute(kanban::SetMemberRole{.projectId = projectId, .principal = overLong, .role = kanban::Role::Member}),
+        kanban::ValidationError);
+
+    const auto roles = model.execute(kanban::GetProjectRoles{.projectId = projectId});
+    REQUIRE(roles.roles.size() == 1);
+    CHECK(roles.roles.front().principal == "alice");
+}
+
+TEST_CASE("RemoveMember rejects a principal over auth::kMaxPrincipalBytes", "[kanban][model]") {
+    DbFixture fixture;
+    kanban::ProjectAdminModel model;
+    const ScopedPrincipal alice{"alice"};
+    const auto projectId = model.execute(kanban::CreateProject{.name = "Sprint Board"}).id;
+
+    const std::string overLong(kanban::auth::kMaxPrincipalBytes + 1, 'b');
+    CHECK_THROWS_AS(model.execute(kanban::RemoveMember{.projectId = projectId, .principal = overLong}),
+                     kanban::ValidationError);
+}

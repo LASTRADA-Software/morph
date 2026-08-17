@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "kanban/auth/kanban_authorizer.hpp"
 #include "kanban/core/types.hpp"
 
 #include <cstddef>
@@ -32,7 +33,17 @@ struct SetMemberRole {
     std::string principal;
     Role role = Role::Viewer;
 
-    [[nodiscard]] bool validate() const noexcept { return projectId.hasValue() && !principal.empty(); }
+    /// Bounds `principal` the same way `Login::validate()` does (reuses
+    /// `auth::isValidPrincipal`) -- `ProjectRoleRecord::principal` is a
+    /// `SqlAnsiString<auth::kMaxPrincipalBytes>` column, and
+    /// `Light::SqlFixedString`'s constructor silently truncates rather than
+    /// throwing on an over-length value. Without this bound, a caller could
+    /// grant a role under an untruncated principal that then can never be
+    /// found (and so never removed) by `RemoveMember`'s equality lookup on
+    /// the same untruncated string.
+    [[nodiscard]] bool validate() const noexcept {
+        return projectId.hasValue() && auth::isValidPrincipal(principal);
+    }
 };
 
 /// @brief Removes `principal`'s role row entirely -- they can no longer
@@ -41,7 +52,13 @@ struct RemoveMember {
     ProjectId projectId;
     std::string principal;
 
-    [[nodiscard]] bool validate() const noexcept { return projectId.hasValue() && !principal.empty(); }
+    /// Same `auth::isValidPrincipal` bound as `SetMemberRole::validate()` --
+    /// see that comment. An over-length `principal` here would never match
+    /// any stored (truncated) row anyway; rejecting it up front is more
+    /// honest than a silent no-op delete.
+    [[nodiscard]] bool validate() const noexcept {
+        return projectId.hasValue() && auth::isValidPrincipal(principal);
+    }
 };
 
 struct MemberRole {
