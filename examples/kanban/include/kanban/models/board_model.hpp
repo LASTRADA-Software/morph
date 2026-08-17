@@ -258,7 +258,7 @@ struct morph::model::ActionKeyTraits<kanban::OpenBoard> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
     static std::string key(const kanban::OpenBoard& action) {
-        return morph::model::keyToString(static_cast<std::int64_t>(*action.projectId));
+        return morph::model::keyToString(*action.projectId);
     }
 };
 template <>
