@@ -518,10 +518,22 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQ
     std::filesystem::remove(path);
     {
         morph::offline::FileOfflineQueue queue{path, morph::core::FileIoOps{}, 2};
+        REQUIRE(queue.maxDepth() == std::optional<std::size_t>{2});
         queue.enqueue("a");
         queue.enqueue("b");
         REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
         REQUIRE(queue.drain().size() == 2);
+    }
+    std::filesystem::remove(path);
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: maxDepth() is std::nullopt when unbounded",
+          "[file_queue][overflow]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    {
+        morph::offline::FileOfflineQueue queue{path};
+        REQUIRE(queue.maxDepth() == std::nullopt);
     }
     std::filesystem::remove(path);
 }
