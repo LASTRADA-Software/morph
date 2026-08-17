@@ -71,13 +71,13 @@ struct QueueItem {
 /// `IOfflineQueue` directly rather than layering a second policy mechanism on
 /// top of this one.
 struct OfflineQueueFullError : std::runtime_error {
-    /// @param maxDepth    The configured capacity that was reached.
-    /// @param currentSize Number of pending items at the time of rejection
-    ///                    (equal to maxDepth for a well-behaved implementation).
-    OfflineQueueFullError(std::size_t maxDepth, std::size_t currentSize)
+    /// @param maxDepthValue    The configured capacity that was reached.
+    /// @param currentSizeValue Number of pending items at the time of rejection
+    ///                         (equal to maxDepth for a well-behaved implementation).
+    OfflineQueueFullError(std::size_t maxDepthValue, std::size_t currentSizeValue)
         : std::runtime_error("IOfflineQueue: enqueue rejected, queue is at capacity (" +
-                              std::to_string(currentSize) + "/" + std::to_string(maxDepth) + ")"),
-          maxDepth{maxDepth}, currentSize{currentSize} {}
+                              std::to_string(currentSizeValue) + "/" + std::to_string(maxDepthValue) + ")"),
+          maxDepth{maxDepthValue}, currentSize{currentSizeValue} {}
 
     /// @brief The configured capacity that was reached.
     std::size_t maxDepth;
