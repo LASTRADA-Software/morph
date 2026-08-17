@@ -9,6 +9,7 @@
 #include <glaze/glaze.hpp>
 #include <map>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -17,6 +18,7 @@
 
 #include "../core/file_io_ops.hpp"
 #include "../core/logger.hpp"
+#include "../core/observability.hpp"
 #include "offline_queue.hpp"
 
 #ifdef _WIN32
@@ -140,11 +142,17 @@ public:
     ///        syscalls. Test-only seam — see `morph::core::FileIoOps`'s own
     ///        docs — for forcing the failure branches that need a real
     ///        OS-level I/O error to reach.
+    /// @param maxDepth Maximum number of pending items `enqueue()` will admit
+    ///        before throwing `OfflineQueueFullError`; `std::nullopt` (the
+    ///        default) means unbounded. Not persisted in the file itself — a
+    ///        per-construction parameter, so a reopen must pass it again to
+    ///        keep the same cap enforced.
     /// @throws FileOfflineQueueError if @p path exists but contains a
     ///         malformed non-trailing line.
     /// @throws std::runtime_error if @p path cannot be opened/rewritten.
-    explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {})
-        : _path{std::move(path)}, _io{std::move(ioOps)} {
+    explicit FileOfflineQueue(std::filesystem::path path, ::morph::core::FileIoOps ioOps = {},
+                              std::optional<std::size_t> maxDepth = std::nullopt)
+        : _path{std::move(path)}, _io{std::move(ioOps)}, _maxDepth{maxDepth} {
         load();
         compact();
         _file = _io.fopen(_path.string(), "a");
@@ -177,6 +185,8 @@ public:
     /// @param payload        Serialised action to persist.
     /// @param idempotencyKey Stable dedup token; empty means "no dedup".
     /// @return The new item's id, or the existing item's id on a dedup hit.
+    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`
+    ///         (a dedup hit above bypasses this check and always succeeds).
     uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         if (!idempotencyKey.empty()) {
@@ -185,6 +195,11 @@ public:
                     return existingId;
                 }
             }
+        }
+        if (_maxDepth && _items.size() >= *_maxDepth) {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,
+                                                 static_cast<double>(_items.size()));
+            throw OfflineQueueFullError{*_maxDepth, _items.size()};
         }
         uint64_t const itemId = ++_nextId;
         QueueItem item{.id = itemId, .payload = std::move(payload), .idempotencyKey = std::move(idempotencyKey)};
@@ -195,7 +210,7 @@ public:
 
     /// @brief Returns all pending items in ascending-id (enqueue) order.
     /// @return Snapshot of all pending items; the file itself is unchanged.
-    std::vector<QueueItem> drain() override {
+    std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         std::vector<QueueItem> out;
         out.reserve(_items.size());
@@ -204,6 +219,17 @@ public:
         }
         return out;
     }
+
+    /// @brief Returns the number of pending items. Thread-safe.
+    /// @return Current pending item count.
+    std::size_t size() const override {
+        std::scoped_lock const lock{_mtx};
+        return _items.size();
+    }
+
+    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
+    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
+    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
 
     /// @brief Tombstones @p itemId. No-op if not found.
     /// @param itemId Id returned by the corresponding `enqueue()` call.
@@ -384,9 +410,10 @@ private:
     std::filesystem::path _path;
     ::morph::core::FileIoOps _io;
     std::FILE* _file = nullptr;
-    std::mutex _mtx;
+    mutable std::mutex _mtx;
     std::map<uint64_t, QueueItem> _items;
     uint64_t _nextId{0};
+    std::optional<std::size_t> _maxDepth;
 };
 
 }  // namespace morph::offline

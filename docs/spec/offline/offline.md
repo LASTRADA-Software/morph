@@ -175,7 +175,69 @@ while offline; `SyncWorker` drains and replays them on reconnect.
 | `drain` | `std::vector<QueueItem> drain()` | Returns all pending items in enqueue order, without removing them. Safe to call multiple times — items survive between `drain()` and the corresponding `markDone()`. |
 | `markDone` | `void markDone(uint64_t itemId)` | Removes the item identified by `itemId`. No-op if not found. |
 | `setAttempts` | `void setAttempts(uint64_t itemId, uint32_t attempts)` | Persists an updated attempt count for an item. **Public** (unlike `setIdempotencyKey`) because `SyncWorker` calls it from outside the queue after every failed replay. Default no-op; `InMemoryOfflineQueue` overrides it to update the in-deque item. A queue that overrides it to store the count durably makes `SyncWorker`'s retry budget survive a process restart. |
+| `size` | `std::size_t size() const` | Number of pending items, without removing them. Default calls `drain().size()` — correct but O(n) and allocates a full snapshot to answer a size query; every shipped implementation overrides it with a direct count. |
+| `maxDepth` | `std::optional<std::size_t> maxDepth() const` | The capacity `enqueue()` enforces, or `std::nullopt` if unbounded. Default: `std::nullopt` — preserves current behavior for any `IOfflineQueue` subclass written before this method existed. |
 | `setIdempotencyKey` (protected) | `void setIdempotencyKey(uint64_t itemId, std::string key)` | Hook the default two-arg `enqueue` uses to stamp the key onto an already-enqueued item. Default no-op; `InMemoryOfflineQueue` records the key directly instead. |
+
+`drain()` is `const` — it takes a snapshot and mutates nothing, so `size()`'s
+default can call it (and so can an application) without needing a non-`const`
+reference to the queue.
+
+#### Depth bound and overflow policy
+
+`IOfflineQueue` has no depth bound by default — `maxDepth()` returns
+`std::nullopt` and `enqueue()` never rejects an item on capacity grounds
+unless a concrete queue is constructed with an explicit bound. Every shipped
+implementation (`InMemoryOfflineQueue`, `FileOfflineQueue`,
+`SqliteOfflineQueue`) takes an `std::optional<std::size_t> maxDepth =
+std::nullopt` as the **last** constructor parameter; passing a value turns on
+enforcement for that instance.
+
+**Policy: reject-newest.** Once a bounded queue holds `maxDepth()` items, a
+further `enqueue()` throws `OfflineQueueFullError` instead of admitting the
+new item — the queue never silently evicts an older item or invokes an
+app-defined eviction callback:
+
+```cpp
+/// Thrown by enqueue() when the queue is at its configured maxDepth().
+struct OfflineQueueFullError : std::runtime_error {
+    OfflineQueueFullError(std::size_t maxDepth, std::size_t currentSize);
+    std::size_t maxDepth;     // the configured capacity that was reached
+    std::size_t currentSize;  // pending items at the time of rejection
+};
+```
+
+`maxDepth`/`currentSize` are equal for a well-behaved implementation; both are
+carried on the exception so a caller can log or branch on the numbers without
+re-querying the queue. Immediately before throwing, each implementation emits
+the `queueOverflow` counter metric with the rejection-time size as its value
+(see [observability.md](../core/observability.md)).
+
+Per-implementation notes:
+
+- **`InMemoryOfflineQueue`** checks capacity under its existing lock, before
+  the deque `push_back`. It has no idempotency-key dedup at all, so there is
+  no dedup-hit-vs-capacity ordering question here.
+- **`FileOfflineQueue`** runs its existing keyed-dedup scan *first*; the
+  capacity check sits after it, before `appendPut`. A dedup hit (a re-enqueue
+  of an already-pending key) therefore always succeeds and returns the
+  existing id, even on a full queue — it inserts nothing new, so there is
+  nothing to reject.
+- **`SqliteOfflineQueue`** checks capacity (`SELECT COUNT(*)`) before
+  attempting either INSERT path (empty-key and keyed). For the keyed path,
+  this means the check runs *before* the `INSERT ... ON CONFLICT ... DO
+  NOTHING` can resolve to a dedup hit — a re-enqueue of an already-queued key
+  can be rejected if the queue happens to be full at that moment, even though
+  it would have inserted nothing. This is a deliberate, documented
+  conservatism: avoiding it would require a second round trip (insert
+  speculatively, then check whether it was actually a no-op conflict) purely
+  to special-case a narrow situation (re-enqueuing an already-queued
+  idempotency key while the queue is simultaneously full).
+
+`maxDepth` is a per-construction parameter, not persisted in the file or
+database — a host that reopens `FileOfflineQueue`/`SqliteOfflineQueue` over
+the same path must pass the same `maxDepth` argument again to keep the same
+cap enforced; nothing on disk remembers it.
 
 ### `InMemoryOfflineQueue`
 

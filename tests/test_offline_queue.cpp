@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <morph/core/observability.hpp>
 #include <morph/offline/offline_queue.hpp>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -101,7 +103,7 @@ struct MinimalQueue : morph::offline::IOfflineQueue {
         items.push_back(morph::offline::QueueItem{.id = itemId, .payload = std::move(payload), .idempotencyKey = {}});
         return itemId;
     }
-    std::vector<morph::offline::QueueItem> drain() override { return items; }
+    std::vector<morph::offline::QueueItem> drain() const override { return items; }
     void markDone(uint64_t) override {}
 
     std::vector<morph::offline::QueueItem> items;
@@ -191,4 +193,83 @@ TEST_CASE("morph::offline::IOfflineQueue: default setAttempts is a no-op", "[que
     auto id = base.enqueue("p");
     base.setAttempts(id, 7);
     REQUIRE(queue.items[0].attempts == 0);
+}
+
+// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue below maxDepth succeeds", "[queue][overflow]") {
+    morph::offline::InMemoryOfflineQueue queue{3};
+    REQUIRE_NOTHROW(queue.enqueue("a"));
+    REQUIRE_NOTHROW(queue.enqueue("b"));
+    REQUIRE(queue.size() == 2);
+    REQUIRE(queue.maxDepth() == std::optional<std::size_t>{3});
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
+          "[queue][overflow]") {
+    morph::offline::InMemoryOfflineQueue queue{2};
+    queue.enqueue("a");
+    queue.enqueue("b");
+    REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
+    REQUIRE(queue.size() == 2);  // the rejected item must not grow the queue
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: markDone frees capacity for a subsequent enqueue",
+          "[queue][overflow]") {
+    morph::offline::InMemoryOfflineQueue queue{1};
+    auto id = queue.enqueue("a");
+    REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+
+    queue.markDone(id);
+
+    REQUIRE_NOTHROW(queue.enqueue("b"));
+    REQUIRE(queue.size() == 1);
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: default constructor is unbounded", "[queue][overflow]") {
+    morph::offline::InMemoryOfflineQueue queue;
+    REQUIRE(queue.maxDepth() == std::nullopt);
+    for (int i = 0; i < 10000; ++i) {
+        REQUIRE_NOTHROW(queue.enqueue("item" + std::to_string(i)));
+    }
+    REQUIRE(queue.size() == 10000);
+}
+
+TEST_CASE("morph::offline::IOfflineQueue: default size() delegates to drain().size()", "[queue][overflow]") {
+    MinimalQueue queue;
+    morph::offline::IOfflineQueue& base = queue;
+    base.enqueue("a");
+    base.enqueue("b");
+    base.enqueue("c");
+    // MinimalQueue does not override size(), so this resolves to
+    // IOfflineQueue's default, which calls drain().size().
+    REQUIRE(base.size() == 3);
+    REQUIRE(base.maxDepth() == std::nullopt);
+}
+
+TEST_CASE("morph::offline::OfflineQueueFullError: carries maxDepth and currentSize", "[queue][overflow]") {
+    morph::offline::OfflineQueueFullError const error{5, 5};
+    REQUIRE(error.maxDepth == 5);
+    REQUIRE(error.currentSize == 5);
+    std::string const what = error.what();
+    REQUIRE(what.find("5") != std::string::npos);
+}
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
+          "[queue][overflow][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    morph::offline::InMemoryOfflineQueue queue{1};
+    queue.enqueue("a");
+
+    std::vector<double> samples;
+    morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+        if (evt.metric == morph::observe::Metric::queueOverflow) {
+            samples.push_back(evt.value);
+        }
+    });
+
+    REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+
+    REQUIRE(samples.size() == 1);
+    REQUIRE(samples[0] == 1.0);
 }

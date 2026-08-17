@@ -25,7 +25,7 @@ if the seam did not exist. `RemoteServer` additionally exposes a
 
 ## Metrics
 
-`Metric` is a closed `enum class` of eight observation kinds:
+`Metric` is a closed `enum class` of nine observation kinds:
 
 | Enumerator | Kind | Meaning |
 |---|---|---|
@@ -37,6 +37,7 @@ if the seam did not exist. `RemoteServer` additionally exposes a
 | `queueDepth` | gauge | `IOfflineQueue` pending items at the start of a `SyncWorker::run()`. |
 | `reconnectAttempts` | counter | `ReconnectCoordinator::onOnline`'s `tryReconnect` attempts. |
 | `reconnectOutcome` | counter | One per `onOnline()` call, tagged by outcome. |
+| `queueOverflow` | counter | An `IOfflineQueue::enqueue()` call rejected because the queue was at its configured `maxDepth()` (see `docs/spec/offline/offline.md`). |
 
 Each observation is a `MetricEvent{metric, value, tags}`; `tags` is a
 `std::span<const std::pair<std::string_view, std::string_view>>` carrying
@@ -112,6 +113,7 @@ a deployment's transport (e.g. `QtWebSocketServer`) is expected to expose
 | `LocalBackend::execute`'s strand task | `executeLatencyMs`, `executeInFlight`, `executeErrors` | `beginSpan`/`endSpan` around `localOp` |
 | `SyncWorker::run()` | `queueDepth` (once, at drain) | — |
 | `ReconnectCoordinator::onOnline()` | `reconnectAttempts` (per attempt), `reconnectOutcome` (once, tagged `outcome`) | — |
+| `InMemoryOfflineQueue::enqueue`, `FileOfflineQueue::enqueue`, `SqliteOfflineQueue::enqueue` | `queueOverflow` (once per rejected call, at the queue's configured `maxDepth()`) | — |
 
 `registerCount`/`deregisterCount` count every call, not just successful ones —
 an unauthorized or malformed `register` still increments it, so the counter
@@ -178,7 +180,7 @@ the `~StrandExecutor` note below).
 
 ### `Metric`
 
-`enum class Metric : std::uint8_t` — see [Metrics](#metrics) for the eight enumerators.
+`enum class Metric : std::uint8_t` — see [Metrics](#metrics) for the nine enumerators.
 
 ### `MetricEvent`
 

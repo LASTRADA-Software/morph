@@ -7,10 +7,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "../core/observability.hpp"
 #include "offline_queue.hpp"
 
 namespace morph::offline {
@@ -94,10 +96,16 @@ public:
 
     /// @brief Opens (or creates) the queue database at @p path, creating the
     ///        schema if it does not already exist.
-    /// @param path SQLite database file.
+    /// @param path     SQLite database file.
+    /// @param maxDepth Maximum number of pending rows `enqueue()` will admit
+    ///        before throwing `OfflineQueueFullError`; `std::nullopt` (the
+    ///        default) means unbounded. Not persisted in the database itself
+    ///        — a per-construction parameter, so a reopen must pass it again
+    ///        to keep the same cap enforced.
     /// @throws SqliteOfflineQueueError if the database cannot be opened or
     ///         the schema cannot be created.
-    explicit SqliteOfflineQueue(std::filesystem::path path) : _path{std::move(path)} {
+    explicit SqliteOfflineQueue(std::filesystem::path path, std::optional<std::size_t> maxDepth = std::nullopt)
+        : _path{std::move(path)}, _maxDepth{maxDepth} {
         if (sqlite3_open(_path.string().c_str(), &_db) != SQLITE_OK) {
             std::string msg = "SqliteOfflineQueue: failed to open " + _path.string() + ": " +
                               (_db != nullptr ? sqlite3_errmsg(_db) : "unknown error");
@@ -136,8 +144,10 @@ public:
     /// @brief Inserts @p payload with an empty idempotency key.
     /// @param payload Serialised action to persist.
     /// @return The new row's id (`SELECT last_insert_rowid()`).
+    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
     uint64_t enqueue(std::string payload) override {
         std::scoped_lock const lock{_mtx};
+        checkCapacityLocked();
         detail::StatementGuard guard{
             prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                     "VALUES (?, '', 0, ?);")};
@@ -153,9 +163,16 @@ public:
     /// @param payload        Serialised action to persist.
     /// @param idempotencyKey Stable dedup token; empty means "no dedup".
     /// @return The new row's id, or the existing row's id on a dedup hit.
+    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
+    ///         Checked before the insert is attempted, so a call that would
+    ///         have resolved to a dedup hit (inserting nothing) can also be
+    ///         rejected when the queue happens to be full at the same time —
+    ///         a documented, accepted conservatism rather than an extra
+    ///         round trip to special-case it.
     uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
         if (idempotencyKey.empty()) {
+            checkCapacityLocked();
             detail::StatementGuard guard{
                 prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                         "VALUES (?, '', 0, ?);")};
@@ -165,6 +182,7 @@ public:
             return static_cast<uint64_t>(sqlite3_last_insert_rowid(_db));
         }
 
+        checkCapacityLocked();
         detail::StatementGuard insertGuard{
             prepare("INSERT INTO morph_offline_queue (payload, idempotency_key, attempts, enqueued_at) "
                     "VALUES (?, ?, 0, ?) "
@@ -196,7 +214,7 @@ public:
 
     /// @brief Returns all pending rows in ascending-id (enqueue) order.
     /// @return Snapshot of all pending items; the table is unchanged.
-    std::vector<QueueItem> drain() override {
+    std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         detail::StatementGuard guard{
             prepare("SELECT id, payload, idempotency_key, attempts FROM morph_offline_queue ORDER BY id;")};
@@ -245,6 +263,17 @@ public:
         stepOrThrow(guard.get(), "setAttempts");
     }
 
+    /// @brief Returns the number of pending rows. Thread-safe.
+    /// @return Current pending item count (`COUNT(*)` against the table).
+    std::size_t size() const override {
+        std::scoped_lock const lock{_mtx};
+        return countLocked();
+    }
+
+    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
+    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
+    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
+
 protected:
     /// @brief Stamps an idempotency key onto an already-inserted row. No-op if
     ///        @p itemId is absent. Reachable only if a caller invokes the base
@@ -271,7 +300,7 @@ private:
         }
     }
 
-    sqlite3_stmt* prepare(const char* sql) {
+    sqlite3_stmt* prepare(const char* sql) const {
         sqlite3_stmt* stmt = nullptr;
         if (sqlite3_prepare_v2(_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: prepare failed: "} + sqlite3_errmsg(_db)};
@@ -279,19 +308,19 @@ private:
         return stmt;
     }
 
-    void bindText(sqlite3_stmt* stmt, int index, const std::string& value) {
+    void bindText(sqlite3_stmt* stmt, int index, const std::string& value) const {
         if (sqlite3_bind_text(stmt, index, value.c_str(), -1, detail::kSqliteTransient) != SQLITE_OK) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: bind failed: "} + sqlite3_errmsg(_db)};
         }
     }
 
-    void bindInt64(sqlite3_stmt* stmt, int index, std::int64_t value) {
+    void bindInt64(sqlite3_stmt* stmt, int index, std::int64_t value) const {
         if (sqlite3_bind_int64(stmt, index, value) != SQLITE_OK) {
             throw SqliteOfflineQueueError{std::string{"SqliteOfflineQueue: bind failed: "} + sqlite3_errmsg(_db)};
         }
     }
 
-    void stepOrThrow(sqlite3_stmt* stmt, const char* what) {
+    void stepOrThrow(sqlite3_stmt* stmt, const char* what) const {
         // A busy/error code is treated the same as reaching the end -- a
         // production consumer wanting to distinguish SQLITE_BUSY should retry
         // instead, but a single in-process mutex around the whole connection
@@ -313,9 +342,32 @@ private:
             .count();
     }
 
+    /// @brief Returns the current row count. Caller must hold `_mtx`.
+    /// @return `COUNT(*)` against `morph_offline_queue`.
+    std::size_t countLocked() const {
+        detail::StatementGuard guard{prepare("SELECT COUNT(*) FROM morph_offline_queue;")};
+        sqlite3_step(guard.get());
+        return static_cast<std::size_t>(sqlite3_column_int64(guard.get(), 0));
+    }
+
+    /// @brief Throws `OfflineQueueFullError` if the queue is already at
+    ///        `maxDepth()`. Caller must hold `_mtx`. No-op if unbounded.
+    void checkCapacityLocked() const {
+        if (!_maxDepth) {
+            return;
+        }
+        std::size_t const current = countLocked();
+        if (current >= *_maxDepth) {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,
+                                                 static_cast<double>(current));
+            throw OfflineQueueFullError{*_maxDepth, current};
+        }
+    }
+
     std::filesystem::path _path;
-    sqlite3* _db = nullptr;
-    std::mutex _mtx;
+    mutable sqlite3* _db = nullptr;
+    mutable std::mutex _mtx;
+    std::optional<std::size_t> _maxDepth;
 };
 
 }  // namespace morph::offline

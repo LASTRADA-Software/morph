@@ -4,8 +4,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
+#include <morph/core/observability.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
+#include <sqlite3.h>
+
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -148,6 +152,107 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
         REQUIRE(deadLettered[0].id == enqueuedId);
         REQUIRE(deadLettered[0].attempts == 5);
         REQUIRE(queue.drain().empty());
+    }
+    removeDbFiles(dbPath);
+}
+
+// ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError", "[sqlite][overflow]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, 2};
+        queue.enqueue("a");
+        queue.enqueue("b");
+        REQUIRE_THROWS_AS(queue.enqueue("c"), morph::offline::OfflineQueueFullError);
+        REQUIRE(queue.drain().size() == 2);
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: maxDepth survives destroying and reopening over the same file",
+          "[sqlite][overflow]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        queue.enqueue("a");
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+    }
+    {
+        // Reopened with the same maxDepth argument -- still enforced. maxDepth
+        // is a per-construction parameter, not persisted in the database itself.
+        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        REQUIRE(queue.drain().size() == 1);
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: size() matches COUNT(*) against the table", "[sqlite][overflow]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath};
+        REQUIRE(queue.size() == 0);
+        queue.enqueue("a");
+        queue.enqueue("b");
+        queue.enqueue("c");
+        REQUIRE(queue.size() == 3);
+
+        // Cross-check via a raw query against the same database file.
+        sqlite3* raw = nullptr;
+        REQUIRE(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK);
+        sqlite3_stmt* stmt = nullptr;
+        REQUIRE(sqlite3_prepare_v2(raw, "SELECT COUNT(*) FROM morph_offline_queue;", -1, &stmt, nullptr) ==
+                SQLITE_OK);
+        REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
+        auto const rawCount = static_cast<std::size_t>(sqlite3_column_int64(stmt, 0));
+        sqlite3_finalize(stmt);
+        sqlite3_close(raw);
+
+        REQUIRE(rawCount == queue.size());
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: a dedup hit at capacity is rejected (documented conservatism)",
+          "[sqlite][overflow]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        queue.enqueue("first-payload", "op-1");
+        // The keyed path checks capacity BEFORE attempting the insert, so a
+        // call that would otherwise resolve to a dedup hit (inserting
+        // nothing) is still rejected once the queue is full -- documented
+        // conservatism, not a bug.
+        REQUIRE_THROWS_AS(queue.enqueue("second-payload", "op-1"), morph::offline::OfflineQueueFullError);
+        REQUIRE(queue.drain().size() == 1);
+    }
+    removeDbFiles(dbPath);
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOverflow metric",
+          "[sqlite][overflow][observability]") {
+    morph::observe::ScopedObserveOverride guard;
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    {
+        morph::offline::SqliteOfflineQueue queue{dbPath, 1};
+        queue.enqueue("a");
+
+        std::vector<double> samples;
+        morph::observe::setMetricSink([&](const morph::observe::MetricEvent& evt) {
+            if (evt.metric == morph::observe::Metric::queueOverflow) {
+                samples.push_back(evt.value);
+            }
+        });
+
+        REQUIRE_THROWS_AS(queue.enqueue("b"), morph::offline::OfflineQueueFullError);
+        REQUIRE(samples.size() == 1);
+        REQUIRE(samples[0] == 1.0);
     }
     removeDbFiles(dbPath);
 }

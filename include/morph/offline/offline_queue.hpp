@@ -5,8 +5,12 @@
 #include <cstdint>
 #include <deque>
 #include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "../core/observability.hpp"
 
 namespace morph::offline {
 
@@ -56,6 +60,31 @@ struct QueueItem {
     uint32_t attempts{0};
 };
 
+/// @brief Thrown by `enqueue()` when the queue is at its configured `maxDepth()`.
+///
+/// `IOfflineQueue` enforces a reject-newest overflow policy: once the queue
+/// holds `maxDepth()` items, a further `enqueue()` throws instead of silently
+/// evicting an older item or invoking an app-defined callback. Evicting the
+/// oldest item would destroy data the caller believes durable and break
+/// replay ordering with no error raised anywhere; a host that genuinely wants
+/// different eviction semantics already has the seam for it — subclass
+/// `IOfflineQueue` directly rather than layering a second policy mechanism on
+/// top of this one.
+struct OfflineQueueFullError : std::runtime_error {
+    /// @param maxDepthValue    The configured capacity that was reached.
+    /// @param currentSizeValue Number of pending items at the time of rejection
+    ///                         (equal to maxDepth for a well-behaved implementation).
+    OfflineQueueFullError(std::size_t maxDepthValue, std::size_t currentSizeValue)
+        : std::runtime_error("IOfflineQueue: enqueue rejected, queue is at capacity (" +
+                              std::to_string(currentSizeValue) + "/" + std::to_string(maxDepthValue) + ")"),
+          maxDepth{maxDepthValue}, currentSize{currentSizeValue} {}
+
+    /// @brief The configured capacity that was reached.
+    std::size_t maxDepth;
+    /// @brief Number of pending items at the time of rejection.
+    std::size_t currentSize;
+};
+
 // ── Interface ─────────────────────────────────────────────────────────────────
 
 /// @brief Interface for durable storage of actions that could not be delivered.
@@ -102,13 +131,28 @@ struct IOfflineQueue {
     /// call `drain()` multiple times — items survive a crash between `drain()`
     /// and the corresponding `markDone()` call.
     /// @return Snapshot of all pending items.
-    virtual std::vector<QueueItem> drain() = 0;
+    virtual std::vector<QueueItem> drain() const = 0;
 
     /// @brief Removes the item identified by @p itemId.
     ///
     /// No-op if @p itemId is not found.
     /// @param itemId Id returned by the corresponding `enqueue()` call.
     virtual void markDone(uint64_t itemId) = 0;
+
+    /// @brief Returns the number of pending items without removing them.
+    ///
+    /// Default implementation calls `drain().size()` — correct but O(n) and
+    /// allocates a full snapshot vector to answer a size query. Override for
+    /// an O(1) or index-backed answer.
+    /// @return Current pending item count.
+    virtual std::size_t size() const { return drain().size(); }
+
+    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
+    ///
+    /// Default: `std::nullopt` (unbounded) — preserves current behavior for any
+    /// `IOfflineQueue` subclass that predates this method.
+    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
+    virtual std::optional<std::size_t> maxDepth() const { return std::nullopt; }
 
     /// @brief Persists an updated attempt count for an item. Default: no-op.
     ///
@@ -147,6 +191,12 @@ class InMemoryOfflineQueue : public IOfflineQueue {
 public:
     using IOfflineQueue::enqueue;  // keep the two-arg overload visible
 
+    /// @brief Constructs an in-memory queue, optionally bounded.
+    /// @param maxDepth Maximum number of pending items `enqueue()` will admit
+    ///        before throwing `OfflineQueueFullError`; `std::nullopt` (the
+    ///        default) means unbounded.
+    explicit InMemoryOfflineQueue(std::optional<std::size_t> maxDepth = std::nullopt) : _maxDepth{maxDepth} {}
+
     /// @brief Appends @p payload and returns a monotonically increasing id.
     /// @param payload Serialised action to store.
     /// @return Unique id for this item.
@@ -157,8 +207,14 @@ public:
     /// @param payload        Serialised action to store.
     /// @param idempotencyKey Stable dedup token; stored verbatim on the item.
     /// @return Unique id for this item.
+    /// @throws OfflineQueueFullError if the queue is already at `maxDepth()`.
     uint64_t enqueue(std::string payload, std::string idempotencyKey) override {
         std::scoped_lock const lock{_mtx};
+        if (_maxDepth && _items.size() >= *_maxDepth) {
+            ::morph::observe::detail::emitMetric(::morph::observe::Metric::queueOverflow,
+                                                 static_cast<double>(_items.size()));
+            throw OfflineQueueFullError{*_maxDepth, _items.size()};
+        }
         uint64_t const itemId = ++_nextId;
         _items.push_back(
             QueueItem{.id = itemId, .payload = std::move(payload), .idempotencyKey = std::move(idempotencyKey)});
@@ -167,10 +223,21 @@ public:
 
     /// @brief Returns a snapshot of all pending items. Thread-safe.
     /// @return Copy of all items in insertion order.
-    std::vector<QueueItem> drain() override {
+    std::vector<QueueItem> drain() const override {
         std::scoped_lock const lock{_mtx};
         return std::vector<QueueItem>{_items.begin(), _items.end()};
     }
+
+    /// @brief Returns the number of pending items. Thread-safe.
+    /// @return Current pending item count.
+    std::size_t size() const override {
+        std::scoped_lock const lock{_mtx};
+        return _items.size();
+    }
+
+    /// @brief Returns the configured maximum depth, or `std::nullopt` if unbounded.
+    /// @return The capacity `enqueue()` enforces, or `std::nullopt` if none.
+    std::optional<std::size_t> maxDepth() const override { return _maxDepth; }
 
     /// @brief Removes the item with @p itemId from the queue. Thread-safe.
     ///
@@ -202,9 +269,10 @@ public:
     }
 
 private:
-    std::mutex _mtx;
+    mutable std::mutex _mtx;
     std::deque<QueueItem> _items;
     uint64_t _nextId{0};
+    std::optional<std::size_t> _maxDepth;
 };
 
 }  // namespace morph::offline
