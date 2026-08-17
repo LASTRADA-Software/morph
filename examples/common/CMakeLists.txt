@@ -173,6 +173,7 @@ add_executable(ladder_common_tests
     testkit/test_strand_interleaver.cpp
     testkit/test_wasm_registration_path_native.cpp
     testkit/test_action_driver.cpp
+    testkit/test_offline_rig.cpp
 )
 target_link_libraries(ladder_common_tests PRIVATE morph::ladder_testkit)
 # morph::ladder_testkit links Lightweight::Lightweight PUBLIC (above), and
