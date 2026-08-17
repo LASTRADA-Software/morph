@@ -39,10 +39,17 @@ namespace detail {
 /// test-only seam on `QWebSocketServer` itself, so the throw logic is what
 /// gets tested instead of the real I/O call (mirrors
 /// `backend_rig.hpp`'s `throwIfListenFailed`, same rationale, different
-/// error message).
+/// error message). Named distinctly from that one (`...FaultProxy...` rather
+/// than the same bare name) because both are `inline` free functions in this
+/// same `detail` namespace: a translation unit that includes both headers —
+/// as any offline-stack test wiring a `FaultProxy` in front of a
+/// `BackendRig`-style server does — would otherwise hit a hard
+/// redefinition error, not just an ODR risk (found while building Task 20's
+/// offline DoD tests, the first file in the tree to include both headers
+/// together).
 /// @param listenSucceeded The real `listen()` call's result.
 /// @throws std::runtime_error if @p listenSucceeded is `false`.
-inline void throwIfListenFailed(bool listenSucceeded) {
+inline void throwIfFaultProxyListenFailed(bool listenSucceeded) {
     if (!listenSucceeded) {
         throw std::runtime_error("FaultProxy::start: failed to listen on an ephemeral loopback port");
     }
