@@ -24,6 +24,25 @@ if(TARGET ladder_kanban_lib)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/dto/auth_dto.cpp")
 endif()
 
+# Task 17: the attachment HTTP side channel (src/http/attachment_server.cpp)
+# is not picked up by morph_add_rung()'s own globs (src/models, src/db,
+# src/app only) -- same reason src/auth/ and src/dto/ need the explicit
+# target_sources() call above. It needs Qt6::Network for QTcpServer/
+# QTcpSocket, which ladder_kanban_lib does not otherwise link (it only pulls
+# in Qt6::Core directly); morph::qt's own Qt6::WebSockets dependency brings
+# Qt6::Network in transitively for any consumer that already links morph::qt,
+# but ladder_kanban_lib is a lower layer than that (models/db/app, no
+# transport), so it needs its own direct Qt6::Network link rather than
+# reaching for morph::qt just for one header's socket types. Gated on
+# MORPH_BUILD_QT: like the WebSocket transport this shares a TokenVerifier
+# with, this is a Qt-only server and does not build without Qt in the tree.
+if(TARGET ladder_kanban_lib AND MORPH_BUILD_QT)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Network)
+    target_sources(ladder_kanban_lib PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/http/attachment_server.cpp")
+    target_link_libraries(ladder_kanban_lib PUBLIC Qt6::Network)
+endif()
+
 # Task 5: wires SqliteOfflineQueue/NetworkMonitor/SyncWorker/
 # ReconnectCoordinator into BoardBridge::moveTask (gui_lib/board_qml_bridge.
 # hpp/.cpp) -- optional, like every other morph::offline_sqlite consumer

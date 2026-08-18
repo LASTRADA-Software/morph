@@ -4,20 +4,28 @@
 /// kanban standalone server process: `kanban::db::setup()` once, one
 /// `kanban::app::App` (worker pool + `RemoteServer` with a real
 /// `auth::KanbanAuthorizer` + durable action log + process-global
-/// `TokenIssuer`), and one `morph::qt::QtWebSocketServer` in front of it.
+/// `TokenIssuer`), one `morph::qt::QtWebSocketServer` in front of it, and one
+/// `kanban::http::AttachmentServer` alongside it for attachment blob
+/// upload/download -- the HTTP side channel README build-order step 8 calls
+/// for. The attachment server's `TokenVerifier` is built from the exact same
+/// `tokenSecret` `App`'s own `KanbanAuthorizer` uses (see the local variable's
+/// own comment below), so a token minted for one side verifies on the other.
 /// Mirrors `bookmarks::src::server::main.cpp` closely, minus the background
 /// worker to drain on shutdown (`kanban::app::App` is plain C++ with no timer
 /// at all -- see that header's own `@file` comment).
 ///
 /// Usage:
 /// @code
-/// KANBAN_TOKEN_SECRET=... KANBAN_DB=... KANBAN_PORT=8768 ladder_kanban_server
+/// KANBAN_TOKEN_SECRET=... KANBAN_DB=... KANBAN_PORT=8768 \
+///     KANBAN_ATTACHMENT_PORT=8769 ladder_kanban_server
 /// @endcode
 
 #include "kanban/app/app.hpp"
 #include "kanban/db/database.hpp"
+#include "kanban/http/attachment_server.hpp"
 
 #include <morph/qt/qt_websocket_server.hpp>
+#include <morph/session/session_auth.hpp>
 
 #include <QCoreApplication>
 #include <QTimer>
@@ -101,6 +109,23 @@ int main(int argc, char** argv) {
         port = parsed;
     }
 
+    // Same parsing discipline as KANBAN_PORT just above, for the HTTP
+    // attachment side channel's own port. Defaults to one past the WebSocket
+    // port's own default so a from-scratch `KANBAN_PORT`/`KANBAN_ATTACHMENT_PORT`-
+    // less run of both servers never collides.
+    quint16 attachmentPort = 8769;
+    if (const char* attachmentPortEnv = std::getenv("KANBAN_ATTACHMENT_PORT"); attachmentPortEnv != nullptr) {
+        const std::string_view text{attachmentPortEnv};
+        std::uint16_t parsed = 0;
+        const auto [end, ec] = std::from_chars(text.data(), text.data() + text.size(), parsed);
+        if (ec != std::errc{} || end != text.data() + text.size()) {
+            std::cerr << "kanban-server: KANBAN_ATTACHMENT_PORT='" << attachmentPortEnv
+                      << "' is not a valid port number (0-65535)\n";
+            return 2;
+        }
+        attachmentPort = parsed;
+    }
+
     int exitCode = 0;
     {
         // App installs both the KanbanAuthorizer and the process-global
@@ -114,6 +139,23 @@ int main(int argc, char** argv) {
             return 1;
         }
         std::cout << "kanban-server: listening on ws://127.0.0.1:" << wsServer.port() << std::endl;
+
+        // The attachment HTTP side channel's TokenVerifier is built from the
+        // exact same tokenSecret (and the same explicit hmacSha256 MAC) App's
+        // own KanbanAuthorizer above already uses -- not a second,
+        // separately-sourced secret. Two verifiers configured from
+        // independently-sourced secrets is exactly the drift this reuse
+        // avoids: a token minted for the WebSocket side must also verify here.
+        const ::morph::session::TokenVerifier attachmentVerifier{tokenSecret, ::morph::session::hmacSha256};
+        kanban::http::AttachmentServer attachmentServer{
+            attachmentVerifier,
+            kanban::http::AttachmentServer::Config{.storageDir = std::filesystem::current_path() / "kanban_attachments"}};
+        if (!attachmentServer.listen(attachmentPort)) {
+            std::cerr << "kanban-server: failed to listen on attachment port " << attachmentPort << "\n";
+            return 1;
+        }
+        std::cout << "kanban-server: attachment side channel listening on http://127.0.0.1:" << attachmentServer.port()
+                   << std::endl;
 
         std::signal(SIGINT, onStopSignal);
         std::signal(SIGTERM, onStopSignal);
