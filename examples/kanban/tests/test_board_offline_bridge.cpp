@@ -21,6 +21,7 @@
 #include <kanban/models/board_model.hpp>
 #include <kanban/models/project_admin_model.hpp>
 
+#include <morph/core/observability.hpp>
 #include <morph/offline/network_monitor.hpp>
 #include <morph/session/session.hpp>
 
@@ -31,12 +32,15 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -357,6 +361,120 @@ TEST_CASE("BoardBridge's deadLetterCount property reflects dead-lettered moves",
 
     CHECK(bridge.deadLetterCount() == 1);
     CHECK(bridge.queueDepth() == 0);
+}
+
+TEST_CASE("BoardBridge's offline queue/reconnect path emits the framework's own morph::observe metrics",
+          "[kanban][gui][offline]") {
+    // README's DoD: "The offline tests assert the framework's own
+    // morph::observe metrics (queueDepth, reconnect attempt/outcome) -- the
+    // observability seam gains its first app-scale coverage here." The two
+    // tests above already prove the offline stack's *behavior* (queue then
+    // replay; five-flap dead-letter); this test proves the same stack's
+    // *instrumentation* -- that SyncWorker::run() and
+    // ReconnectCoordinator::onOnline() actually call through to
+    // morph::observe::detail::emitMetric with the metric kinds the DoD
+    // names, not just that the offline behavior itself is correct.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+
+    const ScopedQueueFile queueFile{tempQueuePath()};
+    std::atomic<bool> simulatedOnline{true};
+
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bool moved = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::taskMoved, [&](const QString&) { moved = true; });
+    int lastQueueDepth = -1;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::syncStatusChanged,
+                      [&](int depth, int /*deadLettered*/) { lastQueueDepth = depth; });
+
+    // ── Snapshot/restore the process-global metric sink around this test
+    //    only -- ScopedObserveOverride is the framework's own RAII idiom for
+    //    exactly this (see include/morph/core/observability.hpp), so a
+    //    sibling TEST_CASE in this same binary is never left with this
+    //    test's sink still installed. `MetricEvent::tags` is a `std::span`
+    //    into the emitting call's own stack-local storage, invalid once
+    //    `emitMetric` returns -- only `metric` itself (a plain enum value,
+    //    safe to copy) is retained, since that's all this test asserts on.
+    ::morph::observe::ScopedObserveOverride observeOverride;
+    std::vector<::morph::observe::Metric> observedMetrics;
+    std::mutex observedMetricsMtx;
+    ::morph::observe::setMetricSink([&](const ::morph::observe::MetricEvent& event) {
+        std::scoped_lock const lock{observedMetricsMtx};
+        observedMetrics.push_back(event.metric);
+    });
+
+    auto hasMetric = [&](::morph::observe::Metric metric) {
+        std::scoped_lock const lock{observedMetricsMtx};
+        return std::ranges::find(observedMetrics, metric) != observedMetrics.end();
+    };
+
+    // ── Seed a board with one task and two columns (same shape as the
+    //    reconnect test above) ───────────────────────────────────────────
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("To Do"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString col1 =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("Done"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString col2 =
+        bridge.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createSwimlane(QStringLiteral("Default"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString swimlaneId = bridge.board()
+                                    .value(QStringLiteral("swimlanes"))
+                                    .toList()
+                                    .front()
+                                    .toMap()
+                                    .value(QStringLiteral("id"))
+                                    .toString();
+
+    changed = false;
+    bridge.createTask(col1, swimlaneId, QStringLiteral("Fix bug"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString taskId =
+        bridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    bridge.enableOfflineQueue(
+        QString::fromStdString(queueFile.path().string()), [&simulatedOnline] { return simulatedOnline.load(); },
+        ::morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1});
+
+    // ── Force offline, queue one move ────────────────────────────────────
+    simulatedOnline.store(false);
+    REQUIRE(pumpUntil([&] { return !bridge.isNetworkOnlineForTest(); }, 2000ms));
+
+    changed = false;
+    moved = false;
+    lastQueueDepth = -1;
+    bridge.moveTask(taskId, col2, swimlaneId, 0);
+    REQUIRE(pumpUntil([&] { return lastQueueDepth == 1; }, 500ms));
+
+    // ── Reconnect: drives ReconnectCoordinator::onOnline() (reconnectAttempts
+    //    + reconnectOutcome) and SyncWorker::run() (queueDepth, emitted once
+    //    per drain with the pre-drain item count) ─────────────────────────
+    changed = false;
+    simulatedOnline.store(true);
+    REQUIRE(pumpUntil([&] { return changed; }, 2000ms));
+
+    // Give the metric sink's own lock-protected callback a moment to catch
+    // up with the last emission -- emitMetric() is synchronous on the same
+    // thread that calls it (Qt's posted executor), so by the time
+    // boardChanged has fired (the last step of the replay/refresh chain)
+    // every metric this run will ever emit has already been recorded.
+    CHECK(hasMetric(::morph::observe::Metric::queueDepth));
+    CHECK(hasMetric(::morph::observe::Metric::reconnectAttempts));
+    CHECK(hasMetric(::morph::observe::Metric::reconnectOutcome));
 }
 
 #endif  // MORPH_BUILD_OFFLINE_SQLITE

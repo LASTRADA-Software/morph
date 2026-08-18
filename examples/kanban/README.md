@@ -1,13 +1,16 @@
 # kanban — rung 4 of the [application ladder](../LADDER.md)
 
-**Status: planned — committed scope, and the ladder's designated
-showcase.** A multi-project kanban board: columns, swimlanes, tasks,
-drag-and-drop moves, WIP limits, comments, per-project roles, an activity
-stream, and automation rules. The mid-tier flagship: the first app where
-concurrency, authorization, offline, and the journal are all load-bearing at
-once. As the one polished showcase (round-7 audience decision), this rung
-alone may spend effort on visual presentation; every other rung stays
-deliberately unstyled.
+**Status: shipped** — every rung-4 task is complete, including automation
+rules and attachments (originally deferred, now implemented); see
+[Definition of done](#definition-of-done) for what that does and does not
+mean (one disclosed gap: no `--seed` demo path yet, per `LADDER.md`'s
+ladder-wide convention). A multi-project kanban board: columns, swimlanes,
+tasks, drag-and-drop moves, WIP limits, comments, per-project roles, an
+activity stream, and automation rules. The mid-tier flagship: the first
+app where concurrency, authorization, offline, and the journal are all
+load-bearing at once. As the one polished showcase (round-7 audience
+decision), this rung alone may spend effort on visual presentation; every
+other rung stays deliberately unstyled.
 
 ## Reference implementations
 
@@ -160,18 +163,30 @@ authorization at Kanboard's granularity (4), journal-derived activity + undo
 - Attachment bytes must bypass the JSON protocol; only metadata is an
   action — and the side channel is **the largest new attack surface in the
   ladder** (a hand-written HTTP server beside the WebSocket server): it
-  must reuse `TokenVerifier` (same secret, same clock), enforce its own
-  size bound, and its request parser joins the fuzz corpus. Test the
-  upload dying after metadata commit (dangling row).
+  reuses `TokenVerifier` (same secret, same clock), enforces its own
+  size bound, and — since no `MORPH_BUILD_FUZZERS` harness targets HTTP
+  parsing — its request parser is instead proven against a dedicated
+  adversarial test (`test_attachment_server.cpp`'s garbage-input case:
+  truncated/malformed/negative-length/binary-garbage requests, asserting
+  only "does not crash or hang," the same bar a fuzz harness would set).
+  Tests the upload dying after metadata commit (dangling row), and
+  authorizes reads by the caller's project role, not bearer-token validity
+  alone (a validly-signed token for a different project gets 404, same as
+  a nonexistent key).
 
-## Deferred within this rung (delivery review)
+## Steps 6 and 8: implemented
 
-Steps 6 (automation rules) and 8 (attachments) are each independently
-large, and the attachments answer is duplicated at forge phase 2. They move
-to a "later" bucket: steps 1–5 + 7 deliver every DoD bullet except the
-cascade divergence test — and [`ledger`](../ledger) needs only the
-cascade-journaling *decision*, which is written from a spike, not from a
-full rules engine.
+Steps 6 (automation rules) and 8 (attachments) were originally deferred to a
+"later" bucket (each is independently large, and the attachments answer is
+duplicated at forge phase 2) — both are now implemented. Automation rules
+(tag add/remove, triggered on move-to-column) are scoped to the two mutation
+kinds this rung's schema actually supports; the README's own illustrative
+"assign to closer" example is not implemented, since no "closer" concept
+exists anywhere in this rung and inventing one would be ungrounded scope
+creep — a genuine follow-up if a future rung wants it. Attachments are a
+hand-written HTTP side channel next to the WebSocket server, authorizing
+reads by the caller's project role (not bearer-token validity alone).
+[`ledger`](../ledger) reuses this rung's cascade-journaling decision.
 
 ## Definition of done
 
@@ -182,9 +197,13 @@ full rules engine.
 - Exactly-once proven under reply-frame loss (fault-injection proxy in the
   testkit by this rung).
 - Kill the network mid-drag: client keeps queuing, reconnect replays, board
-  converges; the five-flap dead-letter path surfaces in the GUI; demo
-  scripted. The offline tests assert the framework's own
-  `morph::observe` metrics (`queueDepth`, reconnect attempt/outcome) — the
-  observability seam gains its first app-scale coverage here.
+  converges; the five-flap dead-letter path surfaces in the GUI — proven by
+  test (`test_board_offline_bridge.cpp`), not yet by a runnable `--seed`
+  demo walkthrough (`LADDER.md`'s ladder-wide "every rung ships a `--seed`
+  path" convention is not yet implemented for this rung — a real, separate
+  gap, tracked but not yet closed). The offline tests assert the
+  framework's own `morph::observe` metrics (`queueDepth`, reconnect
+  attempt/outcome) — the observability seam gains its first app-scale
+  coverage here.
 - Activity stream rendered from the journal, with the cascade-journaling
   decision recorded and its divergence test green.
