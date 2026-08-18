@@ -4,6 +4,7 @@
 #include "gui/presenter.hpp"
 
 #include "kanban/dto/activity_dto.hpp"
+#include "kanban/dto/attachment_dto.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/event_dto.hpp"
 
@@ -185,6 +186,38 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     /// @param ruleId The rule to delete.
     void deleteRule(RuleId ruleId);
 
+    /// @brief Commits an attachment's metadata after its bytes have already
+    ///        been uploaded through the separate HTTP side channel
+    ///        (`kanban::http::AttachmentServer`, Task 17) -- @p storageKey is
+    ///        that upload's own response, not something this method
+    ///        interprets or validates itself (`attachment_dto.hpp`'s own
+    ///        `@file` comment: "bytes over a side channel, metadata through
+    ///        actions").
+    ///
+    ///        Returns its own `Completion<Ack>` rather than reporting through
+    ///        a shared signal -- the same "no shared mutable field carries
+    ///        one call's data" reasoning as `moveTaskForReplay`/
+    ///        `getEventsSinceForPolling` above: `BoardBridge::uploadAttachment()`
+    ///        chains this call after its own HTTP upload settles, and two
+    ///        overlapping uploads (different tasks, or the same task twice)
+    ///        must each resolve to their own outcome, never cross-attributed
+    ///        via a shared `attachmentAdded(QString)`-style signal.
+    /// @param taskId      The task to attach metadata to.
+    /// @param filename    The uploaded file's original name.
+    /// @param contentType The uploaded file's content type.
+    /// @param sizeBytes   The uploaded file's size, in bytes.
+    /// @param storageKey  The opaque key `AttachmentServer`'s upload response
+    ///        returned.
+    /// @return The call's own completion.
+    [[nodiscard]] ::morph::async::Completion<Ack> addAttachment(TaskId taskId, const QString& filename,
+                                                                  const QString& contentType, std::int64_t sizeBytes,
+                                                                  const QString& storageKey);
+
+    /// @brief Lists every attachment recorded against a task. Emits
+    ///        `attachmentsListed`, or `failed`.
+    /// @param taskId The task whose attachments to list.
+    void getAttachments(TaskId taskId);
+
   signals:
     /// @brief `OpenBoard`/`GetBoardState`/`CreateColumn`/`CreateSwimlane`/
     ///        `CreateTask` succeeded — the board's full rebuilt state (every
@@ -211,6 +244,9 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     void rulesListed(kanban::GetRulesResult result);
     /// @brief `DeleteRule` succeeded.
     void ruleDeleted();
+    /// @brief `GetAttachments` succeeded.
+    /// @param result Every attachment on the requested task, in upload order.
+    void attachmentsListed(kanban::GetAttachmentsResult result);
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);

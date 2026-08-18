@@ -77,3 +77,23 @@ if(MORPH_BUILD_OFFLINE_SQLITE)
         target_link_libraries(ladder_kanban_tests PRIVATE morph::offline_sqlite)
     endif()
 endif()
+
+# Task 18: TaskDetailPopup.qml's "Attach file"/"Download" affordances use
+# QtQuick.Dialogs' FileDialog for local file selection. morph_add_rung()'s
+# qt_add_qml_module(ladder_kanban_qml ...) call scans this rung's own .qml
+# files for their `import`s and auto-links whatever known QML plugins they
+# name (that scan is why Controls/Layouts/Templates already resolve with no
+# extra wiring here) -- but only among plugins already visible as a linked
+# dependency of ladder_kanban_qml itself. Qt6::QuickDialogs2 is a component
+# nothing in this tree links yet (kanban is the first rung to use a
+# QtQuick.Dialogs type), so without this the *engine* can still parse and
+# AOT-compile TaskDetailPopup.qml (qmltypes alone are enough for that), but
+# resolving the type at runtime fails with "module \"QtQuick.Dialogs\" is not
+# installed" -- confirmed by linking it onto the consuming ladder_kanban_gui/
+# ladder_kanban_tests executables instead, which did not fix it: the plugin
+# has to be a dependency of the *QML module* the scan runs against, not of
+# whatever later links that module.
+if(TARGET ladder_kanban_qml)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS QuickDialogs2)
+    target_link_libraries(ladder_kanban_qml PUBLIC Qt6::QuickDialogs2)
+endif()

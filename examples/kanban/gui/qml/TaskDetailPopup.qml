@@ -10,6 +10,18 @@
 // from CommentRecord::task, the existing BelongsTo to the owning task) --
 // plus an add-comment field driven by BoardBridge.addComment.
 //
+// Task 18 adds the attachment list + an "Attach file" button alongside the
+// comment section above: a FileDialog picks a local file, BoardBridge.
+// uploadAttachment() reads its bytes, POSTs them to Task 17's
+// AttachmentServer, and commits the metadata via AddAttachment -- this file
+// only ever binds to boardBridge.attachments and calls uploadAttachment()/
+// downloadAttachment(), same "translation, not logic" discipline the comment
+// section above already follows. Unlike the comment list, BoardBridge.
+// attachments already carries only the requested task's own rows (it is
+// populated by an explicit getAttachments(taskId) call, not filtered
+// client-side out of a whole-board list the way comments are), so no
+// client-side filter is needed here.
+//
 // `boardBridge` defaults to null and `taskId` defaults to -1 so this same
 // file also loads standalone with nothing wired up, which is exactly what
 // the offscreen engine-load smoke test (tests/test_gui_qml_smoke.cpp) does.
@@ -18,6 +30,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 Popup {
@@ -25,7 +38,7 @@ Popup {
     modal: true
     focus: true
     width: 420
-    height: 480
+    height: 640
     x: (parent ? parent.width - width : 0) / 2
     y: (parent ? parent.height - height : 0) / 2
 
@@ -45,6 +58,43 @@ Popup {
         return boardBridge.board.comments.filter(function (c) {
             return c.taskId === wantedTaskId
         })
+    }
+
+    /// This task's own attachments -- unlike `comments` above, `boardBridge.
+    /// attachments` is already scoped to whichever task `getAttachments()`
+    /// was last called for (populated below, in `onOpened`), so no
+    /// client-side filter is applied here.
+    readonly property var attachments: (boardBridge && boardBridge.attachments) ? boardBridge.attachments : []
+
+    /// Refreshes the attachment list every time this popup is shown for a
+    /// (possibly different) task -- mirrors how `comments` recomputes
+    /// automatically from `boardBridge.board`, except `attachments` has no
+    /// board-wide list to filter client-side and needs its own explicit
+    /// fetch per task.
+    onOpened: {
+        if (popup.boardBridge !== null) {
+            popup.boardBridge.getAttachments(popup.taskId)
+        }
+    }
+
+    /// Picks a local file to upload as a new attachment on the open task.
+    FileDialog {
+        id: attachFileDialog
+        fileMode: FileDialog.OpenFile
+        onAccepted: {
+            popup.boardBridge.uploadAttachment(popup.taskId, selectedFile)
+        }
+    }
+
+    /// Picks where to save a downloaded attachment's bytes -- set by each
+    /// download button's own onClicked below (see `downloadStorageKey`).
+    FileDialog {
+        id: saveAttachmentDialog
+        fileMode: FileDialog.SaveFile
+        property string storageKey: ""
+        onAccepted: {
+            popup.boardBridge.downloadAttachment(storageKey, selectedFile)
+        }
     }
 
     ColumnLayout {
@@ -107,6 +157,45 @@ Popup {
                     newComment.text = ""
                 }
             }
+        }
+
+        Label {
+            font.bold: true
+            text: "Attachments"
+        }
+
+        ListView {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 120
+            clip: true
+            model: popup.attachments
+
+            delegate: RowLayout {
+                id: attachmentRow
+                required property var modelData
+                width: ListView.view ? ListView.view.width : 0
+
+                Label {
+                    Layout.fillWidth: true
+                    elide: Text.ElideMiddle
+                    text: attachmentRow.modelData.filename
+                }
+
+                Button {
+                    text: "Download"
+                    onClicked: {
+                        saveAttachmentDialog.storageKey = attachmentRow.modelData.storageKey
+                        saveAttachmentDialog.open()
+                    }
+                }
+            }
+        }
+
+        Button {
+            Layout.fillWidth: true
+            text: "Attach file..."
+            enabled: popup.boardBridge !== null
+            onClicked: attachFileDialog.open()
         }
 
         Button {

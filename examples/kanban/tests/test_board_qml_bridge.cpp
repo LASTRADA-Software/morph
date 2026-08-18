@@ -13,26 +13,31 @@
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
 
+#include <kanban/http/attachment_server.hpp>
 #include <kanban/models/board_model.hpp>
 #include <kanban/models/project_admin_model.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <morph/session/session.hpp>
+#include <morph/session/session_auth.hpp>
 
 #include <QMetaMethod>
 #include <QMetaObject>
 #include <QMetaProperty>
 #include <QMetaType>
 #include <QString>
+#include <QTemporaryDir>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -80,6 +85,46 @@ template <typename IdT>
     return IdT{static_cast<std::int64_t>(text.toLongLong())};
 }
 
+/// @brief The signing secret shared by this file's own `TokenIssuer`/
+///        `TokenVerifier` pair -- same shape as test_attachment_server.cpp's
+///        `kSecret`, duplicated locally rather than shared, following that
+///        file's own precedent.
+constexpr std::string_view kAttachmentTestSecret = "board-qml-bridge-attachment-test-secret-32b";
+
+/// @brief Builds a rig whose one bridge already carries a valid, *signed*
+///        session for @p principal -- unlike `makeAuthedRig` above (which
+///        only sets `Context::principal`), this also mints and installs a
+///        real bearer token via @p issuer, since `BoardBridge::
+///        uploadAttachment()`/`downloadAttachment()` read
+///        `Bridge::defaultSession().token` to set their own
+///        `Authorization: Bearer` header, and the real `AttachmentServer`
+///        this test stands up alongside the rig verifies it for real.
+/// @param issuer    The token issuer to mint from.
+/// @param principal The identity to install.
+/// @return The rig, owning the bridge and executor the adapter takes.
+[[nodiscard]] std::unique_ptr<BackendRig> makeAuthedRigWithToken(const morph::session::TokenIssuer& issuer,
+                                                                  std::string principal) {
+    auto rig = std::make_unique<BackendRig>(Mode::Local, 1);
+    morph::session::Context ctx;
+    ctx.token = issuer.issue(morph::session::SessionToken{
+        .principal = principal, .issuedAtMs = 0, .expiresAtMs = 4102444800000, .roles = {}});
+    ctx.principal = std::move(principal);
+    rig->bridge(0).setDefaultSession(ctx);
+    return rig;
+}
+
+/// @brief A fresh, empty storage directory for one test's `AttachmentServer`,
+///        removed at scope entry -- same recipe as
+///        test_attachment_server.cpp's own `freshStorageDir`.
+/// @param name Distinguishes this test's directory from every other test's.
+/// @return The directory path (not yet created -- `AttachmentServer`'s own
+///         constructor creates it).
+[[nodiscard]] std::filesystem::path freshAttachmentStorageDir(const std::string& name) {
+    auto path = std::filesystem::temp_directory_path() / ("board_qml_bridge_attachments_" + name);
+    std::filesystem::remove_all(path);
+    return path;
+}
+
 }  // namespace
 
 TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]") {
@@ -93,15 +138,16 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfProperty("activity") >= 0);
     REQUIRE(meta->indexOfProperty("myRole") >= 0);
     REQUIRE(meta->indexOfProperty("rules") >= 0);
+    REQUIRE(meta->indexOfProperty("attachments") >= 0);
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     // Task 6: queueDepth/deadLetterCount only exist when the offline stack
     // (MORPH_BUILD_OFFLINE_SQLITE) is compiled in -- see board_qml_bridge.hpp's
     // own gating of these two Q_PROPERTYs.
     REQUIRE(meta->indexOfProperty("queueDepth") >= 0);
     REQUIRE(meta->indexOfProperty("deadLetterCount") >= 0);
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 6);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 7);
 #else
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 4);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 5);
 #endif
 
     REQUIRE(meta->indexOfMethod("openBoard(QString)") >= 0);
@@ -115,6 +161,10 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfMethod("createRule(QString,QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("getRules()") >= 0);
     REQUIRE(meta->indexOfMethod("deleteRule(QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("setAttachmentServerUrl(QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("uploadAttachment(QString,QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("getAttachments(QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("downloadAttachment(QString,QString)") >= 0);
 
     REQUIRE(meta->indexOfSignal("bound()") >= 0);
     REQUIRE(meta->indexOfSignal("boardChanged()") >= 0);
@@ -125,6 +175,9 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfSignal("rulesListed(QVariantList)") >= 0);
     REQUIRE(meta->indexOfSignal("ruleCreated()") >= 0);
     REQUIRE(meta->indexOfSignal("ruleDeleted()") >= 0);
+    REQUIRE(meta->indexOfSignal("attachmentsListed(QVariantList)") >= 0);
+    REQUIRE(meta->indexOfSignal("attachmentUploaded(QString)") >= 0);
+    REQUIRE(meta->indexOfSignal("attachmentDownloaded(QString)") >= 0);
     REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
 }
 
@@ -453,4 +506,170 @@ TEST_CASE("BoardBridge's EventPoller applies another client's move and refreshes
     CHECK(taskRowAfter.value(QStringLiteral("id")).toString() == taskId);
     CHECK(taskRowAfter.value(QStringLiteral("columnId")).toString() == col2);
     CHECK(taskRowAfter.value(QStringLiteral("position")).toLongLong() == 0);
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// Task 18 — attachment upload/download
+// ═════════════════════════════════════════════════════════════════════════
+
+TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads it back", "[kanban][gui][attachments]") {
+    DbFixture fixture;
+    const morph::session::TokenIssuer issuer{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+    const morph::session::TokenVerifier verifier{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+
+    const auto storageDir = freshAttachmentStorageDir("upload_and_record");
+    kanban::http::AttachmentServer server{verifier, kanban::http::AttachmentServer::Config{.storageDir = storageDir}};
+    REQUIRE(server.listen());
+
+    auto rig = makeAuthedRigWithToken(issuer, "alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+    bridge.setAttachmentServerUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("To Do"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createSwimlane(QStringLiteral("Default"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString swimlaneId =
+        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createTask(columnId, swimlaneId, QStringLiteral("Fix bug"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString taskId =
+        bridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    // A real local file to upload -- QTemporaryDir cleans it up automatically.
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString localFilePath = tempDir.filePath(QStringLiteral("report.pdf"));
+    {
+        QFile localFile{localFilePath};
+        REQUIRE(localFile.open(QIODevice::WriteOnly));
+        localFile.write(QByteArrayLiteral("this is the attachment's own bytes"));
+    }
+
+    QString failureMessage;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::failed,
+                      [&](const QString& message) { failureMessage = message; });
+
+    bool uploaded = false;
+    QString uploadedTaskId;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentUploaded, [&](const QString& id) {
+        uploadedTaskId = id;
+        uploaded = true;
+    });
+    bridge.uploadAttachment(taskId, localFilePath);
+    REQUIRE(pumpUntil([&] { return uploaded; }));
+    INFO("failed() message, if any: " << failureMessage.toStdString());
+    CHECK(uploadedTaskId == taskId);
+
+    // uploadAttachment() refreshes `attachments` on success (via its own
+    // internal getAttachments() call) -- no separate getAttachments() call
+    // should be needed here, but this test waits for the property to reflect
+    // exactly one row rather than assuming the refresh already landed by the
+    // time attachmentUploaded() fired.
+    REQUIRE(pumpUntil([&] { return bridge.attachments().size() == 1; }));
+    const QVariantMap attachmentRow = bridge.attachments().front().toMap();
+    for (const char* key : {"id", "taskId", "filename", "contentType", "sizeBytes", "storageKey", "uploadedBy", "uploadedAtMs"}) {
+        INFO("missing key: " << key);
+        REQUIRE(attachmentRow.contains(QString::fromLatin1(key)));
+    }
+    CHECK(attachmentRow.value(QStringLiteral("filename")).toString() == QStringLiteral("report.pdf"));
+    CHECK(attachmentRow.value(QStringLiteral("taskId")).toString() == taskId);
+    CHECK(attachmentRow.value(QStringLiteral("sizeBytes")).toLongLong() ==
+          static_cast<qlonglong>(std::string_view{"this is the attachment's own bytes"}.size()));
+    const QString storageKey = attachmentRow.value(QStringLiteral("storageKey")).toString();
+    REQUIRE_FALSE(storageKey.isEmpty());
+
+    // A second, independent getAttachments() call also reflects the upload --
+    // proves the metadata is really committed server-side, not just cached on
+    // this bridge from the upload's own response.
+    bool attachmentsListedFired = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentsListed,
+                      [&](const QVariantList&) { attachmentsListedFired = true; });
+    bridge.getAttachments(taskId);
+    REQUIRE(pumpUntil([&] { return attachmentsListedFired; }));
+    REQUIRE(bridge.attachments().size() == 1);
+
+    // downloadAttachment(): round-trips the same bytes back out to a second
+    // local path.
+    const QString downloadedFilePath = tempDir.filePath(QStringLiteral("report-downloaded.pdf"));
+    bool downloaded = false;
+    QString downloadedPath;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentDownloaded, [&](const QString& path) {
+        downloadedPath = path;
+        downloaded = true;
+    });
+    bridge.downloadAttachment(storageKey, downloadedFilePath);
+    REQUIRE(pumpUntil([&] { return downloaded; }));
+    CHECK(downloadedPath == downloadedFilePath);
+
+    QFile downloadedFile{downloadedFilePath};
+    REQUIRE(downloadedFile.open(QIODevice::ReadOnly));
+    CHECK(downloadedFile.readAll() == QByteArrayLiteral("this is the attachment's own bytes"));
+
+    std::filesystem::remove_all(storageDir);
+}
+
+TEST_CASE("BoardBridge::uploadAttachment reports failed() when no attachment server is configured",
+          "[kanban][gui][attachments]") {
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("To Do"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createSwimlane(QStringLiteral("Default"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString swimlaneId =
+        bridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createTask(columnId, swimlaneId, QStringLiteral("Fix bug"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString taskId =
+        bridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString localFilePath = tempDir.filePath(QStringLiteral("report.pdf"));
+    {
+        QFile localFile{localFilePath};
+        REQUIRE(localFile.open(QIODevice::WriteOnly));
+        localFile.write(QByteArrayLiteral("bytes"));
+    }
+
+    QString message;
+    bool failed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::failed, [&](const QString& text) {
+        message = text;
+        failed = true;
+    });
+    // setAttachmentServerUrl() is never called here -- BoardBridge must not
+    // guess an address, only report failed().
+    bridge.uploadAttachment(taskId, localFilePath);
+    REQUIRE(pumpUntil([&] { return failed; }));
+    CHECK_FALSE(message.isEmpty());
 }

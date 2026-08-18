@@ -14,7 +14,25 @@
 /// @code
 /// ladder_kanban_gui                                # in-process backend
 /// ladder_kanban_gui --server ws://127.0.0.1:8768   # standalone server
+/// ladder_kanban_gui --server ws://127.0.0.1:8768 --attachment-server http://127.0.0.1:8769
 /// @endcode
+///
+/// `--attachment-server <url>` (Task 18) tells `BoardBridge` where Task 17's
+/// `AttachmentServer` listens, so `uploadAttachment()`/`downloadAttachment()`
+/// have somewhere to send their `QNetworkAccessManager` requests --
+/// mirroring `--server`'s own convention for the WebSocket URL, since no
+/// other configuration mechanism for this address exists anywhere in this
+/// rung yet. Defaults to `http://127.0.0.1:8769` when `--server` is given
+/// but `--attachment-server` is not -- the same default port
+/// `src/server/main.cpp`'s own `KANBAN_ATTACHMENT_PORT` falls back to, so the
+/// common case ("run both binaries with their own defaults") needs no flag
+/// at all. Left unset entirely in Local (in-process) mode: that deployment
+/// runs no `AttachmentServer` of its own (`kanban::app::App`, the durable
+/// action log and real `KanbanAuthorizer`, lives only in the server binary
+/// -- see the Local-mode comment below), so attachment upload/download
+/// simply is not available there; `uploadAttachment()`/`downloadAttachment()`
+/// report `failed()` rather than guessing an address nothing is listening
+/// on.
 ///
 /// Everything below the deployment-mode choice is intended to be shared
 /// verbatim with a future `gui_wasm/main_wasm.cpp` — the adapters, and the
@@ -55,12 +73,26 @@ namespace {
     return QUrl{args.at(index + 1)};
 }
 
+/// @brief `--attachment-server <url>` if present. Same parsing shape as
+///        `serverUrlFromArgs` -- see this file's own `@file` comment for why
+///        this flag exists and its default.
+/// @param args The application's argument list.
+/// @return The parsed url, or `std::nullopt` if the flag was not given.
+[[nodiscard]] std::optional<QString> attachmentServerUrlFromArgs(const QStringList& args) {
+    const auto index = args.indexOf(QStringLiteral("--attachment-server"));
+    if (index < 0 || index + 1 >= args.size()) {
+        return std::nullopt;
+    }
+    return args.at(index + 1);
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     QGuiApplication qtApp{argc, argv};
 
     const auto serverUrl = serverUrlFromArgs(QCoreApplication::arguments());
+    const auto attachmentServerUrl = attachmentServerUrlFromArgs(QCoreApplication::arguments());
 
     // Local mode hosts every model in this very process, so this process is
     // also the one that has to point Lightweight at a database, apply the
@@ -115,6 +147,13 @@ int main(int argc, char** argv) {
         // `main.cpp` for the full rationale (identical shape here).
         projectAdminBridge = std::make_unique<kanban::gui::ProjectAdminBridge>(ctx.bridge(), ctx.executor());
         boardBridge = std::make_unique<kanban::gui::BoardBridge>(ctx.bridge(), ctx.executor());
+        // See this file's own @file comment for why this is unset entirely in
+        // Local mode (no AttachmentServer to point at) and defaults to
+        // src/server/main.cpp's own KANBAN_ATTACHMENT_PORT default otherwise.
+        if (serverUrl) {
+            boardBridge->setAttachmentServerUrl(
+                attachmentServerUrl ? *attachmentServerUrl : QStringLiteral("http://127.0.0.1:8769"));
+        }
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
         // Turns on BoardBridge's offline queue/replay stack (Task 5,
         // docs/superpowers/specs/2026-08-17-kanban-gui-design.md's now-updated

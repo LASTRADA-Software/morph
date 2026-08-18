@@ -149,4 +149,21 @@ void BoardPresenter::deleteRule(RuleId ruleId) {
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
+::morph::async::Completion<Ack> BoardPresenter::addAttachment(TaskId taskId, const QString& filename,
+                                                                const QString& contentType, std::int64_t sizeBytes,
+                                                                const QString& storageKey) {
+    return _handler.execute(AddAttachment{.taskId = taskId,
+                                          .filename = filename.toStdString(),
+                                          .contentType = contentType.toStdString(),
+                                          .sizeBytes = sizeBytes,
+                                          .storageKey = storageKey.toStdString()});
+}
+
+void BoardPresenter::getAttachments(TaskId taskId) {
+    track<GetAttachmentsResult>(
+        _handler.execute(GetAttachments{.taskId = taskId}),
+        [this](GetAttachmentsResult result) { emit attachmentsListed(std::move(result)); },
+        [this](const std::exception_ptr& err) { reportError(err); });
+}
+
 }  // namespace kanban::gui

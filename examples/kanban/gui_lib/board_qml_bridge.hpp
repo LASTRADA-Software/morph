@@ -13,9 +13,18 @@
 // over this header, and moc must not be pointed at morph's template-heavy
 // bridge.hpp or event_poller.hpp — see that header's own doc comment for the
 // full rationale (mirrors poll_qml_bridges.hpp's identical guard).
+//
+// QNetworkAccessManager itself is a plain, non-template Qt class moc handles
+// fine, but the member below is guarded alongside everything else in this
+// block purely to keep one `#ifndef Q_MOC_RUN`/`#endif` pair bracketing every
+// non-Q_OBJECT-macro addition this class makes, matching this header's own
+// existing convention rather than adding a second, narrower guard just for
+// this one include.
 #ifndef Q_MOC_RUN
 #include "board_presenter.hpp"
 #include "gui/event_poller.hpp"
+
+#include <QNetworkAccessManager>
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -53,6 +62,21 @@ namespace kanban::gui {
 /// whatever `opId` it is given) never has to see or manage idempotency keys
 /// at all. Each `moveTask()` call mints a fresh id; two calls, even for the
 /// same task, never share one.
+///
+/// @par Attachment upload/download is the one place this bridge does its own I/O
+/// `uploadAttachment()`/`downloadAttachment()` do not merely translate a
+/// presenter call: `AddAttachment`/`GetAttachments` (Task 16) are metadata-only
+/// actions, and the actual bytes travel over a separate HTTP side channel
+/// (`kanban::http::AttachmentServer`, Task 17) this bridge speaks to directly
+/// via `QNetworkAccessManager` -- there is no presenter/model call for "upload
+/// these bytes" to translate. `uploadAttachment()` therefore performs the
+/// `POST /attachments` itself, then calls `BoardPresenter::addAttachment()`
+/// with the returned `storageKey` to commit the metadata row, mirroring the
+/// flow order the HTTP server's own class doc comment documents. This is a
+/// deliberate, narrow exception to "translates and routes; it never decides"
+/// (`examples/IMPLEMENTATION.md` rule 2): there is no decision being made
+/// here, only two round trips (HTTP, then the model action) chained in the
+/// one order the design allows.
 ///
 /// @par Member declaration order is load-bearing
 /// `_presenter` must be declared **before** `_poller`, and `_liveness` must
@@ -95,6 +119,14 @@ class BoardBridge : public QObject {
     ///        the attached board, each a `{id, triggerColumnId, mutationType,
     ///        mutationValue}` map. `mutationType` is `"AddTag"`/`"RemoveTag"`.
     Q_PROPERTY(QVariantList rules READ rules NOTIFY rulesListed)
+    /// @brief The most recent `getAttachments` result: every attachment
+    ///        recorded on the requested task, each a `{id, taskId, filename,
+    ///        contentType, sizeBytes, storageKey, uploadedBy, uploadedAtMs}`
+    ///        map, in upload order. `storageKey` is exposed so QML can pass
+    ///        it straight back into `downloadAttachment()` without this
+    ///        bridge needing to re-resolve an id to a key. Also refreshed
+    ///        after a successful `uploadAttachment()`.
+    Q_PROPERTY(QVariantList attachments READ attachments NOTIFY attachmentsListed)
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief Current pending-item count in the offline queue — the same
@@ -130,6 +162,9 @@ class BoardBridge : public QObject {
     /// @brief The current rule list (see `rules` property).
     /// @return The most recent `getRules` result's rows.
     [[nodiscard]] QVariantList rules() const { return _rules; }
+    /// @brief The current attachment list (see `attachments` property).
+    /// @return The most recent `getAttachments` result's rows.
+    [[nodiscard]] QVariantList attachments() const { return _attachments; }
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief The offline queue's current depth (see `queueDepth` property).
@@ -212,6 +247,58 @@ class BoardBridge : public QObject {
     ///        or `failed`.
     /// @param ruleId The rule to delete, as its plain number.
     Q_INVOKABLE void deleteRule(const QString& ruleId);
+
+    /// @brief Sets the base URL of Task 17's `kanban::http::AttachmentServer`
+    ///        (e.g. `"http://127.0.0.1:8769"`), which `uploadAttachment()`/
+    ///        `downloadAttachment()` below issue their `QNetworkAccessManager`
+    ///        requests against. Pure state — dispatches nothing, mirrors
+    ///        `setMyRole()`.
+    ///
+    ///        This bridge has no other way to learn the attachment server's
+    ///        address: unlike the WebSocket URL (`gui/main.cpp`'s `--server`
+    ///        flag, fed to `AppContext`), no analogous flag or discovery
+    ///        mechanism exists yet for the HTTP side channel. A caller that
+    ///        never calls this leaves `uploadAttachment()`/
+    ///        `downloadAttachment()` failing with `failed()` (empty base URL
+    ///        is treated as "not configured", not as `http://` +
+    ///        `localFilePath`) rather than silently guessing a port.
+    /// @param baseUrl The attachment server's base URL, no trailing slash.
+    Q_INVOKABLE void setAttachmentServerUrl(const QString& baseUrl);
+
+    /// @brief Uploads a local file to Task 17's `AttachmentServer` (a raw
+    ///        `POST /attachments` with the file's bytes as the body, an
+    ///        `X-Attachment-Content-Type` header, and this bridge's own
+    ///        bearer token), then commits its metadata via `AddAttachment`
+    ///        with the `storageKey` the upload returned. Emits
+    ///        `attachmentUploaded(taskId)` (and refreshes the `attachments`
+    ///        property) on success, `failed` on any step's failure --
+    ///        reading the local file, the network request itself, a
+    ///        non-`200` server response, or the follow-up `AddAttachment`.
+    /// @param taskId        The task to attach the file to, as its plain
+    ///        number.
+    /// @param localFilePath Absolute path to the local file to upload (as a
+    ///        `FileDialog` selection hands it back).
+    Q_INVOKABLE void uploadAttachment(const QString& taskId, const QString& localFilePath);
+
+    /// @brief Lists every attachment recorded against a task. Emits
+    ///        `attachmentsListed` (and updates the `attachments` property),
+    ///        or `failed`.
+    /// @param taskId The task whose attachments to list, as its plain number.
+    Q_INVOKABLE void getAttachments(const QString& taskId);
+
+    /// @brief Downloads an attachment's bytes from Task 17's
+    ///        `AttachmentServer` (`GET /attachments/{storageKey}` with this
+    ///        bridge's own bearer token) and writes them to @p localFilePath.
+    ///        Emits `attachmentDownloaded(localFilePath)` on success, `failed`
+    ///        on any step's failure -- the network request itself, a
+    ///        non-`200` server response (including the `404` a caller with no
+    ///        role on the attachment's owning project gets even with a
+    ///        validly-signed token -- see the class doc comment's
+    ///        authorization note), or writing the local file.
+    /// @param storageKey    The attachment's `storageKey` (an `attachments`
+    ///        row's own field).
+    /// @param localFilePath Absolute path to write the downloaded bytes to.
+    Q_INVOKABLE void downloadAttachment(const QString& storageKey, const QString& localFilePath);
 
     /// @brief Stops the `EventPoller`'s timer without treating it as a fatal
     ///        error — a board view calls this when it is hidden/closed. A
@@ -324,6 +411,18 @@ class BoardBridge : public QObject {
     void ruleCreated();
     /// @brief A `deleteRule` succeeded.
     void ruleDeleted();
+    /// @brief A `getAttachments` succeeded — see `attachments` property.
+    /// @param attachments The listing's rows.
+    void attachmentsListed(const QVariantList& attachments);
+    /// @brief An `uploadAttachment` succeeded end to end (upload,
+    ///        then `AddAttachment`).
+    /// @param taskId The task the attachment was committed to, as its plain
+    ///        number.
+    void attachmentUploaded(const QString& taskId);
+    /// @brief A `downloadAttachment` succeeded and its bytes were written to
+    ///        the requested local path.
+    /// @param localFilePath The path the bytes were written to, echoed back.
+    void attachmentDownloaded(const QString& localFilePath);
     /// @brief The `EventPoller` stopped for good (a non-timeout failure).
     ///        Polling does not resume on its own; the view should show this
     ///        and let the user re-open the board.
@@ -468,6 +567,19 @@ class BoardBridge : public QObject {
     QVariantList _activity;
     QString _myRole;
     QVariantList _rules;
+    QVariantList _attachments;
+    /// @brief Base URL of Task 17's `AttachmentServer` -- see
+    ///        `setAttachmentServerUrl()`'s own doc comment for why this
+    ///        bridge has no other way to learn it. Empty until set.
+    QString _attachmentServerUrl;
+#ifndef Q_MOC_RUN
+    /// @brief Issues every `uploadAttachment()`/`downloadAttachment()`
+    ///        request. One instance for this bridge's whole lifetime (Qt's
+    ///        own recommendation -- a `QNetworkAccessManager` is meant to be
+    ///        reused across requests, not built per call), parented to
+    ///        `this` so it is torn down alongside the bridge.
+    QNetworkAccessManager* _networkManager;
+#endif
     QString _lastOpIdForTest;
     /// @brief Set by `openBoard()`, consumed (and cleared) by the next
     ///        `boardOpened` this bridge relays — see `applyBoard()`'s own

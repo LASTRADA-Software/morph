@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_qml_bridge.hpp"
 
+#include <QByteArray>
+#include <QFile>
+#include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMimeDatabase>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QString>
+#include <QUrl>
 #include <QUuid>
 #include <QVariant>
 
@@ -28,6 +37,35 @@ namespace {
 template <typename IdT>
 [[nodiscard]] qlonglong idNumber(const IdT& id) {
     return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
+}
+
+/// @brief Builds an `Authorization: Bearer <token>` header value from
+///        @p bridge's own currently-installed session -- the same token
+///        `ProjectAdminPresenter::onLoginSucceeded` installs via
+///        `Bridge::setDefaultSession()` after a successful `Login`. Neither
+///        `uploadAttachment()` nor `downloadAttachment()` invents a separate
+///        auth-storage mechanism: this is the one bearer token this process
+///        already holds.
+/// @param bridge The `Bridge` whose `defaultSession().token` to read.
+/// @return The header value, ready for `QNetworkRequest::setRawHeader()`.
+[[nodiscard]] QByteArray bearerHeaderValue(const ::morph::bridge::Bridge& bridge) {
+    return QByteArray{"Bearer "} + QByteArray::fromStdString(bridge.defaultSession().token);
+}
+
+/// @brief Normalises @p path to a local filesystem path, whether it arrived
+///        as a plain path or as a `file://` URL -- `Qt.labs`/`QtQuick.Dialogs`'s
+///        `FileDialog.selectedFile` is a `QUrl`, and QML's own `QUrl` ->
+///        `QString` marshalling renders it as `file:///C:/...`, not a bare
+///        path `QFile` can open directly. A caller passing an already-bare
+///        local path (any non-GUI caller, or a future test) is unaffected:
+///        `QUrl::isLocalFile()` is `false` for a string with no `file://`
+///        scheme, so @p path passes through unchanged.
+/// @param path Either a bare local path or a `file://` URL, as QML's
+///        `FileDialog` hands it back.
+/// @return The bare local filesystem path.
+[[nodiscard]] QString localFilePathFrom(const QString& path) {
+    const QUrl url{path};
+    return url.isLocalFile() ? url.toLocalFile() : path;
 }
 
 /// @brief Parses a QML-supplied id string (a plain integer, as every
@@ -111,6 +149,24 @@ template <typename IdT>
     };
 }
 
+/// @brief One `AttachmentView` row as the property bag the attachment list
+///        binds against. `storageKey` is included (unlike, say, `TaskView`'s
+///        own internal ids) precisely so QML can pass it straight into
+///        `BoardBridge::downloadAttachment()` without a lookup back through
+///        this bridge.
+[[nodiscard]] QVariantMap toVariantMap(const AttachmentView& attachment) {
+    return QVariantMap{
+        {"id", idNumber(attachment.id)},
+        {"taskId", idNumber(attachment.taskId)},
+        {"filename", QString::fromStdString(attachment.filename)},
+        {"contentType", QString::fromStdString(attachment.contentType)},
+        {"sizeBytes", static_cast<qlonglong>(attachment.sizeBytes)},
+        {"storageKey", QString::fromStdString(attachment.storageKey)},
+        {"uploadedBy", QString::fromStdString(attachment.uploadedBy)},
+        {"uploadedAtMs", static_cast<qlonglong>(attachment.uploadedAtMs)},
+    };
+}
+
 template <typename Rows>
 [[nodiscard]] QVariantList toVariantList(const Rows& rows) {
     QVariantList out;
@@ -188,7 +244,13 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
     });
     connect(&_presenter, &BoardPresenter::ruleCreated, this, &BoardBridge::ruleCreated);
     connect(&_presenter, &BoardPresenter::ruleDeleted, this, &BoardBridge::ruleDeleted);
+    connect(&_presenter, &BoardPresenter::attachmentsListed, this, [this](GetAttachmentsResult result) {
+        _attachments = toVariantList(result.attachments);
+        emit attachmentsListed(_attachments);
+    });
     connect(&_presenter, &BoardPresenter::failed, this, &BoardBridge::failed);
+
+    _networkManager = new QNetworkAccessManager{this};
 }
 
 void BoardBridge::applyBoard(const GetBoardResult& result) {
@@ -281,6 +343,147 @@ void BoardBridge::getRules() {
 
 void BoardBridge::deleteRule(const QString& ruleId) {
     _presenter.deleteRule(parseId<RuleId>(ruleId));
+}
+
+void BoardBridge::setAttachmentServerUrl(const QString& baseUrl) {
+    _attachmentServerUrl = baseUrl;
+}
+
+void BoardBridge::getAttachments(const QString& taskId) {
+    _presenter.getAttachments(parseId<TaskId>(taskId));
+}
+
+void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFilePath) {
+    if (_attachmentServerUrl.isEmpty()) {
+        emit failed(QStringLiteral("uploadAttachment: no attachment server configured (call "
+                                    "setAttachmentServerUrl() first)"));
+        return;
+    }
+    const TaskId parsedTaskId = parseId<TaskId>(taskId);
+    if (!parsedTaskId.hasValue()) {
+        emit failed(QStringLiteral("uploadAttachment: '%1' is not a valid taskId").arg(taskId));
+        return;
+    }
+
+    // `localFilePath` arrives as a bare path from a non-GUI caller, or as a
+    // `file://` URL from QML's `FileDialog.selectedFile` -- see
+    // localFilePathFrom()'s own doc comment.
+    const QString resolvedPath = localFilePathFrom(localFilePath);
+    QFile file{resolvedPath};
+    if (!file.open(QIODevice::ReadOnly)) {
+        emit failed(QStringLiteral("uploadAttachment: could not open '%1' for reading").arg(resolvedPath));
+        return;
+    }
+    const QByteArray bytes = file.readAll();
+    file.close();
+
+    const QFileInfo fileInfo{resolvedPath};
+    const QString filename = fileInfo.fileName();
+    const QString contentType = QMimeDatabase{}.mimeTypeForFile(fileInfo).name();
+
+    QNetworkRequest request{QUrl{_attachmentServerUrl + QStringLiteral("/attachments")}};
+    request.setRawHeader("X-Attachment-Content-Type", contentType.toUtf8());
+    request.setRawHeader("Authorization", bearerHeaderValue(_bridge));
+
+    // POST, not multipart -- AttachmentServer's own class doc comment
+    // documents the raw-bytes-plus-header convention this request must speak
+    // (see kanban/http/attachment_server.hpp). The reply is parented to
+    // `_networkManager` for its own lifetime; this lambda captures `alive` so
+    // a bridge destroyed mid-request never has its (by-then-dangling) `this`
+    // touched by a reply that arrives after teardown -- same weak_ptr guard
+    // every other async continuation in this class already uses. Every
+    // captured value here (parsedTaskId/filename/contentType/size) travels
+    // with this one call's own continuation, never through a shared field --
+    // two overlapping uploadAttachment() calls each get their own closure, so
+    // neither's outcome can be cross-attributed to the other (the same
+    // "no shared mutable field carries one call's data" lesson moveTask()'s
+    // own doc comment cites).
+    QNetworkReply* reply = _networkManager->post(request, bytes);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, taskId, parsedTaskId, filename, contentType, size = bytes.size(),
+             alive = std::weak_ptr<const void>{_liveness}] {
+                reply->deleteLater();
+                if (alive.expired()) {
+                    return;
+                }
+                if (reply->error() != QNetworkReply::NoError) {
+                    emit failed(QStringLiteral("uploadAttachment: HTTP request failed: %1").arg(reply->errorString()));
+                    return;
+                }
+                const QByteArray responseBody = reply->readAll();
+                const QJsonDocument doc = QJsonDocument::fromJson(responseBody);
+                const QString storageKey = doc.object().value(QStringLiteral("storageKey")).toString();
+                if (storageKey.isEmpty()) {
+                    emit failed(QStringLiteral("uploadAttachment: server response carried no storageKey"));
+                    return;
+                }
+                // BoardPresenter::addAttachment() returns its own independent
+                // Completion<Ack> (not a shared signal) for exactly this
+                // reason: this continuation is this call's, and only this
+                // call's.
+                _presenter.addAttachment(parsedTaskId, filename, contentType, static_cast<std::int64_t>(size),
+                                         storageKey)
+                    .then([this, taskId, parsedTaskId, alive](Ack) {
+                        if (alive.expired()) {
+                            return;
+                        }
+                        emit attachmentUploaded(taskId);
+                        _presenter.getAttachments(parsedTaskId);
+                    })
+                    .onError([this, alive](const std::exception_ptr& err) {
+                        if (alive.expired()) {
+                            return;
+                        }
+                        try {
+                            std::rethrow_exception(err);
+                        } catch (const std::exception& ex) {
+                            emit failed(QStringLiteral("uploadAttachment: AddAttachment failed: %1")
+                                            .arg(QString::fromStdString(ex.what())));
+                        }
+                    });
+            });
+}
+
+void BoardBridge::downloadAttachment(const QString& storageKey, const QString& localFilePath) {
+    if (_attachmentServerUrl.isEmpty()) {
+        emit failed(QStringLiteral("downloadAttachment: no attachment server configured (call "
+                                    "setAttachmentServerUrl() first)"));
+        return;
+    }
+
+    QNetworkRequest request{QUrl{_attachmentServerUrl + QStringLiteral("/attachments/") + storageKey}};
+    request.setRawHeader("Authorization", bearerHeaderValue(_bridge));
+
+    // A validly-signed token does not guarantee 200 here: GET /attachments/{storageKey}
+    // also checks the caller's project role and returns 404 for an authenticated
+    // principal with no standing on the owning project (kanban/http/attachment_server.hpp's
+    // "Authorization (not just authentication)" section) -- handled below the
+    // same way any other server rejection is, via failed(QString), never assumed away.
+    // Same file://-URL-or-bare-path normalisation uploadAttachment() applies
+    // -- see localFilePathFrom()'s own doc comment.
+    const QString resolvedPath = localFilePathFrom(localFilePath);
+    QNetworkReply* reply = _networkManager->get(request);
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, resolvedPath, alive = std::weak_ptr<const void>{_liveness}] {
+                reply->deleteLater();
+                if (alive.expired()) {
+                    return;
+                }
+                if (reply->error() != QNetworkReply::NoError) {
+                    emit failed(
+                        QStringLiteral("downloadAttachment: HTTP request failed: %1").arg(reply->errorString()));
+                    return;
+                }
+                QFile file{resolvedPath};
+                if (!file.open(QIODevice::WriteOnly)) {
+                    emit failed(
+                        QStringLiteral("downloadAttachment: could not open '%1' for writing").arg(resolvedPath));
+                    return;
+                }
+                file.write(reply->readAll());
+                file.close();
+                emit attachmentDownloaded(resolvedPath);
+            });
 }
 
 void BoardBridge::stopPolling() {
