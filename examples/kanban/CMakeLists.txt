@@ -43,6 +43,28 @@ if(TARGET ladder_kanban_lib AND MORPH_BUILD_QT)
     target_link_libraries(ladder_kanban_lib PUBLIC Qt6::Network)
 endif()
 
+# Task 18: BoardBridge's attachment upload/download (gui_lib/board_qml_bridge.
+# hpp/.cpp) uses QNetworkAccessManager to talk to Task 17's HTTP side
+# channel -- this needs Qt6::Network too, but on ladder_kanban_gui_lib, a
+# different target from the one Task 17 (above) wired it onto.
+# ladder_kanban_gui_lib only ever picks up Qt6::Network *transitively* by
+# linking morph::ladder_kanban_lib (cmake/morph_add_rung.cmake's
+# `if(TARGET ladder_${_rung}_lib) target_link_libraries(...
+# morph::ladder_${_rung}_lib)` block) -- and ladder_kanban_lib itself does
+# not exist at all under Emscripten (see morph_add_rung.cmake's own
+# "native only" comment on that target: persistence lives server-side for
+# a WASM client, so there is nothing for gui_lib to link there). The
+# result: native builds succeeded by accident (through that transitive
+# chain), while the WASM build -- which has no ladder_kanban_lib to
+# transit through -- failed with "'QNetworkAccessManager' file not found".
+# gui_lib needs this dependency directly and unconditionally, on every
+# platform, since QNetworkAccessManager is used by shared presenter/bridge
+# code both the desktop and WASM clients link.
+if(TARGET ladder_kanban_gui_lib AND MORPH_BUILD_QT)
+    find_package(Qt6 6.5 REQUIRED COMPONENTS Network)
+    target_link_libraries(ladder_kanban_gui_lib PUBLIC Qt6::Network)
+endif()
+
 # Task 5: wires SqliteOfflineQueue/NetworkMonitor/SyncWorker/
 # ReconnectCoordinator into BoardBridge::moveTask (gui_lib/board_qml_bridge.
 # hpp/.cpp) -- optional, like every other morph::offline_sqlite consumer
