@@ -128,14 +128,33 @@ TEST_CASE("AttachmentServer accepts a valid upload and returns a storageKey; byt
     std::filesystem::remove_all(storageDir);
 }
 
-TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the recorded content type",
+TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the recorded content type "
+          "for a principal with Viewer-or-above role on the owning project",
           "[kanban][attachments][http]") {
+    // Positive control for the ownership-authorization gate below: uploading
+    // bytes alone is not enough to authorize a GET any more -- the storageKey
+    // must actually be committed to a task (via AddAttachment, exactly like a
+    // real client would) on a project the requesting principal has a role
+    // on. This supersedes what used to be a bare upload-then-GET with no
+    // AttachmentRecord at all (see the Critical-finding fix report).
+    DbFixture fixture;
     const auto storageDir = freshStorageDir("download_existing");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
 
     AttachmentServer server{verifier, AttachmentServer::Config{.storageDir = storageDir}};
     REQUIRE(server.listen());
+
+    const auto projectId = createProjectAs("alice", "Download Existing Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
 
     const std::string token = validToken(issuer, "alice");
     const std::string body = "downloadable payload bytes";
@@ -156,6 +175,13 @@ TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the re
     const auto secondQuote = uploadResponse.find('"', firstQuote + 1);
     const std::string storageKey = uploadResponse.substr(firstQuote + 1, secondQuote - firstQuote - 1);
 
+    // Commit the metadata row, exactly as a real client's follow-up
+    // AddAttachment call would -- this is what makes the storageKey resolve
+    // to a project the GET-time authorization check can find.
+    model.execute(kanban::AddAttachment{
+        .taskId = taskId, .filename = "dl.txt", .contentType = "text/plain", .sizeBytes = static_cast<std::int64_t>(body.size()),
+        .storageKey = storageKey});
+
     const QByteArray getRequest = QByteArray::fromStdString(
         "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
         "Host: 127.0.0.1\r\n"
@@ -170,8 +196,95 @@ TEST_CASE("AttachmentServer downloads an existing storageKey's bytes with the re
     std::filesystem::remove_all(storageDir);
 }
 
+TEST_CASE("AttachmentServer returns 404 (not 200) for a GET whose bearer token is validly signed for a "
+          "DIFFERENT project the principal has no role on -- authentication alone is not authorization",
+          "[kanban][attachments][http]") {
+    // The Critical-finding regression test: `mallory` holds a validly-signed
+    // token (real signature, unexpired) but has NO role on the project that
+    // owns this attachment -- she is authenticated, not authorized. Before
+    // the fix, this GET would return 200 with the bytes (the server checked
+    // only that *some* bearer token verified, never whose project it
+    // belonged to). 404, not 403, matching the existing dangling-row
+    // precedent: an unauthorized caller must not be able to distinguish "this
+    // key doesn't exist" from "this key exists but you have no access."
+    DbFixture fixture;
+    const auto storageDir = freshStorageDir("cross_tenant_get");
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
+
+    AttachmentServer server{verifier, AttachmentServer::Config{.storageDir = storageDir}};
+    REQUIRE(server.listen());
+
+    // alice's project owns the attachment.
+    const auto aliceProjectId = createProjectAs("alice", "Alice's Board");
+    kanban::BoardModel aliceModel;
+    kanban::TaskId aliceTaskId;
+    {
+        const ScopedPrincipal alice{"alice"};
+        aliceModel.execute(kanban::OpenBoard{.projectId = aliceProjectId});
+        const auto columnId = aliceModel.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+        const auto swimlaneId = aliceModel.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+        aliceTaskId =
+            aliceModel.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Secret task"})
+                .tasks.front()
+                .id;
+    }
+
+    // mallory has her own, entirely separate project -- she is a real,
+    // authenticated principal, just not one with any standing on alice's
+    // project.
+    const auto malloryProjectId = createProjectAs("mallory", "Mallory's Own Board");
+    static_cast<void>(malloryProjectId);
+
+    const std::string aliceToken = validToken(issuer, "alice");
+    const std::string body = "secret attachment bytes only alice's project should see";
+    const QByteArray uploadRequest = QByteArray::fromStdString(
+        "POST /attachments HTTP/1.1\r\n"
+        "Host: 127.0.0.1\r\n"
+        "Authorization: Bearer " + aliceToken + "\r\n"
+        "X-Attachment-Content-Type: text/plain\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n"
+        "\r\n" + body);
+    const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
+    REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
+    const auto keyPos = uploadResponse.find("\"storageKey\"");
+    const auto colonPos = uploadResponse.find(':', keyPos);
+    const auto firstQuote = uploadResponse.find('"', colonPos);
+    const auto secondQuote = uploadResponse.find('"', firstQuote + 1);
+    const std::string storageKey = uploadResponse.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+
+    {
+        const ScopedPrincipal alice{"alice"};
+        aliceModel.execute(kanban::AddAttachment{.taskId = aliceTaskId,
+                                                  .filename = "secret.txt",
+                                                  .contentType = "text/plain",
+                                                  .sizeBytes = static_cast<std::int64_t>(body.size()),
+                                                  .storageKey = storageKey});
+    }
+
+    // mallory presents her own validly-signed token (real signature, real
+    // principal, unexpired) against alice's storageKey.
+    const std::string malloryToken = validToken(issuer, "mallory");
+    const QByteArray getRequest = QByteArray::fromStdString(
+        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
+        "Host: 127.0.0.1\r\n"
+        "Authorization: Bearer " + malloryToken + "\r\n"
+        "\r\n");
+    const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
+
+    REQUIRE(getResponse.starts_with("HTTP/1.1 404"));
+    CHECK(getResponse.find(body) == std::string::npos);
+
+    std::filesystem::remove_all(storageDir);
+}
+
 TEST_CASE("AttachmentServer returns 404 for a GET naming a storageKey that was never uploaded",
           "[kanban][attachments][http]") {
+    // DbFixture: the GET-time authorization check (fix for the Critical
+    // finding) queries AttachmentRecord/TaskRecord/ProjectRoleRecord for
+    // every GET, even one whose storageKey never existed at all -- a real DB
+    // connection is now needed here, where none was before that fix.
+    DbFixture fixture;
     const auto storageDir = freshStorageDir("download_missing");
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
     const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};

@@ -1,12 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "kanban/http/attachment_server.hpp"
 
+#include "kanban/core/types.hpp"
+#include "kanban/db/kanban_entity.hpp"
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
+
 #include <QByteArray>
 
 #include <array>
 #include <chrono>
 #include <cstdio>
 #include <fstream>
+#include <optional>
 #include <random>
 #include <sstream>
 
@@ -41,6 +48,73 @@ namespace {
         out.push_back(kHex[byte & 0x0f]);
     }
     return out;
+}
+
+/// @brief The caller's own role on @p projectDbId, or `std::nullopt` if they
+///        have none. Duplicated from `kanban::(anonymous)::loadCallerRole`
+///        (`board_model.cpp`, also duplicated again in
+///        `project_admin_model.cpp`) rather than shared or exposed from
+///        either -- this file already follows the same "each model gets its
+///        own copy" precedent design spec §3 establishes for that helper
+///        (both existing copies are file-local, anonymous-namespace-scoped
+///        functions, not declared in any header), and this HTTP server is a
+///        third, independent translation unit with the same shape of need:
+///        "does this principal hold at least this role on this project."
+[[nodiscard]] std::optional<Role> loadCallerRole(::Lightweight::DataMapper& mapper, std::uint64_t projectDbId,
+                                                  const std::string& principal) {
+    auto rows = mapper.Query<db::ProjectRoleRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::project>, "=", projectDbId)
+                    .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
+                    .All();
+    if (rows.empty()) {
+        return std::nullopt;
+    }
+    return roleFromString(rows.front().role.Value().str());
+}
+
+/// @brief Resolves whether @p principal may read the attachment blob named by
+///        @p storageKey: looks up the `AttachmentRecord` row matching
+///        `storageKey`, follows it to its owning `TaskRecord`, then that
+///        task's `ProjectRecord`, and checks @p principal holds at least
+///        `Role::Viewer` there -- the same read bar
+///        `BoardModel::execute(const GetAttachments&)` enforces
+///        (`requireRole(Role::Viewer)` + `requireTaskBelongsToProject`,
+///        `board_model.cpp`), reconstructed here since the HTTP server has no
+///        `BoardModel` instance (and no `_projectIdStr` to gate against --
+///        the project is only known *after* resolving the storage key, not
+///        ambient like it is inside an already-`OpenBoard`'d `BoardModel`).
+/// @return `true` only if a matching `AttachmentRecord` row exists AND its
+///         owning project grants @p principal at least `Role::Viewer`.
+///         `false` for a nonexistent `storageKey`, a dangling row whose task
+///         or project no longer resolves, or an authenticated principal with
+///         no (or too low a) role on the owning project -- deliberately
+///         collapsed to one boolean so the caller cannot accidentally emit a
+///         different status code for "key doesn't exist" vs. "key exists but
+///         you have no access," which would leak existence to an
+///         unauthorized prober.
+[[nodiscard]] bool callerMayReadAttachment(std::string_view storageKey, const std::string& principal) {
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto attachmentRows = mapper->Query<db::AttachmentRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::storageKey>, "=",
+                                     std::string{storageKey})
+                              .All();
+    if (attachmentRows.empty()) {
+        return false;
+    }
+    auto taskRows = mapper->Query<db::TaskRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::TaskRecord::id>, "=",
+                               attachmentRows.front().task.Value())
+                        .All();
+    if (taskRows.empty()) {
+        // Cross-tenant/dangling-FK re-check discipline (design spec §2):
+        // TaskRecord::project is FK-shaped but not FK-enforced by SQLite, so
+        // a task row that has vanished out from under an attachment row must
+        // fail closed here, not be treated as "no restriction."
+        return false;
+    }
+    const std::uint64_t projectDbId = taskRows.front().project.Value();
+    const auto role = loadCallerRole(mapper.Get(), projectDbId, principal);
+    return role.has_value() && static_cast<std::uint8_t>(*role) >= static_cast<std::uint8_t>(Role::Viewer);
 }
 
 /// @brief A storage key must be exactly the shape `mintStorageKey()` produces
@@ -305,16 +379,33 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
     // Authentication first, before any route logic or body handling: an
     // unauthenticated caller is rejected before this server ever inspects
     // (let alone buffers or writes) a single body byte, upload or download.
+    // The verified SessionToken (not just a bool) is kept: GET below needs
+    // its principal to check *authorization*, not merely that the token was
+    // validly signed and unexpired -- authentication alone would let any
+    // authenticated principal (a valid token for ANY project) read any
+    // attachment blob by storage key. See the class doc comment's
+    // "Authorization (not just authentication)" section.
     const auto token = extractBearerToken(req);
-    const bool authenticated = token && _verifier.verify(*token, nowMs()).has_value();
-    if (!authenticated) {
+    const auto verified = token ? _verifier.verify(*token, nowMs()) : std::unexpected(::morph::session::AuthError::Malformed);
+    if (!verified.has_value()) {
         respondAndClose(socket, state, buildResponse(401, "Unauthorized", errorJson("missing or invalid bearer token")));
         return;
     }
+    const std::string& principal = verified->principal;
 
     if (req.method == "GET" && req.path.starts_with("/attachments/")) {
         const std::string key = req.path.substr(std::string_view{"/attachments/"}.size());
         if (!isValidStorageKey(key)) {
+            respondAndClose(socket, state, buildResponse(404, "Not Found", errorJson("not found")));
+            return;
+        }
+        // Authorization: does `principal` (already authenticated above) hold
+        // at least Viewer on the project this storageKey's attachment
+        // belongs to? A nonexistent key and an existing-but-unauthorized key
+        // are deliberately indistinguishable to the caller -- both 404 --
+        // so this check is never allowed to leak "this key exists" via a
+        // different status code (403) to a caller with no standing on it.
+        if (!callerMayReadAttachment(key, principal)) {
             respondAndClose(socket, state, buildResponse(404, "Not Found", errorJson("not found")));
             return;
         }

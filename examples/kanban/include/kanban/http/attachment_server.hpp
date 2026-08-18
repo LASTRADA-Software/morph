@@ -100,6 +100,39 @@ struct AttachmentServerConfig {
 /// transactional link between this HTTP server's upload and the metadata
 /// action's commit in this pass; reconciling the two is out of scope here.
 ///
+/// @par Authorization (not just authentication)
+/// `GET /attachments/{storageKey}` does more than check the bearer token is
+/// validly signed and unexpired: it resolves the `storageKey` to its
+/// `db::AttachmentRecord` row, follows that row's `task` to the owning
+/// `db::TaskRecord`, and requires the verified principal hold at least
+/// `Role::Viewer` on that task's `project` -- mirroring
+/// `BoardModel::execute(const GetAttachments&)`'s own
+/// `requireRole(Role::Viewer)` + `requireTaskBelongsToProject` gate. A
+/// validly-signed token for some *other* project's principal is
+/// authentication without authorization and must not be enough to read a
+/// blob it has no role on. If no `AttachmentRecord` row names `storageKey`
+/// at all (the dangling-row / never-uploaded case above), the response is
+/// still `404` -- the same status an unauthorized caller gets -- so a probe
+/// cannot distinguish "this key doesn't exist" from "this key exists but you
+/// have no role on its project."
+///
+/// `POST /attachments` deliberately does **not** get an equivalent
+/// project-scoped check: it mints a brand-new `storageKey` and there is, by
+/// construction, no `AttachmentRecord` yet to resolve ownership from (that
+/// row is only created afterward by the caller's own follow-up
+/// `AddAttachment` call, per this server's designed flow order -- see the
+/// "Dangling metadata rows" paragraph above). Any authenticated principal
+/// may upload bytes and receive a storage key back; the bytes are, at that
+/// point, an orphaned blob with no project association until
+/// `AddAttachment` commits it -- `AddAttachment` is the real authorization
+/// boundary for *committing* an attachment (`requireRole(Role::Member)` +
+/// `requireTaskBelongsToProject`), and `GET` is the real authorization
+/// boundary for *reading* a committed one. An uploaded-but-never-committed
+/// blob carries no confidentiality value worth gating at upload time: its
+/// `storageKey` is known only to the uploader until it is named in an
+/// `AddAttachment` call or a `GET`, both of which are already
+/// authorization-checked.
+///
 /// @par Threading
 /// A `QObject` living on the Qt event loop thread, same as `QtWebSocketServer`:
 /// every slot below runs there. One request is handled per connection; the
