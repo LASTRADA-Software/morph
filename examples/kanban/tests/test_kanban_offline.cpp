@@ -67,6 +67,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
+#include <Lightweight/SqlMigration.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -77,7 +78,9 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <utility>
@@ -583,18 +586,43 @@ namespace {
 /// `GlobalDataMapperPool()`'s connections use `SqlConnection`'s default
 /// constructor (`DefaultConnectionString()`), not an explicit
 /// per-`DataMapper` override.
+///
+/// @par WAL mode
+/// `useWalJournalMode` optionally issues `PRAGMA journal_mode=WAL` in the
+/// same post-connect hook, right after `busy_timeout` -- the identical
+/// per-connection setup point, and the same idiom
+/// `sqlite_offline_queue.hpp`'s own `SqliteOfflineQueue` constructor already
+/// uses for its (unrelated, raw-`sqlite3*`) queue database. Needed because
+/// `DbFixture`'s shared on-disk database defaults to SQLite's ordinary
+/// rollback-journal mode, and the WAL-mode variant of the 32-board
+/// contention test below (design spec/README's "WAL on and off") must set
+/// WAL on the very connections that race, not on some separate one-off
+/// connection: `journal_mode=WAL` is a per-database-file, not strictly
+/// per-connection, setting once any connection sets it (SQLite persists the
+/// mode in the file itself), but every newly-opened connection still must
+/// see it applied at least once before the racing writes begin, so it goes
+/// through the same hook `busy_timeout` uses, for the same reason.
 class ScopedShortBusyTimeout {
   public:
     /// @param milliseconds Value installed as both the `PRAGMA busy_timeout`
     ///        on every newly-opened connection and the default connection
     ///        string's `Timeout=` (the sqliteodbc driver's own outer retry
     ///        ceiling) for this object's lifetime.
-    explicit ScopedShortBusyTimeout(int milliseconds)
+    /// @param useWalJournalMode When `true`, also issues `PRAGMA
+    ///        journal_mode=WAL` in the same post-connect hook (see this
+    ///        class's own "WAL mode" doc section above). Defaults to `false`
+    ///        -- SQLite's ordinary rollback-journal mode -- matching every
+    ///        existing caller of this helper.
+    explicit ScopedShortBusyTimeout(int milliseconds, bool useWalJournalMode = false)
         : _previousConnectionString{::Lightweight::SqlConnection::DefaultConnectionString()} {
-        ::Lightweight::SqlConnection::SetPostConnectedHook([milliseconds](::Lightweight::SqlConnection& connection) {
-            ::Lightweight::SqlStatement stmt{connection};
-            (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
-        });
+        ::Lightweight::SqlConnection::SetPostConnectedHook(
+            [milliseconds, useWalJournalMode](::Lightweight::SqlConnection& connection) {
+                ::Lightweight::SqlStatement stmt{connection};
+                (void) stmt.ExecuteDirect("PRAGMA busy_timeout = " + std::to_string(milliseconds));
+                if (useWalJournalMode) {
+                    (void) stmt.ExecuteDirect("PRAGMA journal_mode = WAL");
+                }
+            });
         ::Lightweight::SqlConnection::SetDefaultConnectionString(
             ::Lightweight::SqlConnectionString{shortenTimeout(_previousConnectionString.value, milliseconds)});
     }
@@ -837,4 +865,298 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
             }
         }
     }
+}
+
+namespace {
+
+/// @brief Points `Lightweight`'s default connection at a dedicated,
+///        WAL-only SQLite file for its lifetime -- a filesystem copy of
+///        `DbFixture`'s already-migrated (and, thanks to the `DbFixture`
+///        constructed just before this object, freshly emptied) shared
+///        database -- restoring the previous default connection string on
+///        destruction.
+///
+/// @par Why a copy, not the shared file directly
+/// `PRAGMA journal_mode=WAL` is written into the database file's own
+/// header, not scoped per-connection -- and switching a file *away* from
+/// WAL (`journal_mode=DELETE`) requires SQLite's exclusive access, which
+/// fails with a hard, non-timeout-bounded `SQLITE_BUSY` ("database is
+/// locked") whenever any other connection -- even a perfectly idle one with
+/// no open transaction -- still has that same file open. Confirmed
+/// empirically (30-real-second `busy_timeout` made no difference -- the
+/// failure is instant, not a timeout): `GlobalDataMapperPool()` keeps idle
+/// connections open to `DbFixture`'s shared file for the rest of the
+/// process, and -- the connection that actually makes restoring hopeless --
+/// `Lightweight::DataMapper::AcquireThreadLocal()`'s `thread_local` instance
+/// (which `Lightweight::SqlMigration::MigrationManager::GetInstance()` uses
+/// internally for every migration call) is opened once per thread and never
+/// closed or repointed for the rest of the process, regardless of any later
+/// `SetDefaultConnectionString()` call -- confirmed empirically:
+/// `MigrationManager::CloseDataMapper()` only clears the manager's own
+/// pointer *to* that thread_local instance, it does not close or reconstruct
+/// the instance itself, so a later `ApplyPendingMigrations()` call still
+/// silently re-acquires the *original* file's long-lived connection. Given
+/// there is no public API to close or repoint that thread_local connection,
+/// this scenario avoids ever competing with it: it runs against its own
+/// file, populated by a plain filesystem copy of the shared file right after
+/// `DbFixture`'s own migrate-and-empty pass (so the copy's schema is
+/// identical, and it starts empty) -- never through `MigrationManager` --
+/// so the shared file every other `TEST_CASE` in this binary uses is never
+/// touched, and Catch2's execution order (confirmed non-deterministic across
+/// runs of this very binary) can never make this test's WAL mode leak into
+/// the rollback-journal contention test above, or any other `TEST_CASE` in
+/// this file. Only `GlobalDataMapperPool()`-acquired connections (every
+/// model call in this scenario) ever need to see the new connection string;
+/// nothing in this scenario calls `MigrationManager` again after
+/// construction, so `AcquireThreadLocal()`'s permanent pin to the shared
+/// file is simply never exercised here.
+class ScopedWalDatabaseFile {
+  public:
+    /// @param path SQLite file this scenario's connections use for this
+    ///        object's lifetime -- must not collide with `DbFixture`'s own
+    ///        shared `morph_ladder_test.db`. Must be constructed
+    ///        immediately after a `DbFixture` on the same (default)
+    ///        connection string, so that string's file is the fresh,
+    ///        empty-but-migrated schema this copies from.
+    explicit ScopedWalDatabaseFile(const std::string& path)
+        : _previousConnectionString{::Lightweight::SqlConnection::DefaultConnectionString()} {
+        std::filesystem::remove(path);
+        std::filesystem::remove(path + "-wal");
+        std::filesystem::remove(path + "-shm");
+        std::filesystem::copy_file(sharedDatabaseFilePath(), path);
+        ::Lightweight::SqlConnection::SetDefaultConnectionString(
+            ::Lightweight::SqlConnectionString{"DRIVER=SQLite3;Database=" + path + ";Timeout=5000"});
+    }
+
+    ~ScopedWalDatabaseFile() {
+        // Every mapper GlobalDataMapperPool() currently holds idle is a real,
+        // still-open connection to *this* object's own WAL file (every
+        // Acquire() during this scenario's lifetime was forced fresh under
+        // this file's connection string -- see the constructor's own doc
+        // comment and the scenario's own staleConnectionDrain). Draining and
+        // then deliberately leaking that batch (never releasing it back to
+        // the pool) empties the idle list one last time before repointing
+        // the default connection string back to the shared file below --
+        // otherwise whichever sibling `TEST_CASE` runs next in this binary
+        // would have its own *first* Acquire() silently hand back one of
+        // these still-WAL-file-connected mappers instead of constructing
+        // fresh under the restored connection string (the same
+        // GlobalDataMapperPool() idle-reuse gotcha this scenario's own
+        // staleConnectionDrain guards against on the way in -- confirmed
+        // empirically: without this, the very next TEST_CASE's own
+        // CreateProject calls landed in *this* WAL file instead of the
+        // shared one). Intentionally never released: leaking these
+        // connections for the rest of the process is the only way, short of
+        // a public pool-wide close API this library does not expose, to
+        // guarantee no later Acquire() ever reuses one.
+        static std::vector<::Lightweight::DataMapperPool::PooledDataMapper> leakedWalConnections;
+        auto finalDrain = drainPoolIdleMappers();
+        for (auto& mapper : finalDrain) {
+            leakedWalConnections.push_back(std::move(mapper));
+        }
+        ::Lightweight::SqlConnection::SetDefaultConnectionString(_previousConnectionString);
+    }
+
+    ScopedWalDatabaseFile(const ScopedWalDatabaseFile&) = delete;
+    ScopedWalDatabaseFile& operator=(const ScopedWalDatabaseFile&) = delete;
+    ScopedWalDatabaseFile(ScopedWalDatabaseFile&&) = delete;
+    ScopedWalDatabaseFile& operator=(ScopedWalDatabaseFile&&) = delete;
+
+  private:
+    /// @brief Extracts the plain filesystem path out of `DbFixture`'s own
+    ///        shared connection string (`DRIVER=SQLite3;Database=<path>;...`)
+    ///        -- the file this object copies its own dedicated database
+    ///        from. Only ever called right after a `DbFixture` construction,
+    ///        so the current default connection string is guaranteed to
+    ///        still be that shared one (this object has not repointed it
+    ///        yet at this point in the constructor).
+    [[nodiscard]] static std::string sharedDatabaseFilePath() {
+        const auto& current = ::Lightweight::SqlConnection::DefaultConnectionString().value;
+        static constexpr std::string_view key = "Database=";
+        const auto pos = current.find(key);
+        if (pos == std::string::npos) {
+            throw std::runtime_error{"ScopedWalDatabaseFile: no Database= in default connection string"};
+        }
+        const auto valueStart = pos + key.size();
+        auto valueEnd = current.find(';', valueStart);
+        if (valueEnd == std::string::npos) {
+            valueEnd = current.size();
+        }
+        return current.substr(valueStart, valueEnd - valueStart);
+    }
+
+    ::Lightweight::SqlConnectionString _previousConnectionString;
+};
+
+}  // namespace
+
+TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no timeout-then-committed double-apply",
+          "[kanban][offline][contention]") {
+    // Identical scenario and identical invariants to the rollback-journal
+    // TEST_CASE directly above -- this proves the SAME no-double-apply /
+    // dense-unique-positions guarantees hold under WAL, per
+    // examples/kanban/README.md's "WAL on and off" DoD wording, rather than
+    // inventing new assertions. The only structural difference is
+    // `ScopedWalDatabaseFile` (see its own doc comment for why this
+    // scenario needs its own file, not the shared `DbFixture` one the
+    // rollback-journal test above uses) plus
+    // `ScopedShortBusyTimeout{kShortBusyTimeoutMs, /*useWalJournalMode=*/true}`
+    // below, which issues `PRAGMA journal_mode = WAL` in the same
+    // post-connect hook that installs the short busy_timeout -- the same
+    // per-connection setup point the rollback-journal test uses, per this
+    // task's own brief.
+    //
+    // WAL changes SQLite's locking shape (readers no longer block on a
+    // writer, and only one writer can hold the WAL write lock at a time, the
+    // same single-writer serialization as rollback-journal mode), so the
+    // succeeded/failed mix under 32-way contention is not guaranteed to
+    // match the rollback-journal test's own tuned numbers exactly -- both
+    // branches (`succeeded.load() > 0` and `failed.load() > 0`) still fire
+    // reliably at the same `kShortBusyTimeoutMs`/`kLockHold` values, since
+    // `DbBusyFixture`'s `BEGIN IMMEDIATE` still takes SQLite's one write lock
+    // regardless of journal mode.
+    //
+    // A `DbFixture` runs first, exactly like every other `TEST_CASE` in this
+    // file -- it migrates the *shared* database fresh and empty (dropping
+    // every table first), giving `ScopedWalDatabaseFile` a known-good,
+    // known-empty schema to copy at the filesystem level right afterward.
+    // `fixture` itself is never used again past this point (every model
+    // call below goes through `ScopedWalDatabaseFile`'s own dedicated file
+    // instead), but it must stay alive at least until the copy is taken.
+    DbFixture fixture;
+    const ScopedWalDatabaseFile walDb{"morph_ladder_test_wal.db"};
+
+    constexpr int kBoards = 32;
+    std::vector<SeededBoard> boards;
+    boards.reserve(kBoards);
+
+    // GlobalDataMapperPool() is a process-wide singleton: if any earlier
+    // TEST_CASE in this binary already ran (e.g. the rollback-journal
+    // contention test above), its idle mappers -- still open, still
+    // connected to the *shared* DbFixture file -- sit in the pool's idle
+    // list regardless of the connection string ScopedWalDatabaseFile just
+    // installed (db_busy_fixture.hpp's own "SetPostConnectedHook and
+    // GlobalDataMapperPool()" doc section: Acquire() only constructs fresh
+    // when the idle list is empty). A drain-then-release-immediately (as
+    // db_pool_drain.hpp's own doc comment suggests for "one racy
+    // acquisition") is *not* enough here: `Return()` (BoundedOverflow's
+    // growth strategy) pushes every released mapper from the drained batch
+    // back onto the *same* idle list in one go, so only the very first
+    // Acquire() after releasing is guaranteed to be the fresh one -- any
+    // Acquire() after that can still pull one of the other, still-stale
+    // (shared-file) connections the same drained batch just returned.
+    // Confirmed empirically: draining and releasing around only
+    // seedBoard()'s first call left every *other* seedBoard() call free to
+    // reuse a stale connection, and their CreateProject rows landed in the
+    // *shared* file instead of this scenario's own -- corrupting whichever
+    // sibling TEST_CASE runs next in this binary (observed: its own board 0
+    // got a project ID stolen by this scenario's stale writes). Holding the
+    // drained batch for this scenario's *entire* remaining body -- never
+    // releasing it before this TEST_CASE itself ends -- guarantees every
+    // Acquire() from here on, by every board's seedBoard() call and every
+    // worker thread below, constructs fresh under the connection string
+    // ScopedWalDatabaseFile just installed; nothing this scenario does ever
+    // needs more than `Config.maxSize` concurrently *idle* connections
+    // anyway, since BoundedOverflow's Acquire() itself has no bound on
+    // concurrent *new* construction when the idle list is empty.
+    auto staleConnectionDrain = drainPoolIdleMappers();
+    for (int i = 0; i < kBoards; ++i) {
+        boards.push_back(seedBoard("alice", "WAL Contention Board " + std::to_string(i)));
+    }
+
+    // Same tuned values as the rollback-journal test above -- see that
+    // test's own opening comment for why 2000ms/150ms were the ones real
+    // measurement settled on for this 32-way shape.
+    constexpr int kShortBusyTimeoutMs = 2000;
+    const ScopedShortBusyTimeout shortTimeout{kShortBusyTimeoutMs, /*useWalJournalMode=*/true};
+
+    auto drained = drainPoolIdleMappers();
+
+    constexpr auto kLockHold = 150ms;
+    auto busy = std::make_unique<DbBusyFixture>("tasks");
+    std::thread releaser{[kLockHold, &busy] {
+        std::this_thread::sleep_for(kLockHold);
+        busy.reset();  // ~DbBusyFixture() issues ROLLBACK here, releasing the lock now.
+    }};
+
+    std::vector<std::thread> workers;
+    std::vector<bool> threw(kBoards, false);
+    std::vector<std::string> throwMsg(kBoards);
+    std::atomic<int> succeeded{0};
+    std::atomic<int> failed{0};
+    workers.reserve(kBoards);
+    for (int i = 0; i < kBoards; ++i) {
+        workers.emplace_back([&, i] {
+            morph::session::Context ctx;
+            ctx.principal = "alice";
+            morph::session::detail::ScopedContext scope{ctx};
+            kanban::BoardModel model;
+            try {
+                model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
+                model.execute(kanban::MoveTaskPosition{.taskId = boards[static_cast<std::size_t>(i)].taskId,
+                                                        .columnId = boards[static_cast<std::size_t>(i)].columnB,
+                                                        .swimlaneId = boards[static_cast<std::size_t>(i)].swimlaneId,
+                                                        .position = 0,
+                                                        .opId = "contend-1"});
+                ++succeeded;
+            } catch (const std::exception& ex) {
+                threw[static_cast<std::size_t>(i)] = true;
+                throwMsg[static_cast<std::size_t>(i)] = ex.what();
+                ++failed;
+            }
+        });
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    releaser.join();
+    drained.clear();
+    CAPTURE(succeeded.load());
+    CAPTURE(failed.load());
+    CHECK(failed.load() > 0);
+    CHECK(succeeded.load() > 0);
+    REQUIRE(succeeded.load() + failed.load() == kBoards);
+
+    // The DoD invariant, identical in kind to the rollback-journal test's
+    // own: no board whose call threw shows the move applied anyway (no
+    // timeout-then-committed double-apply), every board whose call succeeded
+    // shows it applied exactly once, and every column's positions stay
+    // dense/unique regardless of which branch a board took.
+    for (int i = 0; i < kBoards; ++i) {
+        morph::session::Context ctx;
+        ctx.principal = "alice";
+        morph::session::detail::ScopedContext scope{ctx};
+        kanban::BoardModel model;
+        const auto state = model.execute(kanban::OpenBoard{.projectId = boards[static_cast<std::size_t>(i)].projectId});
+        const auto movedCount = std::ranges::count_if(state.tasks, [&](const kanban::TaskView& t) {
+            return t.id == boards[static_cast<std::size_t>(i)].taskId &&
+                   t.columnId == boards[static_cast<std::size_t>(i)].columnB;
+        });
+        if (threw[static_cast<std::size_t>(i)]) {
+            CAPTURE(i);
+            CAPTURE(throwMsg[static_cast<std::size_t>(i)]);
+            CHECK(movedCount == 0);
+        } else {
+            CAPTURE(i);
+            CHECK(movedCount == 1);
+        }
+        for (const auto& column : {boards[static_cast<std::size_t>(i)].columnA,
+                                    boards[static_cast<std::size_t>(i)].columnB}) {
+            std::vector<std::int64_t> positions;
+            for (const auto& t : state.tasks) {
+                if (t.columnId == column) {
+                    positions.push_back(t.position);
+                }
+            }
+            std::ranges::sort(positions);
+            for (std::size_t p = 0; p < positions.size(); ++p) {
+                CHECK(positions[p] == static_cast<std::int64_t>(p));
+            }
+        }
+    }
+    // No journal-mode restore needed here -- `walDb` (a `ScopedWalDatabaseFile`)
+    // set WAL on its own dedicated file, never on the shared `DbFixture` one;
+    // its destructor below (implicit, end of scope) drains and repoints the
+    // default connection string back, leaving every other TEST_CASE's
+    // shared database untouched (see that class's own destructor comment).
 }
