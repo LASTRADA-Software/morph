@@ -115,6 +115,25 @@ int main(int argc, char** argv) {
         // `main.cpp` for the full rationale (identical shape here).
         projectAdminBridge = std::make_unique<kanban::gui::ProjectAdminBridge>(ctx.bridge(), ctx.executor());
         boardBridge = std::make_unique<kanban::gui::BoardBridge>(ctx.bridge(), ctx.executor());
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+        // Turns on BoardBridge's offline queue/replay stack (Task 5,
+        // docs/superpowers/specs/2026-08-17-kanban-gui-design.md's now-updated
+        // §1/§11): a dragged-task move made while offline queues into this
+        // SQLite file instead of failing, and replays once NetworkMonitor's
+        // own connectivity probe reports the backend reachable again.
+        //
+        // Uses `enableOfflineQueue`'s default (always-online) probe: this
+        // rung has no dedicated "ping" action yet (see that method's own doc
+        // comment), so the monitor never actually transitions offline in this
+        // desktop client today, and moveTask() always takes its online path.
+        // A real connectivity probe (e.g. a lightweight periodic no-op
+        // action, once one exists) is a follow-up; this wiring proves the
+        // queue/replay mechanism itself works end-to-end (this task's DoD),
+        // not a production offline detector.
+        const char* offlineQueuePath = std::getenv("KANBAN_OFFLINE_QUEUE_DB");
+        boardBridge->enableOfflineQueue(
+            QString::fromUtf8(offlineQueuePath != nullptr ? offlineQueuePath : "kanban-offline-queue.db"));
+#endif
         // Initial properties rather than context properties: the root object
         // then declares what it needs, so the same Main.qml also loads with
         // nothing wired up — which is exactly what the offscreen engine-load

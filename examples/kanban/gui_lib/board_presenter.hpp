@@ -102,6 +102,33 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     ///        stashed on a shared member.
     void moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swimlaneId, std::int64_t position, QString opId);
 
+    /// @brief Dedicated `Completion`-returning overload of `moveTask`, for
+    ///        `BoardBridge`'s offline-queue replay path only
+    ///        (`enableOfflineQueue()`) — never called from QML.
+    ///
+    ///        `moveTask()` above cannot serve a replay: it reports outcome
+    ///        only through the shared `taskMoved(QString)`/`failed(QString)`
+    ///        signals every other action on this presenter also uses, so a
+    ///        concurrent user-driven `moveTask()` racing a queued replay could
+    ///        have its outcome cross-attributed to the replay, or vice versa —
+    ///        exactly the hazard `getEventsSinceForPolling`'s own doc comment
+    ///        (just above) already documents for the identical reason, and
+    ///        the same "no shared mutable field carries one call's data"
+    ///        lesson this rung's `moveTask()` doc comment cites. This overload
+    ///        instead dispatches directly through `_handler.execute()`,
+    ///        returning that call's own independent `Completion<
+    ///        GetBoardResult>` — identical in shape and rationale to
+    ///        `getEventsSinceForPolling`.
+    /// @param taskId     The task to move.
+    /// @param columnId   The destination column.
+    /// @param swimlaneId The destination swimlane.
+    /// @param position   The destination position within `(columnId, swimlaneId)`.
+    /// @param opId       The idempotency key this specific move was minted with.
+    /// @return The call's own completion — nothing else can be attributed to it.
+    [[nodiscard]] ::morph::async::Completion<GetBoardResult> moveTaskForReplay(TaskId taskId, ColumnId columnId,
+                                                                                SwimlaneId swimlaneId,
+                                                                                std::int64_t position, QString opId);
+
     /// @brief Appends a comment to a task on this handler's attached board.
     ///        Emits `commentAdded(taskId)` on success, `failed` on error.
     /// @param taskId The task to comment on.

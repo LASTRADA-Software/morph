@@ -213,6 +213,48 @@ target_sources(morph
         include/morph/render/locale_format.hpp
 )
 
+# ── SQLite-backed durable offline queue: library target (optional) ──────────
+# Only the morph::offline_sqlite target itself is created here, deliberately
+# ahead of "Application ladder"'s add_subdirectory(examples) further below:
+# examples/kanban/CMakeLists.txt links morph::offline_sqlite (a namespaced
+# target, which CMake requires to already exist at the point it is named --
+# see the identical note on morph::qt_forms vs the plain
+# morph_forms_moduleplugin just below). The tests/offline_sqlite subdirectory
+# that also depends on MORPH_BUILD_OFFLINE_SQLITE stays deferred to its
+# original spot, after the "Tests" section, since it links
+# Catch2::Catch2WithMain and that target only exists once Catch2 has been
+# found/fetched there.
+if(MORPH_BUILD_OFFLINE_SQLITE)
+    find_package(SQLite3 REQUIRED)
+
+    # FindSQLite3 reports success but does not always leave `SQLite3::SQLite3`
+    # resolvable at generate time (observed on the ubuntu-24.04 runner, which
+    # fails with "the link interface ... contains SQLite3::SQLite3 but the
+    # target was not found" while printing "Found SQLite3" moments earlier).
+    # Synthesise the target from the variables the module *does* set, and
+    # promote it to GLOBAL either way so every subdirectory that consumes
+    # morph::offline_sqlite can see it.
+    if(NOT TARGET SQLite3::SQLite3)
+        add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
+        set_target_properties(SQLite3::SQLite3 PROPERTIES
+            IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
+            INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+    else()
+        set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
+    endif()
+
+    add_library(morph_offline_sqlite INTERFACE)
+    add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
+    target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)
+    target_sources(morph_offline_sqlite
+        INTERFACE
+        FILE_SET HEADERS
+        BASE_DIRS include
+        FILES
+            include/morph/offline/sqlite_offline_queue.hpp
+    )
+endif()
+
 # ── Qt/QML forms renderer setup (optional) ───────────────────────────────────
 # Ships the reference Qt/QML renderer (MorphForms, src/qt/forms) as a reusable
 # component, independent of MORPH_BUILD_EXAMPLES. examples/forms/gui_qml
@@ -420,40 +462,14 @@ if(MORPH_BUILD_NET)
     endif()
 endif()
 
-# ── SQLite-backed durable offline queue (optional) ──────────────────────────
-if(MORPH_BUILD_OFFLINE_SQLITE)
-    find_package(SQLite3 REQUIRED)
-
-    # FindSQLite3 reports success but does not always leave `SQLite3::SQLite3`
-    # resolvable at generate time (observed on the ubuntu-24.04 runner, which
-    # fails with "the link interface ... contains SQLite3::SQLite3 but the
-    # target was not found" while printing "Found SQLite3" moments earlier).
-    # Synthesise the target from the variables the module *does* set, and
-    # promote it to GLOBAL either way so every subdirectory that consumes
-    # morph::offline_sqlite can see it.
-    if(NOT TARGET SQLite3::SQLite3)
-        add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
-        set_target_properties(SQLite3::SQLite3 PROPERTIES
-            IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
-            INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
-    else()
-        set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
-    endif()
-
-    add_library(morph_offline_sqlite INTERFACE)
-    add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
-    target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)
-    target_sources(morph_offline_sqlite
-        INTERFACE
-        FILE_SET HEADERS
-        BASE_DIRS include
-        FILES
-            include/morph/offline/sqlite_offline_queue.hpp
-    )
-
-    if(MORPH_BUILD_TESTS)
-        add_subdirectory(tests/offline_sqlite)
-    endif()
+# ── SQLite-backed durable offline queue: tests (optional) ───────────────────
+# The morph::offline_sqlite target itself is created much earlier (see
+# "SQLite-backed durable offline queue: library target" above, before
+# "Application ladder"'s add_subdirectory(examples)) -- only this suite's own
+# subdirectory stays deferred to here, since it links Catch2::Catch2WithMain
+# and Catch2 is only found/fetched in the "Tests" section just above.
+if(MORPH_BUILD_OFFLINE_SQLITE AND MORPH_BUILD_TESTS)
+    add_subdirectory(tests/offline_sqlite)
 endif()
 
 # ── Documentation ───────────────────────────────────────────────────────────

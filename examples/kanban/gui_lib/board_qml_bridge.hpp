@@ -7,6 +7,7 @@
 #include <QVariantMap>
 
 #include <memory>
+#include <string>
 
 // Guarded exactly like board_presenter.hpp's own includes: AUTOMOC runs moc
 // over this header, and moc must not be pointed at morph's template-heavy
@@ -18,6 +19,20 @@
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+
+// The offline stack is optional (MORPH_BUILD_OFFLINE_SQLITE, needs SQLite3 —
+// see CMakeLists.txt's own "SQLite-backed durable offline queue" block) and
+// this header must still compile moc-clean and link when that option is OFF:
+// every member and method these headers introduce below is itself guarded by
+// the same macro, so an OFF configure simply gets a BoardBridge with no
+// offline awareness at all -- the pre-Task-5 shape -- rather than a hard
+// dependency on SQLite3.
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+#include <morph/offline/network_monitor.hpp>
+#include <morph/offline/reconnect_coordinator.hpp>
+#include <morph/offline/sqlite_offline_queue.hpp>
+#include <morph/offline/sync_worker.hpp>
+#endif
 #endif
 
 namespace kanban::gui {
@@ -121,6 +136,15 @@ class BoardBridge : public QObject {
     ///        `opId` (`QUuid::createUuid().toString()`) internally for
     ///        every call — QML never sees or passes one, per design spec
     ///        §6.2 step 4. Emits `taskMoved`, or `failed`.
+    ///
+    ///        When `enableOfflineQueue()` has been called and
+    ///        `_networkMonitor->isOnline()` is currently `false`, this call
+    ///        does not reach `_presenter` at all: it serialises the move
+    ///        (opId included) into the `SqliteOfflineQueue` instead and emits
+    ///        `syncStatusChanged` with the new queue depth — no `taskMoved`,
+    ///        no `failed`, until a later reconnect replays it. Every other
+    ///        case (offline queue not enabled, or currently online) behaves
+    ///        exactly as before this task.
     /// @param taskId     The task to move, as its plain number.
     /// @param columnId   The destination column, as its plain number.
     /// @param swimlaneId The destination swimlane, as its plain number.
@@ -152,6 +176,54 @@ class BoardBridge : public QObject {
     /// @return The most recent `moveTask()` call's minted `opId`.
     [[nodiscard]] QString lastOpIdForTest() const { return _lastOpIdForTest; }
 
+#ifndef Q_MOC_RUN
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    /// @brief Turns on the offline queue/replay stack for this bridge: a
+    ///        `SqliteOfflineQueue` at @p queuePath, a `SyncWorker` that
+    ///        replays each queued item through `_presenter.moveTask()`, a
+    ///        `NetworkMonitor` driving `_networkMonitor->isOnline()` (the
+    ///        gate `moveTask()` checks below), and a `ReconnectCoordinator`
+    ///        that sequences reconnect -> replay per `docs/spec/offline/
+    ///        offline.md`'s "End-to-end integration".
+    ///
+    /// Not folded into the constructor: the queue needs a caller-chosen file
+    /// path (`main.cpp`'s real deployment and a test's own temp file differ),
+    /// and this whole method compiles away entirely when
+    /// `MORPH_BUILD_OFFLINE_SQLITE` is off, so a constructor parameter would
+    /// have to be conditionally compiled too -- an optional, idempotent
+    /// setup call is the smaller surface. Calling this more than once is not
+    /// supported (it replaces every member below without tearing down the
+    /// previous `NetworkMonitor`'s probe thread first).
+    ///
+    /// @param queuePath Where the durable `SqliteOfflineQueue` persists
+    ///        pending moves (created if absent).
+    /// @param probe     Connectivity probe `NetworkMonitor` polls on its own
+    ///        background thread; defaults to always-online (no real
+    ///        connectivity check), since this rung has no dedicated "ping"
+    ///        action yet. A test supplies its own atomic-backed probe to
+    ///        force a deterministic offline/online transition without a
+    ///        real network dependency.
+    /// @param monitorConfig Tuning passed straight to `NetworkMonitor` --
+    ///        a test shortens `probeInterval`/`failureThreshold`/
+    ///        `onlineThreshold` for fast, deterministic convergence.
+    void enableOfflineQueue(const QString& queuePath,
+                            ::morph::offline::NetworkMonitor::ProbeFunction probe = [] { return true; },
+                            ::morph::offline::NetworkMonitor::Config monitorConfig = {});
+
+    /// @brief Test-only accessor: whether `_networkMonitor` currently
+    ///        reports the network online. Exists solely so
+    ///        `test_board_offline_bridge.cpp` can wait for a real,
+    ///        background-probe-driven online/offline transition to land
+    ///        before driving the next `moveTask()` call, instead of racing a
+    ///        stale assumption about when the transition happened — no
+    ///        production code reads this (production code reads
+    ///        `isOnline()` only from inside `moveTask()` itself).
+    /// @return `true` if the offline stack isn't enabled yet, or if it is
+    ///         and `_networkMonitor` reports online; `false` otherwise.
+    [[nodiscard]] bool isNetworkOnlineForTest() const { return !_networkMonitor || _networkMonitor->isOnline(); }
+#endif
+#endif
+
   signals:
     /// @brief Emitted once the wrapped presenter's registration round trip
     ///        settles — see `ProjectAdminBridge::bound`'s identical doc
@@ -179,6 +251,17 @@ class BoardBridge : public QObject {
     /// @brief Any action's typed error, already rendered as a message.
     /// @param message The model's own `what()`.
     void failed(const QString& message);
+    /// @brief The offline queue's depth or dead-letter count changed —
+    ///        emitted after every `moveTask()` that queues instead of
+    ///        sending (depth), and after every `SyncWorker` replay pass
+    ///        (depth, and dead-lettered if any item exhausted its retry
+    ///        budget). A no-op signal (never emitted) when
+    ///        `enableOfflineQueue()` was never called, e.g. a
+    ///        `MORPH_BUILD_OFFLINE_SQLITE=OFF` build.
+    /// @param queueDepth   Current pending-item count in the offline queue.
+    /// @param deadLettered Cumulative items dropped after exhausting
+    ///        `SyncWorker`'s retry budget, this bridge's lifetime.
+    void syncStatusChanged(int queueDepth, int deadLettered);
 
   private:
     /// @brief Installs a `board` value and emits `boardChanged`. If this
@@ -223,6 +306,26 @@ class BoardBridge : public QObject {
 #endif
 
 #ifndef Q_MOC_RUN
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    /// @brief `_syncWorker`'s `ReplayFunction`: deserialises @p payload and
+    ///        replays it via `BoardPresenter::moveTaskForReplay`, blocking
+    ///        (via a nested `QEventLoop`, the same idiom
+    ///        `QtWebSocketBackend::sendSync` uses for its own synchronous
+    ///        contract — `qt_websocket_backend.cpp`) until that call's own
+    ///        `Completion` settles, since `SyncWorker::run()` calls this
+    ///        function synchronously and needs an immediate `bool` back
+    ///        (`sync_worker.hpp`'s documented `ReplayFunction` contract).
+    /// @param payload One queued `QueueItem::payload` — a
+    ///        `serializeMoveTaskPosition()`-encoded `MoveTaskPosition`.
+    /// @return `true` (remove from queue) if @p payload decoded and the
+    ///         replayed move succeeded; `false` (retry, subject to
+    ///         `SyncWorker`'s 5-attempt dead-letter cap) if @p payload could
+    ///         not be decoded or the replayed move's `Completion` failed.
+    [[nodiscard]] bool replayMoveTaskPosition(const std::string& payload);
+#endif
+#endif
+
+#ifndef Q_MOC_RUN
     BoardPresenter _presenter;
     std::unique_ptr<Poller> _poller;
     /// @brief The same `Bridge` `_presenter` was constructed with — kept
@@ -232,6 +335,45 @@ class BoardBridge : public QObject {
     ///        Same reference `PollBridge::_bridge` keeps for the identical
     ///        reason.
     ::morph::bridge::Bridge& _bridge;
+    /// @brief The executor `_presenter`'s `Completion` callbacks land on --
+    ///        kept here (redundantly with `_presenter`'s own copy, which it
+    ///        does not expose) only so `enableOfflineQueue()`'s
+    ///        `NetworkMonitor` callbacks, which run on the monitor's own
+    ///        probe thread, can `post()` the `ReconnectCoordinator`
+    ///        sequencing onto the Qt thread instead of running it inline --
+    ///        `docs/spec/offline/offline.md`'s "NetworkMonitor callback
+    ///        constraint" (a blocking, seconds-long retry loop must never run
+    ///        on the probe thread).
+    ::morph::exec::IExecutor* _executor;
+#endif
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    /// @brief Set only by `enableOfflineQueue()`; every offline member below
+    ///        is `nullptr`/absent until then, and `moveTask()` skips the
+    ///        offline branch entirely in that case (dispatches straight to
+    ///        `_presenter`, the pre-Task-5 behaviour).
+    ///
+    /// @par Declaration order is load-bearing here too
+    /// `_networkMonitor` must be declared **last** among these four members
+    /// (i.e. destroyed **first**, reverse declaration order): its probe
+    /// thread calls back into `_reconnectCoordinator` (via a `post()`ed
+    /// lambda -- see the constructor's own comment), so that thread must be
+    /// fully stopped (`~NetworkMonitor()` blocks until it is) before
+    /// `_reconnectCoordinator`/`_syncWorker`/`_offlineQueue` are torn down.
+    /// Declaring `_networkMonitor` *before* them (destroyed *after* them)
+    /// would let a probe-thread callback still in flight during teardown
+    /// reach an already-destroyed `_reconnectCoordinator` through a
+    /// `unique_ptr` that had already been reset to null -- `_liveness`'s own
+    /// `weak_ptr` guard does not catch this, since `_liveness` itself is
+    /// destroyed even later still and would not yet be expired.
+    std::unique_ptr<::morph::offline::SqliteOfflineQueue> _offlineQueue;
+    std::unique_ptr<::morph::offline::SyncWorker> _syncWorker;
+    std::unique_ptr<::morph::offline::ReconnectCoordinator> _reconnectCoordinator;
+    std::unique_ptr<::morph::offline::NetworkMonitor> _networkMonitor;
+    /// @brief Cumulative dead-lettered count `syncStatusChanged` reports —
+    ///        `SyncWorker`'s own `SyncResult`/`DeadLetterSink` report
+    ///        per-`run()` counts, not a running total, so this bridge keeps
+    ///        the total itself.
+    int _deadLetteredCount = 0;
 #endif
     QVariantMap _board;
     QVariantList _activity;
@@ -261,6 +403,16 @@ class BoardBridge : public QObject {
     /// `morph::ladder::gui::EventPoller::_liveness`
     /// (`examples/common/gui/event_poller.hpp`) and
     /// `morph::bridge::Bridge::_liveness` (`include/morph/core/bridge.hpp`).
+    ///
+    /// `enableOfflineQueue()`'s three new callback sites guard on this exact
+    /// token, the same way `startPolling()`'s three closures above already
+    /// do: `NetworkMonitor`'s `onOffline`/`onOnline` (called on the probe
+    /// thread, so they capture a `weak_ptr` and check `.expired()` before
+    /// `post()`-ing anything that touches `this`) and the posted lambda that
+    /// actually runs `_reconnectCoordinator->onOnline()`/`onOffline()` on the
+    /// Qt thread (checked again there, since the `post()` can outlive this
+    /// object between being queued and actually running). No separate
+    /// lifetime mechanism is introduced for the offline stack.
     std::shared_ptr<const void> _liveness{std::make_shared<char>()};
 };
 

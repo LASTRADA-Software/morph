@@ -16,20 +16,33 @@ desktop client only: a native Qt Quick app driving the already-implemented
 - Desktop client only, both `Local` (in-process) and `Remote` (WebSocket)
   modes, mirroring `examples/bookmarks/gui/main.cpp`'s `--server` flag.
 
+**The offline stack is wired.** `BoardBridge` (`examples/kanban/gui_lib/
+board_qml_bridge.hpp`/`.cpp`) owns a `SqliteOfflineQueue`-backed offline
+queue, turned on via its own `enableOfflineQueue(queuePath, probe,
+monitorConfig)` method: a `NetworkMonitor` drives `moveTask()`'s
+online/offline branch (queues a serialised `MoveTaskPosition` -- opId
+included -- instead of dispatching while offline), and a
+`ReconnectCoordinator`/`SyncWorker` pair drains and replays the queue once
+the monitor reports the network reachable again, through a dedicated
+`BoardPresenter::moveTaskForReplay()` overload that bypasses the shared
+`taskMoved`/`failed` signals (the same isolation `getEventsSinceForPolling`
+already uses for the identical reason). `BoardBridge::syncStatusChanged(int
+queueDepth, int deadLettered)` reports the queue's depth and cumulative
+dead-lettered count after every enqueue and every replay pass -- the signal
+Task 6's "N changes pending sync" indicator (below) surfaces. The whole
+mechanism is gated behind `MORPH_BUILD_OFFLINE_SQLITE` (needs SQLite3); a
+configure without it builds `BoardBridge` with no offline awareness at all,
+the pre-wiring shape. `main.cpp`'s own desktop client currently supplies only
+an always-online placeholder probe (this rung has no dedicated "ping" action
+yet), so the queue/replay mechanism itself is proven end-to-end but a real
+connectivity probe remains a follow-up (see §11).
+
 **Explicitly out of scope** (unchanged from the backend's own out-of-scope
 list — `examples/kanban/README.md`'s "Deferred within this rung" and the
 backend design spec's §9):
 - Automation rules (event → condition → mutation) — no action/DTO exists for
   this, so there is nothing for a GUI to drive.
 - Task attachments — same reason.
-- The offline stack (`SqliteOfflineQueue`/`SyncWorker`/`ReconnectCoordinator`/
-  `NetworkMonitor`). The backend's own final review found this stack was
-  implemented but never proven end-to-end; wiring it for real is substantial,
-  separate work deserving its own design pass, not a corner of this one. This
-  GUI uses the same always-connected, `GetEventsSince`-polling pattern
-  `polls`/`bookmarks` already use. A dropped connection surfaces through the
-  existing `failed(QString)` error-`Label` pattern, exactly like every prior
-  rung — no "N changes pending sync" indicator, no reconnect UI.
 - A WASM build. Desktop only, for this pass.
 - Visual/UX design beyond "legible, with smooth drag feedback" — see §2.
 
@@ -296,7 +309,13 @@ the surrounding codebase's convention, not because CI enforces it here.
 
 ## 11. Out-of-scope follow-ups this spec deliberately does not solve
 
-- Wiring the real offline stack into any GUI (§1) — separate design pass.
+- A real connectivity probe for `enableOfflineQueue()` (§1) — `main.cpp`
+  currently wires an always-online placeholder, since this rung has no
+  dedicated "ping" action yet; the queue/replay mechanism itself is already
+  proven end-to-end against a test-supplied probe.
+- A "N changes pending sync" GUI indicator surfacing
+  `BoardBridge::syncStatusChanged` (§1) — the signal exists; no QML view
+  consumes it yet (see Task 6 of the rung-4-completion plan).
 - A WASM build (§1) — separate design pass if ever pursued.
 - Automation rules / attachments UI — no backend surface exists yet.
 - `GetMyProjects` pagination — not needed at ladder-example scale; revisit

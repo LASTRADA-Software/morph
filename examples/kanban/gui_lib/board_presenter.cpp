@@ -87,6 +87,16 @@ void BoardPresenter::moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swiml
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
+::morph::async::Completion<GetBoardResult> BoardPresenter::moveTaskForReplay(TaskId taskId, ColumnId columnId,
+                                                                             SwimlaneId swimlaneId,
+                                                                             std::int64_t position, QString opId) {
+    return _handler.execute(MoveTaskPosition{.taskId = taskId,
+                                              .columnId = columnId,
+                                              .swimlaneId = swimlaneId,
+                                              .position = position,
+                                              .opId = opId.toStdString()});
+}
+
 void BoardPresenter::addComment(TaskId taskId, const QString& body) {
     // Same per-call capture discipline as moveTask() above: `taskId` travels
     // with this call's own continuation, not a shared field.

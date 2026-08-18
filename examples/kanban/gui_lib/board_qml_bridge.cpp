@@ -5,7 +5,17 @@
 #include <QUuid>
 #include <QVariant>
 
+#include <glaze/glaze.hpp>
+
+#include <optional>
 #include <utility>
+
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+#include <QEventLoop>
+
+#include <chrono>
+#include <thread>
+#endif
 
 namespace kanban::gui {
 
@@ -109,10 +119,42 @@ template <typename Rows>
     };
 }
 
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+/// @brief Renders a `MoveTaskPosition` (including its already-minted `opId`)
+///        as the JSON payload `enableOfflineQueue()`'s `SqliteOfflineQueue`
+///        stores while offline. Plain `glz::write_json` over the DTO's own
+///        aggregate reflection — no explicit `glz::meta<MoveTaskPosition>`
+///        exists or is needed (glaze reflects a plain struct's named members
+///        automatically; `TaskId`/`ColumnId`/`SwimlaneId` already have their
+///        own `glz::meta` specialisations, `kanban/core/types.hpp`), the same
+///        pattern `bookmarks::gui::decodeLoginResult`
+///        (`bookmark_qml_bridges.cpp`) uses for its own bridge-level JSON.
+/// @param action The move to serialise.
+/// @return Its JSON encoding, ready for `IOfflineQueue::enqueue()`.
+[[nodiscard]] std::string serializeMoveTaskPosition(const MoveTaskPosition& action) {
+    return glz::write_json(action).value_or("{}");
+}
+
+/// @brief Parses a queued payload `serializeMoveTaskPosition` produced back
+///        into a `MoveTaskPosition`.
+/// @param payload The `QueueItem::payload` a `SyncWorker` replay is handling.
+/// @return The decoded action, or `std::nullopt` if @p payload is not valid
+///         JSON for this shape (a corrupt or foreign row — `SyncWorker`'s
+///         `ReplayFunction` contract treats that as a replay failure, not a
+///         crash).
+[[nodiscard]] std::optional<MoveTaskPosition> deserializeMoveTaskPosition(const std::string& payload) {
+    MoveTaskPosition action;
+    if (glz::read_json(action, payload)) {
+        return std::nullopt;
+    }
+    return action;
+}
+#endif
+
 }  // namespace
 
 BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : QObject{parent}, _presenter{bridge, executor}, _bridge{bridge} {
+    : QObject{parent}, _presenter{bridge, executor}, _bridge{bridge}, _executor{executor} {
     // Direct (same-thread) connections throughout — same "no meta-type
     // registration needed" note as ProjectAdminBridge's identical
     // constructor comment.
@@ -166,6 +208,33 @@ void BoardBridge::moveTask(const QString& taskId, const QString& columnId, const
     // this class's own doc comment and design spec §6.2 step 4.
     const QString opId = QUuid::createUuid().toString();
     _lastOpIdForTest = opId;
+
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    if (_offlineQueue && _networkMonitor && !_networkMonitor->isOnline()) {
+        // Offline: queue instead of dispatching. The action (opId included)
+        // travels entirely inside this queued payload -- nothing about this
+        // specific move is stashed on any shared bridge-level field, so many
+        // distinct queued moves over time never cross-contaminate each
+        // other's data (the Task 2 lesson this task's brief calls out
+        // explicitly). idempotencyKey == opId: the same key a later replay's
+        // MoveTaskPosition::opId carries, ready for a host that also dedups
+        // against the journal (docs/spec/offline/offline.md's "idempotency
+        // key" section) -- this bridge's own replay path (enableOfflineQueue
+        // below) doesn't need it for correctness (BoardModel::execute()
+        // already dedups on opId via its own ledger), but stamping it here
+        // costs nothing and keeps the contract available to a future replay
+        // consumer that isn't this bridge.
+        const MoveTaskPosition action{.taskId = parseId<TaskId>(taskId),
+                                       .columnId = parseId<ColumnId>(columnId),
+                                       .swimlaneId = parseId<SwimlaneId>(swimlaneId),
+                                       .position = static_cast<std::int64_t>(position),
+                                       .opId = opId.toStdString()};
+        _offlineQueue->enqueue(serializeMoveTaskPosition(action), action.opId);
+        emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+        return;
+    }
+#endif
+
     _presenter.moveTask(parseId<TaskId>(taskId), parseId<ColumnId>(columnId), parseId<SwimlaneId>(swimlaneId),
                         static_cast<std::int64_t>(position), opId);
 }
@@ -243,5 +312,147 @@ void BoardBridge::onEventApplied(const BoardEvent&) {
     refresh();
     _presenter.getActivity();
 }
+
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+
+bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
+    const auto decoded = deserializeMoveTaskPosition(payload);
+    if (!decoded) {
+        // Not this bridge's own shape (corrupt row, or a foreign payload a
+        // future action type also queued into the same file) -- a replay
+        // failure per SyncWorker's contract (false, not a throw: the payload
+        // itself isn't going to reparse differently next attempt, but
+        // treating it as a hard error here would still let SyncWorker's own
+        // 5-attempt dead-letter cap eventually drop it, exactly as intended
+        // for an unreplayable item).
+        return false;
+    }
+    const MoveTaskPosition& action = *decoded;
+
+    // Nested QEventLoop, parked until moveTaskForReplay()'s own Completion
+    // settles -- the same idiom QtWebSocketBackend::sendSync uses for its
+    // own synchronous contract (qt_websocket_backend.cpp), needed here
+    // because SyncWorker::run() calls this function synchronously and wants
+    // an immediate bool back (sync_worker.hpp's documented ReplayFunction
+    // contract), while BoardPresenter's own Completion-based API is
+    // fundamentally asynchronous. SyncWorker::run() drains and replays one
+    // item at a time on whichever thread called run() (here, the Qt thread,
+    // via enableOfflineQueue()'s posted onOnline() below) -- never two
+    // replays in flight together -- so there is no reentrant-parking hazard
+    // the way a second concurrent sendSync() would have.
+    QEventLoop loop;
+    bool succeeded = false;
+    // alive guards the lambda touching `this` (via `succeeded`'s capture and
+    // `loop.quit()`) after a BoardBridge destruction that somehow outraces
+    // this synchronous call -- defence in depth, matching every other
+    // callback in this file, even though in practice this whole call stack
+    // (SyncWorker::run(), still on the Qt thread) keeps `this` alive by
+    // construction (nothing destroys a BoardBridge out from under its own
+    // running member function).
+    _presenter.moveTaskForReplay(action.taskId, action.columnId, action.swimlaneId, action.position,
+                                  QString::fromStdString(action.opId))
+        .then([&succeeded, &loop](GetBoardResult) {
+            succeeded = true;
+            loop.quit();
+        })
+        .onError([&loop](const std::exception_ptr&) { loop.quit(); });
+    loop.exec();
+    return succeeded;
+}
+
+void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline::NetworkMonitor::ProbeFunction probe,
+                                      ::morph::offline::NetworkMonitor::Config monitorConfig) {
+    _offlineQueue = std::make_unique<::morph::offline::SqliteOfflineQueue>(queuePath.toStdString());
+
+    _syncWorker = std::make_unique<::morph::offline::SyncWorker>(
+        *_offlineQueue, [this](const std::string& payload) { return replayMoveTaskPosition(payload); },
+        [this](const ::morph::offline::QueueItem&) {
+            // DeadLetterSink: one more item exhausted SyncWorker's 5-attempt
+            // cap and was just dropped from the queue. The running total
+            // (not SyncWorker's own per-run count, which resets every
+            // run()) is what syncStatusChanged reports, so a GUI's "N
+            // dropped" indicator (Task 6) never regresses between polls.
+            ++_deadLetteredCount;
+            emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+        });
+
+    // ReconnectCoordinator::Deps: this bridge has no separate "primary vs.
+    // local backend" to switch between (unlike docs/spec/offline/offline.md's
+    // End-to-end integration example, which assumes a Bridge that owns both)
+    // -- moveTask()'s own _networkMonitor->isOnline() check is this bridge's
+    // entire backend-selection mechanism, so activatePrimary/activateLocal/
+    // bindContext are no-ops here: there is nothing to activate or rebind,
+    // only the queue to replay. shouldContinue reads the monitor's own
+    // current state (not a captured snapshot), matching the "went offline
+    // again mid-retry" abort case the coordinator's doc comment describes.
+    _reconnectCoordinator = std::make_unique<::morph::offline::ReconnectCoordinator>(
+        ::morph::offline::ReconnectCoordinator::Deps{
+            .tryReconnect = [] { return true; },
+            .activatePrimary = [] {},
+            .activateLocal = [] {},
+            .bindContext = [] {},
+            .replay =
+                [this] {
+                    // `_deadLetteredCount` itself is updated by the
+                    // DeadLetterSink below (once per exhausted item, as it
+                    // happens) -- this handler only reports the queue's
+                    // post-run depth, since a successful or merely-retried
+                    // (still-queued) item never touches that counter.
+                    const ::morph::offline::SyncResult result = _syncWorker->run();
+                    emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+                    // A successful replay applied a move server-side that
+                    // this bridge's cached `board`/`activity` do not yet
+                    // reflect (moveTaskForReplay() deliberately never
+                    // touches `_board` itself -- see that method's own doc
+                    // comment on why it bypasses every shared signal). Only
+                    // refresh if something actually landed: an all-offline
+                    // run (every item re-queued, nothing succeeded) has
+                    // nothing new to fetch.
+                    if (result.successful > 0) {
+                        refresh();
+                    }
+                },
+            .shouldContinue = [this] { return _networkMonitor && _networkMonitor->isOnline(); },
+            .sleep = [](std::chrono::milliseconds duration) { std::this_thread::sleep_for(duration); },
+        });
+
+    // NetworkMonitor's own callbacks run on its dedicated probe thread
+    // (network_monitor.hpp's documented callback constraint) and must do
+    // O(1) work only -- they post the coordinator's sequencing onto
+    // `_executor` (the Qt thread) rather than running it inline, exactly
+    // docs/spec/offline/offline.md's "End-to-end integration" pattern. Both
+    // posted lambdas re-check `alive` after landing on the Qt thread, since
+    // the post() can outlive this object between being queued and actually
+    // running (same two-layer guard startPolling()'s closures use above:
+    // once before capturing anything, implicitly by capturing only `alive`
+    // and `this`, and once again on arrival).
+    _networkMonitor = std::make_unique<::morph::offline::NetworkMonitor>(
+        std::move(probe),
+        [this, alive = std::weak_ptr<const void>{_liveness}] {
+            if (alive.expired()) {
+                return;
+            }
+            _executor->post([this, alive] {
+                if (alive.expired()) {
+                    return;
+                }
+                _reconnectCoordinator->onOffline();
+            });
+        },
+        [this, alive = std::weak_ptr<const void>{_liveness}] {
+            if (alive.expired()) {
+                return;
+            }
+            _executor->post([this, alive] {
+                if (alive.expired()) {
+                    return;
+                }
+                _reconnectCoordinator->onOnline();
+            });
+        },
+        monitorConfig);
+}
+
+#endif
 
 }  // namespace kanban::gui
