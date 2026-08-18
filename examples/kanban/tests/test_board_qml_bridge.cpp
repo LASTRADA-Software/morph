@@ -622,6 +622,162 @@ TEST_CASE("BoardBridge uploads a file and records its metadata, then downloads i
     std::filesystem::remove_all(storageDir);
 }
 
+TEST_CASE("BoardBridge::downloadAttachment reports failed() for a storageKey that was never uploaded "
+          "(a real 404 from a real AttachmentServer)",
+          "[kanban][gui][attachments]") {
+    // The review finding this test closes: uploadAttachment's own
+    // "no server configured" failed() test never issues an HTTP request at
+    // all (it's a pure pre-flight guard). This test is the first one in this
+    // file that actually drives downloadAttachment() against a real, running
+    // AttachmentServer and asserts BoardBridge::failed(QString) fires from a
+    // genuine 404 response -- mirrors test_attachment_server.cpp's own
+    // "AttachmentServer returns 404 for a GET naming a storageKey that was
+    // never uploaded" case, one layer up at the bridge.
+    DbFixture fixture;
+    const morph::session::TokenIssuer issuer{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+    const morph::session::TokenVerifier verifier{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+
+    const auto storageDir = freshAttachmentStorageDir("download_missing");
+    kanban::http::AttachmentServer server{verifier, kanban::http::AttachmentServer::Config{.storageDir = storageDir}};
+    REQUIRE(server.listen());
+
+    auto rig = makeAuthedRigWithToken(issuer, "alice");
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+    bridge.setAttachmentServerUrl(QStringLiteral("http://127.0.0.1:%1").arg(server.port()));
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    // A syntactically-valid-looking storageKey (64 hex chars, matching
+    // test_attachment_server.cpp's own fakeKey shape) that was never
+    // produced by any upload -- there is no blob on disk and no
+    // AttachmentRecord naming it.
+    const QString neverUploadedKey = QString::fromStdString(std::string(64, 'a'));
+    const QString localFilePath = tempDir.filePath(QStringLiteral("should-not-exist.bin"));
+
+    QString message;
+    bool failed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::failed, [&](const QString& text) {
+        message = text;
+        failed = true;
+    });
+    bool downloaded = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::attachmentDownloaded,
+                      [&](const QString&) { downloaded = true; });
+
+    bridge.downloadAttachment(neverUploadedKey, localFilePath);
+    REQUIRE(pumpUntil([&] { return failed || downloaded; }));
+
+    CHECK(failed);
+    CHECK_FALSE(downloaded);
+    CHECK_FALSE(message.isEmpty());
+    // No partial/empty file should be mistaken for a successful download --
+    // downloadAttachment() only opens localFilePath for writing after a
+    // successful HTTP response (board_qml_bridge.cpp's own downloadAttachment()).
+    CHECK_FALSE(QFile::exists(localFilePath));
+
+    std::filesystem::remove_all(storageDir);
+}
+
+TEST_CASE("BoardBridge::downloadAttachment reports failed() the same way for a storageKey that belongs to "
+          "a DIFFERENT project the caller has no role on (authenticated, not authorized)",
+          "[kanban][gui][attachments]") {
+    // The stronger, security-relevant half of the same review finding:
+    // mirrors test_attachment_server.cpp's own "AttachmentServer returns 404
+    // (not 200) for a GET whose bearer token is validly signed for a
+    // DIFFERENT project the principal has no role on" case, wired up through
+    // two real BoardBridge instances (one per principal/project) rather than
+    // raw sockets, proving the GUI layer collapses this case to failed() the
+    // same way it does the plain-nonexistent-key case above -- neither case
+    // is allowed to behave differently at the bridge, matching the server's
+    // own deliberate 404-for-both design.
+    DbFixture fixture;
+    const morph::session::TokenIssuer issuer{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+    const morph::session::TokenVerifier verifier{std::string{kAttachmentTestSecret}, morph::session::hmacSha256};
+
+    const auto storageDir = freshAttachmentStorageDir("cross_tenant_get");
+    kanban::http::AttachmentServer server{verifier, kanban::http::AttachmentServer::Config{.storageDir = storageDir}};
+    REQUIRE(server.listen());
+    const QString serverUrl = QStringLiteral("http://127.0.0.1:%1").arg(server.port());
+
+    // alice's project owns the attachment: a real upload + AddAttachment
+    // commit through a real BoardBridge, exactly like the upload/download
+    // round-trip test above.
+    auto aliceRig = makeAuthedRigWithToken(issuer, "alice");
+    const auto aliceProjectId = seedProject(*aliceRig);
+    kanban::gui::BoardBridge aliceBridge{aliceRig->bridge(0), aliceRig->executor()};
+    aliceBridge.setAttachmentServerUrl(serverUrl);
+
+    bool changed = false;
+    QObject::connect(&aliceBridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    aliceBridge.openBoard(QString::number(aliceProjectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    aliceBridge.createColumn(QStringLiteral("To Do"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId =
+        aliceBridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    aliceBridge.createSwimlane(QStringLiteral("Default"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString swimlaneId =
+        aliceBridge.board().value(QStringLiteral("swimlanes")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    aliceBridge.createTask(columnId, swimlaneId, QStringLiteral("Secret task"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString taskId =
+        aliceBridge.board().value(QStringLiteral("tasks")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    QTemporaryDir tempDir;
+    REQUIRE(tempDir.isValid());
+    const QString uploadFilePath = tempDir.filePath(QStringLiteral("secret.txt"));
+    {
+        QFile localFile{uploadFilePath};
+        REQUIRE(localFile.open(QIODevice::WriteOnly));
+        localFile.write(QByteArrayLiteral("secret attachment bytes only alice's project should see"));
+    }
+
+    bool uploaded = false;
+    QObject::connect(&aliceBridge, &kanban::gui::BoardBridge::attachmentUploaded, [&](const QString&) { uploaded = true; });
+    aliceBridge.uploadAttachment(taskId, uploadFilePath);
+    REQUIRE(pumpUntil([&] { return uploaded; }));
+    REQUIRE(pumpUntil([&] { return aliceBridge.attachments().size() == 1; }));
+    const QString storageKey =
+        aliceBridge.attachments().front().toMap().value(QStringLiteral("storageKey")).toString();
+    REQUIRE_FALSE(storageKey.isEmpty());
+
+    // mallory: her own, entirely separate project -- a real, authenticated
+    // principal (a real signed bearer token) with no role whatsoever on
+    // alice's project.
+    auto malloryRig = makeAuthedRigWithToken(issuer, "mallory");
+    static_cast<void>(seedProject(*malloryRig));
+    kanban::gui::BoardBridge malloryBridge{malloryRig->bridge(0), malloryRig->executor()};
+    malloryBridge.setAttachmentServerUrl(serverUrl);
+
+    QString message;
+    bool failed = false;
+    QObject::connect(&malloryBridge, &kanban::gui::BoardBridge::failed, [&](const QString& text) {
+        message = text;
+        failed = true;
+    });
+    bool downloaded = false;
+    QObject::connect(&malloryBridge, &kanban::gui::BoardBridge::attachmentDownloaded,
+                      [&](const QString&) { downloaded = true; });
+
+    const QString downloadPath = tempDir.filePath(QStringLiteral("mallory-should-not-get-this.txt"));
+    malloryBridge.downloadAttachment(storageKey, downloadPath);
+    REQUIRE(pumpUntil([&] { return failed || downloaded; }));
+
+    CHECK(failed);
+    CHECK_FALSE(downloaded);
+    CHECK_FALSE(message.isEmpty());
+    CHECK_FALSE(QFile::exists(downloadPath));
+
+    std::filesystem::remove_all(storageDir);
+}
+
 TEST_CASE("BoardBridge::uploadAttachment reports failed() when no attachment server is configured",
           "[kanban][gui][attachments]") {
     DbFixture fixture;
