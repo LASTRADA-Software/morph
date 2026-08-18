@@ -83,7 +83,11 @@ Build order:
    replay mode to executing code — both are new, general-purpose framework
    capabilities (`docs/spec/journal/journal.md`), not kanban-specific code;
    see the divergence test this rung adds once the rules engine lands.
-   [`ledger`](../ledger) reuses this same answer.
+   `causalParentId` must key on a stable id independent of `LogEntry::seq`
+   (sink-local, re-stamped on every forward — see
+   `docs/spec/journal/journal.md`'s Invariants section, and this rung's
+   design spec §9 for the full reasoning). [`ledger`](../ledger) reuses
+   this same answer.
 7. **Offline drag-a-card** — this rung's framework-level deliverable, with
    a **scope correction from review: the offline stack does not run on WASM
    today.** `NetworkMonitor` is a background probe thread (WASM build is

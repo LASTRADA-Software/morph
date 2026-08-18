@@ -574,6 +574,19 @@ proving replay does not double-apply a cascade) remains deferred per the
 README's own "Deferred within this rung" section; only this decision, and
 the framework support it requires, is in scope here.
 
+**`causalParentId` must reference a stable identity independent of
+`LogEntry::seq`.** `docs/spec/journal/journal.md`'s Invariants section is
+explicit: `seq` is sink-local and re-stamped on every forward — each
+sink's `append()` overwrites it with its own counter, and
+`SessionLog::checkpoint()` re-stamps it again when forwarding to a durable
+sink — so it is an ordering key within one sink instance in one process
+run, not a stable, cross-sink or cross-restart identifier. Wiring
+`causalParentId` to a trigger entry's raw `seq` would inherit that same
+instability (a value that no longer matches anything once the entry has
+been forwarded or the process has restarted). Task 12 needs its own
+opaque/UUID-style identity scheme for this field, assigned at the trigger
+entry's creation and independent of `seq`.
+
 Task attachments (README step 8, deferred) and its HTTP side-channel design
 remain out of scope for this spec, per the same "Deferred within this rung"
 section.
