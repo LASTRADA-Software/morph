@@ -7,7 +7,7 @@
 // ships (both link the ladder_kanban_qml module), with no bridges attached —
 // which is why Main.qml's two `*Bridge` properties, and the ones
 // LoginView.qml/ProjectListView.qml/BoardView.qml/MembersView.qml/
-// TaskDetailPopup.qml declare, all default to null. Mirrors
+// TaskDetailPopup.qml/RulesView.qml declare, all default to null. Mirrors
 // examples/bookmarks/tests/test_gui_qml_smoke.cpp's structure exactly (see
 // that file's own header comment for the full rationale), substituting the
 // module URI and this rung's own screen names.
@@ -42,11 +42,12 @@
 // here, since `loggedIn`/`projectOpened` come from a bridge that is null.
 // The second and third cases below therefore load ProjectListView and
 // BoardView directly as root objects in their own right, so those screens
-// are genuinely engine-checked rather than merely compiled. MembersView and
-// TaskDetailPopup are both reachable from ProjectListView.qml/BoardView.qml
-// respectively (ProjectListView instantiates MembersView directly;
-// BoardView instantiates TaskDetailPopup directly), so loading those two
-// roots already exercises every one of this rung's six QML files.
+// are genuinely engine-checked rather than merely compiled. MembersView,
+// TaskDetailPopup, and RulesView are all reachable from ProjectListView.qml/
+// BoardView.qml (ProjectListView instantiates MembersView directly; BoardView
+// instantiates both TaskDetailPopup and RulesView directly, the latter inside
+// a Popup opened by its own "Rules" header button), so loading those two
+// roots already exercises every one of this rung's seven QML files.
 //
 // MORPH_LADDER_QML_URI is defined by morph_add_rung() only when the rung's
 // QML module was actually built (MORPH_BUILD_FORMS_QML=ON). Without it this
@@ -115,8 +116,9 @@ TEST_CASE("kanban's post-login project list loads standalone with no errors", "[
 
 TEST_CASE("kanban's board view loads standalone with no errors", "[kanban][gui][qml-smoke]") {
     // Reached only after a project is opened in the real app, so it is
-    // loaded directly here too. This also exercises TaskDetailPopup.qml,
-    // which BoardView.qml instantiates directly.
+    // loaded directly here too. This also exercises TaskDetailPopup.qml and
+    // RulesView.qml, both of which BoardView.qml instantiates directly (the
+    // latter inside a Popup opened by its own "Rules" header button).
     bool created = false;
     CHECK(firstWarningLoading("BoardView", created) == std::string{});
     REQUIRE(created);

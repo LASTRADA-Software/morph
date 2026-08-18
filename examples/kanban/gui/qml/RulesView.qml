@@ -12,9 +12,10 @@
 // RuleTriggerEvent has exactly one member (rule_dto.hpp).
 //
 // `boardBridge` defaults to null so this same file also loads standalone
-// with nothing wired up, matching MembersView.qml's identical convention
-// (and ready for the offscreen engine-load smoke test to exercise it the
-// same way, if a future task reaches it from BoardView.qml).
+// with nothing wired up, matching MembersView.qml's identical convention.
+// Reached from BoardView.qml's "Rules" header button, which opens this view
+// inside a Popup (board-scoped, since the trigger-column picker needs the
+// open board's own board.columns) -- see BoardView.qml's own header comment.
 
 pragma ComponentBehavior: Bound
 

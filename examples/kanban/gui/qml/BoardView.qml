@@ -20,6 +20,14 @@
 // entry otherwise (swimlaneId -1 when the board has no swimlane of its own
 // yet, matching tasksFor's own "-1 means accept any" convention below).
 //
+// A "Rules" header button opens RulesView.qml (automation rules, design
+// spec §11/Task 14's backend) in a Popup -- same "open on demand, board
+// stays visible underneath" mechanism as taskPopup below, just wrapping a
+// form-plus-list view instead of a single task's comments. Rules are
+// board-scoped (a rule's triggerColumnId picker needs the open board's own
+// board.columns), which is why this entry point lives here rather than
+// alongside MembersView in ProjectListView.qml.
+//
 // `boardBridge`/`projectAdminBridge` default to null so this same file also
 // loads with nothing wired up, which is exactly what the offscreen
 // engine-load smoke test (tests/test_gui_qml_smoke.cpp) does.
@@ -106,6 +114,39 @@ Item {
         boardBridge: page.boardBridge
     }
 
+    // Automation-rules management (RulesView.qml): rules are board-scoped
+    // (a rule's triggerColumnId picker needs the open board's own
+    // board.columns), so this popup lives here rather than in
+    // ProjectListView.qml alongside MembersView -- same "open on demand,
+    // board stays visible underneath" mechanism as taskPopup above, just
+    // sized for a form-plus-list view rather than a single task's comments.
+    Popup {
+        id: rulesPopup
+        modal: true
+        focus: true
+        width: 520
+        height: 420
+        x: (parent ? parent.width - width : 0) / 2
+        y: (parent ? parent.height - height : 0) / 2
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 8
+
+            RulesView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                boardBridge: page.boardBridge
+            }
+
+            Button {
+                Layout.fillWidth: true
+                text: "Close"
+                onClicked: rulesPopup.close()
+            }
+        }
+    }
+
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 8
@@ -126,6 +167,11 @@ Item {
             }
 
             Item { Layout.fillWidth: true }
+
+            Button {
+                text: "Rules"
+                onClicked: rulesPopup.open()
+            }
 
             Label {
                 opacity: 0.7

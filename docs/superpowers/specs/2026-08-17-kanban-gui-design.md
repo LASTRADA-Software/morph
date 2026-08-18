@@ -317,6 +317,10 @@ the surrounding codebase's convention, not because CI enforces it here.
   `BoardBridge::syncStatusChanged` (§1) — the signal exists; no QML view
   consumes it yet (see Task 6 of the rung-4-completion plan).
 - A WASM build (§1) — separate design pass if ever pursued.
-- Automation rules / attachments UI — no backend surface exists yet.
+- Attachments UI — no backend surface exists yet (Phase 7 of the plan).
+  Automation rules now have both a backend surface (`CreateRule`/`GetRules`/
+  `DeleteRule`, rule evaluation) and a GUI (`RulesView.qml`, opened from
+  `BoardView.qml`'s "Rules" header button), so they are no longer part of
+  this out-of-scope list.
 - `GetMyProjects` pagination — not needed at ladder-example scale; revisit
   if a future rung's project count assumption changes.
