@@ -231,12 +231,18 @@ DoD):
   on one pumped thread you add queueing latency, not new interleavings);
   scale via `MORPH_LADDER_CLIENTS` / `MORPH_LADDER_ACTIONS` env vars
   (soak-suite convention) — same CI run, no separate schedule. Kanban's
-  stress case runs under ThreadSanitizer
-  at N=4 — **in `Local` rig mode on `ThreadPoolExecutor`**: the repo's CI
+  stress case (`test_kanban_stress.cpp`, `[kanban][stress][tsan]`) runs at
+  N=4 — **in `Local` rig mode on `ThreadPoolExecutor`**: the repo's CI
   deliberately keeps Qt stacks out of the sanitizer matrix ("a GUI stack
-  under TSan is mostly noise"), so the TSan leg exercises models + strands,
-  not sockets. Server-scale load (hundreds–thousands of sockets) is rung
-  8's load *script*, not a unit test.
+  under TSan is mostly noise"), so this test exercises models + strands,
+  not sockets, which lets it run under real ThreadSanitizer without pulling
+  Qt/QML into the sanitizer matrix. A dedicated CI job, `kanban-tsan`
+  (`.github/workflows/ci.yml`), builds only `MORPH_LADDER_RUNGS=kanban`
+  under the `clang-tsan` preset and runs this one test with `ctest -R
+  ThreadSanitizer` — every other CI leg that runs the ladder (`ladder-tests`,
+  the coverage leg of `linux-sanitizers`) excludes it, since neither builds
+  with `-fsanitize=thread`. Server-scale load (hundreds–thousands of
+  sockets) is rung 8's load *script*, not a unit test.
 - `offline_rig.hpp` — scripted connectivity: drop by closing/destroying the
   in-test `QtWebSocketServer`, revive on the same port (proven pattern);
   hand-cranked signals into `ReconnectCoordinator`; queue inspection.
@@ -324,16 +330,26 @@ root `CMakeLists.txt` — don't repeat that eight times):
   the testkit never grows per-rung options.
 - A `morph_add_rung()` function creates `ladder_<rung>_{lib,gui_lib,gui,
   gui_wasm,tests,headless}` with `catch_discover_tests` + ctest labels
-  (`ladder`, `ladder-<rung>`, `stress`, `socket-only`), warnings and
+  (`ladder`, `ladder-<rung>` — Catch2's own tags like `[stress]`/`[tsan]`
+  are not translated into ctest labels anywhere in this repo; select on
+  them with `ctest -R` against the test name instead), warnings and
   sanitizers **applied to all app code** (bank skips both repo-wide because
   its ORM headers aren't `-Werror`-clean — the ladder scopes any such
   relaxation to the `db/` entity targets only, since persistence goes
   through the same Lightweight ORM per
   [`IMPLEMENTATION.md`](IMPLEMENTATION.md)), AUTOMOC, and a TIMEOUT on
-  every binary. Lightweight's `FetchContent` acquisition is hoisted once
-  into `examples/common`, not repeated per rung. One trap when implementing
-  it: `catch_discover_tests` cannot carry a **multi-value** `LABELS`. It
-  forwards `PROPERTIES` as a flat list through a `-D VAR=a;b;c` command line
+  every binary. Sanitizers are opt-in per `AF_SANITIZER` (set by the
+  `clang-asan`/`clang-tsan`/`clang-ubsan` presets), applied with the same
+  `if(DEFINED AF_SANITIZER) apply_sanitizers(<target> ${AF_SANITIZER})
+  endif()` guard `AF_COVERAGE` uses for `apply_coverage()` — every ladder
+  target that reaches a rung's models or tests carries this guard, so a
+  `--preset clang-tsan` configure of the ladder actually instruments the
+  code it builds (`.github/workflows/ci.yml`'s `kanban-tsan` job is the
+  first CI leg that exercises this). Lightweight's `FetchContent`
+  acquisition is hoisted once into `examples/common`, not repeated per
+  rung. One trap when implementing it: `catch_discover_tests` cannot carry
+  a **multi-value** `LABELS`. It forwards `PROPERTIES` as a flat list
+  through a `-D VAR=a;b;c` command line
   where no escaping survives, so `LABELS "x;y"` does not make a two-label
   test — it shifts every following name/value pair by one, silently dropping
   the rest. `examples/common/CMakeLists.txt` shows the working shape: one
@@ -413,11 +429,15 @@ managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
 
 1. **CI (every push/PR)**: one `ladder-tests` job (clone of `linux-qt`:
    gcc-debug, offscreen, sccache), path-filtered per the `MORPH_LADDER_RUNGS`
-   rule above. `ctest -L ladder` — full ladder, all modes, including
-   `[stress]` (scaled via `MORPH_LADDER_CLIENTS`/`ACTIONS` on the affected
-   rungs), the kanban TSan leg (Local mode), and one Playwright browser smoke.
-   One Windows compile-only build (never 8 rungs × 4 MSVC presets) runs
-   alongside it. ASan is scoped to changed rungs.
+   rule above. `ctest -L ladder -LE stress` — full ladder, all modes,
+   excluding kanban's `[tsan]`-tagged stress case (that job's `gcc-debug`
+   build never sets `AF_SANITIZER`, so it would run the test uninstrumented)
+   and one Playwright browser smoke. One Windows compile-only build (never 8
+   rungs × 4 MSVC presets) runs alongside it. ASan is scoped to changed
+   rungs. The kanban TSan leg is a separate, dedicated job (`kanban-tsan`,
+   sibling to `linux-sanitizers`) rather than part of this one — it builds
+   `MORPH_LADDER_RUNGS=kanban` alone under the `clang-tsan` preset and runs
+   only that one test via `ctest -R ThreadSanitizer`.
 
    Two pieces of this live outside that job as shipped, for reasons of
    toolchain rather than design. **The GUI half** — each rung's QML module,

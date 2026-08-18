@@ -52,6 +52,16 @@ apply_warnings(morph_ladder_gui)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_gui)
 endif()
+# AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage() is
+# above, and for the same reason -- without it, a --preset clang-tsan build
+# of the ladder compiles this target with no sanitizer instrumentation at
+# all, so any race in code it contributes would never be caught even though
+# the preset name suggests otherwise. See .github/workflows/ci.yml's
+# kanban-tsan job, the first CI leg to actually build ladder code under a
+# sanitizer preset.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_gui ${AF_SANITIZER})
+endif()
 
 # ── morph_ladder_app: AppContext — the deployment-mode-choosing layer ───────
 # Split out of morph_ladder_gui so that target can stay Qt6::Core-only (see
@@ -70,6 +80,10 @@ set_target_properties(morph_ladder_app PROPERTIES AUTOMOC ON)
 apply_warnings(morph_ladder_app)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_app)
+endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_app ${AF_SANITIZER})
 endif()
 
 # ── WebAssembly build ────────────────────────────────────────────────────────
@@ -161,6 +175,14 @@ set_target_properties(morph_ladder_testkit PROPERTIES AUTOMOC ON)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_testkit)
 endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above. BackendRig and
+# DbFixture live in this target, and BoardModel's strand-serialized dispatch
+# (the thing kanban-tsan's stress test actually exercises) runs through the
+# testkit's own pump/rig plumbing, so it needs instrumentation exactly as
+# much as ladder_<rung>_tests itself does.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_testkit ${AF_SANITIZER})
+endif()
 
 # ── ladder_common_tests: the testkit's own self-test suite ──────────────────
 add_executable(ladder_common_tests
@@ -200,6 +222,10 @@ set_target_properties(ladder_common_tests PROPERTIES AUTOMOC ON)
 apply_warnings(ladder_common_tests)
 if(AF_COVERAGE)
     apply_coverage(ladder_common_tests)
+endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(ladder_common_tests ${AF_SANITIZER})
 endif()
 
 include(Catch)

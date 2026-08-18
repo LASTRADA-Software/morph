@@ -302,6 +302,116 @@ jobs:
           name: coverage-report
           path: build/clang-coverage/html/
 
+  # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
+  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE runs entirely on
+  # Mode::Local's ThreadPoolExecutor{4} with no Qt/GUI involvement (see the
+  # test file's own header comment), so the "a GUI stack under TSan is
+  # mostly noise" rationale that keeps the ladder out of linux-sanitizers
+  # does not apply to this one test. This job builds only what that test
+  # needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban, no Qt GUI
+  # modules beyond the WebSockets backend the ladder testkit itself
+  # requires -- to keep it a minimal, fast, TSan-clean addition rather than
+  # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
+  kanban-tsan:
+    name: Kanban / ThreadSanitizer
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-kanban-tsan-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-kanban-tsan-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }} from apt.llvm.org
+        run: |
+          sudo apt-get update -q
+          # unixodbc-dev + libsqliteodbc: the ladder (built by this job)
+          # fetches the Lightweight ORM, whose CMake runs
+          # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose DbFixture
+          # opens a real `DRIVER=SQLite3` connection at test time (identical
+          # rationale to linux-sanitizers' coverage-leg step and ladder-tests'
+          # own install step). Named explicitly rather than relied on from the
+          # runner image.
+          # libyaml-cpp-dev + libzip-dev: Lightweight's own CMakeLists.txt does
+          # `find_package(yaml-cpp)`/`find_package(libzip)` as system CONFIG
+          # packages, not through CPM (examples/bank/CMakeLists.txt's comment
+          # on the identical fetch) — without these, configure fails the
+          # moment MORPH_BUILD_LADDER=ON pulls Lightweight in.
+          # libgl1-mesa-dev: every other job that configures MORPH_BUILD_QT=ON
+          # together with MORPH_BUILD_LADDER=ON installs this (linux-sanitizers'
+          # coverage leg, ladder-tests, linux-all-features) for Qt's GL platform
+          # integration; carried here for the same reason even though this leg's
+          # test run itself stays off-GUI.
+          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
+      # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
+      # every other job that builds the ladder on Linux already documents.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
+
+      - name: Cache sccache
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-kanban-tsan-${{ github.sha }}
+          restore-keys: sccache-kanban-tsan-
+
+      - name: Install sccache
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      # MORPH_LADDER_RUNGS=kanban (a single rung, not "all"): examples/CMakeLists.txt's
+      # rung-selection loop (`if(MORPH_LADDER_RUNGS STREQUAL "all" OR _rung IN_LIST
+      # MORPH_LADDER_RUNGS)`) matches a single-value list correctly, and examples/common
+      # (the testkit every rung's tests link) is always added regardless of which rungs
+      # are selected — so this configures and builds only kanban's ladder targets, not
+      # the whole ladder.
+      - name: Configure (clang-tsan, kanban only)
+        run: |
+          cmake --preset clang-tsan \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=kanban \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
+      # catch_discover_tests() runs ladder_kanban_tests once at BUILD time to
+      # enumerate its cases, which can abort on this headless runner (no X
+      # server) without it — see linux-sanitizers' and ladder-tests' own Build
+      # steps for the identical note.
+      - name: Build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: cmake --build --preset clang-tsan
+
+      # Every ladder ctest case only ever carries the "ladder"/"ladder-<rung>"
+      # labels morph_add_rung() applies (cmake/morph_add_rung.cmake) — Catch2's
+      # own tags ([kanban][stress][tsan]) are never translated into ctest
+      # labels anywhere in this repo's CMake (no catch_discover_tests call
+      # passes ADD_TAGS_AS_LABELS). A "-L tsan" filter would therefore match
+      # zero tests and silently run nothing. This test's name is the only
+      # thing distinguishing it, and "ThreadSanitizer" appears in exactly one
+      # TEST_CASE name across the whole kanban tree (confirmed by grep), so
+      # -R selects it precisely.
+      - name: Test (kanban's TSan-tagged stress test only)
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
+
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
   linux-qt:
     name: Linux / Qt6 WebSockets

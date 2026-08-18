@@ -139,6 +139,15 @@ function(morph_add_rung)
             if(AF_COVERAGE)
                 apply_coverage(ladder_${_rung}_lib)
             endif()
+            # AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage()
+            # is above. Without this, a --preset clang-tsan build of the ladder
+            # compiles this target (a rung's models -- the code kanban-tsan's
+            # stress test actually races on) with no sanitizer instrumentation at
+            # all, silently defeating the whole point of building under that
+            # preset. See .github/workflows/ci.yml's kanban-tsan job.
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(ladder_${_rung}_lib ${AF_SANITIZER})
+            endif()
         endif()
     endif()
 
@@ -177,6 +186,10 @@ function(morph_add_rung)
         apply_bigobj(ladder_${_rung}_gui_lib)
         if(AF_COVERAGE)
             apply_coverage(ladder_${_rung}_gui_lib)
+        endif()
+        # See ladder_${_rung}_lib's identical AF_SANITIZER block above.
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(ladder_${_rung}_gui_lib ${AF_SANITIZER})
         endif()
     endif()
 
@@ -291,6 +304,10 @@ function(morph_add_rung)
             if(AF_COVERAGE)
                 apply_coverage(ladder_${_rung}_gui)
             endif()
+            # See ladder_${_rung}_lib's identical AF_SANITIZER block above.
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(ladder_${_rung}_gui ${AF_SANITIZER})
+            endif()
         endif()
     endif()
 
@@ -362,6 +379,10 @@ function(morph_add_rung)
             apply_bigobj(ladder_${_rung}_server)
             if(AF_COVERAGE)
                 apply_coverage(ladder_${_rung}_server)
+            endif()
+            # See ladder_${_rung}_lib's identical AF_SANITIZER block above.
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(ladder_${_rung}_server ${AF_SANITIZER})
             endif()
         endif()
     endif()
@@ -457,6 +478,16 @@ function(morph_add_rung)
             apply_bigobj(ladder_${_rung}_tests)
             if(AF_COVERAGE)
                 apply_coverage(ladder_${_rung}_tests)
+            endif()
+            # AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage()
+            # is above. This is the target kanban's [tsan]-tagged stress test
+            # actually links and runs from -- without this, a --preset clang-tsan
+            # build compiles it with no sanitizer instrumentation at all, and
+            # .github/workflows/ci.yml's kanban-tsan job would build and pass
+            # while never actually exercising ThreadSanitizer over the code it
+            # claims to cover.
+            if(DEFINED AF_SANITIZER)
+                apply_sanitizers(ladder_${_rung}_tests ${AF_SANITIZER})
             endif()
 
             include(Catch)
