@@ -111,7 +111,7 @@ template <typename Rows>
 }  // namespace
 
 BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : QObject{parent}, _presenter{bridge, executor} {
+    : QObject{parent}, _presenter{bridge, executor}, _bridge{bridge} {
     // Direct (same-thread) connections throughout — same "no meta-type
     // registration needed" note as ProjectAdminBridge's identical
     // constructor comment.
@@ -130,9 +130,14 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
 void BoardBridge::applyBoard(const GetBoardResult& result) {
     _board = toVariantMap(result);
     emit boardChanged();
+    if (_openPending) {
+        _openPending = false;
+        startPolling();
+    }
 }
 
 void BoardBridge::openBoard(const QString& projectId) {
+    _openPending = true;
     _presenter.openBoard(parseId<ProjectId>(projectId));
 }
 
@@ -171,6 +176,71 @@ void BoardBridge::addComment(const QString& taskId, const QString& body) {
 void BoardBridge::setMyRole(const QString& role) {
     _myRole = role;
     emit myRoleChanged();
+}
+
+void BoardBridge::stopPolling() {
+    if (_poller) {
+        _poller->stop();
+    }
+}
+
+void BoardBridge::startPolling() {
+    // Declaration-order note in board_qml_bridge.hpp explains why `_poller`
+    // may safely outlive individual ticks of `_presenter`'s handler but must
+    // itself be torn down before `_presenter` is.
+    //
+    // openBoard()'s own GetBoardResult carries no cursor, so every
+    // (re)start dispatches from BoardEventId{} — GetEventsSince's own
+    // "from the beginning" default (kanban/dto/event_dto.hpp) — which is
+    // correct here since a freshly (re)attached board view has not yet seen
+    // any event.
+    _poller = std::make_unique<Poller>(
+        _bridge, BoardEventId{},
+        [this, alive = std::weak_ptr<const void>{_liveness}](BoardEventId lastEventId, Poller::OnSuccess onSuccess,
+                                                              Poller::OnError onError) {
+            if (alive.expired()) {
+                return;
+            }
+            // The production-safe Dispatch shape event_poller.hpp's own doc
+            // comment asks for: built directly over one call's own
+            // Completion, never over a Presenter's shared failed(QString)
+            // signal. BoardPresenter::getEventsSinceForPolling returns a
+            // fresh, independent Completion<GetEventsSinceResult> per call —
+            // see that method's own doc comment. onSuccess/onError are
+            // EventPoller's own callbacks, already guarded on its own
+            // _liveness token (see event_poller.hpp) — nothing further to
+            // add here beyond not touching `_presenter` past this object's
+            // own lifetime, which the `alive` check above already covers.
+            _presenter.getEventsSinceForPolling(lastEventId)
+                .then([lastEventId, onSuccess](GetEventsSinceResult result) {
+                    const BoardEventId newLastEventId =
+                        result.events.empty() ? lastEventId : result.events.back().id;
+                    onSuccess(std::move(result.events), newLastEventId);
+                })
+                .onError([onError](const std::exception_ptr& err) { onError(err); });
+        },
+        [this, alive = std::weak_ptr<const void>{_liveness}](const BoardEvent& event) {
+            if (alive.expired()) {
+                return;
+            }
+            onEventApplied(event);
+        },
+        [this, alive = std::weak_ptr<const void>{_liveness}](const QString& message) {
+            if (alive.expired()) {
+                return;
+            }
+            emit pollingStopped(message);
+        });
+}
+
+void BoardBridge::onEventApplied(const BoardEvent&) {
+    // A board event's own shape (kind + summary, kanban/dto/event_dto.hpp)
+    // carries nothing the board/activity property bags expose beyond what a
+    // full resync already reports, so every applied event simply triggers a
+    // refresh of both `board` and `activity` — both actions this rung's
+    // design spec §7 already documents as staying in sync with each other.
+    refresh();
+    _presenter.getActivity();
 }
 
 }  // namespace kanban::gui

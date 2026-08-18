@@ -109,4 +109,8 @@ void BoardPresenter::getActivity() {
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
+::morph::async::Completion<GetEventsSinceResult> BoardPresenter::getEventsSinceForPolling(BoardEventId lastEventId) {
+    return _handler.execute(kanban::GetEventsSince{.lastEventId = lastEventId});
+}
+
 }  // namespace kanban::gui

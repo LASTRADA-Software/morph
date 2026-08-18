@@ -118,6 +118,28 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     ///        on error.
     void getActivity();
 
+    /// @brief Dedicated `Completion`-returning overload of `getEventsSince`,
+    ///        for `morph::ladder::gui::EventPoller`'s `Dispatch` closure only
+    ///        (`BoardBridge::startPolling`) — never called from QML.
+    ///
+    /// `getEventsSince(BoardEventId)` above cannot serve as a poller's
+    /// `Dispatch`: it is `void` and reports through the shared
+    /// `eventsReceived`/`failed` signals every other action on this
+    /// presenter also uses, so a concurrent in-flight action (e.g.
+    /// `addComment`) racing a poll tick could have its outcome
+    /// cross-attributed to the tick, or vice versa — exactly the hazard
+    /// `event_poller.hpp`'s own doc comment warns against building a
+    /// `Dispatch` out of. This overload instead dispatches directly through
+    /// `_handler.execute()`, returning that call's own independent
+    /// `Completion<GetEventsSinceResult>` — identical in shape and
+    /// rationale to `polls::gui::PollFormsController::getEventsSince`
+    /// (`poll_forms_controller.hpp`/`.cpp`), this rung's own precedent for
+    /// exactly this seam.
+    /// @param lastEventId The cursor to list events after.
+    /// @return The call's own completion — nothing else can be attributed to
+    ///         it.
+    [[nodiscard]] ::morph::async::Completion<GetEventsSinceResult> getEventsSinceForPolling(BoardEventId lastEventId);
+
   signals:
     /// @brief `OpenBoard`/`GetBoardState`/`CreateColumn`/`CreateSwimlane`/
     ///        `CreateTask` succeeded — the board's full rebuilt state (every
