@@ -80,6 +80,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 using morph::bridge::AllowShared;
@@ -350,6 +351,206 @@ TEST_CASE("Reconnecting after a dropped connection replays the offline queue and
     CHECK(replayed.tasks.size() == first.tasks.size());
 
     wsServer.closeGracefully(std::chrono::milliseconds{0});
+}
+
+namespace {
+
+/// @brief True iff, within every `(columnId, swimlaneId)` pair actually
+///        occupied in @p state, the tasks placed there have positions
+///        forming a dense `0..n-1` run with no gaps or duplicates. Design
+///        spec §8's first invariant, scoped to `(columnId, swimlaneId)`
+///        rather than `columnId` alone -- `MoveTaskPosition`'s own
+///        renumbering (board_model.cpp) only ever re-tightens positions
+///        within one `(columnId, swimlaneId)` pair at a time, so that pair is
+///        this test's own unit of "dense and unique", matching this
+///        scenario's exact wording in examples/kanban/README.md's "Expected
+///        strain points" section. Not extracted as a shared helper with
+///        test_kanban_stress.cpp's own (column-only) `positionsAreDenseAndUnique`:
+///        the two check different scopes and are each only ~15 lines, so a
+///        shared helper would add coupling between two independently-owned
+///        test files for no real reuse (this task's own brief flags this
+///        exact judgment call).
+/// @param state The board state to check.
+/// @return `true` if every occupied `(columnId, swimlaneId)` pair's task
+///         positions are dense and unique.
+[[nodiscard]] bool positionsAreDenseAndUniquePerColumnSwimlane(const kanban::GetBoardResult& state) {
+    std::vector<std::pair<std::int64_t, std::int64_t>> pairs;
+    for (const auto& task : state.tasks) {
+        pairs.emplace_back(*task.columnId, *task.swimlaneId);
+    }
+    std::ranges::sort(pairs);
+    pairs.erase(std::ranges::unique(pairs).begin(), pairs.end());
+
+    for (const auto& [columnId, swimlaneId] : pairs) {
+        std::vector<std::int64_t> positions;
+        for (const auto& task : state.tasks) {
+            if (*task.columnId == columnId && *task.swimlaneId == swimlaneId) {
+                positions.push_back(task.position);
+            }
+        }
+        std::ranges::sort(positions);
+        for (std::size_t i = 0; i < positions.size(); ++i) {
+            if (positions[i] != static_cast<std::int64_t>(i)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+}  // namespace
+
+TEST_CASE("Two clients' offline queues replaying interleaved converge on a valid board", "[kanban][offline]") {
+    // This scenario is driven at the backend level -- two independent,
+    // in-process BoardModel handles standing in for two clients' own
+    // SqliteOfflineQueue-backed BoardBridge instances -- rather than through
+    // two real BoardBridge/enableOfflineQueue stacks. Considered the
+    // BoardBridge route first (test_board_offline_bridge.cpp's own recipe:
+    // BackendRig{Mode::Socket, 2, authorizer} gives two independent sockets/
+    // bridges trivially), but SyncWorker::run() (sync_worker.hpp) drains and
+    // replays an *entire* queue in one call -- there is no public seam to
+    // replay "one item, then hand control to the other client's queue,
+    // alternating" through BoardBridge/enableOfflineQueue's real API, and
+    // BoardBridge::_presenter (the only handle onto the per-item
+    // moveTaskForReplay() overload that could fake such a seam) is private.
+    // Reaching it would mean adding a test-only accessor to BoardBridge
+    // itself, disproportionate for what this test needs to prove. This
+    // backend-level version instead simulates each client's local queue as a
+    // plain std::vector<MoveTaskPosition> (exactly what SqliteOfflineQueue
+    // durably persists while offline) and replays both queues through
+    // BoardModel::execute() directly -- the same "replay via a fresh
+    // in-process BoardModel call" shape the sibling reconnect test above
+    // already uses for its own single-client case, extended here to two
+    // independent queues/handles sharing one board. This still exercises the
+    // real, concurrency-sensitive code under test (BoardModel's shared
+    // per-project strand and MoveTaskPosition's position-renumbering/ledger
+    // logic) -- what it does not exercise is BoardBridge/SyncWorker's own
+    // plumbing around that, which test_board_offline_bridge.cpp and
+    // test_board_concurrent_drag.cpp already cover for the single- and
+    // multi-client-online cases respectively.
+    DbFixture fixture;
+
+    morph::session::Context ctx;
+    ctx.principal = "alice";
+    morph::session::detail::ScopedContext scope{ctx};
+
+    // Seed a richer board than seedBoard() gives (one column, one task) --
+    // this scenario needs enough columns/swimlanes/tasks that two clients'
+    // queued moves can plausibly target overlapping destinations without
+    // just being trivially independent.
+    kanban::ProjectAdminModel admin;
+    const auto projectId = admin.execute(kanban::CreateProject{.name = "Interleaved Offline Board"}).id;
+
+    kanban::BoardModel seeder;
+    seeder.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto colA = seeder.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto colB = seeder.execute(kanban::CreateColumn{.name = "Doing", .wipLimit = 0}).columns.back().id;
+    const auto laneA = seeder.execute(kanban::CreateSwimlane{.name = "Team A"}).swimlanes.front().id;
+    const auto laneB = seeder.execute(kanban::CreateSwimlane{.name = "Team B"}).swimlanes.back().id;
+
+    std::vector<kanban::TaskId> taskIds;
+    for (int i = 0; i < 6; ++i) {
+        const auto columnId = (i % 2 == 0) ? colA : colB;
+        const auto swimlaneId = (i % 3 == 0) ? laneB : laneA;
+        const auto after = seeder.execute(
+            kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)});
+        taskIds.push_back(after.tasks.back().id);
+    }
+    REQUIRE(taskIds.size() == 6);
+
+    // Two independent clients' offline queues -- each a plain
+    // std::vector<MoveTaskPosition>, exactly the durable shape a
+    // SqliteOfflineQueue persists while its own client is offline (see this
+    // test's opening comment). Each queues 4 distinct MoveTaskPosition
+    // actions against the same shared board, targeting different
+    // taskIds/destinations, but deliberately overlapping on some (columnId,
+    // swimlaneId) destinations across the two clients -- the actual
+    // interleaved-convergence scenario, not two independent non-conflicting
+    // schedules.
+    const std::vector<kanban::MoveTaskPosition> clientAQueue{
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[0], .columnId = colB, .swimlaneId = laneA, .position = 0, .opId = "clientA-op-1"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[2], .columnId = colA, .swimlaneId = laneB, .position = 0, .opId = "clientA-op-2"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[1], .columnId = colB, .swimlaneId = laneA, .position = 1, .opId = "clientA-op-3"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[4], .columnId = colA, .swimlaneId = laneA, .position = 0, .opId = "clientA-op-4"},
+    };
+    const std::vector<kanban::MoveTaskPosition> clientBQueue{
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[3], .columnId = colA, .swimlaneId = laneA, .position = 0, .opId = "clientB-op-1"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[5], .columnId = colB, .swimlaneId = laneA, .position = 0, .opId = "clientB-op-2"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[0], .columnId = colA, .swimlaneId = laneB, .position = 1, .opId = "clientB-op-3"},
+        kanban::MoveTaskPosition{
+            .taskId = taskIds[2], .columnId = colB, .swimlaneId = laneB, .position = 0, .opId = "clientB-op-4"},
+    };
+
+    // Reconnect both, then replay both queues in an interleaved order --
+    // alternate draining one item from each queue rather than draining
+    // client A fully then client B -- each client replaying through its own
+    // fresh in-process BoardModel handle (a distinct object per client,
+    // mirroring two distinct BoardBridge/SyncWorker instances that would
+    // never share one C++ object either -- only the underlying shared,
+    // per-project server-side BoardModel instance and its strand/ledger
+    // actually couple them, exactly like two real reconnecting clients).
+    kanban::BoardModel clientA;
+    clientA.execute(kanban::OpenBoard{.projectId = projectId});
+    kanban::BoardModel clientB;
+    clientB.execute(kanban::OpenBoard{.projectId = projectId});
+
+    const std::size_t maxLen = std::max(clientAQueue.size(), clientBQueue.size());
+    int failures = 0;
+    for (std::size_t i = 0; i < maxLen; ++i) {
+        if (i < clientAQueue.size()) {
+            try {
+                (void) clientA.execute(clientAQueue[i]);
+            } catch (const std::exception&) {
+                // A queued move landing on a destination another client's
+                // interleaved move already changed out from under it (e.g. a
+                // stale position offset) is an expected, benign outcome of
+                // replaying two independently-queued schedules against the
+                // same live board -- not every queued action is guaranteed
+                // conflict-free once interleaved with someone else's. What
+                // must never happen is a crash, or the invariant below
+                // failing once every item has been replayed.
+                ++failures;
+            }
+        }
+        if (i < clientBQueue.size()) {
+            try {
+                (void) clientB.execute(clientBQueue[i]);
+            } catch (const std::exception&) {
+                ++failures;
+            }
+        }
+    }
+    CAPTURE(failures);
+
+    // The board invariant this scenario's own README wording asks for:
+    // positions dense and unique within every (columnId, swimlaneId), every
+    // task present exactly once, no task lost or duplicated -- NOT any
+    // specific final ordering.
+    const auto finalState = clientA.execute(kanban::GetBoardState{});
+
+    if (!positionsAreDenseAndUniquePerColumnSwimlane(finalState)) {
+        for (const auto& task : finalState.tasks) {
+            const std::string line = "task " + std::to_string(*task.id) + " column " + std::to_string(*task.columnId) +
+                                      " swimlane " + std::to_string(*task.swimlaneId) +
+                                      " pos " + std::to_string(task.position);
+            WARN(line);
+        }
+    }
+    CHECK(positionsAreDenseAndUniquePerColumnSwimlane(finalState));
+
+    REQUIRE(finalState.tasks.size() == taskIds.size());
+    for (const auto& taskId : taskIds) {
+        const auto count =
+            std::ranges::count_if(finalState.tasks, [&](const kanban::TaskView& t) { return t.id == taskId; });
+        CHECK(count == 1);
+    }
 }
 
 namespace {
