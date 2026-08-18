@@ -691,3 +691,120 @@ TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[k
         replayedState.comments, [](const auto& c) { return c.body == "auto-tagged: moved to Done"; });
     CHECK(cascadeComments == 1);
 }
+
+// Task 14: the real version of Task 12's hand-simulated cascade -- an actual
+// CreateRule, actually firing via MoveTaskPosition, actually journaled with a
+// causalParentId linking the cascade entry to the triggering move entry.
+TEST_CASE("A rule firing on move-to-column adds a tag, journaled with a causal parent", "[kanban][rules]") {
+    DbFixture fixture;
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    const auto projectIdStr = std::to_string(*projectId);
+
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.attachActionLog(log, projectIdStr);
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+
+    const auto doneColumnId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = doneColumnId, .swimlaneId = swimlaneId, .title = "Ship it"})
+            .tasks.front()
+            .id;
+
+    const auto ruleId = model
+                             .execute(kanban::CreateRule{.projectId = projectId,
+                                                          .triggerColumnId = doneColumnId,
+                                                          .mutationType = kanban::RuleMutationType::AddTag,
+                                                          .mutationValue = "closed"})
+                             .ruleId;
+    REQUIRE(ruleId.hasValue());
+
+    const auto afterMove = model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = doneColumnId, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+
+    // The rule's mutation fired: the task now carries the "closed" tag.
+    const auto movedTask = std::ranges::find_if(afterMove.tasks, [&](const auto& t) { return t.id == taskId; });
+    REQUIRE(movedTask != afterMove.tasks.end());
+    CHECK(std::ranges::find(movedTask->tags, "closed") != movedTask->tags.end());
+
+    // The journal has two entries for this action -- the move itself, and
+    // the cascaded tag add -- with the tag-add entry's causalParentId equal
+    // to the move entry's own id. MoveTaskPosition mints its own stable
+    // identity from its `board_events` row's autoincrement id (board_model.cpp's
+    // execute(MoveTaskPosition) doc comment): find that row via
+    // GetEventsSince (the "move" kind) rather than hardcoding the scheme.
+    const auto events = model.execute(kanban::GetEventsSince{}).events;
+    const auto moveEvent = std::ranges::find_if(events, [](const auto& e) { return e.kind == "move"; });
+    REQUIRE(moveEvent != events.end());
+    const std::string expectedCausalId = "boardEvent:" + std::to_string(*moveEvent->id);
+
+    const auto recorded = log->entries(projectIdStr);
+    const auto cascadeEntry =
+        std::ranges::find_if(recorded, [](const auto& e) { return e.actionType == "ApplyTagMutation"; });
+    REQUIRE(cascadeEntry != recorded.end());
+    CHECK_FALSE(cascadeEntry->causalParentId.empty());
+    CHECK(cascadeEntry->causalParentId == expectedCausalId);
+}
+
+// Task 14: proves Phase 5's suppress-during-replay decision holds for a real
+// rule firing through MoveTaskPosition, not just Task 12's hand-simulation.
+TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[kanban][rules]") {
+    DbFixture fixture;
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    const auto projectIdStr = std::to_string(*projectId);
+
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.attachActionLog(log, projectIdStr);
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+
+    const auto doneColumnId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = doneColumnId, .swimlaneId = swimlaneId, .title = "Ship it"})
+            .tasks.front()
+            .id;
+    model.execute(kanban::CreateRule{.projectId = projectId,
+                                      .triggerColumnId = doneColumnId,
+                                      .mutationType = kanban::RuleMutationType::AddTag,
+                                      .mutationValue = "closed"});
+
+    // Perform the move once -- the rule fires, the tag is added.
+    model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = doneColumnId, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+
+    // Replay the journal from scratch against a fresh BoardModel instance --
+    // OpenBoard first (Loggable::No, hand-appended, same shape as Task 12's
+    // divergence test), then everything logAction actually recorded.
+    std::vector<::morph::journal::LogEntry> replayEntries;
+    {
+        ::morph::journal::LogEntry openBoardEntry;
+        openBoardEntry.modelType = "BoardModel";
+        openBoardEntry.entityKey = projectIdStr;
+        openBoardEntry.actionType = std::string{::morph::model::ActionTraits<kanban::OpenBoard>::typeId()};
+        openBoardEntry.payload =
+            ::morph::model::ActionTraits<kanban::OpenBoard>::toJson(kanban::OpenBoard{.projectId = projectId});
+        openBoardEntry.outcome = ::morph::journal::Outcome::Succeeded;
+        replayEntries.push_back(std::move(openBoardEntry));
+    }
+    for (const auto& entry : log->entries(projectIdStr)) {
+        replayEntries.push_back(entry);
+    }
+
+    const auto replayedHolder = ::morph::journal::replay("BoardModel", replayEntries);
+    auto& replayedModel = replayedHolder->into<kanban::BoardModel>();
+    const auto replayedState = replayedModel.execute(kanban::GetBoardState{});
+
+    // The invariant: the "closed" tag was applied exactly once, not twice --
+    // replaying the recorded MoveTaskPosition entry must not re-fire the
+    // rule (morph::journal::isReplaying() suppresses evaluateRules during
+    // replay's dispatch loop), leaving the cascade's own recorded
+    // ApplyTagMutation entry as the sole source of the tag.
+    const auto replayedTask = std::ranges::find_if(replayedState.tasks, [&](const auto& t) { return t.id == taskId; });
+    REQUIRE(replayedTask != replayedState.tasks.end());
+    const auto closedTagCount = std::ranges::count(replayedTask->tags, "closed");
+    CHECK(closedTagCount == 1);
+}

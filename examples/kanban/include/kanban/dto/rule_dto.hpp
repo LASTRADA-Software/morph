@@ -147,6 +147,35 @@ struct DeleteRule {
     [[nodiscard]] bool validate() const noexcept { return ruleId.hasValue(); }
 };
 
+/// @brief `BoardModel`'s own registered action for applying one rule's
+///        `AddTag`/`RemoveTag` mutation to a task -- the cascade `evaluateRules`
+///        fires (design spec §9). Not part of the rung's GUI-facing API
+///        surface (no presenter/QML bridge ever constructs one directly);
+///        it exists as a real, `BRIDGE_REGISTER_ACTION`-registered action
+///        purely so its own `LogEntry` is independently replayable via
+///        `morph::journal::replay()`'s `dispatcher.dispatch()` -- a cascade
+///        entry's `actionType` must name a registered action or replay
+///        throws "unknown action". Carries the same `Role::Member` gate as
+///        every other task-mutating action (`AddComment`, `MoveTaskPosition`),
+///        so a client that dispatches this directly (bypassing
+///        `evaluateRules`) is bound by the same RBAC a rule's own cascade
+///        already implies its triggering caller passed.
+struct ApplyTagMutation {
+    TaskId taskId;
+    RuleMutationType mutationType = RuleMutationType::AddTag;
+    std::string tag;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return taskId.hasValue() && !tag.empty() && tag.size() <= kMaxRuleMutationValueBytes;
+    }
+};
+
+/// @brief What a successful `ApplyTagMutation` returns -- an
+///        acknowledgement, mirroring `kanban::Ack`'s "nothing else to
+///        return" shape but defined locally so this file does not need to
+///        pull in `project_dto.hpp` for one bare struct.
+struct ApplyTagMutationResult {};
+
 }  // namespace kanban
 
 /// @brief On the wire a `RuleTriggerEvent` is its string name

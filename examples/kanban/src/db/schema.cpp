@@ -130,3 +130,18 @@ LIGHTWEIGHT_SQL_MIGRATION(20260818000001, "Create kanban rules table") {
         .RequiredColumn("mutation_value", Varchar(100));
     plan.CreateIndex("idx_rules_project", "rules", {"project_id"});
 }
+
+// Task 14: rule evaluation needs "add tag"/"remove tag" to mean something
+// concrete. kanban has no `tags` table and `RuleRecord::mutationValue` is a
+// bare string (not a `TagId`), so a task's tags are a denormalized (task_id,
+// tag) join table -- the smallest storage answer that makes a fired rule
+// observable in `TaskView::tags`. A separate migration, same "append, don't
+// edit a shipped block" precedent as 20260818000001 above.
+LIGHTWEIGHT_SQL_MIGRATION(20260818000002, "Create kanban task_tags table") {
+    plan.CreateTableIfNotExists("task_tags")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("task_id", Bigint(),
+                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
+        .RequiredColumn("tag", Varchar(100));
+    plan.CreateIndex("idx_task_tags_task", "task_tags", {"task_id"});
+}

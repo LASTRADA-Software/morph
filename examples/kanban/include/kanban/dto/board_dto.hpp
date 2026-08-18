@@ -99,6 +99,12 @@ struct TaskView {
     SwimlaneId swimlaneId;
     std::string title;
     std::int64_t position = 0;
+    /// @brief Free-form tag names attached to this task -- populated from the
+    ///        `task_tags` join table (design spec §9's rules engine is the
+    ///        only writer today, via `RuleMutationType::AddTag`/`RemoveTag`;
+    ///        no manual tag-editing action exists yet). Order matches
+    ///        `task_tags`' own row order (insertion order), not sorted.
+    std::vector<std::string> tags;
 };
 
 struct CommentView {

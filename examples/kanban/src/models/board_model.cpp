@@ -6,6 +6,7 @@
 
 #include "clock.hpp"
 
+#include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
@@ -28,6 +29,12 @@ static_assert(decltype(db::SwimlaneRecord::name)::ValueType{}.capacity() == kMax
               "kanban::kMaxSwimlaneNameBytes must equal SwimlaneRecord::name's SqlAnsiString capacity.");
 static_assert(decltype(db::TaskRecord::title)::ValueType{}.capacity() == kMaxTaskTitleBytes,
               "kanban::kMaxTaskTitleBytes must equal TaskRecord::title's SqlAnsiString capacity.");
+static_assert(decltype(db::RuleRecord::mutationValue)::ValueType{}.capacity() == kMaxRuleMutationValueBytes,
+              "kanban::kMaxRuleMutationValueBytes must equal RuleRecord::mutationValue's SqlAnsiString capacity.");
+static_assert(decltype(db::TaskTagRecord::tag)::ValueType{}.capacity() == kMaxRuleMutationValueBytes,
+              "task_tags.tag shares RuleRecord::mutationValue's capacity -- a tag name is always written from a "
+              "rule's mutationValue, so the two columns must agree or a tag that fit into the rule row could still "
+              "get silently truncated writing into task_tags.");
 
 namespace {
 
@@ -165,19 +172,34 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
             {.id = SwimlaneId{static_cast<std::int64_t>(sw.id.Value())}, .name = std::string{sw.name.Value()}});
     }
 
-    for (const auto& t : tasks) {
-        result.tasks.push_back({.id = TaskId{static_cast<std::int64_t>(t.id.Value())},
-                                 .columnId = ColumnId{static_cast<std::int64_t>(t.column.Value())},
-                                 .swimlaneId = SwimlaneId{static_cast<std::int64_t>(t.swimlane.Value())},
-                                 .title = std::string{t.title.Value()},
-                                 .position = t.position.Value()});
-    }
-
     auto taskIds = std::vector<std::uint64_t>{};
     taskIds.reserve(tasks.size());
     for (const auto& t : tasks) {
         taskIds.push_back(t.id.Value());
     }
+
+    // Tags: one query for every task's tags, grouped back by task id below --
+    // mirrors the comments query's own "one WhereIn, then bucket in memory"
+    // shape a few lines down, rather than N per-task queries.
+    std::vector<db::TaskTagRecord> allTags;
+    if (!taskIds.empty()) {
+        allTags = mapper.Query<db::TaskTagRecord>().WhereIn(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, taskIds).All();
+    }
+
+    for (const auto& t : tasks) {
+        TaskView view{.id = TaskId{static_cast<std::int64_t>(t.id.Value())},
+                      .columnId = ColumnId{static_cast<std::int64_t>(t.column.Value())},
+                      .swimlaneId = SwimlaneId{static_cast<std::int64_t>(t.swimlane.Value())},
+                      .title = std::string{t.title.Value()},
+                      .position = t.position.Value()};
+        for (const auto& tagRow : allTags) {
+            if (tagRow.task.Value() == t.id.Value()) {
+                view.tags.emplace_back(tagRow.tag.Value());
+            }
+        }
+        result.tasks.push_back(std::move(view));
+    }
+
     if (!taskIds.empty()) {
         auto comments =
             mapper.Query<db::CommentRecord>().WhereIn(::Lightweight::FieldNameOf<&db::CommentRecord::task>, taskIds).All();
@@ -198,7 +220,7 @@ void BoardModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> l
 }
 
 template <typename Action, typename Result>
-void BoardModel::logAction(const Action& action, const Result& result) const {
+void BoardModel::logAction(const Action& action, const Result& result, std::string causalParentId) const {
     if (!_log) {
         return;
     }
@@ -213,6 +235,7 @@ void BoardModel::logAction(const Action& action, const Result& result) const {
         entry.principal = ctx->principal;
     }
     entry.timestampMs = nowMs();
+    entry.causalParentId = std::move(causalParentId);
     _log->append(std::move(entry));
     // GetActivity reads this same log back via a fresh `entries()` call
     // (design spec §4), and `FileActionLog::entries()`'s own doc comment is
@@ -439,6 +462,176 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
     return result;
 }
 
+CreateRuleResult BoardModel::execute(const CreateRule& action) {
+    if (!action.validate()) {
+        throw ValidationError{
+            "CreateRule: engaged projectId/triggerColumnId and a bounded, non-empty mutationValue are required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"CreateRule: handler was never attached via OpenBoard"};
+    }
+    // Rule creation is a structural, board-policy change -- the same gate
+    // ProjectAdminModel applies to column/role administration (design spec
+    // §3), not Role::Member's day-to-day bar CreateColumn/CreateTask use.
+    requireRole(Role::Manager);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+
+    // The rule's trigger column must belong to this project -- same "trust
+    // nothing read before this call" discipline requireColumnBelongsToProject
+    // already applies to CreateTask/MoveTaskPosition's destination column.
+    requireColumnBelongsToProject(mapper.Get(), project, action.triggerColumnId);
+
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    db::RuleRecord rec;
+    rec.project = project;
+    rec.triggerEvent = std::string{ruleTriggerEventToString(RuleTriggerEvent::TaskMovedToColumn)};
+    // Task 13's deliberately-left-undone mapping: CreateRule carries a
+    // concrete triggerColumnId, but RuleRecord stores the general
+    // conditionField/conditionValue shape -- "columnId" / the column id as
+    // text is this rung's only supported condition (RuleTriggerEvent has
+    // exactly one member), so this mapping needs no per-trigger-kind
+    // dispatch today.
+    rec.conditionField = "columnId";
+    rec.conditionValue = std::to_string(*action.triggerColumnId);
+    rec.mutationType = std::string{ruleMutationTypeToString(action.mutationType)};
+    rec.mutationValue = action.mutationValue;
+    mapper->Create(rec);
+    transaction.Commit();
+
+    CreateRuleResult result{.ruleId = RuleId{static_cast<std::int64_t>(rec.id.Value())}};
+    logAction(action, result);
+    return result;
+}
+
+GetRulesResult BoardModel::execute(const GetRules& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetRules: projectId is required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"GetRules: handler was never attached via OpenBoard"};
+    }
+    requireRole(Role::Viewer);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    // loadProjectById's only purpose here is the same NotFound-if-attached-
+    // project-was-deleted check every other read in this file makes; its
+    // return value itself is unused otherwise.
+    (void) loadProjectById(mapper.Get(), projectDbId);
+
+    auto rows = mapper->Query<db::RuleRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", projectDbId)
+                    .All();
+
+    GetRulesResult result;
+    result.rules.reserve(rows.size());
+    for (const auto& row : rows) {
+        // Reverse of CreateRule's mapping: conditionValue ("columnId"'s
+        // stored text) parses back into the DTO's own concrete
+        // triggerColumnId field -- RuleView never exposes the general
+        // conditionField/conditionValue shape to callers.
+        RuleView view;
+        view.id = RuleId{static_cast<std::int64_t>(row.id.Value())};
+        view.triggerColumnId = ColumnId{std::stoll(std::string{row.conditionValue.Value()})};
+        view.mutationType = ruleMutationTypeFromString(row.mutationType.Value().str());
+        view.mutationValue = std::string{row.mutationValue.Value()};
+        result.rules.push_back(std::move(view));
+    }
+    return result;
+}
+
+Ack BoardModel::execute(const DeleteRule& action) {
+    if (!action.validate()) {
+        throw ValidationError{"DeleteRule: ruleId is required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"DeleteRule: handler was never attached via OpenBoard"};
+    }
+    // Same Manager-only gate as CreateRule.
+    requireRole(Role::Manager);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+
+    auto rows = mapper->Query<db::RuleRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=",
+                           static_cast<std::uint64_t>(*action.ruleId))
+                    .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", project.id.Value())
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{"rule does not belong to this project"};
+    }
+
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    mapper->Delete(rows.front());
+    transaction.Commit();
+
+    logAction(action, Ack{});
+    return Ack{};
+}
+
+ApplyTagMutationResult BoardModel::execute(const ApplyTagMutation& action) {
+    if (!action.validate()) {
+        throw ValidationError{"ApplyTagMutation: engaged taskId and a bounded, non-empty tag are required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"ApplyTagMutation: handler was never attached via OpenBoard"};
+    }
+    // Same gate as AddComment/MoveTaskPosition -- see rule_dto.hpp's
+    // ApplyTagMutation doc comment for why this action carries its own RBAC
+    // rather than trusting evaluateRules' caller unconditionally.
+    requireRole(Role::Member);
+    applyTagMutationImpl(action);
+    // Ordinary, non-cascaded call site (a direct client dispatch of this
+    // action) -- empty causalParentId, the default `logAction` already gives
+    // every other action in this file. `evaluateRules` below never reaches
+    // this overload: it calls `applyTagMutationImpl` directly and logs once,
+    // itself, with the triggering move's causal id -- calling through this
+    // `execute()` overload instead would journal the same mutation twice
+    // (once here unconditionally, once again with the causal link), which
+    // `morph::journal::replay()` would then dispatch twice, breaking the
+    // "exactly once" invariant design spec §9 requires of a cascade.
+    logAction(action, ApplyTagMutationResult{});
+    return ApplyTagMutationResult{};
+}
+
+void BoardModel::applyTagMutationImpl(const ApplyTagMutation& action) {
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+
+    const auto taskDbId = static_cast<std::uint64_t>(*action.taskId);
+
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    auto existingTags = mapper->Query<db::TaskTagRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::task>, "=", taskDbId)
+                             .Where(::Lightweight::FieldNameOf<&db::TaskTagRecord::tag>, "=", action.tag)
+                             .All();
+
+    if (action.mutationType == RuleMutationType::AddTag) {
+        // No-op (not an error) if the tag is already present -- AddTag is
+        // idempotent by nature (design spec §9's replay-suppression already
+        // keeps a single trigger from firing this twice, but a rule intended
+        // to fire on more than one column into the same tag, or a rule
+        // re-created after being deleted-and-recreated, would otherwise
+        // insert a duplicate row that RuleMutationType::RemoveTag would then
+        // only partially undo in one call).
+        if (existingTags.empty()) {
+            db::TaskTagRecord rec;
+            rec.task = taskDbId;
+            rec.tag = action.tag;
+            mapper->Create(rec);
+        }
+    } else {
+        for (auto& row : existingTags) {
+            mapper->Delete(row);
+        }
+    }
+    transaction.Commit();
+}
+
 GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
     if (!action.validate()) {
         throw ValidationError{"MoveTaskPosition: engaged taskId/columnId/swimlaneId and a non-negative position "
@@ -644,7 +837,79 @@ GetBoardResult BoardModel::execute(const MoveTaskPosition& action) {
 
     transaction.Commit();
     logAction(action, result);
-    return result;
+
+    // Design spec §9: evaluateRules is called after the move's own commit,
+    // before returning, and mints this move's own stable causal identity from
+    // `event.id` -- the `BoardEventRecord` row `mapper->Create(event)` just
+    // assigned above. A DB-backed autoincrement id is a genuinely stable,
+    // cross-restart identity (unlike `LogEntry::seq`, which is sink-local and
+    // re-stamped on every forward -- see `docs/spec/journal/journal.md`'s
+    // Invariants section and this design spec's §9), and this move's event
+    // row already exists in this exact transaction regardless of whether any
+    // rule ends up matching it. `evaluateRules` itself checks
+    // `morph::journal::isReplaying()` and no-ops during replay, so a
+    // replayed MoveTaskPosition entry never re-derives or reuses this id for
+    // a second firing.
+    const std::string moveCausalId = "boardEvent:" + std::to_string(event.id.Value());
+    evaluateRules(action.taskId, action.columnId, moveCausalId);
+
+    // Rebuilt after evaluateRules (rather than returning the pre-cascade
+    // `result` captured above) so a caller sees a rule's fired mutation --
+    // e.g. a freshly added tag -- in the very state this call returns,
+    // instead of only on the next GetBoardState poll. The ledger's own
+    // resultJson (written a few lines above, inside the same transaction)
+    // deliberately keeps the pre-cascade snapshot: a ledger replay is a
+    // "nothing new happened, return what happened before" path that never
+    // re-evaluates rules (see the opId-hit branch above), so a ledger hit
+    // returning the pre-cascade board state is correct, not stale -- it is
+    // reporting the same fact the original call's ledger row recorded.
+    return buildState(mapper.Get(), project);
+}
+
+void BoardModel::evaluateRules(TaskId movedTask, ColumnId newColumn, const std::string& triggerCausalId) {
+    // Phase 5's Option A decision (design spec §9): a replayed
+    // MoveTaskPosition entry must not re-fire the rule whose own cascade
+    // entry is *also* being replayed from its own recorded LogEntry -- that
+    // would double-apply the mutation. isReplaying() is true for the whole
+    // extent of morph::journal::replay()'s dispatch loop on this thread, so
+    // this check alone is enough regardless of how deep evaluateRules is
+    // called from within that loop.
+    if (::morph::journal::isReplaying()) {
+        return;
+    }
+    if (!_projectIdStr.has_value()) {
+        return;  // Not attached -- nothing to evaluate against (should not happen: only called from execute(MoveTaskPosition), which already requires attach).
+    }
+
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    const auto newColumnValue = std::to_string(*newColumn);
+
+    // Task 13's storage shape: a rule's condition is the general
+    // (conditionField, conditionValue) pair, and this rung's only supported
+    // trigger/condition kind is "columnId" / the column id as text -- see
+    // execute(CreateRule)'s identical mapping.
+    auto rules = mapper->Query<db::RuleRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::project>, "=", projectDbId)
+                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::conditionField>, "=", std::string{"columnId"})
+                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::conditionValue>, "=", newColumnValue)
+                     .All();
+
+    for (const auto& rule : rules) {
+        const ApplyTagMutation cascadeAction{.taskId = movedTask,
+                                              .mutationType = ruleMutationTypeFromString(rule.mutationType.Value().str()),
+                                              .tag = std::string{rule.mutationValue.Value()}};
+        // Calls applyTagMutationImpl directly, not execute(ApplyTagMutation)
+        // -- that overload's own unconditional logAction call would record
+        // this same fired mutation as a *second*, non-causal-linked
+        // LogEntry, and morph::journal::replay() would then dispatch both
+        // entries, double-applying the tag on replay (breaking design spec
+        // §9's "exactly once" cascade invariant). evaluateRules is the sole
+        // logger for a cascade's own entry, logged exactly once here with
+        // causalParentId set to the triggering move's own stable identity.
+        applyTagMutationImpl(cascadeAction);
+        logAction(cascadeAction, ApplyTagMutationResult{}, triggerCausalId);
+    }
 }
 
 GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {

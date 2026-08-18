@@ -150,4 +150,24 @@ struct RuleRecord {
     Light::Field<Light::SqlAnsiString<100>, Light::SqlRealName{"mutation_value"}> mutationValue;  // 6
 };
 
+/// @brief One row of the `task_tags` join table -- a task/tag-name pair.
+///        `kanban::TagId` (`core/types.hpp`) is unused here: `RuleRecord::
+///        mutationValue`/`RuleMutationType::AddTag`/`RemoveTag` all carry a
+///        tag as a bare `std::string` (there is no `CreateTag` action, no
+///        `tags` table, and no tag-editing UI surface anywhere in this rung),
+///        so a task's tags are stored as a denormalized (task, name) pair --
+///        the smallest concrete storage that makes "add tag"/"remove tag"
+///        mean something observable in `TaskView::tags` -- rather than a
+///        `TagId`-keyed row a nonexistent `tags` table would need to back.
+///        No uniqueness constraint: `evaluateRules` itself is responsible for
+///        not inserting a duplicate (design spec §9's rules engine, added by
+///        Task 14).
+struct TaskTagRecord {
+    static constexpr std::string_view TableName = "task_tags";
+
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&TaskRecord::id, Light::SqlRealName{"task_id"}> task;  // 1
+    Light::Field<Light::SqlAnsiString<100>, Light::SqlRealName{"tag"}> tag;  // 2
+};
+
 }  // namespace kanban::db
