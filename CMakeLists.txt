@@ -109,6 +109,13 @@ endif()
 
 include(cmake/compiler_options.cmake)
 
+# Compiler-cache launcher selection: fastcache-cc (when a fastcached daemon
+# answers) -> sccache -> ccache -> none. Included before any target or fetched
+# dependency (FetchContent glaze below) so those get cached too. See
+# cmake/CompileCache.cmake for the full selection logic; it declares its own
+# USE_COMPILER_CACHE/FASTCACHE_ADDR options.
+include(cmake/CompileCache.cmake)
+
 # ── clang-tidy integration ─────────────────────────────────────────────────
 if(MORPH_BUILD_CLANG_TIDY)
     find_program(CLANG_TIDY_BIN clang-tidy REQUIRED)
