@@ -72,15 +72,18 @@ Build order:
    table.
 6. **Automatic actions** — Kanboard's event→condition→mutation rules (e.g.
    "task moved to Done ⇒ assign to closer, add tag"). One client action
-   cascades into further model mutations. **Review sharpened the decision —
-   both naive answers diverge on replay**: unjournaled cascades make replay
-   incomplete, but journaled cascades *double-apply* when replay re-executes
-   the trigger and the rules re-fire. Choose one of: journal cascades with
-   a causal parent-id and suppress rule evaluation during replay, or don't
-   journal cascades and require rule determinism (which breaks when rules
-   are edited — see [`ledger`](../ledger)'s rule-versioning). State the
-   choice in writing with a divergence test; note morph today provides
-   neither replay-mode signaling nor causal links [framework gap].
+   cascades into further model mutations. **Cascades are journaled with a
+   causal parent-id, and rule evaluation is suppressed during replay.** A
+   cascaded mutation's `LogEntry` carries `causalParentId` set to the
+   triggering entry's identity, so the activity feed can render "caused by
+   task move X," and `replay()` re-applies every recorded entry — trigger
+   and cascade alike — without re-running rule evaluation, so a rule firing
+   again on the replayed trigger can never double-apply the cascade. This
+   requires `morph::journal` to carry a causal-parent-id field and to signal
+   replay mode to executing code — both are new, general-purpose framework
+   capabilities (`docs/spec/journal/journal.md`), not kanban-specific code;
+   see the divergence test this rung adds once the rules engine lands.
+   [`ledger`](../ledger) reuses this same answer.
 7. **Offline drag-a-card** — this rung's framework-level deliverable, with
    a **scope correction from review: the offline stack does not run on WASM
    today.** `NetworkMonitor` is a background probe thread (WASM build is

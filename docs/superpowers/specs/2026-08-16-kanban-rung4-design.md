@@ -9,9 +9,10 @@ reference implementations, build order, and the Definition of Done.
 
 **Scope**: steps 1–5 and 7 of the README's build order (CRUD + `GetBoard`,
 `MoveTaskPosition`, WIP limits, per-project RBAC, activity stream, offline
-drag-a-card). Steps 6 (automatic actions) and 8 (task attachments) are
-explicitly deferred per the README's own "Deferred within this rung" section
-and are out of scope for this spec.
+drag-a-card), plus the cascade-journaling *decision* for step 6 (§9). The
+rules engine itself — the executable event→condition→mutation machinery
+step 6 also names — is what remains deferred, along with step 8 (task
+attachments); see the README's own "Deferred within this rung" section.
 
 ## 1. Exactly-once semantics (`MoveTaskPosition`)
 
@@ -526,12 +527,53 @@ doc comment) — a distinct scenario from the network-connectivity test:
 `DbBusyFixture` fakes contention on the *database*, `offline_rig.hpp` fakes
 drops on the *transport*.
 
-## 9. Out of scope for this spec (confirmed, not re-litigated)
+## 9. Cascade-journaling decision (step 6) — in scope; the rules engine is not
 
-- Automatic actions (README step 6, deferred) and its cascade-journaling
-  divergence decision.
-- Task attachments (README step 8, deferred) and its HTTP side-channel
-  design.
+**Decision**: cascades are journaled with a causal parent-id, and rule
+evaluation is suppressed during replay.
 
-Both remain named in `examples/kanban/README.md`'s own "Deferred within this
-rung" section; nothing in this spec changes that scoping.
+A rule-fired mutation ("task moved to Done ⇒ assign to closer, add tag")
+produces its own `LogEntry`, distinct from the triggering action's entry,
+with a new `causalParentId` field set to the trigger entry's identity.
+`replay()` re-applies every recorded entry — trigger and cascade alike — in
+their original recorded order, but does so with rule evaluation suppressed,
+so a rule that would otherwise re-fire on the replayed trigger never runs
+again; the cascade's own recorded entry supplies the mutation instead. This
+is what keeps replay convergent: an unsuppressed rule evaluation on replay
+would re-fire and double-apply a cascade that is *also* being replayed from
+its own recorded entry, and dropping cascades from the journal entirely
+would make replay silently incomplete (state that depended on a rule firing
+would never be reconstructed). Journaling the cascade with a causal link
+does double duty — it is also what the activity stream (§4) needs to
+render "caused by task move X" instead of an unexplained second entry.
+
+This decision was a genuine design fork between two options
+`examples/kanban/README.md`'s step 6 names — journal cascades with a
+causal parent-id and suppress rule evaluation on replay, versus don't
+journal cascades and require rule determinism instead. The determinism
+option is rejected here specifically because Phase 6's rules are runtime,
+user-editable data: a rule edited after some of its firings were recorded
+cannot be replayed deterministically from the trigger alone, and requiring
+determinism would mean either freezing rules against edits or accepting
+replay divergence whenever they change — both worse than carrying the
+extra field. [`ledger`](../ledger) reuses this same answer for its own
+rule cascades.
+
+**What is new in `morph::journal` versus what is app-owned**: the causal
+link needs two additions to the framework, not app code — a
+`causalParentId` field on `LogEntry` (additive, defaulted, following the
+same evolution discipline as every other optional `LogEntry` field; see
+`docs/spec/journal/journal.md`'s data-at-rest contract) and a way for
+`replay()` to signal "this dispatch is a replay" to executing code, since
+suppressing rule evaluation only during replay requires the rules engine
+to be able to tell the two cases apart. Both land in `docs/spec/journal/
+journal.md` and its implementation, not in kanban's own model code — kanban
+consumes them, it does not define them. The rules engine itself (the
+executable event→condition→mutation machinery, and the divergence test
+proving replay does not double-apply a cascade) remains deferred per the
+README's own "Deferred within this rung" section; only this decision, and
+the framework support it requires, is in scope here.
+
+Task attachments (README step 8, deferred) and its HTTP side-channel design
+remain out of scope for this spec, per the same "Deferred within this rung"
+section.
