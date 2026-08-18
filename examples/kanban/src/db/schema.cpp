@@ -109,3 +109,24 @@ LIGHTWEIGHT_SQL_MIGRATION(20260817000001, "Create kanban tables") {
         .RequiredColumn("created_at_ms", Bigint());
     plan.CreateIndex("idx_board_events_project", "board_events", {"project_id"});
 }
+
+// Automation rules (README build-order step 6, design spec §9):
+// event->condition->mutation rules, storage and DTO surface only -- rule
+// *evaluation* is a later task. A separate migration, matching bookmarks'
+// own precedent (schema.cpp's 20260807000002 outbox-table addition) of
+// appending a new LIGHTWEIGHT_SQL_MIGRATION block rather than editing an
+// already-shipped one.
+LIGHTWEIGHT_SQL_MIGRATION(20260818000001, "Create kanban rules table") {
+    const auto projectsRef =
+        Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "projects", .columnName = "id"};
+
+    plan.CreateTableIfNotExists("rules")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("project_id", Bigint(), projectsRef)
+        .RequiredColumn("trigger_event", Varchar(32))
+        .RequiredColumn("condition_field", Varchar(32))
+        .RequiredColumn("condition_value", Varchar(100))
+        .RequiredColumn("mutation_type", Varchar(16))
+        .RequiredColumn("mutation_value", Varchar(100));
+    plan.CreateIndex("idx_rules_project", "rules", {"project_id"});
+}

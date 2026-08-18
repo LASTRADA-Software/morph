@@ -125,4 +125,29 @@ struct BoardEventRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
 };
 
+/// @brief One row of the `rules` table -- README build-order step 6's
+///        event→condition→mutation automation rules (design spec §9).
+///        `triggerEvent`/`conditionField`/`conditionValue` describe *when*
+///        the rule fires (e.g. "a task moved to this column"); `mutationType`/
+///        `mutationValue` describe *what it does* when it fires. All five are
+///        stored as their wire/enum string form -- the same
+///        `Role`/`ProjectRoleRecord::role` convention (`roleToString`/
+///        `roleFromString` at the model boundary) -- rather than as raw
+///        integers, since a rule's condition/mutation shape varies by
+///        `triggerEvent`/`mutationType` and a string column needs no
+///        per-variant schema. Rule *evaluation* (reading these columns and
+///        acting on them) is out of scope for this task; only storage and the
+///        DTO surface are added here.
+struct RuleRecord {
+    static constexpr std::string_view TableName = "rules";
+
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&ProjectRecord::id, Light::SqlRealName{"project_id"}> project;  // 1
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"trigger_event"}> triggerEvent;  // 2
+    Light::Field<Light::SqlAnsiString<32>, Light::SqlRealName{"condition_field"}> conditionField;  // 3
+    Light::Field<Light::SqlAnsiString<100>, Light::SqlRealName{"condition_value"}> conditionValue;  // 4
+    Light::Field<Light::SqlAnsiString<16>, Light::SqlRealName{"mutation_type"}> mutationType;  // 5
+    Light::Field<Light::SqlAnsiString<100>, Light::SqlRealName{"mutation_value"}> mutationValue;  // 6
+};
+
 }  // namespace kanban::db
