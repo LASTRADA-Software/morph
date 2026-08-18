@@ -93,6 +93,26 @@
       "binaryDir": "${sourceDir}/build/clangcl-release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     },
+    {
+      "name": "windows-everything",
+      "displayName": "Every optional feature (clang-cl release, Windows)",
+      "inherits": "clangcl-release",
+      "binaryDir": "${sourceDir}/build/windows-everything",
+      "cacheVariables": {
+        "MORPH_BUILD_TESTS": "ON",
+        "MORPH_BUILD_EXAMPLES": "ON",
+        "MORPH_BUILD_BANK_EXAMPLE": "ON",
+        "MORPH_BUILD_BANK_GUI": "ON",
+        "MORPH_BUILD_HMAC_EXAMPLES": "ON",
+        "MORPH_BUILD_FORMS_QML": "ON",
+        "MORPH_BUILD_QT": "ON",
+        "MORPH_BUILD_LADDER": "ON",
+        "MORPH_LADDER_RUNGS": "all",
+        "MORPH_BUILD_FUZZERS": "ON",
+        "MORPH_BUILD_LOAD_TESTS": "ON",
+        "MORPH_BUILD_OFFLINE_SQLITE": "ON"
+      }
+    },
 
     {
       "name": "gcc-debug",
@@ -122,6 +142,27 @@
       "inherits": "base-clang-linux",
       "binaryDir": "${sourceDir}/build/clang-release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-everything",
+      "displayName": "Every optional feature (Clang release, Linux)",
+      "inherits": "clang-release",
+      "binaryDir": "${sourceDir}/build/linux-everything",
+      "cacheVariables": {
+        "MORPH_BUILD_TESTS": "ON",
+        "MORPH_BUILD_EXAMPLES": "ON",
+        "MORPH_BUILD_BANK_EXAMPLE": "ON",
+        "MORPH_BUILD_BANK_GUI": "ON",
+        "MORPH_BUILD_HMAC_EXAMPLES": "ON",
+        "MORPH_BUILD_FORMS_QML": "ON",
+        "MORPH_BUILD_QT": "ON",
+        "MORPH_BUILD_LADDER": "ON",
+        "MORPH_LADDER_RUNGS": "all",
+        "MORPH_BUILD_NET": "ON",
+        "MORPH_BUILD_FUZZERS": "ON",
+        "MORPH_BUILD_LOAD_TESTS": "ON",
+        "MORPH_BUILD_OFFLINE_SQLITE": "ON"
+      }
     },
     {
       "name": "clang-asan",
@@ -171,10 +212,12 @@
     { "name": "cl-qt-release",   "configurePreset": "cl-qt-release",   "jobs": 0 },
     { "name": "clangcl-debug",   "configurePreset": "clangcl-debug",   "jobs": 0 },
     { "name": "clangcl-release", "configurePreset": "clangcl-release", "jobs": 0 },
+    { "name": "windows-everything", "configurePreset": "windows-everything", "jobs": 0 },
     { "name": "gcc-debug",       "configurePreset": "gcc-debug",       "jobs": 0 },
     { "name": "gcc-release",     "configurePreset": "gcc-release",     "jobs": 0 },
     { "name": "clang-debug",     "configurePreset": "clang-debug",     "jobs": 0 },
     { "name": "clang-release",   "configurePreset": "clang-release",   "jobs": 0 },
+    { "name": "linux-everything", "configurePreset": "linux-everything", "jobs": 0 },
     { "name": "clang-asan",      "configurePreset": "clang-asan",      "jobs": 0 },
     { "name": "clang-tsan",      "configurePreset": "clang-tsan",      "jobs": 0 },
     { "name": "clang-ubsan",     "configurePreset": "clang-ubsan",     "jobs": 0 },
@@ -206,6 +249,12 @@
       "execution": { "noTestsAction": "error", "stopOnFailure": true }
     },
     {
+      "name": "windows-everything",
+      "configurePreset": "windows-everything",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": true }
+    },
+    {
       "name": "gcc-debug",
       "configurePreset": "gcc-debug",
       "output": { "outputOnFailure": true },
@@ -214,6 +263,12 @@
     {
       "name": "clang-debug",
       "configurePreset": "clang-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error", "stopOnFailure": true }
+    },
+    {
+      "name": "linux-everything",
+      "configurePreset": "linux-everything",
       "output": { "outputOnFailure": true },
       "execution": { "noTestsAction": "error", "stopOnFailure": true }
     },
