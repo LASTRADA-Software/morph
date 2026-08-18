@@ -571,3 +571,83 @@ TEST_CASE("AttachmentServer rejects a stream that keeps sending bytes past the s
 
     std::filesystem::remove_all(storageDir);
 }
+
+TEST_CASE("AttachmentServer never lets a bare-LF-bearing X-Attachment-Content-Type header value inject an "
+          "extra header line into a later GET response",
+          "[kanban][attachments][http][security]") {
+    // The response-header-injection finding: parseHeaders only splits on
+    // "\r\n", so a header *value* containing a bare "\n" (no preceding "\r")
+    // survives parsing intact as part of the value -- but a lenient
+    // HTTP client/intermediary may treat a bare LF as a line terminator.
+    // Before the fix, that raw value was stored verbatim in the
+    // ".contenttype" sidecar and interpolated straight into the GET
+    // response's "Content-Type:" header, letting an attacker-chosen header
+    // ride along on every subsequent GET of that attachment. The value must
+    // now be validated at upload-capture time and substituted with the
+    // default "application/octet-stream" instead of ever reaching a response
+    // header unsanitized.
+    DbFixture fixture;
+    const auto storageDir = freshStorageDir("header_injection");
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+    const morph::session::TokenVerifier verifier{std::string{kSecret}, morph::session::hmacSha256};
+
+    AttachmentServer server{verifier, AttachmentServer::Config{.storageDir = storageDir}};
+    REQUIRE(server.listen());
+
+    const auto projectId = createProjectAs("alice", "Header Injection Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    const std::string token = validToken(issuer, "alice");
+    const std::string body = "attachment bytes for the header injection attempt";
+    // The malicious header value: a well-formed prefix followed by a bare
+    // "\n" (no "\r") and an attacker-chosen header line.
+    const QByteArray uploadRequest = QByteArray::fromStdString(
+        "POST /attachments HTTP/1.1\r\n"
+        "Host: 127.0.0.1\r\n"
+        "Authorization: Bearer " + token + "\r\n"
+        "X-Attachment-Filename: evil.txt\r\n"
+        "X-Attachment-Content-Type: text/plain\nX-Injected: evil\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n"
+        "\r\n" + body);
+    const std::string uploadResponse = sendRawRequest(server.port(), uploadRequest).toStdString();
+    REQUIRE(uploadResponse.starts_with("HTTP/1.1 200"));
+    const auto keyPos = uploadResponse.find("\"storageKey\"");
+    const auto colonPos = uploadResponse.find(':', keyPos);
+    const auto firstQuote = uploadResponse.find('"', colonPos);
+    const auto secondQuote = uploadResponse.find('"', firstQuote + 1);
+    const std::string storageKey = uploadResponse.substr(firstQuote + 1, secondQuote - firstQuote - 1);
+    REQUIRE_FALSE(storageKey.empty());
+
+    model.execute(kanban::AddAttachment{.taskId = taskId,
+                                         .filename = "evil.txt",
+                                         .contentType = "text/plain",
+                                         .sizeBytes = static_cast<std::int64_t>(body.size()),
+                                         .storageKey = storageKey});
+
+    const QByteArray getRequest = QByteArray::fromStdString(
+        "GET /attachments/" + storageKey + " HTTP/1.1\r\n"
+        "Host: 127.0.0.1\r\n"
+        "Authorization: Bearer " + token + "\r\n"
+        "\r\n");
+    const std::string getResponse = sendRawRequest(server.port(), getRequest).toStdString();
+
+    REQUIRE(getResponse.starts_with("HTTP/1.1 200"));
+    // The raw response bytes must never contain the injected header, under
+    // any casing or spacing -- check the actual bytes, not a parsed field.
+    CHECK(getResponse.find("X-Injected") == std::string::npos);
+    CHECK(getResponse.find("evil") == std::string::npos);
+    // The content type must have fallen back to the safe default rather than
+    // smuggling through the (invalid, LF-bearing) header value.
+    CHECK(getResponse.find("Content-Type: application/octet-stream") != std::string::npos);
+    CHECK(getResponse.ends_with(body));
+
+    std::filesystem::remove_all(storageDir);
+}

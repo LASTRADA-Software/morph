@@ -3,6 +3,7 @@
 
 #include "kanban/core/types.hpp"
 #include "kanban/db/kanban_entity.hpp"
+#include "kanban/dto/attachment_dto.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/DataMapper/Pool.hpp>
@@ -135,6 +136,87 @@ namespace {
         }
     }
     return true;
+}
+
+/// @brief The value this server falls back to whenever an
+///        `X-Attachment-Content-Type` header (or a `.contenttype` sidecar
+///        file read back at `GET` time) fails `isPlausibleMediaType` below.
+inline constexpr std::string_view kDefaultContentType = "application/octet-stream";
+
+/// @brief Strict allowlist check for a MIME media-type-shaped string:
+///        `type/subtype`, both halves non-empty and drawn only from
+///        `[A-Za-z0-9!#$&^_.+-]` (RFC 7231 §3.1.1.1's `token` charset,
+///        restricted to what a media type actually uses -- no `*`, no
+///        quoted-string parameters), overall length capped at
+///        `kMaxAttachmentContentTypeBytes` (the same bound
+///        `AddAttachment::validate()` -- Task 16, `attachment_dto.hpp` --
+///        already enforces for this same logical field, reused rather than
+///        inventing a second bound for the same value).
+///
+/// This is the single choke point protecting the `GET` response's
+/// `Content-Type:` header line from injection: a value containing `\r` or
+/// `\n` (this server's own `parseHeaders` only splits on `\r\n`, but a
+/// lenient intermediary might honor a bare `\n` as a line terminator) must
+/// never reach `buildResponse` unvalidated. Anything that fails this check
+/// is *not* an upload error -- content type is convenience metadata, not a
+/// security-critical field in its own right -- so callers substitute
+/// `kDefaultContentType` rather than rejecting the request.
+[[nodiscard]] bool isPlausibleMediaType(std::string_view value) noexcept {
+    if (value.empty() || value.size() > kMaxAttachmentContentTypeBytes) {
+        return false;
+    }
+    const auto isAllowedChar = [](char chr) noexcept {
+        const bool isAlnum = (chr >= 'A' && chr <= 'Z') || (chr >= 'a' && chr <= 'z') || (chr >= '0' && chr <= '9');
+        switch (chr) {
+            case '!':
+            case '#':
+            case '$':
+            case '&':
+            case '^':
+            case '_':
+            case '.':
+            case '+':
+            case '-':
+                return true;
+            default:
+                return isAlnum;
+        }
+    };
+    const auto slash = value.find('/');
+    if (slash == std::string_view::npos || slash == 0 || slash == value.size() - 1) {
+        return false;  // no '/', or an empty type/subtype half
+    }
+    const std::string_view type = value.substr(0, slash);
+    const std::string_view subtype = value.substr(slash + 1);
+    if (subtype.find('/') != std::string_view::npos) {
+        return false;  // more than one '/' -- not a plain type/subtype shape
+    }
+    for (const char chr : type) {
+        if (!isAllowedChar(chr)) {
+            return false;
+        }
+    }
+    for (const char chr : subtype) {
+        if (!isAllowedChar(chr)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// @brief Validates @p value as a media type, substituting
+///        `kDefaultContentType` if it does not pass `isPlausibleMediaType`
+///        (covers both an absent/malformed upload header and a `\r`/`\n`-
+///        bearing injection attempt alike -- both fail closed to the same
+///        safe default). Applied at both the point a `Content-Type` value is
+///        captured (upload) and the point one is read back (`GET`), since
+///        the on-disk `.contenttype` sidecar file could in principle be
+///        written by something other than this exact upload code path.
+[[nodiscard]] std::string sanitizedContentType(std::string_view value) {
+    if (isPlausibleMediaType(value)) {
+        return std::string{value};
+    }
+    return std::string{kDefaultContentType};
 }
 
 /// @brief One parsed HTTP request line + headers (case-insensitively looked
@@ -422,11 +504,16 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
         std::ifstream in{blobPath, std::ios::binary};
         std::ostringstream contents;
         contents << in.rdbuf();
-        std::string contentType = "application/octet-stream";
+        std::string contentType{kDefaultContentType};
         if (std::ifstream metaIn{_cfg.storageDir / (key + ".contenttype"), std::ios::binary}) {
             std::ostringstream metaContents;
             metaContents << metaIn.rdbuf();
-            contentType = metaContents.str();
+            // Re-validated here, not just trusted from having (presumably)
+            // already been sanitized at upload time: the sidecar is a plain
+            // file on disk, and this defense must hold even if something
+            // other than finishUpload() ever wrote to it (defense in depth,
+            // per the response-header-injection finding).
+            contentType = sanitizedContentType(metaContents.str());
         }
         respondAndClose(socket, state, buildResponse(200, "OK", contents.str(), contentType));
         return;
@@ -460,8 +547,14 @@ void AttachmentServer::handleRequest(QTcpSocket* socket, ConnectionState& state)
             return;
         }
 
+        // Validated (fail-closed to kDefaultContentType) before it is ever
+        // kept on state, let alone written to the `.contenttype` sidecar
+        // file -- an attacker-supplied header value containing `\r`/`\n`
+        // must never survive to be interpolated into a future GET response's
+        // `Content-Type:` header line (response-header-injection finding).
         const auto contentTypeIt = req.headers.find("x-attachment-content-type");
-        state.uploadContentType = contentTypeIt != req.headers.end() ? contentTypeIt->second : "application/octet-stream";
+        state.uploadContentType =
+            contentTypeIt != req.headers.end() ? sanitizedContentType(contentTypeIt->second) : std::string{kDefaultContentType};
         state.contentLength = declaredLength;
         state.headersParsed = true;
 
