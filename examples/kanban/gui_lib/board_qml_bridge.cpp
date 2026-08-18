@@ -230,7 +230,8 @@ void BoardBridge::moveTask(const QString& taskId, const QString& columnId, const
                                        .position = static_cast<std::int64_t>(position),
                                        .opId = opId.toStdString()};
         _offlineQueue->enqueue(serializeMoveTaskPosition(action), action.opId);
-        emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+        _queueDepth = static_cast<int>(_offlineQueue->size());
+        emit syncStatusChanged(_queueDepth, _deadLetteredCount);
         return;
     }
 #endif
@@ -382,7 +383,8 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
             // run()) is what syncStatusChanged reports, so a GUI's "N
             // dropped" indicator (Task 6) never regresses between polls.
             ++_deadLetteredCount;
-            emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+            _queueDepth = static_cast<int>(_offlineQueue->size());
+            emit syncStatusChanged(_queueDepth, _deadLetteredCount);
         });
 
     // ReconnectCoordinator::Deps: this bridge has no separate "primary vs.
@@ -408,7 +410,8 @@ void BoardBridge::enableOfflineQueue(const QString& queuePath, ::morph::offline:
                     // post-run depth, since a successful or merely-retried
                     // (still-queued) item never touches that counter.
                     const ::morph::offline::SyncResult result = _syncWorker->run();
-                    emit syncStatusChanged(static_cast<int>(_offlineQueue->size()), _deadLetteredCount);
+                    _queueDepth = static_cast<int>(_offlineQueue->size());
+                    emit syncStatusChanged(_queueDepth, _deadLetteredCount);
                     // A successful replay applied a move server-side that
                     // this bridge's cached `board`/`activity` do not yet
                     // reflect (moveTaskForReplay() deliberately never

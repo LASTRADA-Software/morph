@@ -248,4 +248,115 @@ TEST_CASE("BoardBridge queues a move made while offline and replays it on reconn
           col1);
 }
 
+TEST_CASE("BoardBridge's deadLetterCount property reflects dead-lettered moves", "[kanban][gui][offline]") {
+    // Mirrors test_kanban_offline.cpp's own 5-cumulative-attempt dead-letter
+    // setup, adapted to drive it through BoardBridge's own offline queue
+    // rather than SyncWorker directly (this task's own brief): a WIP-limit-1
+    // column already holding one task makes every replay of a second task's
+    // move into that column fail identically and deterministically
+    // (BoardModel::execute(MoveTaskPosition) throws Conflict -- "target
+    // column is at its WIP limit" -- board_model.cpp), so five online/offline
+    // flaps accumulate exactly five failed replay attempts on the one queued
+    // item and SyncWorker's hard-coded 5-attempt cap (sync_worker.hpp)
+    // dead-letters it.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+
+    const ScopedQueueFile queueFile{tempQueuePath()};
+    std::atomic<bool> simulatedOnline{true};
+
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    int lastQueueDepth = -1;
+    int lastDeadLettered = -1;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::syncStatusChanged, [&](int depth, int deadLettered) {
+        lastQueueDepth = depth;
+        lastDeadLettered = deadLettered;
+    });
+
+    // ── Seed a board: one WIP-limit-1 "To Do" column already holding
+    //    `blocker`, plus a second task `mover` sitting in "Backlog" that this
+    //    test will queue a doomed move for ─────────────────────────────────
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("Backlog"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString backlogCol =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("To Do"), 1);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString toDoCol =
+        bridge.board().value(QStringLiteral("columns")).toList().back().toMap().value(QStringLiteral("id")).toString();
+
+    changed = false;
+    bridge.createSwimlane(QStringLiteral("Default"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString swimlaneId = bridge.board()
+                                    .value(QStringLiteral("swimlanes"))
+                                    .toList()
+                                    .front()
+                                    .toMap()
+                                    .value(QStringLiteral("id"))
+                                    .toString();
+
+    changed = false;
+    bridge.createTask(toDoCol, swimlaneId, QStringLiteral("Blocker"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createTask(backlogCol, swimlaneId, QStringLiteral("Mover"));
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QVariantList tasksAfterSeed = bridge.board().value(QStringLiteral("tasks")).toList();
+    REQUIRE(tasksAfterSeed.size() == 2);
+    QString moverTaskId;
+    for (const auto& row : tasksAfterSeed) {
+        const QVariantMap map = row.toMap();
+        if (map.value(QStringLiteral("title")).toString() == QStringLiteral("Mover")) {
+            moverTaskId = map.value(QStringLiteral("id")).toString();
+        }
+    }
+    REQUIRE_FALSE(moverTaskId.isEmpty());
+
+    // ── Enable the offline stack, same recipe as the sibling test above ──
+    bridge.enableOfflineQueue(
+        QString::fromStdString(queueFile.path().string()), [&simulatedOnline] { return simulatedOnline.load(); },
+        ::morph::offline::NetworkMonitor::Config{.probeInterval = 20ms, .failureThreshold = 1, .onlineThreshold = 1});
+
+    // ── Force offline, then queue the doomed move ("Mover" into the full
+    //    "To Do" column) ────────────────────────────────────────────────
+    simulatedOnline.store(false);
+    REQUIRE(pumpUntil([&] { return !bridge.isNetworkOnlineForTest(); }, 2000ms));
+
+    lastQueueDepth = -1;
+    bridge.moveTask(moverTaskId, toDoCol, swimlaneId, 0);
+    REQUIRE(pumpUntil([&] { return lastQueueDepth == 1; }, 500ms));
+    CHECK(bridge.queueDepth() == 1);
+    CHECK(bridge.deadLetterCount() == 0);
+
+    // ── Flap online/offline five times: each online transition drives one
+    //    SyncWorker::run() -> one failed replay attempt (Conflict, WIP
+    //    limit) on the one queued item. The fifth attempt exhausts
+    //    SyncWorker's cumulative cap and dead-letters it. ────────────────
+    for (int flap = 0; flap < 5; ++flap) {
+        lastDeadLettered = -1;
+        simulatedOnline.store(true);
+        REQUIRE(pumpUntil([&] { return lastDeadLettered >= 0; }, 2000ms));
+        if (lastDeadLettered > 0) {
+            break;
+        }
+        simulatedOnline.store(false);
+        REQUIRE(pumpUntil([&] { return !bridge.isNetworkOnlineForTest(); }, 2000ms));
+    }
+
+    CHECK(bridge.deadLetterCount() == 1);
+    CHECK(bridge.queueDepth() == 0);
+}
+
 #endif  // MORPH_BUILD_OFFLINE_SQLITE

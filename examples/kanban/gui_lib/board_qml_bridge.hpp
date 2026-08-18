@@ -92,6 +92,22 @@ class BoardBridge : public QObject {
     ///        set.
     Q_PROPERTY(QString myRole READ myRole NOTIFY myRoleChanged)
 
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    /// @brief Current pending-item count in the offline queue — the same
+    ///        value `syncStatusChanged`'s own `queueDepth` parameter last
+    ///        reported. `0` before `enableOfflineQueue()` is ever called.
+    ///        Absent entirely from a `MORPH_BUILD_OFFLINE_SQLITE=OFF` build,
+    ///        matching every other offline member's gating.
+    Q_PROPERTY(int queueDepth READ queueDepth NOTIFY syncStatusChanged)
+    /// @brief Cumulative count of moves dropped after exhausting
+    ///        `SyncWorker`'s retry budget — the same running total
+    ///        `syncStatusChanged`'s own `deadLettered` parameter last
+    ///        reported. `0` before `enableOfflineQueue()` is ever called.
+    ///        Absent entirely from a `MORPH_BUILD_OFFLINE_SQLITE=OFF` build,
+    ///        matching every other offline member's gating.
+    Q_PROPERTY(int deadLetterCount READ deadLetterCount NOTIFY syncStatusChanged)
+#endif
+
   public:
     /// @param bridge   The shared `Bridge` `AppContext` owns.
     /// @param executor The executor `Completion` callbacks land on.
@@ -107,6 +123,16 @@ class BoardBridge : public QObject {
     /// @brief The caller's role on the open board (see `myRole` property).
     /// @return `"Viewer"`/`"Member"`/`"Manager"`, or empty before it is known.
     [[nodiscard]] QString myRole() const { return _myRole; }
+
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    /// @brief The offline queue's current depth (see `queueDepth` property).
+    /// @return The most recent `syncStatusChanged` queue-depth value.
+    [[nodiscard]] int queueDepth() const { return _queueDepth; }
+    /// @brief The cumulative dead-letter count (see `deadLetterCount`
+    ///        property).
+    /// @return The most recent `syncStatusChanged` dead-lettered value.
+    [[nodiscard]] int deadLetterCount() const { return _deadLetteredCount; }
+#endif
 
     /// @brief Attaches to `projectId`'s board. Emits `boardChanged`, or
     ///        `failed`.
@@ -397,6 +423,14 @@ class BoardBridge : public QObject {
     ///        per-`run()` counts, not a running total, so this bridge keeps
     ///        the total itself.
     int _deadLetteredCount = 0;
+    /// @brief Mirrors the most recent `syncStatusChanged` queue-depth value,
+    ///        backing the `queueDepth` `Q_PROPERTY` getter — every
+    ///        `syncStatusChanged` emission site already computes this same
+    ///        value (`_offlineQueue->size()`) to pass as that signal's own
+    ///        argument; this member just keeps the latest one around for a
+    ///        plain getter to read without needing a live `_offlineQueue`
+    ///        pointer at call time.
+    int _queueDepth = 0;
 #endif
     QVariantMap _board;
     QVariantList _activity;

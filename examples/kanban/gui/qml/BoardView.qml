@@ -133,6 +133,24 @@ Item {
             }
         }
 
+        // Task 6: dead-letter indicator -- README's DoD names this exact
+        // wording ("N changes could not be synced"). Bound directly to
+        // boardBridge.deadLetterCount (a Q_PROPERTY backed by
+        // syncStatusChanged), so it appears the moment SyncWorker's 5-attempt
+        // cap drops a queued move and disappears again if that count is
+        // ever reset (e.g. a fresh BoardBridge). Absent from a
+        // MORPH_BUILD_OFFLINE_SQLITE=OFF build, where boardBridge simply has
+        // no such property and this binding's guard keeps it hidden.
+        Label {
+            Layout.fillWidth: true
+            visible: page.boardBridge !== null && page.boardBridge.deadLetterCount !== undefined
+                     && page.boardBridge.deadLetterCount > 0
+            wrapMode: Text.Wrap
+            color: "#d33"
+            font.bold: true
+            text: visible ? "%1 changes could not be synced".arg(page.boardBridge.deadLetterCount) : ""
+        }
+
         RowLayout {
             Layout.fillWidth: true
 

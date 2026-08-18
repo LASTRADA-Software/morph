@@ -92,7 +92,16 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfProperty("board") >= 0);
     REQUIRE(meta->indexOfProperty("activity") >= 0);
     REQUIRE(meta->indexOfProperty("myRole") >= 0);
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    // Task 6: queueDepth/deadLetterCount only exist when the offline stack
+    // (MORPH_BUILD_OFFLINE_SQLITE) is compiled in -- see board_qml_bridge.hpp's
+    // own gating of these two Q_PROPERTYs.
+    REQUIRE(meta->indexOfProperty("queueDepth") >= 0);
+    REQUIRE(meta->indexOfProperty("deadLetterCount") >= 0);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 5);
+#else
     CHECK(meta->propertyCount() - meta->propertyOffset() == 3);
+#endif
 
     REQUIRE(meta->indexOfMethod("openBoard(QString)") >= 0);
     REQUIRE(meta->indexOfMethod("refresh()") >= 0);
