@@ -30,6 +30,10 @@ class ProjectAdminModel {
     Ack execute(const RemoveMember& action);
     /// @brief Any project member (Viewer and above) may list roles.
     GetProjectRolesResult execute(const GetProjectRoles& action);
+    /// @brief Lists every project the calling principal has any role on,
+    ///        with their own role, ordered by project name. No project-id
+    ///        parameter -- the principal comes from `session::current()`.
+    GetMyProjectsResult execute(const GetMyProjects& action);
 
   private:
     /// @brief Throws `Forbidden` unless the calling principal's role on
@@ -63,6 +67,8 @@ BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::CreateProject, "Create
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::SetMemberRole, "SetMemberRole")
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::RemoveMember, "RemoveMember")
 BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetProjectRoles, "GetProjectRoles",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(kanban::ProjectAdminModel, kanban::GetMyProjects, "GetMyProjects",
                        ::morph::model::Loggable::No)
 
 BRIDGE_REGISTER_MODEL(kanban::AuthModel, "AuthModel")

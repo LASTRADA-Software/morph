@@ -8,6 +8,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+
 using morph::ladder::testkit::DbFixture;
 
 namespace {
@@ -111,4 +113,48 @@ TEST_CASE("RemoveMember rejects a principal over auth::kMaxPrincipalBytes", "[ka
     const std::string overLong(kanban::auth::kMaxPrincipalBytes + 1, 'b');
     CHECK_THROWS_AS(model.execute(kanban::RemoveMember{.projectId = projectId, .principal = overLong}),
                      kanban::ValidationError);
+}
+
+TEST_CASE("GetMyProjects lists every project the caller has a role on, with their own role",
+          "[kanban][model]") {
+    DbFixture fixture;
+    kanban::ProjectAdminModel model;
+
+    kanban::ProjectId p2;
+    {
+        const ScopedPrincipal alice{"alice"};
+        // alice creates two projects (Manager on both); bob is added as
+        // Viewer on the second only.
+        model.execute(kanban::CreateProject{.name = "Alpha"});
+        p2 = model.execute(kanban::CreateProject{.name = "Beta"}).id;
+        model.execute(kanban::SetMemberRole{.projectId = p2, .principal = "bob", .role = kanban::Role::Viewer});
+    }
+
+    {
+        const ScopedPrincipal alice{"alice"};
+        const auto aliceProjects = model.execute(kanban::GetMyProjects{});
+        REQUIRE(aliceProjects.projects.size() == 2);
+        auto findByName = [&](const auto& projects, const std::string& name) {
+            return std::ranges::find_if(projects, [&](const auto& p) { return p.name == name; });
+        };
+        const auto aliceAlpha = findByName(aliceProjects.projects, "Alpha");
+        REQUIRE(aliceAlpha != aliceProjects.projects.end());
+        CHECK(aliceAlpha->myRole == kanban::Role::Manager);
+    }
+
+    {
+        const ScopedPrincipal bob{"bob"};
+        const auto bobProjects = model.execute(kanban::GetMyProjects{});
+        REQUIRE(bobProjects.projects.size() == 1);
+        CHECK(bobProjects.projects.front().name == "Beta");
+        CHECK(bobProjects.projects.front().myRole == kanban::Role::Viewer);
+    }
+}
+
+TEST_CASE("GetMyProjects returns an empty list for a principal with no roles", "[kanban][model]") {
+    DbFixture fixture;
+    kanban::ProjectAdminModel model;
+    const ScopedPrincipal carol{"carol"};
+    const auto result = model.execute(kanban::GetMyProjects{});
+    CHECK(result.projects.empty());
 }

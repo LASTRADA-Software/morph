@@ -53,14 +53,14 @@ decision, made explicit here rather than left implicit:
 No other rung is affected by this decision; every other rung's zero-styling
 convention is unchanged.
 
-## 3. New backend action: `GetMyProjects`
+## 3. Backend action: `GetMyProjects`
 
-None of the surveyed backend actions answer "which projects does the caller
-belong to" — `CreateProject` returns exactly the one project it created,
-and `GetProjectRoles` needs a project id already in hand. A project-list
-view needs this to exist. Small addition to `kanban::ProjectAdminModel`
-(same model as `CreateProject`/`SetMemberRole`/`RemoveMember`/
-`GetProjectRoles` — project-admin-scoped, not board-scoped):
+`CreateProject` returns exactly the one project it created, and
+`GetProjectRoles` needs a project id already in hand — neither answers
+"which projects does the caller belong to", which a project-list view
+needs. `GetMyProjects` is implemented on `kanban::ProjectAdminModel` (same
+model as `CreateProject`/`SetMemberRole`/`RemoveMember`/`GetProjectRoles` —
+project-admin-scoped, not board-scoped):
 
 ```cpp
 /// @brief Lists every project the calling principal has any role on.
@@ -82,19 +82,12 @@ GetMyProjectsResult execute(const GetMyProjects& action);
 
 `GetMyProjects` takes no parameters — the principal comes from
 `session::current()`, exactly like `AddComment`'s `requireOwner()` pattern
-in `BoardModel`. This is the one piece of backend work this spec requires;
-everything else drives the already-shipped surface as-is. Implementation:
-a query joining `project_has_roles` (or whatever the actual role table is
-named in `db::ProjectRoleRecord` — confirm exact table/column names against
-`examples/kanban/src/db/schema.cpp` at implementation time) filtered by
-`principal`, ordered by project name. No pagination for this pass — project
+in `BoardModel`. It queries `db::ProjectRoleRecord` (the `project_has_roles`
+table) filtered by `principal`, loads each referenced `db::ProjectRecord`,
+and returns the results ordered by project name. No pagination — project
 count per user is expected to be small at ladder-example scale, same
 reasoning `docs/superpowers/specs/2026-08-16-kanban-rung4-design.md` already
 applies to `BoardModel::buildState`'s unpaginated per-project reads.
-
-This addition needs its own task-review cycle (SDD or otherwise) before the
-GUI work depends on it, since it changes a model's public action surface on
-an already-reviewed, CI-green branch.
 
 ## 4. Architecture
 

@@ -11,6 +11,7 @@
 #include <Lightweight/DataMapper/Pool.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 
+#include <algorithm>
 #include <cstdint>
 
 namespace kanban {
@@ -180,6 +181,34 @@ GetProjectRolesResult ProjectAdminModel::execute(const GetProjectRoles& action) 
         result.roles.push_back(
             MemberRole{.principal = std::string{row.principal.Value().str()}, .role = roleFromString(row.role.Value().str())});
     }
+    return result;
+}
+
+GetMyProjectsResult ProjectAdminModel::execute(const GetMyProjects&) {
+    const auto& principal = requireOwner();
+
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    auto roleRows = mapper->Query<db::ProjectRoleRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::ProjectRoleRecord::principal>, "=", principal)
+                        .All();
+
+    GetMyProjectsResult result;
+    result.projects.reserve(roleRows.size());
+    for (const auto& roleRow : roleRows) {
+        const auto projectId = roleRow.project.Value();
+        auto projectRows = mapper->Query<db::ProjectRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::ProjectRecord::id>, "=", projectId)
+                                .All();
+        if (projectRows.empty()) {
+            continue;  // Project deleted underneath a stale role row; skip.
+        }
+        result.projects.push_back(MyProjectSummary{
+            .id = ProjectId{static_cast<std::int64_t>(projectId)},
+            .name = std::string{projectRows.front().name.Value().str()},
+            .myRole = roleFromString(roleRow.role.Value().str()),
+        });
+    }
+    std::ranges::sort(result.projects, {}, &MyProjectSummary::name);
     return result;
 }
 

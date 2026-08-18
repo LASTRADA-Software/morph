@@ -78,6 +78,22 @@ struct GetProjectRolesResult {
     std::vector<MemberRole> roles;
 };
 
+/// @brief Lists every project the calling principal has any role on.
+struct GetMyProjects {};
+
+/// @brief One project the caller belongs to, with their own role on it.
+struct MyProjectSummary {
+    ProjectId id;
+    std::string name;
+    Role myRole = Role::Viewer;
+};
+
+/// @brief `GetMyProjects`' result: every project the caller has a role on,
+///        ordered by project name.
+struct GetMyProjectsResult {
+    std::vector<MyProjectSummary> projects;
+};
+
 using Ack = struct Ack {};
 
 }  // namespace kanban
