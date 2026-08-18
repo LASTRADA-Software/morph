@@ -233,16 +233,24 @@ DoD):
   (soak-suite convention) — same CI run, no separate schedule. Kanban's
   stress case (`test_kanban_stress.cpp`, `[kanban][stress][tsan]`) runs at
   N=4 — **in `Local` rig mode on `ThreadPoolExecutor`**: the repo's CI
-  deliberately keeps Qt stacks out of the sanitizer matrix ("a GUI stack
-  under TSan is mostly noise"), so this test exercises models + strands,
-  not sockets, which lets it run under real ThreadSanitizer without pulling
-  Qt/QML into the sanitizer matrix. A dedicated CI job, `kanban-tsan`
-  (`.github/workflows/ci.yml`), builds only `MORPH_LADDER_RUNGS=kanban`
-  under the `clang-tsan` preset and runs this one test with `ctest -R
-  ThreadSanitizer` — every other CI leg that runs the ladder (`ladder-tests`,
-  the coverage leg of `linux-sanitizers`) excludes it, since neither builds
-  with `-fsanitize=thread`. Server-scale load (hundreds–thousands of
-  sockets) is rung 8's load *script*, not a unit test.
+  deliberately keeps Qt stacks out of the `clang-asan`/`clang-tsan`/
+  `clang-ubsan` sanitizer legs ("a GUI stack under TSan is mostly noise"),
+  so this test exercises models + strands, not sockets, which lets it run
+  under real ThreadSanitizer without pulling Qt/QML into that matrix. A
+  dedicated CI job, `kanban-tsan` (`.github/workflows/ci.yml`), builds only
+  `MORPH_LADDER_RUNGS=kanban` under the `clang-tsan` preset and runs this one
+  test with `ctest -R ThreadSanitizer`, instrumented with `-fsanitize=thread`
+  — the real TSan coverage. This same test also still runs, uninstrumented
+  for TSan, in two other legs that build the ladder without `AF_SANITIZER`:
+  the ordinary `ladder-tests` job (`gcc-debug`; its `-LE stress` filter is a
+  no-op since no ctest label named `stress` exists — see below), and the
+  `clang-coverage` leg of the `linux-sanitizers` matrix job (unlike its
+  `clang-asan`/`clang-tsan`/`clang-ubsan` siblings, `clang-coverage` does
+  build the full ladder — `MORPH_LADDER_RUNGS=all` — for coverage numbers,
+  and its `ctest` run applies no stress exclusion). Both of those runs are
+  harmless and redundant, not sanitizer coverage; only `kanban-tsan`'s run
+  is. Server-scale load (hundreds–thousands of sockets) is
+  rung 8's load *script*, not a unit test.
 - `offline_rig.hpp` — scripted connectivity: drop by closing/destroying the
   in-test `QtWebSocketServer`, revive on the same port (proven pattern);
   hand-cranked signals into `ReconnectCoordinator`; queue inspection.
@@ -429,15 +437,25 @@ managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
 
 1. **CI (every push/PR)**: one `ladder-tests` job (clone of `linux-qt`:
    gcc-debug, offscreen, sccache), path-filtered per the `MORPH_LADDER_RUNGS`
-   rule above. `ctest -L ladder -LE stress` — full ladder, all modes,
-   excluding kanban's `[tsan]`-tagged stress case (that job's `gcc-debug`
-   build never sets `AF_SANITIZER`, so it would run the test uninstrumented)
-   and one Playwright browser smoke. One Windows compile-only build (never 8
-   rungs × 4 MSVC presets) runs alongside it. ASan is scoped to changed
-   rungs. The kanban TSan leg is a separate, dedicated job (`kanban-tsan`,
-   sibling to `linux-sanitizers`) rather than part of this one — it builds
+   rule above. `ctest -L ladder -LE stress` — full ladder, all modes. The
+   `-LE stress` clause is currently a no-op (no ctest label named `stress`
+   exists anywhere in this repo's CMake — Catch2 tags are never translated
+   into ctest labels, as noted above), so this job also runs kanban's
+   `[tsan]`-tagged stress case, uninstrumented, since `gcc-debug` never sets
+   `AF_SANITIZER`: harmless and redundant, but no real TSan coverage. The
+   `clang-coverage` leg of the `linux-sanitizers` matrix job (below) also
+   builds and runs the full ladder — again without `AF_SANITIZER` — so it
+   runs the same test a second uninstrumented time. One Playwright browser
+   smoke also runs here. One Windows compile-only build (never 8 rungs × 4
+   MSVC presets) runs alongside it. ASan is scoped to changed rungs. Real
+   ThreadSanitizer coverage of that same test comes from a separate,
+   dedicated job (`kanban-tsan`, sibling to `linux-sanitizers`): it builds
    `MORPH_LADDER_RUNGS=kanban` alone under the `clang-tsan` preset and runs
-   only that one test via `ctest -R ThreadSanitizer`.
+   only that one test via `ctest -R ThreadSanitizer`, instrumented. So the
+   kanban TSan-tagged stress test runs three times today — uninstrumented
+   inside `ladder-tests`, uninstrumented inside `linux-sanitizers`'s
+   `clang-coverage` leg, and instrumented inside `kanban-tsan` — and only the
+   last of these is meaningful sanitizer coverage.
 
    Two pieces of this live outside that job as shipped, for reasons of
    toolchain rather than design. **The GUI half** — each rung's QML module,
