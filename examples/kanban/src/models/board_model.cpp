@@ -182,8 +182,9 @@ void requireTaskBelongsToProject(::Lightweight::DataMapper& mapper, const db::Pr
         auto comments =
             mapper.Query<db::CommentRecord>().WhereIn(::Lightweight::FieldNameOf<&db::CommentRecord::task>, taskIds).All();
         for (const auto& c : comments) {
-            result.comments.push_back(
-                {.principal = std::string{c.principal.Value()}, .body = std::string{c.body.Value()}});
+            result.comments.push_back({.taskId = TaskId{static_cast<std::int64_t>(c.task.Value())},
+                                        .principal = std::string{c.principal.Value()},
+                                        .body = std::string{c.body.Value()}});
         }
     }
     return result;

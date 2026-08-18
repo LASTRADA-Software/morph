@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // kanban's comment/activity overlay, design spec §7: tapping (not dragging) a
-// card opens this Popup -- the board stays visible underneath. Shows the
-// task's own comments (filtered out of BoardBridge.board.comments, which
-// carries every comment on the whole board -- board_qml_bridge.cpp's
-// CommentView has no taskId of its own in the property bag today, so this
-// view shows the board's full comment list while the popup is open for a
-// given task; the add-comment field is what is genuinely task-scoped) plus
-// an add-comment field driven by BoardBridge.addComment.
+// card opens this Popup -- the board stays visible underneath. Shows only the
+// tapped task's own comments, filtered client-side out of
+// BoardBridge.board.comments (which carries every comment on the whole
+// board) by matching each comment's own taskId against popup.taskId --
+// board_qml_bridge.cpp's CommentView property bag carries a taskId
+// (kanban::CommentView::taskId, populated in board_model.cpp's buildState
+// from CommentRecord::task, the existing BelongsTo to the owning task) --
+// plus an add-comment field driven by BoardBridge.addComment.
 //
 // `boardBridge` defaults to null and `taskId` defaults to -1 so this same
 // file also loads standalone with nothing wired up, which is exactly what
@@ -32,10 +33,19 @@ Popup {
     property string taskId: "-1"
     property string taskTitle: ""
 
-    /// Every comment on the board -- see this file's header comment on why
-    /// this popup does not filter by task.
-    readonly property var comments: boardBridge && boardBridge.board && boardBridge.board.comments
-                                     ? boardBridge.board.comments : []
+    /// This task's own comments -- boardBridge.board.comments filtered to
+    /// the rows whose own taskId matches popup.taskId (a decimal string, per
+    /// BoardView.qml's `taskPopup.taskId = String(task.id)`); every other
+    /// task's comments on this same board are excluded.
+    readonly property var comments: {
+        if (!boardBridge || !boardBridge.board || !boardBridge.board.comments) {
+            return []
+        }
+        const wantedTaskId = Number(popup.taskId)
+        return boardBridge.board.comments.filter(function (c) {
+            return c.taskId === wantedTaskId
+        })
+    }
 
     ColumnLayout {
         anchors.fill: parent

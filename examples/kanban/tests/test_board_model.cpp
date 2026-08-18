@@ -98,6 +98,50 @@ TEST_CASE("AddComment appends to GetBoardState's comments", "[kanban][model]") {
     REQUIRE(result.comments.size() == 1);
     CHECK(result.comments.front().body == "looking into it");
     CHECK(result.comments.front().principal == "alice");
+    CHECK(result.comments.front().taskId == taskId);
+}
+
+TEST_CASE("GetBoardState's comments each carry the taskId of the task they belong to, not just the board's",
+          "[kanban][model]") {
+    // Regression test for the QML TaskDetailPopup gap: CommentView used to
+    // have no taskId, so a board with comments on more than one task could
+    // not be filtered client-side to just the tapped task's own comments --
+    // every comment on the whole board looked identical once serialized.
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+
+    const auto taskA =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task A"})
+            .tasks.front()
+            .id;
+    const auto afterTaskB =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task B"});
+    const auto taskB = std::ranges::find_if(afterTaskB.tasks, [](const auto& t) { return t.title == "Task B"; })->id;
+
+    model.execute(kanban::AddComment{.taskId = taskA, .body = "comment on A"});
+    const auto result = model.execute(kanban::AddComment{.taskId = taskB, .body = "comment on B"});
+
+    REQUIRE(result.comments.size() == 2);
+    const auto commentOnA =
+        std::ranges::find_if(result.comments, [](const auto& c) { return c.body == "comment on A"; });
+    const auto commentOnB =
+        std::ranges::find_if(result.comments, [](const auto& c) { return c.body == "comment on B"; });
+    REQUIRE(commentOnA != result.comments.end());
+    REQUIRE(commentOnB != result.comments.end());
+    CHECK(commentOnA->taskId == taskA);
+    CHECK(commentOnB->taskId == taskB);
+    CHECK(commentOnA->taskId != commentOnB->taskId);
+
+    // What TaskDetailPopup.qml's own filter now expresses client-side: only
+    // taskA's comments should survive a filter keyed on taskA's id.
+    const auto commentsForTaskA = std::ranges::count_if(
+        result.comments, [&](const auto& c) { return c.taskId == taskA; });
+    CHECK(commentsForTaskA == 1);
 }
 
 TEST_CASE("MoveTaskPosition moves a task and renumbers positions densely", "[kanban][model]") {

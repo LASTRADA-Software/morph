@@ -102,6 +102,7 @@ struct TaskView {
 };
 
 struct CommentView {
+    TaskId taskId;
     std::string principal;
     std::string body;
 };

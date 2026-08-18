@@ -71,6 +71,7 @@ template <typename IdT>
 
 [[nodiscard]] QVariantMap toVariantMap(const CommentView& comment) {
     return QVariantMap{
+        {"taskId", idNumber(comment.taskId)},
         {"principal", QString::fromStdString(comment.principal)},
         {"body", QString::fromStdString(comment.body)},
     };
