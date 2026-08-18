@@ -314,6 +314,34 @@ TEST_CASE("AddAttachment/GetAttachments/RemoveAttachment validate()", "[kanban][
                                         .sizeBytes = 1024,
                                         .storageKey = ""})
                     .validate());
+    // Task 16 review finding: a `storageKey`/`filename`/`contentType` that fits
+    // in memory but overflows its bounded SqlAnsiString column must be
+    // rejected here -- otherwise it silently truncates on write (mirrors
+    // CreateColumn's/CreateTask's own bounded-name over-length checks above).
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = std::string(kanban::kMaxAttachmentFilenameBytes + 1, 'x'),
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"})
+                    .validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "report.pdf",
+                                        .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes + 1, 'x'),
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"})
+                    .validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "report.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes + 1, 'x')})
+                    .validate());
+    CHECK((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                  .filename = std::string(kanban::kMaxAttachmentFilenameBytes, 'x'),
+                                  .contentType = std::string(kanban::kMaxAttachmentContentTypeBytes, 'x'),
+                                  .sizeBytes = 1024,
+                                  .storageKey = std::string(kanban::kMaxAttachmentStorageKeyBytes, 'x')})
+              .validate());
 
     kanban::GetAttachments getAttachments{.taskId = kanban::TaskId{1}};
     CHECK(getAttachments.validate());

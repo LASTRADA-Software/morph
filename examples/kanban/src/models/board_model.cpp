@@ -35,6 +35,14 @@ static_assert(decltype(db::TaskTagRecord::tag)::ValueType{}.capacity() == kMaxRu
               "task_tags.tag shares RuleRecord::mutationValue's capacity -- a tag name is always written from a "
               "rule's mutationValue, so the two columns must agree or a tag that fit into the rule row could still "
               "get silently truncated writing into task_tags.");
+static_assert(decltype(db::AttachmentRecord::filename)::ValueType{}.capacity() == kMaxAttachmentFilenameBytes,
+              "kanban::kMaxAttachmentFilenameBytes must equal AttachmentRecord::filename's SqlAnsiString capacity.");
+static_assert(decltype(db::AttachmentRecord::contentType)::ValueType{}.capacity() == kMaxAttachmentContentTypeBytes,
+              "kanban::kMaxAttachmentContentTypeBytes must equal AttachmentRecord::contentType's SqlAnsiString "
+              "capacity.");
+static_assert(decltype(db::AttachmentRecord::storageKey)::ValueType{}.capacity() == kMaxAttachmentStorageKeyBytes,
+              "kanban::kMaxAttachmentStorageKeyBytes must equal AttachmentRecord::storageKey's SqlAnsiString "
+              "capacity.");
 
 namespace {
 

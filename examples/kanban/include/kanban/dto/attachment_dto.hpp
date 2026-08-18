@@ -4,6 +4,7 @@
 #include "kanban/core/types.hpp"
 #include "kanban/dto/project_dto.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -21,6 +22,10 @@
 /// a broken reference).
 namespace kanban {
 
+inline constexpr std::size_t kMaxAttachmentFilenameBytes = 255;
+inline constexpr std::size_t kMaxAttachmentContentTypeBytes = 127;
+inline constexpr std::size_t kMaxAttachmentStorageKeyBytes = 255;
+
 /// @brief Records that a file has been uploaded (via the separate HTTP side
 ///        channel) and attaches its metadata to a task.
 struct AddAttachment {
@@ -33,8 +38,9 @@ struct AddAttachment {
     std::string storageKey;
 
     [[nodiscard]] bool validate() const noexcept {
-        return taskId.hasValue() && !filename.empty() && !contentType.empty() && sizeBytes >= 0 &&
-               !storageKey.empty();
+        return taskId.hasValue() && !filename.empty() && filename.size() <= kMaxAttachmentFilenameBytes &&
+               !contentType.empty() && contentType.size() <= kMaxAttachmentContentTypeBytes && sizeBytes >= 0 &&
+               !storageKey.empty() && storageKey.size() <= kMaxAttachmentStorageKeyBytes;
     }
 };
 
