@@ -342,13 +342,22 @@ bool BoardBridge::replayMoveTaskPosition(const std::string& payload) {
     // the way a second concurrent sendSync() would have.
     QEventLoop loop;
     bool succeeded = false;
-    // alive guards the lambda touching `this` (via `succeeded`'s capture and
-    // `loop.quit()`) after a BoardBridge destruction that somehow outraces
-    // this synchronous call -- defence in depth, matching every other
-    // callback in this file, even though in practice this whole call stack
-    // (SyncWorker::run(), still on the Qt thread) keeps `this` alive by
-    // construction (nothing destroys a BoardBridge out from under its own
-    // running member function).
+    // No `alive`/weak_ptr guard here, unlike every async callback elsewhere
+    // in this file -- none is needed. `.then()`/`.onError()` below capture
+    // only `succeeded`/`loop` (plain stack locals), never `this`, so there is
+    // nothing in this pair of lambdas for a dangling `this` to corrupt even
+    // in principle. More fundamentally, this whole call is synchronous, not
+    // posted: replayMoveTaskPosition() is called directly, on the calling
+    // thread, from SyncWorker::run() (sync_worker.hpp's ReplayFunction
+    // contract), which is itself called directly from
+    // ReconnectCoordinator::onOnline()'s `replay` dep (reconnect_coordinator.hpp),
+    // which enableOfflineQueue() below wires to run only from inside the
+    // already-`alive`-checked lambda `_networkMonitor` posts onto `_executor`.
+    // That whole chain is one uninterrupted call stack with no re-entrant
+    // return to the executor's event loop in between, so the frame that
+    // verified `this` was alive is still on the stack, still holding `this`
+    // alive, for every nanosecond this function runs -- there is no window in
+    // which `this` could be destroyed out from under it.
     _presenter.moveTaskForReplay(action.taskId, action.columnId, action.swimlaneId, action.position,
                                   QString::fromStdString(action.opId))
         .then([&succeeded, &loop](GetBoardResult) {

@@ -195,6 +195,29 @@ class BoardBridge : public QObject {
     /// supported (it replaces every member below without tearing down the
     /// previous `NetworkMonitor`'s probe thread first).
     ///
+    /// @par Executor caveat: `onOnline()`/`onOffline()` run on the Qt GUI
+    /// thread, not a background worker
+    /// `docs/spec/offline/offline.md`'s "NetworkMonitor callback constraint"
+    /// requires `ReconnectCoordinator::onOnline()`/`onOffline()` to be
+    /// posted onto a worker executor, precisely because `onOnline()`'s retry
+    /// loop runs synchronously on whatever thread calls it and can block for
+    /// up to `maxAttempts * retryDelay` (~20s at `ReconnectCoordinatorConfig`'s
+    /// defaults), plus `SyncWorker::run()`'s own unbounded replay work on
+    /// top. This method instead posts both callbacks onto `_executor`, which
+    /// (as `main.cpp` wires it) is a `QtExecutor` delivering onto the Qt GUI
+    /// thread via `Qt::QueuedConnection` -- not a background thread. This is
+    /// harmless *today* only because the default @p probe's paired
+    /// `tryReconnect` (`enableOfflineQueue()`'s own default probe is
+    /// always-online, and `main.cpp` wires no other) always succeeds
+    /// immediately, so `onOnline()`'s retry loop never actually iterates or
+    /// sleeps. If a future caller ever wires a real, retry-capable
+    /// `tryReconnect` (an actual network probe / reconnect attempt) through
+    /// this same `_executor`, it MUST first move `onOnline()`/`onOffline()`
+    /// onto a genuine background worker executor -- otherwise a slow
+    /// reconnect freezes the Qt GUI thread for the entire retry window. Do
+    /// not assume this wiring is safe for a real `tryReconnect` without
+    /// making that change.
+    ///
     /// @param queuePath Where the durable `SqliteOfflineQueue` persists
     ///        pending moves (created if absent).
     /// @param probe     Connectivity probe `NetworkMonitor` polls on its own

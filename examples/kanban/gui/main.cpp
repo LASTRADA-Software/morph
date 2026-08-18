@@ -130,6 +130,17 @@ int main(int argc, char** argv) {
         // action, once one exists) is a follow-up; this wiring proves the
         // queue/replay mechanism itself works end-to-end (this task's DoD),
         // not a production offline detector.
+        //
+        // IMPORTANT for that follow-up: enableOfflineQueue() posts
+        // onOnline()/onOffline() onto ctx.executor() -- a QtExecutor
+        // delivering onto *this* Qt GUI thread, not a background worker.
+        // Harmless only because today's probe/tryReconnect always succeeds
+        // immediately. A real, retry-capable tryReconnect wired here without
+        // first moving onOnline()/onOffline() to a genuine background
+        // executor would freeze the GUI thread for up to
+        // maxAttempts * retryDelay (~20s at defaults) -- see
+        // enableOfflineQueue()'s own doc comment and docs/spec/offline/
+        // offline.md's "NetworkMonitor callback constraint".
         const char* offlineQueuePath = std::getenv("KANBAN_OFFLINE_QUEUE_DB");
         boardBridge->enableOfflineQueue(
             QString::fromUtf8(offlineQueuePath != nullptr ? offlineQueuePath : "kanban-offline-queue.db"));
