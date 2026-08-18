@@ -327,3 +327,107 @@ TEST_CASE("A Viewer's role on one project does not grant Member-level access on 
         .onError([&failed](auto) { failed = true; });
     REQUIRE(pumpUntil([&failed] { return failed; }));
 }
+
+TEST_CASE("A member demoted mid-session has their next move rejected and reads cut off",
+          "[kanban][model][shared-instances][auth]") {
+    // Task 8 (kanban rung-4 completion): BoardModel::requireRole runs on
+    // every execute() call, not just at attach time -- so a role change
+    // made through a *separate* ProjectAdminModel handler must be visible
+    // to a BoardModel instance that has been sitting attached the whole
+    // time and is never detached in between. Mode::Local (not Socket): the
+    // assertions below check the concrete kanban::Forbidden exception
+    // type, which only LocalBackend preserves end-to-end -- RemoteServer's
+    // wire path (see this file's "Opening a stale projectId" test) collapses
+    // every server-side exception to a generic std::runtime_error carrying
+    // just .what(). Mode::Local's every "client" shares one Bridge (see
+    // BackendRig's own doc comment), so there is only one default session at
+    // a time -- this test flips it with setDefaultSession immediately before
+    // each principal's call and always fully awaits (awaitQt) that call
+    // before flipping again, so no two calls ever race over which session
+    // Bridge::executeVia's synchronous `call.session = _defaultSession`
+    // snapshot picks up.
+    DbFixture fixture;
+    constexpr std::string_view kSecret = "matrix-test-secret-at-least-32-bytes";
+    const auto authorizer =
+        std::make_shared<kanban::auth::KanbanAuthorizer>(std::string{kSecret}, morph::session::hmacSha256);
+    BackendRig rig{Mode::Local, 1, authorizer};
+    const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
+
+    auto asManager = [&] { rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "manager")); };
+    auto asMember = [&] { rig.bridge(0).setDefaultSession(tokenContextFor(issuer, "member")); };
+
+    // manager creates the project (becoming its first Manager -- design
+    // spec §3) and promotes "member" to Role::Member.
+    asManager();
+    auto admin = rig.client<ProjectAdminModel>(0);
+    const auto project = awaitQt(admin.execute(CreateProject{.name = "Demo"}));
+    awaitQt(admin.execute(
+        kanban::SetMemberRole{.projectId = project.id, .principal = "member", .role = kanban::Role::Member}));
+
+    // "member" attaches via a shared handler and stays attached for the
+    // whole test -- this instance is never detached/recreated, which is
+    // the point: authorization must be re-checked per-execute, not only at
+    // attach time.
+    asMember();
+    BridgeHandler<BoardModel, AllowShared> memberBoard{rig.bridge(0), rig.executor()};
+    const auto opened = awaitQt(memberBoard.execute(OpenBoard{.projectId = project.id}));
+    CHECK(opened.name == "Demo");
+
+    // Manager sets up a column/swimlane/task the member will try to move
+    // while still a Member (proving normal write access before demotion).
+    // Mode::Local's shared Bridge means "manager's" BoardModel handler
+    // below is a distinct BridgeHandler instance from memberBoard, but both
+    // ultimately dispatch through the one shared LocalBackend/project row --
+    // there is only one server-side BoardModel instance for this project,
+    // and manager's writes are what member observes next.
+    asManager();
+    auto managerBoard = rig.client<BoardModel>(0);
+    awaitQt(managerBoard.execute(OpenBoard{.projectId = project.id}));
+    const auto column = awaitQt(managerBoard.execute(CreateColumn{.name = "Todo", .wipLimit = 0}));
+    const auto swimlane = awaitQt(managerBoard.execute(kanban::CreateSwimlane{.name = "Default"}));
+    const auto afterTask = awaitQt(managerBoard.execute(
+        kanban::CreateTask{.columnId = column.columns.front().id, .swimlaneId = swimlane.swimlanes.front().id,
+                            .title = "T1"}));
+    const auto taskId = afterTask.tasks.back().id;
+
+    // Manager demotes member to Viewer mid-session (member's attached
+    // BoardModel instance is never detached -- this is the point of the
+    // test: authorization is per-execute, per
+    // docs/spec/core/shared_instances.md).
+    asManager();
+    awaitQt(admin.execute(
+        kanban::SetMemberRole{.projectId = project.id, .principal = "member", .role = kanban::Role::Viewer}));
+
+    // Next write from member (a Member-or-above-required action) is
+    // rejected on the very same, still-attached instance.
+    asMember();
+    CHECK_THROWS_AS(
+        awaitQt(memberBoard.execute(kanban::MoveTaskPosition{.taskId = taskId,
+                                                              .columnId = column.columns.front().id,
+                                                              .swimlaneId = swimlane.swimlanes.front().id,
+                                                              .position = 0,
+                                                              .opId = "demotion-test-1"})),
+        kanban::Forbidden);
+
+    // Viewer is still >= the Viewer minimum GetBoardState/GetEventsSince
+    // require, so reads correctly still succeed at this point -- demoting
+    // to Viewer intentionally does not revoke read access, only Member-or-
+    // above write actions. This is the control that proves the next
+    // assertion below is a real transition, not a pre-existing rejection.
+    CHECK_NOTHROW(awaitQt(memberBoard.execute(kanban::GetBoardState{})));
+
+    // Manager now removes member's role entirely (e.g. offboarding, or a
+    // stricter demotion than "downgrade to Viewer") -- the README's actual
+    // "reads must also be cut off" strain point: with *no* role row left,
+    // requireRole(Role::Viewer) must reject even the read-only actions on
+    // this same, still-attached instance, not just Member-level writes.
+    asManager();
+    awaitQt(admin.execute(kanban::RemoveMember{.projectId = project.id, .principal = "member"}));
+
+    // Reads are cut off going forward -- design spec's "nothing detaches
+    // them; the *next* execute() re-checks the role" guarantee applies to
+    // reads too, not just writes.
+    asMember();
+    CHECK_THROWS_AS(awaitQt(memberBoard.execute(kanban::GetEventsSince{.lastEventId = {}})), kanban::Forbidden);
+    CHECK_THROWS_AS(awaitQt(memberBoard.execute(kanban::GetBoardState{})), kanban::Forbidden);
+}
