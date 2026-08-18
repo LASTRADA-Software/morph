@@ -145,3 +145,21 @@ LIGHTWEIGHT_SQL_MIGRATION(20260818000002, "Create kanban task_tags table") {
         .RequiredColumn("tag", Varchar(100));
     plan.CreateIndex("idx_task_tags_task", "task_tags", {"task_id"});
 }
+
+// Task 16: README build-order step 8's task attachments (metadata half
+// only -- "bytes over a side channel, metadata through actions"). A
+// separate migration, same "append, don't edit a shipped block" precedent
+// as 20260818000001/20260818000002 above.
+LIGHTWEIGHT_SQL_MIGRATION(20260818000003, "Create kanban attachments table") {
+    plan.CreateTableIfNotExists("attachments")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("task_id", Bigint(),
+                             Lightweight::SqlForeignKeyReferenceDefinition{.tableName = "tasks", .columnName = "id"})
+        .RequiredColumn("filename", Varchar(255))
+        .RequiredColumn("content_type", Varchar(127))
+        .RequiredColumn("size_bytes", Bigint())
+        .RequiredColumn("storage_key", Varchar(255))
+        .RequiredColumn("uploaded_by", Varchar(64))
+        .RequiredColumn("uploaded_at_ms", Bigint());
+    plan.CreateIndex("idx_attachments_task", "attachments", {"task_id"});
+}

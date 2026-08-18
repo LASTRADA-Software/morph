@@ -170,4 +170,25 @@ struct TaskTagRecord {
     Light::Field<Light::SqlAnsiString<100>, Light::SqlRealName{"tag"}> tag;  // 2
 };
 
+/// @brief One row of the `attachments` table -- README build-order step 8's
+///        task attachments (metadata half only). Mirrors `CommentRecord`'s
+///        exact shape (a task-scoped child table): same `BelongsTo<&TaskRecord
+///        ::id>`, `principal`-shaped `uploadedBy` column, and trailing
+///        `*AtMs` timestamp. `storageKey` is an opaque reference to wherever
+///        a separate HTTP side channel (a later task) put the file's bytes --
+///        this row never validates that the key resolves to anything; it is
+///        only ever compared for equality, never parsed.
+struct AttachmentRecord {
+    static constexpr std::string_view TableName = "attachments";
+
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&TaskRecord::id, Light::SqlRealName{"task_id"}> task;  // 1
+    Light::Field<Light::SqlAnsiString<255>, Light::SqlRealName{"filename"}> filename;  // 2
+    Light::Field<Light::SqlAnsiString<127>, Light::SqlRealName{"content_type"}> contentType;  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"size_bytes"}> sizeBytes{0};  // 4
+    Light::Field<Light::SqlAnsiString<255>, Light::SqlRealName{"storage_key"}> storageKey;  // 5
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"uploaded_by"}> uploadedBy;  // 6
+    Light::Field<std::int64_t, Light::SqlRealName{"uploaded_at_ms"}> uploadedAtMs{0};  // 7
+};
+
 }  // namespace kanban::db

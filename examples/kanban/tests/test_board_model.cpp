@@ -808,3 +808,130 @@ TEST_CASE("Replaying a move-to-Done journal entry does not re-fire its rule", "[
     const auto closedTagCount = std::ranges::count(replayedTask->tags, "closed");
     CHECK(closedTagCount == 1);
 }
+
+// Task 16: attachment metadata (README build-order step 8's "bytes over a
+// side channel, metadata through actions" -- this task never touches actual
+// bytes, only the storageKey a later HTTP side channel would have handed
+// back).
+TEST_CASE("AddAttachment records metadata for a task, GetAttachments lists it", "[kanban][attachments]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    model.execute(kanban::AddAttachment{.taskId = taskId,
+                                         .filename = "report.pdf",
+                                         .contentType = "application/pdf",
+                                         .sizeBytes = 1024,
+                                         .storageKey = "abc123"});
+
+    const auto result = model.execute(kanban::GetAttachments{.taskId = taskId});
+    REQUIRE(result.attachments.size() == 1);
+    const auto& att = result.attachments.front();
+    CHECK(att.taskId == taskId);
+    CHECK(att.filename == "report.pdf");
+    CHECK(att.contentType == "application/pdf");
+    CHECK(att.sizeBytes == 1024);
+    CHECK(att.storageKey == "abc123");
+    CHECK(att.uploadedBy == "alice");
+    CHECK(att.id.hasValue());
+}
+
+TEST_CASE("RemoveAttachment deletes the metadata row; GetAttachments no longer lists it", "[kanban][attachments]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.execute(kanban::OpenBoard{.projectId = projectId});
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Fix bug"})
+            .tasks.front()
+            .id;
+
+    model.execute(kanban::AddAttachment{.taskId = taskId,
+                                         .filename = "report.pdf",
+                                         .contentType = "application/pdf",
+                                         .sizeBytes = 1024,
+                                         .storageKey = "abc123"});
+    const auto attachmentId = model.execute(kanban::GetAttachments{.taskId = taskId}).attachments.front().id;
+
+    model.execute(kanban::RemoveAttachment{.attachmentId = attachmentId});
+
+    const auto after = model.execute(kanban::GetAttachments{.taskId = taskId});
+    CHECK(after.attachments.empty());
+}
+
+TEST_CASE("AddAttachment rejects a taskId that belongs to a different project", "[kanban][attachments][cross-tenant]") {
+    DbFixture fixture;
+    const auto projectA = createProjectAs("alice", "Board A");
+    const auto projectB = createProjectAs("bob", "Board B");
+
+    kanban::BoardModel modelA;
+    {
+        const ScopedPrincipal alice{"alice"};
+        modelA.execute(kanban::OpenBoard{.projectId = projectA});
+    }
+
+    const kanban::TaskId taskOnA = [&] {
+        const ScopedPrincipal alice{"alice"};
+        const auto columnId = modelA.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+        const auto swimlaneId = modelA.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+        return modelA.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task A"})
+            .tasks.front()
+            .id;
+    }();
+
+    kanban::BoardModel modelB;
+    const ScopedPrincipal bob{"bob"};
+    modelB.execute(kanban::OpenBoard{.projectId = projectB});
+
+    CHECK_THROWS_AS(modelB.execute(kanban::AddAttachment{.taskId = taskOnA,
+                                                          .filename = "sneaky.pdf",
+                                                          .contentType = "application/pdf",
+                                                          .sizeBytes = 1,
+                                                          .storageKey = "sneaky"}),
+                    kanban::NotFound);
+}
+
+TEST_CASE("A Viewer can GetAttachments but cannot AddAttachment -- Forbidden, not a silent write",
+          "[kanban][attachments]") {
+    DbFixture fixture;
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    kanban::BoardModel model;
+
+    kanban::TaskId taskId;
+    {
+        const ScopedPrincipal alice{"alice"};
+        model.execute(kanban::OpenBoard{.projectId = projectId});
+        const auto columnId = model.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0}).columns.front().id;
+        const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+        taskId = model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Fix bug"})
+                     .tasks.front()
+                     .id;
+
+        kanban::ProjectAdminModel admin;
+        admin.execute(kanban::SetMemberRole{.projectId = projectId, .principal = "carol", .role = kanban::Role::Viewer});
+    }
+
+    const ScopedPrincipal carol{"carol"};
+    kanban::BoardModel viewerModel;
+    viewerModel.execute(kanban::OpenBoard{.projectId = projectId});
+
+    CHECK_THROWS_AS(viewerModel.execute(kanban::AddAttachment{.taskId = taskId,
+                                                               .filename = "x.pdf",
+                                                               .contentType = "application/pdf",
+                                                               .sizeBytes = 1,
+                                                               .storageKey = "k"}),
+                    kanban::Forbidden);
+    // Viewer-or-above may still read -- same bar GetBoardState/GetRules use.
+    CHECK(viewerModel.execute(kanban::GetAttachments{.taskId = taskId}).attachments.empty());
+}

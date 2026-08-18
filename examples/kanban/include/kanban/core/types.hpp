@@ -45,6 +45,9 @@ KANBAN_DEFINE_STRONG_ID(SwimlaneId);
 KANBAN_DEFINE_STRONG_ID(TagId);
 /// @brief Strong id for an automation rule (a `rules` table surrogate key).
 KANBAN_DEFINE_STRONG_ID(RuleId);
+/// @brief Strong id for a task attachment (an `attachments` table surrogate
+///        key).
+KANBAN_DEFINE_STRONG_ID(AttachmentId);
 
 #undef KANBAN_DEFINE_STRONG_ID
 
@@ -138,6 +141,12 @@ template <>
 struct glz::meta<kanban::RuleId> {
     static constexpr auto value = &kanban::RuleId::value;
     static constexpr std::string_view name = "RuleId";
+};
+/// @brief On the wire an `AttachmentId` is its nullable underlying integer.
+template <>
+struct glz::meta<kanban::AttachmentId> {
+    static constexpr auto value = &kanban::AttachmentId::value;
+    static constexpr std::string_view name = "AttachmentId";
 };
 
 /// @brief On the wire a `BoardEventId` is its underlying integer.

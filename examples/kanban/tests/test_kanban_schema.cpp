@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "kanban/db/database.hpp"
 #include "kanban/db/kanban_entity.hpp"
+#include "kanban/dto/attachment_dto.hpp"
 #include "kanban/dto/rule_dto.hpp"
 
 #include "testkit/db_fixture.hpp"
@@ -12,7 +13,7 @@
 
 using morph::ladder::testkit::DbFixture;
 
-TEST_CASE("The kanban schema creates all ten tables", "[kanban][schema]") {
+TEST_CASE("The kanban schema creates all eleven tables", "[kanban][schema]") {
     DbFixture fixture;
     auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
     // A query against each table must not throw -- proves the table exists
@@ -20,7 +21,7 @@ TEST_CASE("The kanban schema creates all ten tables", "[kanban][schema]") {
     // smoke-test shape bookmarks'/polls' own schema tests use.
     for (const auto* table :
          {"projects", "project_has_roles", "board_columns", "swimlanes", "tasks", "comments", "board_applied_ops",
-          "board_events", "rules", "task_tags"}) {
+          "board_events", "rules", "task_tags", "attachments"}) {
         ::Lightweight::SqlStatement stmt{mapper->Connection()};
         REQUIRE_NOTHROW(stmt.ExecuteDirect(std::string{"SELECT COUNT(*) FROM "} + table));
     }
@@ -184,4 +185,141 @@ TEST_CASE("CreateRule/GetRules/DeleteRule validate() and enum string round-trips
 
     kanban::CreateRuleResult createResult{.ruleId = kanban::RuleId{7}};
     CHECK(createResult.ruleId == kanban::RuleId{7});
+}
+
+TEST_CASE("An attachments row round-trips through the DataMapper", "[kanban][schema]") {
+    // Task 16: mirrors "A rules table row round-trips through the
+    // DataMapper" above -- AttachmentRecord is CommentRecord's own
+    // task-scoped-child-table shape, just with attachment-shaped columns.
+    DbFixture fixture;
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
+    kanban::db::ProjectRecord project;
+    project.name = "Attachment Board";
+    project.archived = false;
+    project.createdAtMs = 1000;
+    mapper->Create(project);
+
+    kanban::db::ColumnRecord column;
+    column.project = project.id.Value();
+    column.name = "To Do";
+    column.wipLimit = 0;
+    column.sortOrder = 0;
+    mapper->Create(column);
+
+    kanban::db::SwimlaneRecord swimlane;
+    swimlane.project = project.id.Value();
+    swimlane.name = "Default";
+    swimlane.sortOrder = 0;
+    mapper->Create(swimlane);
+
+    kanban::db::TaskRecord task;
+    task.project = project.id.Value();
+    task.column = column.id.Value();
+    task.swimlane = swimlane.id.Value();
+    task.title = "Fix bug";
+    task.position = 0;
+    task.createdAtMs = 1000;
+    mapper->Create(task);
+    REQUIRE(task.id.Value() > 0);
+
+    kanban::db::AttachmentRecord attachment;
+    attachment.task = task.id.Value();
+    attachment.filename = "report.pdf";
+    attachment.contentType = "application/pdf";
+    attachment.sizeBytes = 1024;
+    attachment.storageKey = "abc123";
+    attachment.uploadedBy = "alice";
+    attachment.uploadedAtMs = 2000;
+    mapper->Create(attachment);
+    REQUIRE(attachment.id.Value() > 0);
+
+    auto rows = mapper->Query<kanban::db::AttachmentRecord>()
+                    .Where(::Lightweight::FieldNameOf<&kanban::db::AttachmentRecord::id>, "=", attachment.id.Value())
+                    .All();
+    REQUIRE(rows.size() == 1);
+    CHECK(rows.front().task.Value() == task.id.Value());
+    CHECK(std::string{rows.front().filename.Value()} == "report.pdf");
+    CHECK(std::string{rows.front().contentType.Value()} == "application/pdf");
+    CHECK(rows.front().sizeBytes.Value() == 1024);
+    CHECK(std::string{rows.front().storageKey.Value()} == "abc123");
+    CHECK(std::string{rows.front().uploadedBy.Value()} == "alice");
+    CHECK(rows.front().uploadedAtMs.Value() == 2000);
+}
+
+TEST_CASE("AttachmentRecord has no relation-typed member -- Update() must compile", "[kanban][schema]") {
+    // Same compile-time proof as TaskRecord's identical test above.
+    DbFixture fixture;
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+
+    kanban::db::ProjectRecord project;
+    project.name = "Attachment Board 2";
+    mapper->Create(project);
+    kanban::db::ColumnRecord column;
+    column.project = project.id.Value();
+    column.name = "To Do";
+    mapper->Create(column);
+    kanban::db::SwimlaneRecord swimlane;
+    swimlane.project = project.id.Value();
+    swimlane.name = "Default";
+    mapper->Create(swimlane);
+    kanban::db::TaskRecord task;
+    task.project = project.id.Value();
+    task.column = column.id.Value();
+    task.swimlane = swimlane.id.Value();
+    task.title = "Fix bug";
+    mapper->Create(task);
+
+    kanban::db::AttachmentRecord attachment;
+    attachment.task = task.id.Value();
+    attachment.filename = "report.pdf";
+    attachment.contentType = "application/pdf";
+    attachment.sizeBytes = 1024;
+    attachment.storageKey = "abc123";
+    attachment.uploadedBy = "alice";
+    mapper->Create(attachment);
+    attachment.filename = "renamed.pdf";
+    REQUIRE_NOTHROW(mapper->Update(attachment));
+}
+
+TEST_CASE("AddAttachment/GetAttachments/RemoveAttachment validate()", "[kanban][schema]") {
+    kanban::AddAttachment add{.taskId = kanban::TaskId{1},
+                               .filename = "report.pdf",
+                               .contentType = "application/pdf",
+                               .sizeBytes = 1024,
+                               .storageKey = "abc123"};
+    CHECK(add.validate());
+    CHECK_FALSE(kanban::AddAttachment{}.validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"})
+                    .validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "report.pdf",
+                                        .contentType = "",
+                                        .sizeBytes = 1024,
+                                        .storageKey = "abc123"})
+                    .validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "report.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = -1,
+                                        .storageKey = "abc123"})
+                    .validate());
+    CHECK_FALSE((kanban::AddAttachment{.taskId = kanban::TaskId{1},
+                                        .filename = "report.pdf",
+                                        .contentType = "application/pdf",
+                                        .sizeBytes = 1024,
+                                        .storageKey = ""})
+                    .validate());
+
+    kanban::GetAttachments getAttachments{.taskId = kanban::TaskId{1}};
+    CHECK(getAttachments.validate());
+    CHECK_FALSE(kanban::GetAttachments{}.validate());
+
+    kanban::RemoveAttachment removeAttachment{.attachmentId = kanban::AttachmentId{7}};
+    CHECK(removeAttachment.validate());
+    CHECK_FALSE(kanban::RemoveAttachment{}.validate());
 }

@@ -4,6 +4,7 @@
 #include "kanban/core/errors.hpp"
 #include "kanban/core/types.hpp"
 #include "kanban/dto/activity_dto.hpp"
+#include "kanban/dto/attachment_dto.hpp"
 #include "kanban/dto/board_dto.hpp"
 #include "kanban/dto/event_dto.hpp"
 #include "kanban/dto/project_dto.hpp"
@@ -203,6 +204,54 @@ class BoardModel {
     ///         `MoveTaskPosition`).
     ApplyTagMutationResult execute(const ApplyTagMutation& action);
 
+    /// @brief Records an attachment's metadata against a task -- README
+    ///        build-order step 8. Called **after** a separate HTTP side
+    ///        channel (a later task) has already uploaded the file's bytes
+    ///        and returned `action.storageKey`; this call never touches
+    ///        bytes, only the metadata row.
+    /// @param action The target task id, filename, content type, size, and
+    ///        the side channel's opaque `storageKey`.
+    /// @return An acknowledgement carrying no data.
+    /// @throws ValidationError if `action.validate()` rejects the request
+    ///         (an unset `taskId`, an empty `filename`/`contentType`/
+    ///         `storageKey`, or a negative `sizeBytes`).
+    /// @throws NotFound if this handler was never attached via `OpenBoard`,
+    ///         or if the attached project no longer exists, or if
+    ///         `action.taskId` does not belong to the attached project.
+    /// @throws Forbidden if no principal is authenticated, or the caller's
+    ///         role on the attached project is below `Role::Member` -- same
+    ///         gate as `AddComment`, the more directly analogous precedent
+    ///         (task-content, not board administration).
+    Ack execute(const AddAttachment& action);
+
+    /// @brief Lists every attachment recorded against a task.
+    /// @param action The task id to list attachments for.
+    /// @return Every attachment on `action.taskId`, in upload order.
+    /// @throws ValidationError if `action.validate()` rejects the request
+    ///         (an unset `taskId`).
+    /// @throws NotFound if this handler was never attached via `OpenBoard`,
+    ///         or if the attached project no longer exists, or if
+    ///         `action.taskId` does not belong to the attached project.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Viewer` (i.e. the caller has no role at all) --
+    ///         same read bar as `GetBoardState`/`GetRules`.
+    GetAttachmentsResult execute(const GetAttachments& action);
+
+    /// @brief Deletes one attachment's metadata row. Does not delete the
+    ///        underlying bytes the side channel stored (out of scope --
+    ///        see `attachment_dto.hpp`'s `RemoveAttachment` doc comment).
+    /// @param action The attachment id to delete.
+    /// @return An acknowledgement carrying no data.
+    /// @throws ValidationError if `action.validate()` rejects the request
+    ///         (an unset `attachmentId`).
+    /// @throws NotFound if this handler was never attached via `OpenBoard`,
+    ///         or if the attached project no longer exists, or if
+    ///         `action.attachmentId` does not name an attachment belonging
+    ///         to a task on the attached project.
+    /// @throws Forbidden if the caller's role on the attached project is
+    ///         below `Role::Member` -- same gate as `AddAttachment`.
+    Ack execute(const RemoveAttachment& action);
+
     /// @brief Attaches a durable action log and this instance's stable
     ///        identity, so every subsequent mutating `execute()` records a
     ///        `morph::journal::LogEntry` that `execute(GetActivity)` can
@@ -361,6 +410,9 @@ BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::CreateRule, "CreateRule")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetRules, "GetRules", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::DeleteRule, "DeleteRule")
 BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::ApplyTagMutation, "ApplyTagMutation")
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::AddAttachment, "AddAttachment")
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::GetAttachments, "GetAttachments", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::RemoveAttachment, "RemoveAttachment")
 
 // `BRIDGE_MODEL_KEY(kanban::BoardModel, kanban::OpenBoard, &kanban::OpenBoard::projectId)`
 // cannot be used verbatim here: that macro deduces the model's PrimaryKey as

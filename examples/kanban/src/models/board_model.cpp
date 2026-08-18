@@ -462,6 +462,123 @@ GetBoardResult BoardModel::execute(const AddComment& action) {
     return result;
 }
 
+Ack BoardModel::execute(const AddAttachment& action) {
+    if (!action.validate()) {
+        throw ValidationError{
+            "AddAttachment: an engaged taskId, non-empty filename/contentType/storageKey, and a non-negative "
+            "sizeBytes are required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"AddAttachment: handler was never attached via OpenBoard"};
+    }
+    // Same gate as AddComment -- attachments are task-content, like
+    // comments, not a board-administration feature like CreateRule/DeleteRule
+    // (which gate at Role::Manager).
+    requireRole(Role::Member);
+    const auto& principal = requireOwner();
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+
+    // Same C2 fix AddComment/ApplyTagMutation already apply: without this, a
+    // Member of a different project could attach metadata to any task on the
+    // server by id.
+    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    db::AttachmentRecord rec;
+    rec.task = static_cast<std::uint64_t>(*action.taskId);
+    rec.filename = action.filename;
+    rec.contentType = action.contentType;
+    rec.sizeBytes = action.sizeBytes;
+    rec.storageKey = action.storageKey;
+    rec.uploadedBy = principal;
+    rec.uploadedAtMs = nowMs();
+    mapper->Create(rec);
+
+    db::BoardEventRecord event;
+    event.project = project;
+    event.kind = "attachment";
+    event.summary = "attachment added";
+    event.createdAtMs = nowMs();
+    mapper->Create(event);
+
+    transaction.Commit();
+
+    logAction(action, Ack{});
+    return Ack{};
+}
+
+GetAttachmentsResult BoardModel::execute(const GetAttachments& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetAttachments: an engaged taskId is required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"GetAttachments: handler was never attached via OpenBoard"};
+    }
+    // Same read bar as GetBoardState/GetRules -- Viewer-or-above.
+    requireRole(Role::Viewer);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+    requireTaskBelongsToProject(mapper.Get(), project, action.taskId);
+
+    const auto taskDbId = static_cast<std::uint64_t>(*action.taskId);
+    auto rows = mapper->Query<db::AttachmentRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::task>, "=", taskDbId)
+                    .All();
+
+    GetAttachmentsResult result;
+    result.attachments.reserve(rows.size());
+    for (const auto& row : rows) {
+        AttachmentView view;
+        view.id = AttachmentId{static_cast<std::int64_t>(row.id.Value())};
+        view.taskId = TaskId{static_cast<std::int64_t>(row.task.Value())};
+        view.filename = std::string{row.filename.Value()};
+        view.contentType = std::string{row.contentType.Value()};
+        view.sizeBytes = row.sizeBytes.Value();
+        view.storageKey = std::string{row.storageKey.Value()};
+        view.uploadedBy = std::string{row.uploadedBy.Value()};
+        view.uploadedAtMs = row.uploadedAtMs.Value();
+        result.attachments.push_back(std::move(view));
+    }
+    return result;
+}
+
+Ack BoardModel::execute(const RemoveAttachment& action) {
+    if (!action.validate()) {
+        throw ValidationError{"RemoveAttachment: an engaged attachmentId is required"};
+    }
+    if (!_projectIdStr.has_value()) {
+        throw NotFound{"RemoveAttachment: handler was never attached via OpenBoard"};
+    }
+    // Same gate as AddAttachment.
+    requireRole(Role::Member);
+    auto mapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+    const auto projectDbId = static_cast<std::uint64_t>(std::stoull(*_projectIdStr));
+    auto project = loadProjectById(mapper.Get(), projectDbId);
+
+    auto rows = mapper->Query<db::AttachmentRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AttachmentRecord::id>, "=",
+                           static_cast<std::uint64_t>(*action.attachmentId))
+                    .All();
+    if (rows.empty()) {
+        throw NotFound{"attachment not found"};
+    }
+    // The attachment's own task must belong to the attached project -- same
+    // cross-tenant re-check discipline as DeleteRule's own project-scoped
+    // lookup, adapted here since AttachmentRecord has no direct project FK
+    // (it belongs to a task, which belongs to a project).
+    requireTaskBelongsToProject(mapper.Get(), project, TaskId{static_cast<std::int64_t>(rows.front().task.Value())});
+
+    ::Lightweight::SqlTransaction transaction{mapper->Connection(), ::Lightweight::SqlTransactionMode::ROLLBACK};
+    mapper->Delete(rows.front());
+    transaction.Commit();
+
+    logAction(action, Ack{});
+    return Ack{};
+}
+
 CreateRuleResult BoardModel::execute(const CreateRule& action) {
     if (!action.validate()) {
         throw ValidationError{
