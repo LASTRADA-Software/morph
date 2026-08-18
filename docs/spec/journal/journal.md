@@ -34,6 +34,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 - [Rotation and retention](#rotation-and-retention)
 - [SessionLog](#sessionlog)
 - [replay()](#replay)
+- [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling)
 - [Process-wide default log](#process-wide-default-log)
 - [Attaching a log to remote instances](#attaching-a-log-to-remote-instances)
 - [ScopedActionLog](#scopedactionlog)
@@ -67,6 +68,7 @@ construct or append these directly.
 | `timestampMs` | `int64_t` | Wall-clock time, milliseconds since the Unix epoch. |
 | `idempotencyKey` | `std::string` | Optional dedup token for outbox-relayed entries. Empty by default; ordinary auto-appended entries never set it. Mirrors `morph::offline::QueueItem::idempotencyKey`'s exact contract. See [Transactional outbox (opt-in)](#transactional-outbox-opt-in). |
 | `v` | `std::uint32_t` | Line-format version this entry was written at. Defaults to `kLogFormatVersion`. See [Line-format version (`v`)](#line-format-version-v). |
+| `causalParentId` | `std::string` | Identity of the "trigger" entry that caused this entry to be recorded, or empty (the sentinel) if none. Set by application code that journals a cascaded mutation (e.g. an automation rule reacting to one recorded action by executing a further one). See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling). |
 
 `LogEntry` is a plain aggregate — Glaze reflects it without a `glz::meta`
 specialisation of its own, the same automatic reflection `BRIDGE_REGISTER_ACTION`
@@ -492,6 +494,106 @@ typically obtained by filtering a log with `entries(entityKey)` and by matching
 one `replay()` call replays them all onto a single object and produces a
 meaningless state. This is a precondition, not something `replay()` validates.
 
+**`replay()` signals replay mode to executing code for its whole dispatch
+loop.** See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling)
+below.
+
+## Causal links and replay-mode signaling
+
+A cascaded mutation — one client action that causes further model mutations,
+e.g. an automation rule reacting to "task moved to Done" by executing its own
+further action — needs two things from the journal that a plain, uncascaded
+action does not: a durable link back to what caused it, and a way for the
+mutation that *produced* the cascade to avoid re-producing it a second time
+when the trigger is replayed. Both are framework primitives, not app-specific
+code; the first real consumer is `examples/kanban`'s automation-rules engine
+(design spec `docs/superpowers/specs/2026-08-16-kanban-rung4-design.md` §9),
+but neither piece is kanban-specific.
+
+### `LogEntry::causalParentId`
+
+A cascaded entry's `causalParentId` is set to the *triggering* entry's own
+stable identity, so a reader (an activity-stream view, a replay-aware rules
+engine) can recover "what caused this" without guessing from adjacency or
+timing. Empty (the sentinel) means "not caused by another entry" — the
+overwhelming majority of entries, including every entry recorded today, since
+nothing in this codebase journals a cascade yet.
+
+**Must not be a `LogEntry::seq` value.** `seq` is sink-local and re-stamped by
+every sink's `append()` — and again by `SessionLog::checkpoint()` when
+forwarding to a durable sink (see [Invariants](#invariants)) — so it is an
+ordering key within one sink instance in one process run, not a stable,
+cross-sink or cross-restart identifier. Application code that journals a
+cascade must mint its own opaque/UUID-style identity for the trigger entry at
+the point the trigger is created, independent of whatever `seq` any sink later
+assigns it, and reuse that same identity as every cascaded entry's
+`causalParentId`. `morph::journal` does not mint this identity itself — there
+is no framework-side "trigger id" concept beyond the field that carries it;
+the scheme for generating and threading it through is entirely the
+application's (or, for kanban, the rules engine's) responsibility.
+
+**Additive, per the [data-at-rest contract](#data-at-rest-contract).**
+`causalParentId` is optional/defaulted exactly like `idempotencyKey` and every
+other evolutionarily-added `LogEntry` field: an old payload recorded before
+this field existed has no such key, and `fromJson`'s lenient decode falls back
+to the empty default, so a pre-existing journal keeps decoding unchanged. This
+does **not** bump `kLogFormatVersion` — the version bump is reserved for
+*breaking* changes to the line format, and an additive, defaulted key is by
+definition not one (see [Line-format version (`v`)](#line-format-version-v)).
+
+### Replay-mode signaling: `isReplaying()`
+
+`replay()` re-applies every recorded entry — trigger and cascade alike — in
+their original recorded order. Without a way to tell "this dispatch is a
+replay" apart from an ordinary live dispatch, a rules engine evaluating rules
+against the replayed trigger would fire again and re-produce the cascade —
+double-applying a mutation that is *also* being replayed from its own recorded
+(cascade) entry. `morph::journal::isReplaying()` is the signal that lets
+executing model/rule code tell the two cases apart:
+
+```cpp
+namespace morph::journal {
+[[nodiscard]] bool isReplaying() noexcept;
+}
+```
+
+Returns `true` while the calling thread is inside `replay()`'s dispatch loop,
+`false` otherwise (including for every ordinary, non-replayed dispatch). A
+rules engine (or any other model code that reacts to its own actions) checks
+this before evaluating a rule; suppressing that evaluation during replay is
+the actual mechanism that keeps a cascaded action's replay convergent — the
+cascade's own recorded entry supplies the mutation, and rule evaluation
+contributes nothing a second time.
+
+**Mechanism: a thread-local flag plus an RAII scope guard**, the same shape
+`morph::session::detail::tlsCurrent()`/`ScopedContext` already use to thread a
+per-call `Context` through dispatch (`session.hpp`) — a thread-local slot
+(`detail::tlsIsReplaying()`) and an RAII guard (`detail::ScopedReplayFlag`)
+that sets it `true` on construction and restores the previous value on
+destruction. `replay()` installs a `ScopedReplayFlag` immediately before its
+dispatch loop, so the flag reads `true` for every entry that loop dispatches
+and is restored to its prior value (`false`, for any ordinary top-level
+caller) once `replay()` returns — it never leaks into dispatches that happen
+after `replay()` completes. Nesting is well-defined for the same reason
+`ScopedContext` is: a `replay()` call that itself triggers a nested `replay()`
+leaves the flag `true` for the whole nested extent and restores the outer
+call's value when the inner guard is destroyed.
+
+**Why a thread-local, not a dispatcher parameter.** Threading a "replay mode"
+boolean through `ActionDispatcher::dispatch(...)` and every `Model::execute`
+signature would touch every registered action in the codebase, breaking the
+existing `Model::execute(const Action&)` calling convention `BRIDGE_REGISTER_ACTION`
+relies on. A thread-local, read via a free function, is additive: existing
+`Model::execute` overloads compile and behave unchanged, and only code that
+explicitly calls `isReplaying()` (the rules engine) observes anything new —
+the same reasoning `session::current()` already established for `Context`.
+
+**Scope: signals replay, not identity.** `isReplaying()` says nothing about
+*which* entry is being replayed or *which* model instance — a rule reading it
+combines it with the dispatched action's own fields (available inside
+`Model::execute` the ordinary way) to decide what to suppress. There is no
+`currentReplayEntry()` accessor; none of today's consumers need one.
+
 ## Process-wide default log
 
 Every model instance created via `ModelFactory::create<Model>()` — every model
@@ -718,7 +820,7 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`), `causalParentId` (identity of the triggering entry, empty by default). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
 | `Outcome` | `enum class : std::uint8_t` | `Succeeded` (default) or `Failed`. Has a `glz::meta` specialisation so it (de)serialises as the string, not the underlying int. |
 | `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON with `detail::EscapingWriteOpts` (control-byte escaping). Throws `SerializationError`. |
@@ -752,7 +854,10 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 
 | Symbol | Kind | Notes |
 |---|---|---|
-| `replay` | free function | `std::unique_ptr<IModelHolder> replay(modelTypeId, entries, registry, dispatcher)`. |
+| `replay` | free function | `std::unique_ptr<IModelHolder> replay(modelTypeId, entries, registry, dispatcher)`. Sets `isReplaying()` to `true` for its dispatch loop — see below. |
+| `isReplaying` | free function | `[[nodiscard]] bool isReplaying() noexcept` — `true` while the calling thread is inside `replay()`'s dispatch loop, `false` otherwise. See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling). |
+| `detail::tlsIsReplaying` | inline function | `bool& tlsIsReplaying()` — thread-local slot backing `isReplaying()`. Not part of the public API; installed/restored only by `detail::ScopedReplayFlag`. |
+| `detail::ScopedReplayFlag` | class | RAII: sets the thread-local replay flag `true`, restores the previous value on destruction. Copy/move deleted. |
 
 ## Design decisions
 
@@ -775,6 +880,8 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `v` newer than `kLogFormatVersion` throws | **Fail loud, not guess** | A reader has no way to know the shape a future breaking change introduces; refusing to decode is safer than guessing a superset/subset shape. |
 | `rotate()` reopens the active path regardless of rename outcome | **Never leave the log unusable** | A failed rename reopens the pre-rotation file in place (no data lost, rotation simply didn't happen); a successful rename reopens a fresh empty file. Either branch leaves `FileActionLog` in a valid, appendable state. |
 | `setOutboxManaged` suppresses `recordIfAttached`, not `hasActionLog()` | **Two independent signals** | A store-backed model needs to stop the auto-append without losing "a log is attached" as a fact holders can still query — the suppression is a separate flag, not a side effect of detaching the log. |
+| `causalParentId` is an opaque `std::string`, not a `seq` | **App-minted identity, independent of `seq`** | `seq` is sink-local and re-stamped on every forward (see Invariants below), so it cannot serve as a stable cross-sink/cross-restart causal key. Application code mints its own identity for the trigger entry at creation time and reuses it as the cascade entry's `causalParentId`. |
+| Replay-mode signaling is a thread-local flag, not a dispatcher parameter | **Additive, mirrors `session::current()`** | Threading a "replay mode" parameter through `ActionDispatcher::dispatch`/every `Model::execute` signature would touch every registered action; a thread-local read via `isReplaying()` needs no signature change anywhere, the same reasoning that already justifies `morph::session::current()`'s shape for `Context`. |
 
 ## Invariants
 
@@ -806,7 +913,16 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   cross-sink or cross-restart identifier. Use `entries()`' natural append order
   for identity/ordering across sinks; do not persist or compare raw `seq`
   values as keys. (`FileActionLog::seq` is likewise fresh per process — it does
-  not resume from the highest `seq` on disk.)
+  not resume from the highest `seq` on disk.) This is exactly why
+  `LogEntry::causalParentId` must never be a `seq` value — see [Causal links
+  and replay-mode signaling](#causal-links-and-replay-mode-signaling).
+- **`isReplaying()` is `true` for every dispatch inside one `replay()` call,
+  and only there.** `replay()` installs `detail::ScopedReplayFlag` once,
+  before its dispatch loop, so the flag reads `true` for that loop's entire
+  extent (every entry it dispatches) and is restored to its prior value the
+  moment `replay()` returns — an ordinary, non-replayed dispatch always reads
+  `false`. `SessionLog::undoLast()` calls `replay()` internally, so the same
+  guarantee holds for it.
 - **Reconstruction is single-instance.** `replay()` and `undoLast()` expect
   entries already filtered to a single model instance — filter by `entityKey`
   (via `entries(entityKey)`) and by `modelType` first. Feeding mixed instances
@@ -914,3 +1030,6 @@ Honest boundaries of the current design:
   split exists.
 - **`error_handling.md`** — `SerializationError` and the failure/validator-rejection
   paths that explain *why* unsuccessful actions never reach the log.
+- **`session.md`** — `morph::session::detail::tlsCurrent()`/`ScopedContext`,
+  the thread-local-plus-RAII-guard shape `isReplaying()`/`detail::ScopedReplayFlag`
+  mirrors for signaling replay mode instead of a per-call `Context`.

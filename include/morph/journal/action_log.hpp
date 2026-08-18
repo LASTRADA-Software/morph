@@ -90,6 +90,29 @@ struct LogEntry {
     /// with this same default — i.e. legacy data reads as `v == 1`, which is
     /// correct: v1 is today's shape, `kLogFormatVersion` merely names it.
     std::uint32_t v = kLogFormatVersion;
+
+    /// @brief Identity of the "trigger" entry that caused this entry to be
+    ///        recorded, or empty (the sentinel) if this entry was not caused
+    ///        by another one.
+    ///
+    /// Set by application code that journals a cascaded mutation — e.g. an
+    /// automation rule that reacts to one recorded action by executing a
+    /// further one — to the triggering entry's own stable identity, so
+    /// `replay()` and an activity view can both recover "what caused this."
+    /// Empty by default: an ordinary, non-cascaded entry never sets it.
+    ///
+    /// @warning **Must not be a `LogEntry::seq` value.** `seq` is sink-local
+    /// and re-stamped by every sink's `append()` (and again by
+    /// `SessionLog::checkpoint()` when forwarding) — it is not a stable,
+    /// cross-sink or cross-restart identifier (see the Invariants section of
+    /// `docs/spec/journal/journal.md`). A `causalParentId` wired to a raw
+    /// `seq` would stop matching anything the moment the trigger entry is
+    /// forwarded to another sink or the process restarts. Application code
+    /// must instead mint its own opaque/UUID-style identity for the trigger
+    /// entry at the point it is created, independent of whatever `seq` any
+    /// sink later assigns it, and reuse that same identity as every cascaded
+    /// entry's `causalParentId`.
+    std::string causalParentId{};
 };
 
 }  // namespace morph::journal

@@ -4,6 +4,7 @@
 #include "testkit/db_fixture.hpp"
 
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -578,4 +579,115 @@ TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, no
                                                             .position = 0,
                                                             .opId = ""}),
                     kanban::NotFound);
+}
+
+// Task 12: divergence test. Phase 6's automation-rules engine (the real
+// trigger for a cascade -- "task moved to Done => add a comment") does not
+// exist yet, so this simulates the cascade by hand, exactly the way a rule
+// would once it does: two journal entries, the second carrying
+// `causalParentId` set to the first's own (app-minted, not `seq`-derived)
+// identity, per design spec §9. What this test actually proves today: a
+// cascaded mutation recorded once and replayed via
+// `morph::journal::replay("BoardModel", ...)` reconstructs to *exactly one*
+// application of that mutation, not two -- the same invariant Phase 6's
+// rules engine will rely on once it exists and checks `morph::journal::
+// isReplaying()` before firing again on the replayed trigger.
+TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[kanban][journal]") {
+    DbFixture fixture;
+    auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
+    const auto projectId = createProjectAs("alice", "Sprint Board");
+    const auto projectIdStr = std::to_string(*projectId);
+
+    kanban::BoardModel model;
+    const ScopedPrincipal alice{"alice"};
+    model.attachActionLog(log, projectIdStr);
+    // OpenBoard is Loggable::No (never auto-journaled by logAction), but
+    // replay() needs an OpenBoard entry to attach a freshly reconstructed
+    // BoardModel before any mutating entry can dispatch -- so this test
+    // appends one by hand, exactly the shape a real host-level replay
+    // driver would need to seed regardless of the cascade question this
+    // test is actually about.
+    const auto opened = model.execute(kanban::OpenBoard{.projectId = projectId});
+    (void) opened;
+
+    const auto columnId = model.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0}).columns.front().id;
+    const auto swimlaneId = model.execute(kanban::CreateSwimlane{.name = "Default"}).swimlanes.front().id;
+    const auto taskId =
+        model.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Ship it"})
+            .tasks.front()
+            .id;
+
+    // The "trigger": a task moved into the Done column. A real rule would
+    // react to this by cascading into a further mutation; today nothing
+    // does, so the cascade below is appended to the log by hand.
+    model.execute(kanban::MoveTaskPosition{
+        .taskId = taskId, .columnId = columnId, .swimlaneId = swimlaneId, .position = 0, .opId = ""});
+
+    // Mint the trigger's own stable identity -- independent of LogEntry::seq
+    // (design spec §9, docs/spec/journal/journal.md's Invariants section:
+    // seq is sink-local and re-stamped on every forward, so it cannot serve
+    // as a cross-sink/cross-restart causal key). A real rules engine would
+    // mint this at the trigger entry's creation; this test mints it after
+    // the fact purely because it is constructing the cascade by hand.
+    const std::string triggerCausalId = "cascade-trigger-" + projectIdStr;
+
+    // The "cascade": stands in for "assign to closer, add tag" (kanban has
+    // neither an assignee nor a tag entity yet) with an AddComment, linked
+    // to the trigger via causalParentId.
+    ::morph::journal::LogEntry cascadeEntry;
+    cascadeEntry.modelType = "BoardModel";
+    cascadeEntry.entityKey = projectIdStr;
+    cascadeEntry.actionType = std::string{::morph::model::ActionTraits<kanban::AddComment>::typeId()};
+    const kanban::AddComment cascadeAction{.taskId = taskId, .body = "auto-tagged: moved to Done"};
+    cascadeEntry.payload = ::morph::model::ActionTraits<kanban::AddComment>::toJson(cascadeAction);
+    cascadeEntry.outcome = ::morph::journal::Outcome::Succeeded;
+    cascadeEntry.causalParentId = triggerCausalId;
+    log->append(cascadeEntry);
+
+    // Sanity check on the causal link itself, independent of replay: the
+    // cascade's own recorded entry must carry the trigger's minted id, not
+    // an empty/default causalParentId and not the trigger's (sink-local,
+    // unstable) seq.
+    {
+        const auto recorded = log->entries(projectIdStr);
+        const auto cascadeRecorded =
+            std::ranges::find_if(recorded, [](const auto& e) { return e.actionType == "AddComment"; });
+        REQUIRE(cascadeRecorded != recorded.end());
+        CHECK(cascadeRecorded->causalParentId == triggerCausalId);
+    }
+
+    // Replay the full recorded history (OpenBoard first, hand-appended since
+    // it's Loggable::No, then everything logAction actually recorded, in
+    // order) against a fresh BoardModel via the real framework entry point.
+    std::vector<::morph::journal::LogEntry> replayEntries;
+    {
+        ::morph::journal::LogEntry openBoardEntry;
+        openBoardEntry.modelType = "BoardModel";
+        openBoardEntry.entityKey = projectIdStr;
+        openBoardEntry.actionType = std::string{::morph::model::ActionTraits<kanban::OpenBoard>::typeId()};
+        openBoardEntry.payload = ::morph::model::ActionTraits<kanban::OpenBoard>::toJson(kanban::OpenBoard{.projectId = projectId});
+        openBoardEntry.outcome = ::morph::journal::Outcome::Succeeded;
+        replayEntries.push_back(std::move(openBoardEntry));
+    }
+    for (const auto& entry : log->entries(projectIdStr)) {
+        replayEntries.push_back(entry);
+    }
+
+    const auto replayedHolder = ::morph::journal::replay("BoardModel", replayEntries);
+    auto& replayedModel = replayedHolder->into<kanban::BoardModel>();
+    const auto replayedState = replayedModel.execute(kanban::GetBoardState{});
+
+    // The invariant this test proves: the cascade's own recorded AddComment
+    // was replayed exactly once, from its own recorded entry -- not zero
+    // times (dropped) and not twice (re-fired by both replaying the
+    // trigger *and* an unsuppressed rule evaluation reacting to the
+    // replayed trigger, which is exactly the double-application design
+    // spec §9 rejects). There is no rules engine yet to double-fire this in
+    // practice, but the replay mechanics this test exercises -- one
+    // recorded entry in, one dispatch out -- are exactly what keeps a real
+    // cascade convergent once Phase 6 adds rule evaluation gated on
+    // `morph::journal::isReplaying()`.
+    const auto cascadeComments = std::ranges::count_if(
+        replayedState.comments, [](const auto& c) { return c.body == "auto-tagged: moved to Done"; });
+    CHECK(cascadeComments == 1);
 }
