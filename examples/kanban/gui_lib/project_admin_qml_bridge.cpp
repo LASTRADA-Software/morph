@@ -72,9 +72,8 @@ ProjectAdminBridge::ProjectAdminBridge(::morph::bridge::Bridge& bridge, ::morph:
         _projects = toVariantList(result.projects);
         emit projectsListed(_projects);
     });
-    connect(&_presenter, &ProjectAdminPresenter::projectCreated, this, [this](CreateProjectResult result) {
-        emit projectCreated(idNumber(result.id), _lastCreateName);
-    });
+    connect(&_presenter, &ProjectAdminPresenter::projectCreated, this,
+            [this](CreateProjectResult result, QString name) { emit projectCreated(idNumber(result.id), name); });
     connect(&_presenter, &ProjectAdminPresenter::rolesListed, this, [this](GetProjectRolesResult result) {
         _roles = toVariantList(result.roles);
         emit rolesListed(_roles);
@@ -93,7 +92,6 @@ void ProjectAdminBridge::refreshProjects() {
 }
 
 void ProjectAdminBridge::createProject(const QString& name) {
-    _lastCreateName = name;
     _presenter.createProject(name);
 }
 

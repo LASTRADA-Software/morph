@@ -125,12 +125,6 @@ class ProjectAdminBridge : public QObject {
     QString _principal;
     QVariantList _projects;
     QVariantList _roles;
-    // `CreateProjectResult` carries only the new id, not its name (the
-    // model already knows the name it was given -- no need to echo it back
-    // over the wire). `projectCreated(id, name)` still wants both, so this
-    // remembers the name from the invokable call that is in flight when the
-    // presenter's own `projectCreated` signal arrives.
-    QString _lastCreateName;
 };
 
 }  // namespace kanban::gui

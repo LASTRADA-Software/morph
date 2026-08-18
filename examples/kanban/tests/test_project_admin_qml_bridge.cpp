@@ -32,6 +32,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -246,6 +247,50 @@ TEST_CASE("ProjectAdminBridge::listRoles/setMemberRole/removeMember round-trip a
     REQUIRE(pumpUntil([&] { return rolesListed; }));
     REQUIRE(bridge.roles().size() == 1);
     CHECK(bridge.roles().front().toMap().value(QStringLiteral("principal")).toString() == QStringLiteral("alice"));
+}
+
+TEST_CASE("ProjectAdminBridge::createProject: two overlapping calls each report their own name",
+          "[kanban][gui][qml-bridge]") {
+    // Regression pin for the fix: ProjectAdminBridge used to stash the
+    // in-flight createProject() name in a single shared `_lastCreateName`
+    // field, read back only when the *next* projectCreated signal arrived --
+    // a second call issued before the first's completion landed would
+    // overwrite that field, so the first call's completion reported the
+    // second call's name. The fix threads the name through
+    // ProjectAdminPresenter::projectCreated(result, name) instead, captured
+    // per-call in that call's own track() continuation, so it can never
+    // cross between two in-flight calls. See
+    // test_project_admin_presenter.cpp's identical presenter-level case for
+    // the full rationale on why Mode::Local's real ThreadPoolExecutor makes
+    // this race genuinely (not just theoretically) observable, and
+    // deterministic without any sleep.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::ProjectAdminBridge bridge{rig->bridge(0), rig->executor()};
+
+    struct Created {
+        qlonglong id;
+        QString name;
+    };
+    std::vector<Created> created;
+    QObject::connect(&bridge, &kanban::gui::ProjectAdminBridge::projectCreated,
+                      [&](qlonglong id, const QString& name) { created.push_back(Created{id, name}); });
+
+    // Dispatched back-to-back, before either call's completion has any
+    // chance to arrive -- a double-click, or real latency under
+    // Mode::Remote/Mode::Socket, would create the same overlap.
+    bridge.createProject(QStringLiteral("A"));
+    bridge.createProject(QStringLiteral("B"));
+
+    REQUIRE(pumpUntil([&] { return created.size() == 2; }));
+    REQUIRE(created[0].id != created[1].id);
+    REQUIRE(created[0].id > 0);
+    REQUIRE(created[1].id > 0);
+
+    const bool sawAWithA =
+        (created[0].name == QStringLiteral("A") && created[1].name == QStringLiteral("B")) ||
+        (created[0].name == QStringLiteral("B") && created[1].name == QStringLiteral("A"));
+    CHECK(sawAWithA);
 }
 
 TEST_CASE("ProjectAdminBridge relays failed() and never emits a raw token on any signal",

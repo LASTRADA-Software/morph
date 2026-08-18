@@ -90,7 +90,14 @@ class ProjectAdminPresenter : public ::morph::ladder::gui::Presenter {
     void projectsListed(kanban::GetMyProjectsResult result);
     /// @brief `CreateProject` succeeded.
     /// @param result The new project's id.
-    void projectCreated(kanban::CreateProjectResult result);
+    /// @param name   The name this specific `createProject()` call was given
+    ///        — carried alongside @p result (not read back from any shared
+    ///        member) so two overlapping `createProject()` calls can never
+    ///        cross-contaminate: `CreateProjectResult` itself only carries
+    ///        the new id, so the name has to travel with its own call's
+    ///        completion, captured in that call's own `track()` continuation
+    ///        (see `createProject()`'s definition).
+    void projectCreated(kanban::CreateProjectResult result, QString name);
     /// @brief `GetProjectRoles` succeeded.
     /// @param result Every member's role on the requested project.
     void rolesListed(kanban::GetProjectRolesResult result);

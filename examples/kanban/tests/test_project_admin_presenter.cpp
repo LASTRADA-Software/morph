@@ -21,6 +21,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -82,7 +83,7 @@ TEST_CASE("ProjectAdminPresenter::createProject then refreshProjects sees the ne
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result) {
+                      [&](kanban::CreateProjectResult result, QString) {
                           created = result;
                           gotCreated = true;
                       });
@@ -114,7 +115,7 @@ TEST_CASE("ProjectAdminPresenter::listRoles reports the caller as Manager right 
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result) {
+                      [&](kanban::CreateProjectResult result, QString) {
                           created = result;
                           gotCreated = true;
                       });
@@ -145,7 +146,7 @@ TEST_CASE("ProjectAdminPresenter::setMemberRole then removeMember round-trips a 
     kanban::CreateProjectResult created;
     bool gotCreated = false;
     QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
-                      [&](kanban::CreateProjectResult result) {
+                      [&](kanban::CreateProjectResult result, QString) {
                           created = result;
                           gotCreated = true;
                       });
@@ -221,6 +222,62 @@ TEST_CASE("ProjectAdminPresenter::login mints a token and installs it as the bri
     presenter.refreshProjects();
     REQUIRE(pumpUntil([&] { return gotListed; }));
     CHECK(listed.projects.empty());
+}
+
+TEST_CASE("ProjectAdminPresenter::createProject: two overlapping calls each report their own name",
+          "[kanban][gui][presenter]") {
+    // The race this pins: `CreateProjectResult` only carries the new id, not
+    // the name it was created with, so the name has to travel alongside the
+    // result from the call that created it. Before this fix, the bridge
+    // layer stashed the name in a single shared `_lastCreateName` field
+    // written by every `createProject()` call and read back only when the
+    // *next* `projectCreated` signal landed -- a second call's name could
+    // overwrite that field before the first call's own completion arrived,
+    // making the first call's completion report the second call's name.
+    //
+    // `Mode::Local` runs `ProjectAdminModel` on a real `ThreadPoolExecutor{4}`
+    // (backend_rig.hpp) with completions delivered back on the Qt thread, so
+    // firing both calls before awaiting either (test_kanban_stress.cpp's own
+    // "fire all before awaiting" pattern) creates genuine overlapping
+    // dispatch deterministically -- no sleep, no thread-level orchestration,
+    // and no flakiness: the two CreateProject actions really do run
+    // concurrently on the pool, and either can settle first.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    kanban::gui::ProjectAdminPresenter presenter{rig->bridge(0), rig->executor()};
+
+    struct Created {
+        qlonglong id;
+        QString name;
+    };
+    std::vector<Created> created;
+    QObject::connect(&presenter, &kanban::gui::ProjectAdminPresenter::projectCreated,
+                      [&](kanban::CreateProjectResult result, QString name) {
+                          created.push_back(Created{result.id.hasValue() ? static_cast<qlonglong>(*result.id) : -1,
+                                                     std::move(name)});
+                      });
+
+    // Both calls dispatched before either's completion has had any chance to
+    // arrive -- exactly the "double-click" / concurrent-latency shape the
+    // finding describes.
+    presenter.createProject("A");
+    presenter.createProject("B");
+
+    REQUIRE(pumpUntil([&] { return created.size() == 2; }));
+    REQUIRE_FALSE(presenter.busy());
+
+    // Order of arrival is not guaranteed (that's the point), but each
+    // reported id must be distinct and paired with its *own* name -- never
+    // the other call's.
+    REQUIRE(created[0].id != created[1].id);
+    for (const Created& c : created) {
+        if (c.id == created[0].id) {
+            CHECK(c.name == created[0].name);
+        }
+    }
+    const bool sawAWithA =
+        (created[0].name == "A" && created[1].name == "B") || (created[0].name == "B" && created[1].name == "A");
+    CHECK(sawAWithA);
 }
 
 TEST_CASE("ProjectAdminPresenter routes every action's failure to failed(), not just one",

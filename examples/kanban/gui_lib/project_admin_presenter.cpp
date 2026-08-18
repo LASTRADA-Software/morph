@@ -44,9 +44,14 @@ void ProjectAdminPresenter::refreshProjects() {
 }
 
 void ProjectAdminPresenter::createProject(const QString& name) {
+    // `name` is captured by this call's own lambda, not stashed on any shared
+    // member: two overlapping createProject() calls each get their own
+    // track() continuation with their own captured `name`, so the id/name
+    // pairing on projectCreated() can never cross between them regardless of
+    // completion order (see the signal's own doc comment).
     track<CreateProjectResult>(
         _projectHandler.execute(CreateProject{.name = name.toStdString()}),
-        [this](CreateProjectResult result) { emit projectCreated(std::move(result)); },
+        [this, name](CreateProjectResult result) { emit projectCreated(std::move(result), name); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
