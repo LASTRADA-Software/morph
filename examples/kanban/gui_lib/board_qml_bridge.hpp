@@ -91,6 +91,10 @@ class BoardBridge : public QObject {
     ///        logged-in principal's own role for this project). Empty until
     ///        set.
     Q_PROPERTY(QString myRole READ myRole NOTIFY myRoleChanged)
+    /// @brief The most recent `getRules` result: every automation rule on
+    ///        the attached board, each a `{id, triggerColumnId, mutationType,
+    ///        mutationValue}` map. `mutationType` is `"AddTag"`/`"RemoveTag"`.
+    Q_PROPERTY(QVariantList rules READ rules NOTIFY rulesListed)
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief Current pending-item count in the offline queue — the same
@@ -123,6 +127,9 @@ class BoardBridge : public QObject {
     /// @brief The caller's role on the open board (see `myRole` property).
     /// @return `"Viewer"`/`"Member"`/`"Manager"`, or empty before it is known.
     [[nodiscard]] QString myRole() const { return _myRole; }
+    /// @brief The current rule list (see `rules` property).
+    /// @return The most recent `getRules` result's rows.
+    [[nodiscard]] QVariantList rules() const { return _rules; }
 
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     /// @brief The offline queue's current depth (see `queueDepth` property).
@@ -187,6 +194,24 @@ class BoardBridge : public QObject {
     ///        state — dispatches nothing.
     /// @param role The caller's role on the open board.
     Q_INVOKABLE void setMyRole(const QString& role);
+
+    /// @brief Creates a new automation rule on the attached board: "when a
+    ///        task moves into `triggerColumnId`, apply `mutationType`/
+    ///        `mutationValue`." Manager-only. Emits `ruleCreated`, or `failed`.
+    /// @param triggerColumnId The triggering column, as its plain number.
+    /// @param mutationType    `"AddTag"` or `"RemoveTag"`.
+    /// @param mutationValue   The tag name the mutation adds or removes.
+    Q_INVOKABLE void createRule(const QString& triggerColumnId, const QString& mutationType,
+                                const QString& mutationValue);
+
+    /// @brief Lists every automation rule on the attached board. Emits
+    ///        `rulesListed` (and updates the `rules` property), or `failed`.
+    Q_INVOKABLE void getRules();
+
+    /// @brief Deletes one automation rule. Manager-only. Emits `ruleDeleted`,
+    ///        or `failed`.
+    /// @param ruleId The rule to delete, as its plain number.
+    Q_INVOKABLE void deleteRule(const QString& ruleId);
 
     /// @brief Stops the `EventPoller`'s timer without treating it as a fatal
     ///        error — a board view calls this when it is hidden/closed. A
@@ -292,6 +317,13 @@ class BoardBridge : public QObject {
     /// @brief An `addComment` succeeded.
     /// @param taskId The commented-on task's id, as its plain number.
     void commentAdded(const QString& taskId);
+    /// @brief A `getRules` succeeded — see `rules` property.
+    /// @param rules The listing's rows.
+    void rulesListed(const QVariantList& rules);
+    /// @brief A `createRule` succeeded.
+    void ruleCreated();
+    /// @brief A `deleteRule` succeeded.
+    void ruleDeleted();
     /// @brief The `EventPoller` stopped for good (a non-timeout failure).
     ///        Polling does not resume on its own; the view should show this
     ///        and let the user re-open the board.
@@ -435,6 +467,7 @@ class BoardBridge : public QObject {
     QVariantMap _board;
     QVariantList _activity;
     QString _myRole;
+    QVariantList _rules;
     QString _lastOpIdForTest;
     /// @brief Set by `openBoard()`, consumed (and cleared) by the next
     ///        `boardOpened` this bridge relays — see `applyBoard()`'s own

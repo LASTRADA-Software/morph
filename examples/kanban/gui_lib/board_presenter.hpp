@@ -167,6 +167,24 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     ///         it.
     [[nodiscard]] ::morph::async::Completion<GetEventsSinceResult> getEventsSinceForPolling(BoardEventId lastEventId);
 
+    /// @brief Creates a new automation rule on this handler's attached board:
+    ///        "when a task moves into `triggerColumnId`, apply
+    ///        `mutationType`/`mutationValue`." Manager-only. Emits
+    ///        `ruleCreated` on success, `failed` on error.
+    /// @param triggerColumnId The column whose arrival triggers this rule.
+    /// @param mutationType    `"AddTag"` or `"RemoveTag"`.
+    /// @param mutationValue   The tag name the mutation adds or removes.
+    void createRule(ColumnId triggerColumnId, const QString& mutationType, const QString& mutationValue);
+
+    /// @brief Lists every automation rule on this handler's attached board.
+    ///        Emits `rulesListed` on success, `failed` on error.
+    void getRules();
+
+    /// @brief Deletes one automation rule. Manager-only. Emits `ruleDeleted`
+    ///        on success, `failed` on error.
+    /// @param ruleId The rule to delete.
+    void deleteRule(RuleId ruleId);
+
   signals:
     /// @brief `OpenBoard`/`GetBoardState`/`CreateColumn`/`CreateSwimlane`/
     ///        `CreateTask` succeeded — the board's full rebuilt state (every
@@ -186,6 +204,13 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     /// @brief `GetActivity` succeeded.
     /// @param result Every activity entry, oldest first.
     void activityUpdated(kanban::GetActivityResult result);
+    /// @brief `CreateRule` succeeded.
+    void ruleCreated();
+    /// @brief `GetRules` succeeded.
+    /// @param result Every rule on the attached board, in creation order.
+    void rulesListed(kanban::GetRulesResult result);
+    /// @brief `DeleteRule` succeeded.
+    void ruleDeleted();
     /// @brief Emitted for any action's typed error — @p message is
     ///        `std::exception::what()`, ready for direct display.
     void failed(QString message);
@@ -198,6 +223,16 @@ class BoardPresenter : public ::morph::ladder::gui::Presenter {
     void reportError(const std::exception_ptr& err);
 
     ::morph::bridge::BridgeHandler<BoardModel, ::morph::bridge::AllowShared> _handler;
+
+    /// @brief The project `openBoard()` was last called with -- `CreateRule`/
+    ///        `GetRules` both carry a `projectId` field their own
+    ///        `validate()` requires engaged, even though `BoardModel::execute()`
+    ///        never reads it back (the handler's own attach state, not the
+    ///        DTO field, names the board -- see `board_model.cpp`'s
+    ///        `execute(const GetRules&)` comment). Kept here purely to
+    ///        satisfy that `validate()` gate; not consulted for RBAC or
+    ///        board-selection, both of which stay attach-state-driven.
+    ProjectId _projectId;
 };
 
 }  // namespace kanban::gui

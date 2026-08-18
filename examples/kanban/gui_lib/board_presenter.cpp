@@ -33,6 +33,10 @@ void BoardPresenter::reportError(const std::exception_ptr& err) {
 }
 
 void BoardPresenter::openBoard(ProjectId projectId) {
+    // Stashed for createRule()/getRules() below -- see `_projectId`'s own doc
+    // comment (board_presenter.hpp) for why this is the one piece of
+    // attach-adjacent state this otherwise-transport-only presenter keeps.
+    _projectId = projectId;
     track<GetBoardResult>(
         _handler.execute(OpenBoard{.projectId = projectId}),
         [this](GetBoardResult result) { emit boardOpened(std::move(result)); },
@@ -121,6 +125,28 @@ void BoardPresenter::getActivity() {
 
 ::morph::async::Completion<GetEventsSinceResult> BoardPresenter::getEventsSinceForPolling(BoardEventId lastEventId) {
     return _handler.execute(kanban::GetEventsSince{.lastEventId = lastEventId});
+}
+
+void BoardPresenter::createRule(ColumnId triggerColumnId, const QString& mutationType, const QString& mutationValue) {
+    track<CreateRuleResult>(
+        _handler.execute(CreateRule{.projectId = _projectId,
+                                     .triggerColumnId = triggerColumnId,
+                                     .mutationType = ruleMutationTypeFromString(mutationType.toStdString()),
+                                     .mutationValue = mutationValue.toStdString()}),
+        [this](CreateRuleResult) { emit ruleCreated(); }, [this](const std::exception_ptr& err) { reportError(err); });
+}
+
+void BoardPresenter::getRules() {
+    track<GetRulesResult>(
+        _handler.execute(GetRules{.projectId = _projectId}),
+        [this](GetRulesResult result) { emit rulesListed(std::move(result)); },
+        [this](const std::exception_ptr& err) { reportError(err); });
+}
+
+void BoardPresenter::deleteRule(RuleId ruleId) {
+    track<Ack>(
+        _handler.execute(DeleteRule{.ruleId = ruleId}), [this](Ack) { emit ruleDeleted(); },
+        [this](const std::exception_ptr& err) { reportError(err); });
 }
 
 }  // namespace kanban::gui

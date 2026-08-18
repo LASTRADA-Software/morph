@@ -92,15 +92,16 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfProperty("board") >= 0);
     REQUIRE(meta->indexOfProperty("activity") >= 0);
     REQUIRE(meta->indexOfProperty("myRole") >= 0);
+    REQUIRE(meta->indexOfProperty("rules") >= 0);
 #ifdef MORPH_BUILD_OFFLINE_SQLITE
     // Task 6: queueDepth/deadLetterCount only exist when the offline stack
     // (MORPH_BUILD_OFFLINE_SQLITE) is compiled in -- see board_qml_bridge.hpp's
     // own gating of these two Q_PROPERTYs.
     REQUIRE(meta->indexOfProperty("queueDepth") >= 0);
     REQUIRE(meta->indexOfProperty("deadLetterCount") >= 0);
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 5);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 6);
 #else
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 3);
+    CHECK(meta->propertyCount() - meta->propertyOffset() == 4);
 #endif
 
     REQUIRE(meta->indexOfMethod("openBoard(QString)") >= 0);
@@ -111,6 +112,9 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfMethod("moveTask(QString,QString,QString,int)") >= 0);
     REQUIRE(meta->indexOfMethod("addComment(QString,QString)") >= 0);
     REQUIRE(meta->indexOfMethod("setMyRole(QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("createRule(QString,QString,QString)") >= 0);
+    REQUIRE(meta->indexOfMethod("getRules()") >= 0);
+    REQUIRE(meta->indexOfMethod("deleteRule(QString)") >= 0);
 
     REQUIRE(meta->indexOfSignal("bound()") >= 0);
     REQUIRE(meta->indexOfSignal("boardChanged()") >= 0);
@@ -118,6 +122,9 @@ TEST_CASE("BoardBridge exposes the expected surface", "[kanban][gui][qml-bridge]
     REQUIRE(meta->indexOfSignal("myRoleChanged()") >= 0);
     REQUIRE(meta->indexOfSignal("taskMoved(QString)") >= 0);
     REQUIRE(meta->indexOfSignal("commentAdded(QString)") >= 0);
+    REQUIRE(meta->indexOfSignal("rulesListed(QVariantList)") >= 0);
+    REQUIRE(meta->indexOfSignal("ruleCreated()") >= 0);
+    REQUIRE(meta->indexOfSignal("ruleDeleted()") >= 0);
     REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
 }
 
@@ -270,6 +277,56 @@ TEST_CASE("BoardBridge::setMyRole updates the myRole property", "[kanban][gui][q
     bridge.setMyRole(QStringLiteral("Manager"));
     CHECK(changed);
     CHECK(bridge.myRole() == QStringLiteral("Manager"));
+}
+
+TEST_CASE("BoardBridge::createRule/getRules/deleteRule round-trip a rule, updating the rules property",
+          "[kanban][gui][qml-bridge]") {
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    const auto projectId = seedProject(*rig);
+    kanban::gui::BoardBridge bridge{rig->bridge(0), rig->executor()};
+
+    bool changed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::boardChanged, [&] { changed = true; });
+    bridge.openBoard(QString::number(projectId));
+    REQUIRE(pumpUntil([&] { return changed; }));
+
+    changed = false;
+    bridge.createColumn(QStringLiteral("Done"), 0);
+    REQUIRE(pumpUntil([&] { return changed; }));
+    const QString columnId =
+        bridge.board().value(QStringLiteral("columns")).toList().front().toMap().value(QStringLiteral("id")).toString();
+
+    bool ruleCreated = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::ruleCreated, [&] { ruleCreated = true; });
+    bridge.createRule(columnId, QStringLiteral("AddTag"), QStringLiteral("closed"));
+    REQUIRE(pumpUntil([&] { return ruleCreated; }));
+
+    bool rulesListed = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::rulesListed, [&](const QVariantList&) { rulesListed = true; });
+    bridge.getRules();
+    REQUIRE(pumpUntil([&] { return rulesListed; }));
+    REQUIRE(bridge.rules().size() == 1);
+
+    const QVariantMap ruleRow = bridge.rules().front().toMap();
+    for (const char* key : {"id", "triggerColumnId", "mutationType", "mutationValue"}) {
+        INFO("missing key: " << key);
+        REQUIRE(ruleRow.contains(QString::fromLatin1(key)));
+    }
+    CHECK(ruleRow.value(QStringLiteral("triggerColumnId")).toString() == columnId);
+    CHECK(ruleRow.value(QStringLiteral("mutationType")).toString() == QStringLiteral("AddTag"));
+    CHECK(ruleRow.value(QStringLiteral("mutationValue")).toString() == QStringLiteral("closed"));
+    const QString ruleId = ruleRow.value(QStringLiteral("id")).toString();
+
+    bool ruleDeleted = false;
+    QObject::connect(&bridge, &kanban::gui::BoardBridge::ruleDeleted, [&] { ruleDeleted = true; });
+    bridge.deleteRule(ruleId);
+    REQUIRE(pumpUntil([&] { return ruleDeleted; }));
+
+    rulesListed = false;
+    bridge.getRules();
+    REQUIRE(pumpUntil([&] { return rulesListed; }));
+    CHECK(bridge.rules().isEmpty());
 }
 
 TEST_CASE("BoardBridge relays failed() on a bad projectId", "[kanban][gui][qml-bridge]") {

@@ -87,6 +87,21 @@ template <typename IdT>
     };
 }
 
+/// @brief One `RuleView` row as the property bag the rules view binds
+///        against — `mutationType`'s wire string (`"AddTag"`/`"RemoveTag"`,
+///        `rule_dto.hpp`'s `ruleMutationTypeToString`) rendered as a
+///        `QString`, same convention as `kanban::gui::roleText`
+///        (`project_admin_qml_bridge.cpp`).
+[[nodiscard]] QVariantMap toVariantMap(const RuleView& rule) {
+    const auto mutationType = ruleMutationTypeToString(rule.mutationType);
+    return QVariantMap{
+        {"id", idNumber(rule.id)},
+        {"triggerColumnId", idNumber(rule.triggerColumnId)},
+        {"mutationType", QString::fromUtf8(mutationType.data(), static_cast<qsizetype>(mutationType.size()))},
+        {"mutationValue", QString::fromStdString(rule.mutationValue)},
+    };
+}
+
 [[nodiscard]] QVariantMap toVariantMap(const ActivityEvent& event) {
     return QVariantMap{
         {"actionType", QString::fromStdString(event.actionType)},
@@ -167,6 +182,12 @@ BoardBridge::BoardBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecut
         _activity = toVariantList(result.events);
         emit activityChanged();
     });
+    connect(&_presenter, &BoardPresenter::rulesListed, this, [this](GetRulesResult result) {
+        _rules = toVariantList(result.rules);
+        emit rulesListed(_rules);
+    });
+    connect(&_presenter, &BoardPresenter::ruleCreated, this, &BoardBridge::ruleCreated);
+    connect(&_presenter, &BoardPresenter::ruleDeleted, this, &BoardBridge::ruleDeleted);
     connect(&_presenter, &BoardPresenter::failed, this, &BoardBridge::failed);
 }
 
@@ -247,6 +268,19 @@ void BoardBridge::addComment(const QString& taskId, const QString& body) {
 void BoardBridge::setMyRole(const QString& role) {
     _myRole = role;
     emit myRoleChanged();
+}
+
+void BoardBridge::createRule(const QString& triggerColumnId, const QString& mutationType,
+                              const QString& mutationValue) {
+    _presenter.createRule(parseId<ColumnId>(triggerColumnId), mutationType, mutationValue);
+}
+
+void BoardBridge::getRules() {
+    _presenter.getRules();
+}
+
+void BoardBridge::deleteRule(const QString& ruleId) {
+    _presenter.deleteRule(parseId<RuleId>(ruleId));
 }
 
 void BoardBridge::stopPolling() {
