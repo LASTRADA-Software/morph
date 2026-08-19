@@ -273,7 +273,7 @@ exactly the Firefly bug class this rung exists to demonstrate morph
 prevents by construction, per the README's citation of
 [firefly-iii#12014](https://github.com/firefly-iii/firefly-iii/issues/12014)).
 
-## 5. Framework dependency: `causalParentId` (this branch's one cherry-pick)
+## 5. Framework/testkit dependencies (four cherry-picks, expanded from the original one)
 
 `LogEntry::causalParentId` and `morph::journal::isReplaying()` are
 framework additions designed and implemented on `ladder-kanban-impl`
@@ -285,10 +285,28 @@ action_log.hpp`, `include/morph/journal/journal.hpp`,
 `docs/spec/journal/journal.md`, `tests/test_action_log.cpp` — verified
 clean of any kanban app-code entanglement) rather than branching from
 `ladder-kanban-impl` itself, so this branch's history stays anchored to
-`master` and does not carry kanban's own unmerged app code. When PR #121
-merges, this branch rebases onto `master` and the cherry-picked commit
-becomes a no-op (already-applied patch), resolved by the ordinary rebase
-conflict-free fast-forward through an identical patch-id.
+`master` and does not carry kanban's own unmerged app code.
+
+**Discovered during implementation-plan writing, not anticipated at
+spec-approval time**: the plan's offline (§9-consuming Task 17), sync-
+benchmark (§10-consuming Task 24), and multi-client-stress (Task 23)
+tasks all depend on four `examples/common/testkit/` files —
+`action_driver.hpp`, `offline_rig.hpp`, `client_pool.hpp`,
+`convergence.hpp` — that `TESTING.md`'s own ownership table says predate
+this rung, but that likewise only exist on `ladder-kanban-impl`, not
+`master`, as of this writing. Each of the three commits introducing them
+(`ad491c4`, `66717e7`, `3630a15`) was verified scoped strictly to
+`examples/common/testkit/` + `examples/common/CMakeLists.txt`, each
+ships its own test file, and none touches kanban's own app code — the
+same clean-cherry-pick shape as the `causalParentId` commit. All three
+were cherry-picked onto this branch alongside the original one (four
+cherry-picks total), each verified building and passing its own tests
+before any ledger-specific task began.
+
+When PR #121 merges, this branch rebases onto `master` and all four
+cherry-picked commits become no-ops (already-applied patches), resolved
+by the ordinary rebase conflict-free fast-forward through identical
+patch-ids.
 
 ## 6. Undo as compensating action (step 5)
 
@@ -508,7 +526,10 @@ asserting no successful mutating journal entry ever carries an empty
 
 No new testkit component is needed — `client_pool.hpp`, `convergence.hpp`,
 `action_driver.hpp`, `offline_rig.hpp`, `db_busy_fixture.hpp` all predate
-this rung (per `TESTING.md`'s ownership table) and are reused as-is.
+this rung (per `TESTING.md`'s ownership table) and are reused as-is; the
+first four exist only on `ladder-kanban-impl` as of this writing and
+reached this branch via §5's four cherry-picks (`db_busy_fixture.hpp`
+predates rung 4 itself and is already on `master`).
 `action_driver.hpp`'s per-burst invariant hook for this rung is "legs sum
 zero" (already named in `TESTING.md`). Test files follow the naming
 convention: `test_ledger_model.cpp`, `test_budget_model.cpp`,
