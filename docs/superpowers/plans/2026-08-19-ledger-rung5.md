@@ -1577,40 +1577,95 @@ git commit -m "ledger: LedgerModel skeleton -- OpenAccount, GetLedger"
 
 - [ ] **Step 1: Write the failing test for the happy path**
 
+**Correction from plan self-review**: the original draft used
+`LedgerModel model{ledger::LedgerId{1}}` (a constructor argument) and
+left `StoreTransaction`/`execute(StoreTransaction)`'s implementation as
+prose with no code, and its tests as an incomplete sketch (no ledger
+seeding, no real legs, no real balance assertions). All fixed below, per
+Task 7's own corrected pattern (plain default-constructible model,
+`LedgerId` values come from a real seeded `ledgers` row, never a bare
+literal).
+
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
-    model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "Checking",
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "Groceries",
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
                                        .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
-    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledger::LedgerId{1}});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     auto checkingId = ledgerState.accounts[0].id;
     auto groceriesId = ledgerState.accounts[1].id;
 
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
     // -50.00 from Checking, +50.00 to Groceries -- exact Rational legs, sums to zero.
     auto result = model.execute(ledger::StoreTransaction{
-        .ledgerId = ledger::LedgerId{1},
+        .ledgerId = ledgerId,
         .description = "Weekly shop",
-        .date = morph::time::Timestamp::now(),  // confirm exact factory against morph::time's real API
-        .legs = {/* two TransactionLeg entries per Task 6's resolved amount-field shape */}});
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
 
-    // Assert both account balances reflect the transaction.
+    REQUIRE(result.accounts.size() == 2);
+    auto checking = std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == checkingId; });
+    auto groceries = std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == groceriesId; });
+    REQUIRE(checking != result.accounts.end());
+    REQUIRE(groceries != result.accounts.end());
+    CHECK(checking->balance.numerator == -5000);
+    CHECK(groceries->balance.numerator == 5000);
 }
 
 TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
-    // ... open two accounts as above ...
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
     CHECK_THROWS_AS(
         model.execute(ledger::StoreTransaction{
-            .ledgerId = ledger::LedgerId{1}, .description = "Bad txn", .date = /* ... */,
-            .legs = {/* two legs that do NOT sum to zero */}}),
+            .ledgerId = ledgerId,
+            .description = "Bad txn",
+            .date = morph::time::Timestamp::now(),
+            .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                             .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                              DecimalPlaces{2}}},
+                     ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                            .amount = morph::math::Rational{Numerator{4000}, Denominator{1},
+                                                                             DecimalPlaces{2}}}}}),
         ledger::ZeroSumViolation);
 }
 ```
+
+Add `#include <algorithm>` (for `std::ranges::find_if`) and
+`#include <Lightweight/DataMapper/DataMapper.hpp>` +
+`#include "ledger/db/ledger_entity.hpp"` to this test file's top if not
+already present from Task 7.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1619,12 +1674,117 @@ Expected: FAIL to compile — `StoreTransaction` doesn't exist.
 
 - [ ] **Step 3: Implement `StoreTransaction` and `LedgerModel::execute(StoreTransaction)`**
 
-Follow design spec §1's algorithm exactly: partition legs by the *account's*
-currency (looked up from `AccountRecord`, never client-supplied), sum each
-partition's `Rational` amounts, throw `ZeroSumViolation{currency,
-actualSum}` on any non-canonical-zero partition, otherwise commit the
-`TransactionJournalRecord` + all `TransactionLegRecord`s inside one
-`SqlTransaction` and return the rebuilt `GetLedgerResult`.
+```cpp
+// Append to examples/ledger/include/ledger/dto/transaction_dto.hpp
+struct StoreTransaction {
+    LedgerId ledgerId;
+    std::string description;
+    morph::time::Timestamp date;
+    std::vector<TransactionLeg> legs;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return ledgerId.hasValue() && !description.empty() && legs.size() >= 2 &&
+               std::ranges::all_of(legs, [](const auto& leg) { return leg.accountId.hasValue(); });
+    }
+};
+```
+
+(Add `#include <morph/util/datetime.hpp>`, `#include <algorithm>`, and
+`#include <string>` to `transaction_dto.hpp`'s includes.)
+
+```cpp
+// Append to examples/ledger/include/ledger/models/ledger_model.hpp's class body
+GetLedgerResult execute(const StoreTransaction& action);
+```
+
+```cpp
+// Append the registration line to ledger_model.hpp's bottom block, per
+// Task 7's incremental-registration discipline (a new action's
+// BRIDGE_REGISTER_ACTION line lands alongside its own execute() body):
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
+BRIDGE_KEY_FROM(ledger::StoreTransaction, &ledger::StoreTransaction::ledgerId);
+```
+
+```cpp
+// Append to examples/ledger/src/models/ledger_model.cpp
+GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
+    if (!action.validate()) {
+        throw ValidationError{"StoreTransaction: description and at least two legs with engaged accountIds are required"};
+    }
+    Lightweight::DataMapper mapper;
+
+    // Partition legs by the account's OWN currency, never a client-supplied
+    // field (design spec §1) -- look up every referenced account first.
+    std::map<std::string, morph::math::Rational> sumsByCurrency;
+    std::vector<db::AccountRecord> legAccounts;
+    legAccounts.reserve(action.legs.size());
+    for (const auto& leg : action.legs) {
+        auto rows = mapper.Query<db::AccountRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *leg.accountId)
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"StoreTransaction: no such account"};
+        }
+        legAccounts.push_back(rows.front());
+        const std::string currency{legAccounts.back().currencyCode.Value().ToStringView()};
+        auto it = sumsByCurrency.find(currency);
+        if (it == sumsByCurrency.end()) {
+            sumsByCurrency.emplace(currency, leg.amount);
+        } else {
+            it->second = it->second + leg.amount;
+        }
+    }
+    for (const auto& [currency, sum] : sumsByCurrency) {
+        if (sum.numerator != 0) {
+            throw ZeroSumViolation{currency, "legs did not sum to zero"};
+        }
+    }
+
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection()};  // confirm exact SqlTransaction construction shape
+                                                               // against an existing rung's own multi-row commit
+    db::TransactionJournalRecord journalRow;
+    journalRow.description = action.description;
+    journalRow.date = action.date.value ? action.date.value->toEpochMillis() : 0;  // confirm exact DateTime->epoch
+                                                                                     // millis conversion method name
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                           .All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"StoreTransaction: no such ledger"};
+    }
+    journalRow.ledger = ledgerRows.front();
+    mapper.Create(journalRow);
+
+    for (std::size_t i = 0; i < action.legs.size(); ++i) {
+        db::TransactionLegRecord legRow;
+        legRow.journal = journalRow;
+        legRow.account = legAccounts[i];
+        legRow.amountNum = action.legs[i].amount.numerator;
+        legRow.amountDen = action.legs[i].amount.denominator;
+        legRow.amountDp = static_cast<int>(action.legs[i].amount.decimalPlaces.value);
+        legRow.currencyCode = legAccounts[i].currencyCode.Value();
+        mapper.Create(legRow);
+    }
+    sqlTxn.Commit();  // confirm exact commit method name
+
+    return execute(GetLedger{.ledgerId = action.ledgerId});
+}
+```
+
+This body needs three items confirmed against real headers before it
+compiles (flagged rather than guessed further, since each is a small,
+independently-checkable fact): (1) `Lightweight::SqlTransaction`'s exact
+constructor and commit method — check an existing rung's own multi-row
+commit (e.g. `bookmarks::BookmarkModel`'s `ImportBookmarks` handler, which
+already does a bounded multi-insert); (2) `DateTime`'s exact
+epoch-millis conversion method name (`include/morph/util/datetime.hpp`);
+(3) whether `GetLedgerResult`'s returned `AccountInfo::balance` needs to
+be computed via a real leg-sum query here (currently Task 7's own
+`execute(GetLedger)` returns a hardcoded zero balance per its own note —
+if this task's own tests assert real non-zero balances, as they do above,
+`execute(GetLedger)` itself must be extended in this task to compute each
+account's balance as the sum of its own legs, not left at zero; do this
+as part of this task's own scope, since the tests above require it).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1659,24 +1819,74 @@ git commit -m "ledger: StoreTransaction -- per-currency zero-sum invariant"
 
 - [ ] **Step 1: Write the failing test**
 
+**Correction from plan self-review**: rewritten with a concrete 4-leg
+scenario satisfying the invariant's real wording ("legs sum to zero
+*within each currency*") instead of an unbalanceable 2-leg sketch, and
+using this plan's now-corrected model-construction/ledger-seeding
+pattern.
+
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
-    model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "USD Checking",
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
-    model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "EUR Savings",
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Travel Expense",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Wallet",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::EUR});
-    // Leg A: USD account, -50.00, annotated foreignAmount=+45.23 EUR (display only).
-    // Leg B: EUR account, +45.23 (the real EUR-partition leg balancing leg A's
-    // EUR annotation would need a matching EUR outflow elsewhere for a true
-    // zero-sum EUR partition -- construct the full N-leg set the invariant
-    // actually requires, per design spec §1's exact wording, not a
-    // two-leg cross-currency shortcut).
-    // Assert: commits without ZeroSumViolation; USD partition sums to zero
-    // on its own real legs; EUR partition sums to zero on its own real legs;
-    // the foreign-amount annotation never entered either check.
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Merchant Payable",
+                                       .kind = ledger::AccountKind::Liability, .currency = ledger::Currency::EUR});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto usdChecking = ledgerState.accounts[0].id;
+    auto usdExpense = ledgerState.accounts[1].id;
+    auto eurWallet = ledgerState.accounts[2].id;
+    auto eurPayable = ledgerState.accounts[3].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // A real 4-leg transaction: USD partition legs sum to zero on their
+    // own (a -50.00/+50.00 pair), EUR partition legs sum to zero on their
+    // own (a -45.23/+45.23 pair) -- the foreign-amount annotation on the
+    // USD leg is display metadata only, never entering either check
+    // (design spec §1 step 3).
+    auto result = model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Travel expense with EUR receipt",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = usdChecking,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}},
+                                         .foreignAmount = morph::math::Rational{Numerator{4523}, Denominator{1},
+                                                                                 DecimalPlaces{2}},
+                                         .foreignCurrency = ledger::Currency::EUR},
+                 ledger::TransactionLeg{.accountId = usdExpense,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = eurWallet,
+                                        .amount = morph::math::Rational{Numerator{-4523}, Denominator{1},
+                                                                         DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = eurPayable,
+                                        .amount = morph::math::Rational{Numerator{4523}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // No ZeroSumViolation thrown (implicit -- the call above would have
+    // thrown otherwise); assert both currencies' balances landed correctly.
+    auto findBalance = [&](ledger::AccountId id) {
+        return std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == id; })->balance.numerator;
+    };
+    CHECK(findBalance(usdChecking) == -5000);
+    CHECK(findBalance(usdExpense) == 5000);
+    CHECK(findBalance(eurWallet) == -4523);
+    CHECK(findBalance(eurPayable) == 4523);
 }
 ```
 
@@ -1687,12 +1897,26 @@ Expected: FAIL — foreign-amount fields don't exist on `TransactionLeg` yet.
 
 - [ ] **Step 3: Implement the foreign-amount fields and exclusion logic**
 
-Add the optional fields to `TransactionLeg`; in `LedgerModel::execute
-(StoreTransaction)`'s partitioning step, read only each leg's real
-`amount`/`currency` for the zero-sum sums — never `foreignAmount`/
-`foreignCurrency`. Persist the foreign-amount triple to
-`TransactionLegRecord`'s nullable columns (Task 5) unconditionally (null
-when absent).
+```cpp
+// Modify TransactionLeg in transaction_dto.hpp:
+struct TransactionLeg {
+    AccountId accountId;
+    morph::math::Rational amount;
+    std::optional<morph::math::Rational> foreignAmount;    // display/audit metadata only --
+    std::optional<Currency> foreignCurrency;                // never enters a zero-sum check (design spec §1 step 3)
+};
+```
+
+In `LedgerModel::execute(StoreTransaction)`'s partitioning loop (Task 8),
+the sum accumulation already reads only `leg.amount`/the account's own
+`currencyCode` — no change needed there, since `foreignAmount`/
+`foreignCurrency` were never read by that loop to begin with. Extend the
+`TransactionLegRecord` creation loop to persist the optional triple
+(mapping `std::nullopt` to Lightweight's own null representation for
+each of `foreignAmountNum`/`Den`/`Dp`/`foreignCurrencyCode`,
+unconditionally — always execute this assignment, never branch on
+whether the leg has a foreign amount, since `std::optional`'s own empty
+state already expresses "no foreign amount" through the column).
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1729,6 +1953,10 @@ git commit -m "ledger: foreign-amount pairs -- multi-currency, per-currency zero
   in-model summation per design spec §3 (never a raw SQL `SUM()` over the
   `Rational` columns).
 
+**Correction from plan self-review**: the original draft's test was pure
+prose with no code, and `budget_dto.hpp`/`budget_model.hpp`/`.cpp` had no
+implementation at all. Written out fully below.
+
 - [ ] **Step 1: Write the failing test**
 
 ```cpp
@@ -1738,18 +1966,81 @@ git commit -m "ledger: foreign-amount pairs -- multi-currency, per-currency zero
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("GetBudgetReport sums matching legs in-model, exactly", "[ledger][budget]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel ledgerModel{ledger::LedgerId{1}};
-    ledger::BudgetModel budgetModel{ledger::LedgerId{1}};
-    // Open accounts, create a category, create a budget against it, store
-    // several StoreTransaction legs against that category's account, set
-    // a budget limit, then GetBudgetReport and assert `spent` equals the
-    // exact Rational sum of every matching leg -- not an approximation.
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel ledgerModel;
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                             .kind = ledger::AccountKind::Expense,
+                                             .currency = ledger::Currency::USD});
+    auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto groceriesId = ledgerState.accounts[1].id;
+
+    ledger::BudgetModel budgetModel;
+    auto categoryId = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
+    budgetModel.execute(ledger::LinkAccountToCategory{.accountId = groceriesId, .categoryId = categoryId});
+    auto budgetId = budgetModel.execute(
+        ledger::CreateBudget{.ledgerId = ledgerId, .name = "Monthly groceries", .categoryId = categoryId});
+    budgetModel.execute(ledger::SetBudgetLimit{
+        .budgetId = budgetId, .month = "2026-01",
+        .limit = morph::math::Rational{morph::math::Numerator{20000}, morph::math::Denominator{1},
+                                        morph::math::DecimalPlaces{2}},
+        .currency = ledger::Currency::USD});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // Two StoreTransaction calls against Groceries, both dated in
+    // January 2026 -- -30.00 and -45.50, summing to -75.50 spent.
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Groceries 1",
+        .date = morph::time::Timestamp::now(),  // confirm this actually lands in "2026-01" against the real
+                                                  // system clock at implementation time, or construct an explicit
+                                                  // January 2026 DateTime instead -- see Task 17's time_util.hpp
+                                                  // for the eventual real month-boundary machinery this task can
+                                                  // borrow from if `now()` doesn't reliably land in the test's
+                                                  // expected month
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-3000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{3000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Groceries 2",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-4550}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{4550}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    auto report = budgetModel.execute(ledger::GetBudgetReport{.budgetId = budgetId, .month = "2026-01"});
+    CHECK(report.spent.numerator == 7550);
+    CHECK(report.limit.numerator == 20000);
 }
 ```
+
+This test assumes `CreateCategory`/`LinkAccountToCategory` actions exist
+on `BudgetModel` for wiring an account to a category — the brief's own
+Interfaces block (below) did not originally name these, but
+`GetBudgetReport`'s "matching legs" concept (design spec §3) is undefined
+without some way to say "this account belongs to this category." Added
+to this task's own scope rather than left implicit.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -1758,11 +2049,268 @@ Expected: FAIL to compile.
 
 - [ ] **Step 3: Implement `budget_dto.hpp`/`budget_model.hpp`/`.cpp`**
 
-`GetBudgetReport`'s implementation: `Query<TransactionLegRecord>` filtered
-by the budget's category's accounts and the journal's date range (a
-bounded fetch, not unbounded — cap or paginate per the measured headroom
-from Task 13's fuzz test once it exists; for this task, fetch all matching
-rows for the one month and sum in a loop via `Rational::operator+`).
+```cpp
+// examples/ledger/include/ledger/dto/budget_dto.hpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include "ledger/core/types.hpp"
+#include "ledger/core/units.hpp"
+
+#include <morph/forms/forms.hpp>
+#include <morph/util/rational.hpp>
+
+#include <string>
+
+namespace ledger {
+
+struct CreateCategory {
+    LedgerId ledgerId;
+    std::string name;
+
+    [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue() && !name.empty(); }
+};
+
+struct LinkAccountToCategory {
+    AccountId accountId;
+    CategoryId categoryId;
+
+    [[nodiscard]] bool validate() const noexcept { return accountId.hasValue() && categoryId.hasValue(); }
+};
+
+struct CreateBudget {
+    LedgerId ledgerId;
+    std::string name;
+    CategoryId categoryId;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return ledgerId.hasValue() && !name.empty() && categoryId.hasValue();
+    }
+};
+
+struct SetBudgetLimit {
+    BudgetId budgetId;
+    std::string month;  // "YYYY-MM"
+    morph::math::Rational limit;
+    Currency currency;
+
+    [[nodiscard]] bool validate() const noexcept { return budgetId.hasValue() && month.size() == 7; }
+};
+
+struct GetBudgetReport {
+    BudgetId budgetId;
+    std::string month;
+
+    [[nodiscard]] bool validate() const noexcept { return budgetId.hasValue() && month.size() == 7; }
+};
+
+struct GetBudgetReportResult {
+    morph::math::Rational limit;
+    morph::math::Rational spent;
+    Currency currency;
+};
+
+}  // namespace ledger
+```
+
+```cpp
+// examples/ledger/include/ledger/models/budget_model.hpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include "ledger/dto/budget_dto.hpp"
+
+#include <morph/core/registry.hpp>
+
+namespace ledger {
+
+/// @brief Budgets, limits, and in-model spent-so-far aggregation (design
+///        spec §3). Plain default-constructible, per LedgerModel's own
+///        corrected shape (Task 7) -- every action carries its own key.
+class BudgetModel {
+  public:
+    CategoryId execute(const CreateCategory& action);
+    void execute(const LinkAccountToCategory& action);
+    BudgetId execute(const CreateBudget& action);
+    void execute(const SetBudgetLimit& action);
+    GetBudgetReportResult execute(const GetBudgetReport& action);
+};
+
+}  // namespace ledger
+
+BRIDGE_REGISTER_MODEL(ledger::BudgetModel, "BudgetModel")
+BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::CreateCategory, "CreateCategory")
+BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::LinkAccountToCategory, "LinkAccountToCategory")
+BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::CreateBudget, "CreateBudget")
+BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::SetBudgetLimit, "SetBudgetLimit")
+BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::GetBudgetReport, "GetBudgetReport", ::morph::model::Loggable::No)
+```
+
+Confirm whether `BudgetModel` genuinely needs a `BRIDGE_MODEL_KEY`/
+`BRIDGE_KEY_FROM` pair the way `LedgerModel` does (Task 7) — since every
+action here carries a *different* key type (`LedgerId` for
+`CreateCategory`/`CreateBudget`, `BudgetId` for `SetBudgetLimit`/
+`GetBudgetReport`, `AccountId`+`CategoryId` for `LinkAccountToCategory`),
+a single `ModelKeyTraits<BudgetModel>::PrimaryKey` may not fit this
+model the way it fits `LedgerModel`'s uniform `LedgerId` keying. If the
+framework's keyed-model machinery genuinely requires one consistent key
+type per model, `BudgetModel` may need to skip the
+`BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` pair entirely (running plain,
+unkeyed, like a stateless service model) — confirm against
+`morph::model::ModelKeyTraits`'s actual requirements
+(`include/morph/core/model_key.hpp`) before deciding; do not add
+`BRIDGE_MODEL_KEY` speculatively if it does not actually fit.
+
+```cpp
+// examples/ledger/src/models/budget_model.cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
+#include "ledger/models/budget_model.hpp"
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+
+namespace ledger {
+
+CategoryId BudgetModel::execute(const CreateCategory& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CreateCategory: ledgerId and name are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                           .All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"CreateCategory: no such ledger"};
+    }
+    db::CategoryRecord categoryRow;
+    categoryRow.ledger = ledgerRows.front();
+    categoryRow.name = action.name;
+    mapper.Create(categoryRow);
+    return CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
+}
+
+void BudgetModel::execute(const LinkAccountToCategory& action) {
+    if (!action.validate()) {
+        throw ValidationError{"LinkAccountToCategory: accountId and categoryId are required"};
+    }
+    // Note: AccountRecord (Task 5) has no categoryId column today -- this
+    // action needs a schema addition this task must make: a nullable
+    // category_id foreign key on the accounts table (a follow-up
+    // migration, LIGHTWEIGHT_SQL_MIGRATION with a later timestamp than
+    // Task 4's own 20260819000011, since Lightweight's migration story is
+    // additive-only per IMPLEMENTATION.md rule 4). Add the column, add the
+    // corresponding nullable BelongsTo field to AccountRecord, then
+    // implement this as an Update of the account row's new category link.
+    // Flagged rather than guessed further, since it's a real schema
+    // change this task's own scope must include, not something to route
+    // around.
+    Lightweight::DataMapper mapper;
+    auto accountRows = mapper.Query<db::AccountRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
+                            .All();
+    if (accountRows.empty()) {
+        throw NotFound{"LinkAccountToCategory: no such account"};
+    }
+    // accountRows.front().category = ...;  -- set once the schema addition above lands
+    // mapper.Update(accountRows.front());
+}
+
+BudgetId BudgetModel::execute(const CreateBudget& action) {
+    if (!action.validate()) {
+        throw ValidationError{"CreateBudget: ledgerId, name, and categoryId are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                           .All();
+    auto categoryRows = mapper.Query<db::CategoryRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                             .All();
+    if (ledgerRows.empty() || categoryRows.empty()) {
+        throw NotFound{"CreateBudget: no such ledger or category"};
+    }
+    db::BudgetRecord budgetRow;
+    budgetRow.ledger = ledgerRows.front();
+    budgetRow.name = action.name;
+    budgetRow.category = categoryRows.front();
+    mapper.Create(budgetRow);
+    return BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
+}
+
+void BudgetModel::execute(const SetBudgetLimit& action) {
+    if (!action.validate()) {
+        throw ValidationError{"SetBudgetLimit: budgetId and a YYYY-MM month are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto budgetRows = mapper.Query<db::BudgetRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
+                           .All();
+    if (budgetRows.empty()) {
+        throw NotFound{"SetBudgetLimit: no such budget"};
+    }
+    db::BudgetLimitRecord limitRow;
+    limitRow.budget = budgetRows.front();
+    limitRow.month = action.month;
+    limitRow.limitNum = action.limit.numerator;
+    limitRow.limitDen = action.limit.denominator;
+    limitRow.limitDp = static_cast<int>(action.limit.decimalPlaces.value);
+    limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
+    mapper.Create(limitRow);
+}
+
+GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetBudgetReport: budgetId and a YYYY-MM month are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto budgetRows = mapper.Query<db::BudgetRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::BudgetRecord::id>, "=", *action.budgetId)
+                           .All();
+    if (budgetRows.empty()) {
+        throw NotFound{"GetBudgetReport: no such budget"};
+    }
+    auto limitRows = mapper.Query<db::BudgetLimitRecord>()
+                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::budget>, "=", *action.budgetId)
+                          .Where(::Lightweight::FieldNameOf<&db::BudgetLimitRecord::month>, "=", action.month)
+                          .All();
+    // In-model summation, never a raw SQL SUM() over the Rational columns
+    // (design spec §3 -- SQL cannot combine differing per-row denominators
+    // meaningfully). This task's scope: sum every leg whose account is
+    // linked to this budget's category and whose journal falls in the
+    // named month -- deferred to a real query once LinkAccountToCategory's
+    // schema addition (above) lands; for now, fetch all
+    // TransactionLegRecord rows for the category's accounts within the
+    // month's date range and sum with Rational::operator+ in a loop
+    // (bounded fetch -- see this task's own headroom note once Task 13's
+    // fuzz test exists).
+    morph::math::Rational spent{morph::math::Numerator{0}, morph::math::Denominator{1},
+                                 morph::math::DecimalPlaces{2}};
+    // for (const auto& leg : mapper.Query<db::TransactionLegRecord>()...) { spent = spent + ...; }
+    Currency currency = Currency::USD;
+    morph::math::Rational limit = spent;
+    if (!limitRows.empty()) {
+        limit = morph::math::Rational{morph::math::Numerator{limitRows.front().limitNum.Value()},
+                                       morph::math::Denominator{limitRows.front().limitDen.Value()},
+                                       morph::math::DecimalPlaces{
+                                           static_cast<std::uint32_t>(limitRows.front().limitDp.Value())}};
+        currency = codeToCurrency(limitRows.front().currencyCode.Value().ToStringView());
+    }
+    return GetBudgetReportResult{.limit = limit, .spent = spent, .currency = currency};
+}
+
+}  // namespace ledger
+```
+
+The `spent` aggregation's actual leg-summing loop is deliberately left as
+a commented-out sketch rather than guessed further: it depends on the
+`LinkAccountToCategory` schema addition landing first (a real,
+non-optional part of this task, not a stretch goal), and on a concrete
+decision for how "the journal falls in the named month" translates to a
+date-range query against `TransactionJournalRecord.date` (stored as
+epoch millis) — resolve both, then complete the loop, before this task's
+tests can pass. This is this task's real remaining work, not something
+to leave unfinished.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1806,7 +2354,7 @@ git commit -m "ledger: BudgetModel -- budgets, limits, in-model spent-so-far agg
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][security]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    ledger::LedgerModel model;
     // Drive the call with an empty/cleared principal in context -- use
     // whichever injectable-clock/context-override mechanism an existing
     // rung's own empty-principal test uses (grep the codebase for
@@ -1895,7 +2443,7 @@ reinvent it.
 
 TEST_CASE("CreateRule persists a rule at version 1", "[ledger][rule]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::RuleModel model{ledger::LedgerId{1}};
+    ledger::RuleModel model;
     auto ruleId = model.execute(ledger::CreateRule{
         .ledgerId = ledger::LedgerId{1}, .trigger = ledger::RuleTrigger::DescriptionContains,
         .matchText = "Coffee", .action = ledger::RuleAction::SetCategory, .actionValue = "Dining"});
@@ -2002,8 +2550,8 @@ Expected: PASS.
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEntry::seq", "[ledger][rule][journal]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::RuleModel ruleModel{ledger::LedgerId{1}};
-    ledger::LedgerModel ledgerModel{ledger::LedgerId{1}};
+    ledger::RuleModel ruleModel;
+    ledger::LedgerModel ledgerModel;
     ruleModel.execute(ledger::CreateRule{.ledgerId = ledger::LedgerId{1},
                                           .trigger = ledger::RuleTrigger::DescriptionContains,
                                           .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
@@ -2264,7 +2812,7 @@ git commit -m "ledger: Rational overflow fuzz test + two named framework finding
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances", "[ledger][undo]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    ledger::LedgerModel model;
     // Open two accounts, StoreTransaction a multi-currency, multi-leg
     // journal, record the resulting balances, UndoTransaction it, and
     // assert: the reversal's legs are the exact negation (Rational
@@ -2344,7 +2892,7 @@ before implementing — copy the opId-ledger pattern precisely.
 
 TEST_CASE("Replaying the same opId is a safe no-op", "[ledger][import]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    ledger::LedgerModel model;
     ledger::ImportOpId opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-1"});
     std::string csv = "date,description,amount\n2026-01-01,Coffee,-4.50\n";
 
@@ -2355,7 +2903,7 @@ TEST_CASE("Replaying the same opId is a safe no-op", "[ledger][import]") {
 
 TEST_CASE("Re-importing the same statement under a different opId is caught by content-hash dedup", "[ledger][import]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    ledger::LedgerModel model;
     std::string csv = "date,description,amount\n2026-01-01,Coffee,-4.50\n";
 
     auto first = model.execute(ledger::ImportLedgerChunk{
@@ -2438,7 +2986,7 @@ git commit -m "ledger: CSV import -- opId chunk dedup + content-hash cross-impor
 
 TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending to Done", "[ledger][reports]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    ledger::LedgerModel model;
     // ... open accounts, store a few transactions ...
 
     auto jobId = model.execute(ledger::SubmitReport{
