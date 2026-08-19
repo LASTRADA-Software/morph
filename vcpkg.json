@@ -6,7 +6,9 @@
     "glaze",
     "catch2",
     "yaml-cpp",
-    "libzip"
+    "libzip",
+    "openssl",
+    "sqlite3"
   ],
   "builtin-baseline": "c3867e714dd3a51c272826eea77267876517ed99"
 }
