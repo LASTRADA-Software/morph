@@ -2467,32 +2467,78 @@ git commit -m "ledger: BudgetModel -- budgets, limits, in-model spent-so-far agg
 - Modify: `examples/ledger/tests/test_ledger_model.cpp`
 - Modify: `examples/ledger/tests/test_budget_model.cpp`
 
+**Correction from plan self-review**: `morph::session::Context::principal`
+(`include/morph/session/session.hpp`) is a plain `std::string` — empty
+string means "no principal," never `std::optional`/`.hasValue()`. The
+accessor is `morph::session::current()`, returning `const Context*`
+(`nullptr` outside any dispatch/test scope, per
+`tests/test_coverage_push95.cpp`'s own "returns nullptr outside any
+ScopedContext" test). The real test-time mechanism to drive a scenario
+under a specific (or empty) principal is `morph::session::detail::
+ScopedContext` (a RAII context-installer), following the exact pattern
+`bookmarks::tests::test_bookmark_model.cpp`'s own `ScopedPrincipal`
+helper already establishes (`contextFor(principal)` builds a `Context`,
+`ScopedContext{ctx}` installs it for the guard's lifetime) — copied
+verbatim below rather than reinvented.
+
 **Interfaces:**
-- Consumes: `morph::session::Context::principal` (or the framework's
-  current-context accessor — confirm exact name against an existing
-  rung's `requireRole`/authorization gate, e.g.
-  `docs/superpowers/specs/2026-08-16-kanban-rung4-design.md`'s RBAC
-  section, for how a model reads the dispatching principal).
+- Consumes: `morph::session::current()` (returns `const Context*`,
+  `nullptr` outside any dispatch), `Context::principal` (a plain
+  `std::string`, empty means unauthenticated).
 - Produces: every mutating `execute()` overload on `LedgerModel` and
   `BudgetModel` throws `EmptyPrincipalError` as its first statement when
-  the principal is empty (design spec §11).
+  `session::current()` is `nullptr` or its `principal` is empty (design
+  spec §11).
 
 - [ ] **Step 1: Write the failing test**
 
 ```cpp
-// Append to examples/ledger/tests/test_ledger_model.cpp
+// Append to examples/ledger/tests/test_ledger_model.cpp -- add near the
+// top of the file, in an anonymous namespace, mirroring
+// bookmarks::tests::test_bookmark_model.cpp's own contextFor/ScopedPrincipal:
+namespace {
+[[nodiscard]] morph::session::Context contextFor(std::string principal) {
+    morph::session::Context ctx;
+    ctx.principal = std::move(principal);
+    return ctx;
+}
+
+class ScopedPrincipal {
+  public:
+    explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
+
+  private:
+    morph::session::Context _ctx;
+    morph::session::detail::ScopedContext _scope;
+};
+}  // namespace
+
 TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][security]") {
     morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
     ledger::LedgerModel model;
-    // Drive the call with an empty/cleared principal in context -- use
-    // whichever injectable-clock/context-override mechanism an existing
-    // rung's own empty-principal test uses (grep the codebase for
-    // "EmptyPrincipal" or "empty principal" in an existing rung's tests
-    // before writing this, per the design spec §11's citation of the
-    // injectable TokenVerifier clock).
-    CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{/* ... */}), ledger::EmptyPrincipalError);
+    ScopedPrincipal empty{""};  // installs a Context with an empty principal for this scope
+    CHECK_THROWS_AS(
+        model.execute(ledger::StoreTransaction{.ledgerId = ledgerId, .description = "Should be refused",
+                                                 .date = morph::time::Timestamp::now(), .legs = {}}),
+        ledger::EmptyPrincipalError);
 }
 ```
+
+Note `legs = {}` (empty) here would ALSO fail `validate()`'s own
+"at least two legs" check with `ValidationError`, not
+`EmptyPrincipalError` — since the empty-principal check must run FIRST,
+before `validate()`, this test's assertion is only meaningful if the
+principal check genuinely happens before validation. If it does not, this
+test would pass for the wrong reason (throwing `ValidationError`, which
+`CHECK_THROWS_AS` would fail to match against `EmptyPrincipalError`
+anyway — so this particular test shape is self-checking on that point,
+not a false-positive risk).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -2503,9 +2549,43 @@ Expected: FAIL — no such check exists yet.
 
 ```cpp
 // At the top of LedgerModel::execute(StoreTransaction) and every other
-// mutating overload:
-if (!context.principal.hasValue()) {  // confirm exact accessor name
+// mutating overload (OpenAccount too -- it is also a mutation):
+const auto* ctx = morph::session::current();
+if (ctx == nullptr || ctx->principal.empty()) {
     throw EmptyPrincipalError{};
+}
+```
+
+Add `#include <morph/session/session.hpp>` to `ledger_model.cpp` if not
+already transitively included. Apply the identical check (first
+statement, before `validate()`) to every mutating `execute()` overload
+on both `LedgerModel` (`OpenAccount`, `StoreTransaction`) and
+`BudgetModel` (`CreateCategory`, `LinkAccountToCategory`, `CreateBudget`,
+`SetBudgetLimit`) — `GetLedger`/`GetBudgetReport` are reads and stay
+exempt (design spec §11 only binds mutations).
+
+Add the equivalent test for `BudgetModel`:
+
+```cpp
+// Append to examples/ledger/tests/test_budget_model.cpp -- reuse the
+// same contextFor/ScopedPrincipal helper pattern, added to this file's
+// own anonymous namespace (or a small shared testkit header if the
+// duplication across test_ledger_model.cpp/test_budget_model.cpp
+// bothers the implementer -- not required by this task, since both
+// rungs' own tests, e.g. bookmarks' three separate test files, each
+// declare their own local copy rather than share one).
+TEST_CASE("CreateCategory refuses an empty principal", "[ledger][budget][security]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::BudgetModel model;
+    ScopedPrincipal empty{""};
+    CHECK_THROWS_AS(model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"}),
+                     ledger::EmptyPrincipalError);
 }
 ```
 
