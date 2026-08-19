@@ -38,10 +38,16 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
         .name = action.name,
         .kind = action.kind,
         .currency = action.currency,
-        .balance = morph::math::Rational{morph::math::Numerator{0}, morph::math::Denominator{1},
-                                          morph::math::DecimalPlaces{2}},  // no legs exist yet at this
-                                                                            // task's scope -- Task 8
-                                                                            // computes a real balance
+        .balance = morph::math::Rational{
+            morph::math::Numerator{0}, morph::math::Denominator{1},
+            morph::math::DecimalPlaces{UnitTraits<Currency>::meta(action.currency).defaultDecimals}},  // no
+                                                                            // legs exist yet at this task's
+                                                                            // scope -- Task 8 computes a real
+                                                                            // balance -- but the placeholder
+                                                                            // zero is still tagged at the
+                                                                            // account's actual currency
+                                                                            // precision (0 for JPY/KRW, 2 for
+                                                                            // USD/EUR), not a hardcoded 2
     };
 }
 
@@ -56,15 +62,23 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
     GetLedgerResult result;
     result.accounts.reserve(rows.size());
     for (const auto& row : rows) {
+        const auto currency = codeToCurrency(row.currencyCode.Value().ToStringView());
         result.accounts.push_back(AccountInfo{
             .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
             .name = std::string{row.name.Value().ToStringView()},
             .kind = static_cast<AccountKind>(row.kind.Value()),
-            .currency = codeToCurrency(row.currencyCode.Value().ToStringView()),
-            .balance = morph::math::Rational{morph::math::Numerator{0}, morph::math::Denominator{1},
-                                              morph::math::DecimalPlaces{2}},  // no legs exist yet at this
-                                                                                // task's scope -- Task 8
-                                                                                // computes a real balance
+            .currency = currency,
+            .balance = morph::math::Rational{
+                morph::math::Numerator{0}, morph::math::Denominator{1},
+                morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals}},  // no legs
+                                                                                // exist yet at this task's
+                                                                                // scope -- Task 8 computes a
+                                                                                // real balance -- but the
+                                                                                // placeholder zero is still
+                                                                                // tagged at the account's
+                                                                                // actual currency precision
+                                                                                // (0 for JPY/KRW, 2 for
+                                                                                // USD/EUR), not a hardcoded 2
         });
     }
     return result;

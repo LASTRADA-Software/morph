@@ -18,8 +18,10 @@ TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     ledger::LedgerModel model;
-    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
-                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    auto created = model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                                       .kind = ledger::AccountKind::Asset,
+                                                       .currency = ledger::Currency::USD});
+    CHECK(created.id.hasValue());
 
     auto result = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     REQUIRE(result.accounts.size() == 1);
