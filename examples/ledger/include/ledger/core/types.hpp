@@ -3,6 +3,7 @@
 
 #include <compare>
 #include <cstdint>
+#include <glaze/glaze.hpp>
 #include <optional>
 
 namespace ledger {
@@ -44,3 +45,31 @@ enum class ReportKind : std::uint8_t { MonthlyStatement, BudgetReport };
 enum class ReportStatus : std::uint8_t { Pending, Done, Failed };
 
 }  // namespace ledger
+
+/// @brief On the wire, each `LEDGER_DEFINE_STRONG_ID` type is its nullable
+///        underlying integer -- same rationale and shape as
+///        `bookmarks::BookmarkId`'s `glz::meta` specialisation
+///        (`examples/bookmarks/include/bookmarks/core/types.hpp`): without
+///        this, glaze has no reflection for a type whose only public data
+///        member is `std::optional<std::int64_t> value` wrapped in
+///        non-aggregate machinery (an explicit constructor, `<=>`), and any
+///        `BRIDGE_REGISTER_ACTION` on a DTO carrying one of these fails to
+///        compile deep inside glaze's `to`/`from` templates. One
+///        specialisation per id type, generated the same way the structs
+///        themselves are, then undefined immediately after.
+#define LEDGER_DEFINE_STRONG_ID_WIRE(Name)   \
+    template <>                              \
+    struct glz::meta<ledger::Name> {          \
+        static constexpr auto value = &ledger::Name::value; \
+        static constexpr std::string_view name = #Name;      \
+    }
+
+LEDGER_DEFINE_STRONG_ID_WIRE(LedgerId);
+LEDGER_DEFINE_STRONG_ID_WIRE(AccountId);
+LEDGER_DEFINE_STRONG_ID_WIRE(JournalId);
+LEDGER_DEFINE_STRONG_ID_WIRE(CategoryId);
+LEDGER_DEFINE_STRONG_ID_WIRE(BudgetId);
+LEDGER_DEFINE_STRONG_ID_WIRE(RuleId);
+LEDGER_DEFINE_STRONG_ID_WIRE(ReportJobId);
+
+#undef LEDGER_DEFINE_STRONG_ID_WIRE

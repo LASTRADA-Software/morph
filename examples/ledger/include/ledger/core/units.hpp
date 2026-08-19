@@ -4,6 +4,7 @@
 #include <morph/util/quantity.hpp>
 
 #include <cstdint>
+#include <string_view>
 
 namespace ledger {
 
@@ -21,6 +22,55 @@ enum class Currency : std::uint8_t { USD, EUR, JPY, KRW };
 ///        explicit `morph::units::` qualifier.
 template <typename E>
 using UnitTraits = morph::units::UnitTraits<E>;
+
+/// @brief The 3-letter DB code for @p c (`accounts.currency_code`'s stored
+///        form, `Light::SqlAnsiString<3>` -- see `ledger/db/ledger_entity.hpp`).
+///
+///        A pure switch over a 4-enumerator `std::uint8_t` enum, so this
+///        stays `constexpr` and header-only -- the same convention
+///        `bank::currencyCode` (`examples/bank/include/bank/core/types.hpp`)
+///        uses for an identical shape, as opposed to `bank::format()`
+///        (`examples/bank/src/core/money.cpp`), which is split into a `.cpp`
+///        only because it does non-trivial work (`std::format`, magnitude
+///        arithmetic) -- a different complexity class from a bare switch.
+/// @param c The currency to encode.
+/// @return `"USD"`, `"EUR"`, `"JPY"`, or `"KRW"`.
+[[nodiscard]] constexpr std::string_view currencyToCode(Currency c) noexcept {
+    switch (c) {
+        case Currency::USD:
+            return "USD";
+        case Currency::EUR:
+            return "EUR";
+        case Currency::JPY:
+            return "JPY";
+        case Currency::KRW:
+            return "KRW";
+        default:
+            return "USD";
+    }
+}
+
+/// @brief The inverse of `currencyToCode`: decodes a 3-letter DB code back
+///        into its `Currency` enumerator.
+/// @param code The stored `currency_code` column value.
+/// @return The matching `Currency`, or `Currency::USD` for an unrecognized
+///         code -- a defensive default (a code column with no FK/CHECK
+///         constraint in SQLite is not otherwise guaranteed to only ever
+///         hold one of the four codes this rung writes), never a thrown
+///         error: this is a read-path decode of the model's own prior
+///         write, not caller-facing input validation.
+[[nodiscard]] constexpr Currency codeToCurrency(std::string_view code) noexcept {
+    if (code == "EUR") {
+        return Currency::EUR;
+    }
+    if (code == "JPY") {
+        return Currency::JPY;
+    }
+    if (code == "KRW") {
+        return Currency::KRW;
+    }
+    return Currency::USD;
+}
 
 }  // namespace ledger
 
