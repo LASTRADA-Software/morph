@@ -428,6 +428,22 @@ struct morph::model::ActionKeyTraits<kanban::OpenBoard> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
     static std::string key(const kanban::OpenBoard& action) {
+        // `action.projectId` can be disengaged (e.g. BoardBridge::openBoard()
+        // parsing an unparseable QString into a default-constructed
+        // ProjectId{}) -- key extraction runs before BoardModel::execute()'s
+        // own hasValue() check ever gets a chance to reject it (include/
+        // morph/core/bridge.hpp's BridgeHandler::execute(), the
+        // `try { key = ActionKeyTraits<Action>::key(action); } catch (...)`
+        // block), so this is the first and only place able to catch it.
+        // Throwing here is explicitly the sanctioned way to reject a bad key
+        // (that catch block's own comment: "a throw here resolves the
+        // Completion, it does not escape"), mirroring
+        // BoardModel::execute(OpenBoard)'s identical "projectId is required"
+        // rejection for the case where the key never even reaches that
+        // check.
+        if (!action.projectId.hasValue()) {
+            throw kanban::ValidationError{"OpenBoard: projectId is required"};
+        }
         return morph::model::keyToString(*action.projectId);
     }
 };

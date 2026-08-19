@@ -935,3 +935,33 @@ TEST_CASE("A Viewer can GetAttachments but cannot AddAttachment -- Forbidden, no
     // Viewer-or-above may still read -- same bar GetBoardState/GetRules use.
     CHECK(viewerModel.execute(kanban::GetAttachments{.taskId = taskId}).attachments.empty());
 }
+
+// No DbFixture here: ActionKeyTraits<OpenBoard>::key() is a pure function
+// over the action's own fields -- it never touches a database -- and this
+// regression needs to prove it rejects a bad key *before* any DB connection
+// would even matter, exactly the point in the dispatch pipeline where the
+// crash below happened.
+TEST_CASE("ActionKeyTraits<OpenBoard>::key() rejects a disengaged projectId instead of asserting",
+          "[kanban][model][key]") {
+    // A regression test for a real crash: BoardBridge::openBoard() parses an
+    // unparseable QString (e.g. QML passing garbage, or this rung's own
+    // "BoardBridge relays failed() on a bad projectId" test's
+    // openBoard("not-a-number")) into a default-constructed, disengaged
+    // ProjectId{} via board_qml_bridge.cpp's own parseId<ProjectId>(). That
+    // action reaches morph::bridge::BridgeHandler::execute() before
+    // BoardModel::execute(OpenBoard)'s own hasValue() check ever runs --
+    // ActionKeyTraits<OpenBoard>::key() (board_model.hpp) is what computes
+    // the routing key that attach relies on, and it used to dereference
+    // action.projectId unconditionally. A disengaged std::optional::
+    // operator*() is undefined behavior; under libstdc++'s hardened build
+    // (the "Linux / all optional features (gcc)" CI leg, not every other
+    // job's libc++) that trips a hard assertion and aborts the whole test
+    // process, rather than routing to BoardBridge::failed() as the test
+    // right above this one ("BoardBridge relays failed() on a bad
+    // projectId") expects.
+    kanban::OpenBoard withValidId{.projectId = kanban::ProjectId{1}};
+    CHECK(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(withValidId) == "1");
+
+    kanban::OpenBoard disengaged{.projectId = {}};
+    CHECK_THROWS_AS(morph::model::ActionKeyTraits<kanban::OpenBoard>::key(disengaged), kanban::ValidationError);
+}
