@@ -34,8 +34,21 @@ morph_add_rung(NAME ledger)
 # risk silently linking a stale schema migration object again. Safe to
 # remove once the underlying cache bug is fixed upstream (see fastcache-cc
 # --help / D:/caching/README.md for the tool this refers to).
+#
+# Same bug hit tests/test_ledger_schema.cpp.obj (Task 5): a rebuild after
+# adding a second TEST_CASE to that file kept linking a stale object with
+# only the original TEST_CASE (verified via `strings` on the linked exe and
+# `--list-tests`, not just a passing/stale ctest result), even after
+# deleting the .obj by hand and reinvoking ninja -- the launcher re-served
+# the same stale bytes on the very next build. ladder_ledger_tests opts out
+# for the same reason.
 if(TARGET ladder_ledger_lib)
     set_target_properties(ladder_ledger_lib PROPERTIES
+        C_COMPILER_LAUNCHER ""
+        CXX_COMPILER_LAUNCHER "")
+endif()
+if(TARGET ladder_ledger_tests)
+    set_target_properties(ladder_ledger_tests PROPERTIES
         C_COMPILER_LAUNCHER ""
         CXX_COMPILER_LAUNCHER "")
 endif()
