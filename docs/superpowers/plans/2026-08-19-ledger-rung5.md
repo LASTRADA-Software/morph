@@ -1700,9 +1700,26 @@ GetLedgerResult execute(const StoreTransaction& action);
 ```cpp
 // Append the registration line to ledger_model.hpp's bottom block, per
 // Task 7's incremental-registration discipline (a new action's
-// BRIDGE_REGISTER_ACTION line lands alongside its own execute() body):
+// BRIDGE_REGISTER_ACTION line lands alongside its own execute() body).
+// Per Task 7's own real, verified discovery, BRIDGE_KEY_FROM does not
+// compile against LedgerId (a LEDGER_DEFINE_STRONG_ID type fails
+// morph::model::ModelKey's std::integral/std::string constraint) -- add
+// a hand-written ActionKeyTraits<StoreTransaction> specialization
+// instead, matching ledger_model.hpp's existing ActionKeyTraits<
+// OpenAccount>/<GetLedger> pattern exactly (unwrap *action.ledgerId to
+// the raw std::int64_t PrimaryKey Task 7 already declared on
+// ModelKeyTraits<LedgerModel> -- do not declare it again, it is
+// specialized exactly once):
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
-BRIDGE_KEY_FROM(ledger::StoreTransaction, &ledger::StoreTransaction::ledgerId);
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::StoreTransaction> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::StoreTransaction& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
 ```
 
 ```cpp
@@ -1740,12 +1757,26 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         }
     }
 
-    Lightweight::SqlTransaction sqlTxn{mapper.Connection()};  // confirm exact SqlTransaction construction shape
-                                                               // against an existing rung's own multi-row commit
+    // Constructor/commit shape copied verbatim from
+    // bank::LoanModel::execute(const dto::TakeLoan&) (examples/bank/src/
+    // models/loan_model.cpp:77-80) -- the exact multi-row-commit pattern
+    // this rung's own StoreTransaction (journal + N legs) needs.
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::TransactionJournalRecord journalRow;
     journalRow.description = action.description;
-    journalRow.date = action.date.value ? action.date.value->toEpochMillis() : 0;  // confirm exact DateTime->epoch
-                                                                                     // millis conversion method name
+    // DateTime->epoch-millis conversion copied verbatim from
+    // bookmarks::db's own nowMs()/fromEpochMs() helpers
+    // (bookmark_model.cpp:61-63): Timestamp::value is
+    // std::optional<DateTime>, DateTime::value is
+    // std::chrono::sys_time<milliseconds> -- .time_since_epoch().count()
+    // gives the raw millisecond integer this entity column stores.
+    // action.date is a client-supplied "when did this happen" field
+    // (design spec §1) -- not a server audit stamp, so this does NOT go
+    // through morph::ladder::now() (see this rung's own note on that
+    // convention, which binds server-stamped timestamps like
+    // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
+    // tasks, not a client-supplied journal date).
+    journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
     auto ledgerRows = mapper.Query<db::LedgerRecord>()
                            .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
                            .All();
@@ -1765,26 +1796,29 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         legRow.currencyCode = legAccounts[i].currencyCode.Value();
         mapper.Create(legRow);
     }
-    sqlTxn.Commit();  // confirm exact commit method name
+    sqlTxn.Commit();
 
     return execute(GetLedger{.ledgerId = action.ledgerId});
 }
 ```
 
-This body needs three items confirmed against real headers before it
-compiles (flagged rather than guessed further, since each is a small,
-independently-checkable fact): (1) `Lightweight::SqlTransaction`'s exact
-constructor and commit method — check an existing rung's own multi-row
-commit (e.g. `bookmarks::BookmarkModel`'s `ImportBookmarks` handler, which
-already does a bounded multi-insert); (2) `DateTime`'s exact
-epoch-millis conversion method name (`include/morph/util/datetime.hpp`);
-(3) whether `GetLedgerResult`'s returned `AccountInfo::balance` needs to
-be computed via a real leg-sum query here (currently Task 7's own
-`execute(GetLedger)` returns a hardcoded zero balance per its own note —
-if this task's own tests assert real non-zero balances, as they do above,
-`execute(GetLedger)` itself must be extended in this task to compute each
-account's balance as the sum of its own legs, not left at zero; do this
-as part of this task's own scope, since the tests above require it).
+`Lightweight::SqlTransaction`'s constructor/`Commit()` and `DateTime`'s
+epoch-millis conversion are both verified above against real,
+already-compiling code (`bank::LoanModel`, `bookmarks::db`'s `nowMs()`/
+`fromEpochMs()`) — no further confirmation needed for those two. The one
+remaining real implementation item this task must complete: **this
+task's own `execute(GetLedger)` must be extended to compute each
+account's balance as the real sum of its own legs**, not the hardcoded
+zero Task 7 left it at (Task 7's own doc comment on that placeholder
+says exactly this — "Task 8 computes a real balance"). Add a
+per-account leg-sum query (`Query<db::TransactionLegRecord>().Where(...
+account ...).All()`, summed via `Rational::operator+` in a loop, in-model
+per design spec §3's own "never a raw SQL `SUM()`" rule, which applies
+here too even though §3 is nominally about budgets — the same reason
+holds: `Rational`'s per-row denominators can't be combined by SQL) inside
+`execute(GetLedger)`'s existing per-account loop, replacing the hardcoded
+zero. This is required for this task's own tests (above) to pass, since
+they assert real non-zero balances.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -2113,6 +2147,53 @@ struct GetBudgetReportResult {
 }  // namespace ledger
 ```
 
+**Schema addition this task must make first**: `AccountRecord` (Task 5)
+has no way to record which category an account belongs to.
+`LinkAccountToCategory` needs one. Add a migration and an entity field:
+
+```cpp
+// Append to examples/ledger/src/db/schema.cpp -- additive-only per
+// IMPLEMENTATION.md rule 4, a later timestamp than Task 4's own highest
+// (20260819000011):
+LIGHTWEIGHT_SQL_MIGRATION(20260819000012, "Add category_id to accounts") {
+    plan.AlterTable("accounts").AddColumn("category_id", Bigint());  // nullable by default -- confirm exact
+                                                                        // AlterTable/AddColumn method names and
+                                                                        // nullable-by-default behavior against
+                                                                        // Lightweight's real migration DSL before
+                                                                        // finalizing; no existing rung's schema.cpp
+                                                                        // has an ALTER TABLE migration to copy from,
+                                                                        // so this is this plan's least-verified SQL
+                                                                        // DSL call -- read Lightweight/SqlMigration.hpp
+                                                                        // and Lightweight/SqlQuery/MigrationPlan.hpp
+                                                                        // directly if CreateTableIfNotExists's own
+                                                                        // shape doesn't have an obvious ALTER analogue.
+}
+```
+
+```cpp
+// Modify AccountRecord in examples/ledger/include/ledger/db/ledger_entity.hpp:
+struct AccountRecord {
+    static constexpr std::string_view TableName = "accounts";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
+    Light::Field<int, Light::SqlRealName{"kind"}> kind{0};  // 3
+    Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;  // 4
+    Light::BelongsTo<&CategoryRecord::id, Light::SqlRealName{"category_id"}, Light::SqlNullable::Null>
+        category;  // 5 -- nullable, per bank::db::TxnRecord's own nullable-BelongsTo shape
+};
+```
+
+This changes `AccountRecord`'s member-index comments (a new member at
+index 5) — confirm this doesn't break anything relying on the old
+4-member layout (nothing should, since Lightweight's `DataMapper` matches
+columns by name via `Light::SqlRealName`, not by ordinal position, except
+for `HasMany` resolution — this entity has none). Also note
+`CategoryRecord` must now be forward-declared or fully declared before
+`AccountRecord` in this header — confirm the file's declaration order
+still works (it should, since `CategoryRecord` doesn't depend on
+`AccountRecord`) or reorder the structs if not.
+
 ```cpp
 // examples/ledger/include/ledger/models/budget_model.hpp
 // SPDX-License-Identifier: Apache-2.0
@@ -2130,9 +2211,9 @@ namespace ledger {
 class BudgetModel {
   public:
     CategoryId execute(const CreateCategory& action);
-    void execute(const LinkAccountToCategory& action);
+    AccountId execute(const LinkAccountToCategory& action);
     BudgetId execute(const CreateBudget& action);
-    void execute(const SetBudgetLimit& action);
+    BudgetId execute(const SetBudgetLimit& action);
     GetBudgetReportResult execute(const GetBudgetReport& action);
 };
 
@@ -2144,22 +2225,74 @@ BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::LinkAccountToCategory, "Link
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::CreateBudget, "CreateBudget")
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::SetBudgetLimit, "SetBudgetLimit")
 BRIDGE_REGISTER_ACTION(ledger::BudgetModel, ledger::GetBudgetReport, "GetBudgetReport", ::morph::model::Loggable::No)
+
+// Hand-written ActionKeyTraits per action, exactly as Task 7's real,
+// verified discovery established for LedgerModel: LEDGER_DEFINE_STRONG_ID
+// types (LedgerId, BudgetId, AccountId, CategoryId) all fail
+// morph::model::ModelKey's std::integral/std::string constraint, so
+// BRIDGE_MODEL_KEY/BRIDGE_KEY_FROM cannot be used for any of them.
+// BudgetModel's actions carry genuinely different key TYPES
+// (LedgerId for CreateCategory/CreateBudget, BudgetId for
+// SetBudgetLimit/GetBudgetReport) -- since ModelKeyTraits<BudgetModel>
+// declares one PrimaryKey type for the whole model (see Task 7's own
+// ModelKeyTraits<LedgerModel> -- std::int64_t, specialized exactly once),
+// and every one of these ids already unwraps to the same underlying
+// std::int64_t, PrimaryKey = std::int64_t here too; each action's own
+// key() just unwraps whichever field it carries. LinkAccountToCategory
+// carries two ids (accountId, categoryId) and no single natural
+// "the" key -- confirm against ActionKeyTraits::hasKey's actual
+// contract (include/morph/core/model_key.hpp) whether hasKey = false
+// (this action doesn't route to an existing shared instance the way a
+// keyed action does) is the correct answer for it, rather than picking
+// one of its two ids arbitrarily.
+template <>
+struct morph::model::ModelKeyTraits<ledger::BudgetModel> {
+    using PrimaryKey = std::int64_t;
+};
+template <>
+struct morph::model::ActionKeyTraits<ledger::CreateCategory> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::CreateCategory& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
+template <>
+struct morph::model::ActionKeyTraits<ledger::CreateBudget> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::CreateBudget& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
+template <>
+struct morph::model::ActionKeyTraits<ledger::SetBudgetLimit> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::SetBudgetLimit& action) {
+        return morph::model::keyToString(*action.budgetId);
+    }
+};
+template <>
+struct morph::model::ActionKeyTraits<ledger::GetBudgetReport> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::GetBudgetReport& action) {
+        return morph::model::keyToString(*action.budgetId);
+    }
+};
 ```
 
-Confirm whether `BudgetModel` genuinely needs a `BRIDGE_MODEL_KEY`/
-`BRIDGE_KEY_FROM` pair the way `LedgerModel` does (Task 7) — since every
-action here carries a *different* key type (`LedgerId` for
-`CreateCategory`/`CreateBudget`, `BudgetId` for `SetBudgetLimit`/
-`GetBudgetReport`, `AccountId`+`CategoryId` for `LinkAccountToCategory`),
-a single `ModelKeyTraits<BudgetModel>::PrimaryKey` may not fit this
-model the way it fits `LedgerModel`'s uniform `LedgerId` keying. If the
-framework's keyed-model machinery genuinely requires one consistent key
-type per model, `BudgetModel` may need to skip the
-`BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` pair entirely (running plain,
-unkeyed, like a stateless service model) — confirm against
-`morph::model::ModelKeyTraits`'s actual requirements
-(`include/morph/core/model_key.hpp`) before deciding; do not add
-`BRIDGE_MODEL_KEY` speculatively if it does not actually fit.
+`LinkAccountToCategory`'s own `ActionKeyTraits` is intentionally omitted
+above — confirm against `include/morph/core/model_key.hpp`'s real
+`hasKey = false` contract (an unkeyed action, dispatched without routing
+to a specific shared instance) before writing it, rather than picking
+one of its two ids as "the" key arbitrarily. Both `LinkAccountToCategory`
+and `SetBudgetLimit` changed from `void` to returning an id (`AccountId`/
+`BudgetId` respectively), per Task 7's own real, verified discovery that
+`BRIDGE_REGISTER_ACTION`'s `Result` deduction cannot bind a `void`
+`execute()` — return the affected row's own id (already available from
+the lookup each body performs) rather than inventing a new return value.
 
 ```cpp
 // examples/ledger/src/models/budget_model.cpp
@@ -2190,30 +2323,23 @@ CategoryId BudgetModel::execute(const CreateCategory& action) {
     return CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
 }
 
-void BudgetModel::execute(const LinkAccountToCategory& action) {
+AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
     if (!action.validate()) {
         throw ValidationError{"LinkAccountToCategory: accountId and categoryId are required"};
     }
-    // Note: AccountRecord (Task 5) has no categoryId column today -- this
-    // action needs a schema addition this task must make: a nullable
-    // category_id foreign key on the accounts table (a follow-up
-    // migration, LIGHTWEIGHT_SQL_MIGRATION with a later timestamp than
-    // Task 4's own 20260819000011, since Lightweight's migration story is
-    // additive-only per IMPLEMENTATION.md rule 4). Add the column, add the
-    // corresponding nullable BelongsTo field to AccountRecord, then
-    // implement this as an Update of the account row's new category link.
-    // Flagged rather than guessed further, since it's a real schema
-    // change this task's own scope must include, not something to route
-    // around.
     Lightweight::DataMapper mapper;
     auto accountRows = mapper.Query<db::AccountRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
                             .All();
-    if (accountRows.empty()) {
-        throw NotFound{"LinkAccountToCategory: no such account"};
+    auto categoryRows = mapper.Query<db::CategoryRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                             .All();
+    if (accountRows.empty() || categoryRows.empty()) {
+        throw NotFound{"LinkAccountToCategory: no such account or category"};
     }
-    // accountRows.front().category = ...;  -- set once the schema addition above lands
-    // mapper.Update(accountRows.front());
+    accountRows.front().category = categoryRows.front();
+    mapper.Update(accountRows.front());
+    return AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
 }
 
 BudgetId BudgetModel::execute(const CreateBudget& action) {
@@ -2238,7 +2364,7 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
     return BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
 }
 
-void BudgetModel::execute(const SetBudgetLimit& action) {
+BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
     if (!action.validate()) {
         throw ValidationError{"SetBudgetLimit: budgetId and a YYYY-MM month are required"};
     }
@@ -2257,6 +2383,7 @@ void BudgetModel::execute(const SetBudgetLimit& action) {
     limitRow.limitDp = static_cast<int>(action.limit.decimalPlaces.value);
     limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
     mapper.Create(limitRow);
+    return action.budgetId;
 }
 
 GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
