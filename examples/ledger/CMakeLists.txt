@@ -21,3 +21,21 @@ morph_add_rung(NAME ledger)
 # there is nothing to comment out here. The WASM client's server-url cache
 # variable (see polls' own CMakeLists.txt) has its equivalent block added
 # alongside gui_wasm/ in that later task.
+
+# Local workaround: the machine-local fastcache-cc/fastcached compiler-cache
+# launcher (cmake/CompileCache.cmake) was observed serving a stale, empty
+# object for src/db/schema.cpp.obj regardless of the file's actual content --
+# a HIT against a key that does not vary with the translation unit's content,
+# reproduced by invoking fastcache-cc directly (bypassing ninja) with both
+# direct and non-direct (FASTCACHE_NO_DIRECT=1) modes; only changing the
+# object's *output path* produced a fresh key. No eviction primitive exists
+# in the tool and the daemon's on-disk cache directory is outside this
+# checkout, so this target opts out of the launcher entirely rather than
+# risk silently linking a stale schema migration object again. Safe to
+# remove once the underlying cache bug is fixed upstream (see fastcache-cc
+# --help / D:/caching/README.md for the tool this refers to).
+if(TARGET ladder_ledger_lib)
+    set_target_properties(ladder_ledger_lib PROPERTIES
+        C_COMPILER_LAUNCHER ""
+        CXX_COMPILER_LAUNCHER "")
+endif()
