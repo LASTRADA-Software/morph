@@ -566,76 +566,318 @@ git commit -m "ledger: Currency unit system (dp=2 USD/EUR, dp=0 JPY/KRW)"
 - Test: `examples/ledger/tests/test_ledger_schema.cpp`
 
 **Interfaces:**
-- Produces: `ledger::db::setup()` (declared in `database.hpp`, defined in
-  `schema.cpp`) — registers every `LIGHTWEIGHT_SQL_MIGRATION` this rung
-  needs, following `examples/bank/src/db/schema.cpp`'s exact pattern
-  (`LIGHTWEIGHT_SQL_MIGRATION(<timestamp>, "<description>") { plan... }`,
-  auto-registered at static-init).
+- Produces: `ledger::db::setup(const std::string& connectionString)`
+  (declared in `database.hpp`, defined in `schema.cpp`) — matches
+  `bank::db::setup`/`polls::db::setup`'s exact signature (production
+  bootstrap only; see below for why tests do not call it). Internally
+  calls `configure(connectionString)` (points Lightweight's default
+  connection at it) then `applyMigrations()` (idempotent —
+  `MigrationManager::GetInstance().ApplyPendingMigrations()`), following
+  `examples/bank/src/db/schema.cpp`'s exact split. Registers every
+  `LIGHTWEIGHT_SQL_MIGRATION` this rung needs at static-init time
+  (`LIGHTWEIGHT_SQL_MIGRATION(<timestamp>, "<description>") { plan... }`).
 
-- [ ] **Step 1: Read `bank::db::schema.cpp`'s migration pattern**
+**Correction from plan self-review**: the original draft of this task
+specified a parameterless `ledger::db::setup()` called directly from a
+test — this does not match the established convention. `bank`/`polls`
+both declare `setup(const std::string& connectionString)`, and
+`polls::db::database.hpp`'s own doc comment states outright: "tests never
+call this." The real test-time pattern is
+`morph::ladder::testkit::DbFixture` (`examples/common/testkit/
+db_fixture.hpp`), which handles connection configuration and migration
+application itself — `LIGHTWEIGHT_SQL_MIGRATION`'s registrations are
+process-wide static-init side effects that fire the moment `schema.cpp`
+is linked in, independent of whether `setup()` itself is ever called;
+`DbFixture`'s constructor calls `ApplyPendingMigrations()` on its own,
+against a connection string it computes from `ODBC_CONNECTION_STRING` (or
+a real on-disk SQLite fallback file). `setup()` exists only for
+`examples/ledger/src/app/`'s eventual production bootstrap (a later,
+unplanned task — not part of this plan's scope, matching bank/polls'
+own app-bootstrap ownership), not for tests. Corrected below.
+
+- [ ] **Step 1: Read `bank::db::schema.cpp`'s migration pattern and `db_fixture.hpp`**
 
 Read `examples/bank/src/db/schema.cpp` in full, particularly the
 `accounts` table migration (`LIGHTWEIGHT_SQL_MIGRATION(20260630000002, ...)`),
-to copy the exact `plan.CreateTableIfNotExists(...)` DDL shape.
+to copy the exact `plan.CreateTableIfNotExists(...)` DDL shape. Also read
+`examples/bank/include/bank/db/database.hpp` (for the `configure`/
+`applyMigrations`/`setup` three-function split) and
+`examples/common/testkit/db_fixture.hpp` in full (for how tests actually
+get a configured, freshly-migrated database — via `DbFixture`, never by
+calling `setup()` directly).
 
 - [ ] **Step 2: Write the failing schema test**
 
 ```cpp
 // examples/ledger/tests/test_ledger_schema.cpp
 // SPDX-License-Identifier: Apache-2.0
-#include "ledger/db/database.hpp"
+#include "ledger/db/database.hpp"  // pulls in schema.cpp's registrations via linkage
+
+#include "testkit/db_fixture.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlSchema.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("ledger schema migrations create every expected table", "[ledger][db]") {
-    ledger::db::setup();
-    // Follow examples/bank/tests or examples/polls/tests' own
-    // db_fixture.hpp-based schema test for the exact assertion shape
-    // (querying sqlite_master for table names, or issuing a trivial
-    // Query<T> against each new entity type once Task 5 lands).
+    morph::ladder::testkit::DbFixture fixture;  // configures the connection + applies migrations
+
+    Lightweight::SqlStatement stmt;
+    const auto tables = Lightweight::SqlSchema::ReadAllTables(stmt, stmt.Connection().DatabaseName());
+    auto hasTable = [&](std::string_view name) {
+        return std::ranges::any_of(tables, [&](const auto& t) { return t.name == name; });
+    };
+    CHECK(hasTable("ledgers"));
+    CHECK(hasTable("accounts"));
+    CHECK(hasTable("transaction_journals"));
+    CHECK(hasTable("transaction_legs"));
+    CHECK(hasTable("categories"));
+    CHECK(hasTable("budgets"));
+    CHECK(hasTable("budget_limits"));
+    CHECK(hasTable("rules"));
+    CHECK(hasTable("ledger_imported_ops"));
+    CHECK(hasTable("ledger_imported_txn_hashes"));
+    CHECK(hasTable("ledger_report_jobs"));
 }
 ```
+
+Note this test does NOT call `ledger::db::setup()` — `DbFixture` does the
+connection configuration and migration application itself; the `#include
+"ledger/db/database.hpp"` line's only real job is pulling `schema.cpp`'s
+object file into the test binary's link so its `LIGHTWEIGHT_SQL_MIGRATION`
+static-init registrations actually run (the same reason every other
+rung's schema test includes its own `database.hpp` despite never calling
+`setup()`).
 
 - [ ] **Step 3: Run test to verify it fails**
 
 Run: `ctest --preset cl-debug -R "ledger.*schema" --output-on-failure`
 Expected: FAIL to compile — `database.hpp` doesn't exist.
 
-- [ ] **Step 4: Implement `database.hpp` (declaration only)**
+- [ ] **Step 4: Implement `database.hpp`**
 
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <string>
+
+/// @file
+/// Process-wide database lifecycle for the ledger rung, mirroring
+/// bank::db's exact three-function split (examples/bank/include/bank/db/
+/// database.hpp) — Lightweight resolves its connection from a
+/// process-global default, and each model opens its own `DataMapper`
+/// against it. Production bootstrap only: this rung's own tests never
+/// call `setup()` (or `configure()`/`applyMigrations()` individually) --
+/// they use `morph::ladder::testkit::DbFixture`, which configures its own
+/// connection and applies migrations independently, per the ladder-wide
+/// test convention (see polls::db::setup's doc comment for the same
+/// stated rule in a sibling rung).
+
 namespace ledger::db {
 
-/// @brief Registers every ledger migration with Lightweight's global
-///        migration registry. Call once before any `DataMapper` use.
-void setup();
+/// @brief Installs @p connectionString as Lightweight's default connection.
+/// @param connectionString ODBC connection string, e.g.
+///        `"DRIVER=SQLite3;Database=ledger.db"`.
+void configure(const std::string& connectionString);
+
+/// @brief Applies any pending schema migrations against the default connection.
+///
+/// Idempotent: migrations already recorded in the database's migration
+/// history are skipped, so this is safe to call on every startup.
+void applyMigrations();
+
+/// @brief Convenience: `configure(connectionString)` followed by `applyMigrations()`.
+void setup(const std::string& connectionString);
 
 }  // namespace ledger::db
 ```
 
 - [ ] **Step 5: Implement `schema.cpp` with every table's migration**
 
-Tables (one `LIGHTWEIGHT_SQL_MIGRATION` block each, timestamps
-strictly increasing from a base like `20260819000001`): `ledgers`,
-`accounts` (`ledgerId` FK, `name`, `kind` int, `currencyCode`),
-`transaction_journals` (`ledgerId` FK, `description`, `date`,
-`causalParentId` nullable), `transaction_legs` (`journalId` FK,
-`accountId` FK, `amountNum`/`amountDen`/`amountDp`, `currencyCode`,
-`foreignAmountNum`/`Den`/`Dp` nullable, `foreignCurrencyCode` nullable),
-`categories` (`ledgerId` FK, `name`), `budgets` (`ledgerId` FK, `name`,
-`categoryId` FK), `budget_limits` (`budgetId` FK, `month`,
-`limitAmountNum`/`Den`/`Dp`, `currencyCode`), `rules` (`ledgerId` FK,
-`trigger` int, `matchText`, `action` int, `actionValue`, `version` int
-default 1), `ledger_imported_ops` (mirrors bookmarks'
-`ImportedOpRecord`: `ownerPrincipal`, `opId`, `appliedAtMs`, unique on
-`(ownerPrincipal, opId)`), `ledger_imported_txn_hashes` (`ledgerId`,
-`hash`, unique on `(ledgerId, hash)` — spec §8's cross-import dedup),
-`ledger_report_jobs` (`ledgerId` FK, `jobId`, `kind` int, `status` int,
-`resultJson` nullable, `createdAtMs`).
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "ledger/db/database.hpp"
+
+#include <Lightweight/Lightweight.hpp>
+#include <Lightweight/SqlMigration.hpp>
+
+namespace ledger::db {
+
+void configure(const std::string& connectionString) {
+    Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{connectionString});
+}
+
+void applyMigrations() {
+    auto& migrations = Lightweight::SqlMigration::MigrationManager::GetInstance();
+    migrations.CreateMigrationHistory();
+    migrations.ApplyPendingMigrations();
+}
+
+void setup(const std::string& connectionString) {
+    configure(connectionString);
+    applyMigrations();
+}
+
+}  // namespace ledger::db
+
+using namespace Lightweight::SqlColumnTypeDefinitions;
+using Lightweight::SqlForeignKeyReferenceDefinition;
+
+// Every method/type below is verified verbatim against real usage in
+// examples/bank/src/db/schema.cpp, examples/bookmarks/src/db/schema.cpp,
+// and examples/pastebin/src/db/schema.cpp: RequiredForeignKey(col, Type(),
+// ref()) creates a NOT-NULL FK column in one call; ForeignKey(col, Type(),
+// ref()) (no Required prefix) creates a nullable FK column (bank's own
+// nullable `counterparty_id`); Column(name, Type()) (no Required prefix)
+// creates a nullable plain column (pastebin's own `expires_at_ms`);
+// CreateUniqueIndex(name, table, {cols...}) is a separate plan call, not
+// chained onto CreateTableIfNotExists (bookmarks' own imported_ops table).
+
+namespace {
+constexpr auto ledgersRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "ledgers", .columnName = "id"};
+}
+constexpr auto accountsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "accounts", .columnName = "id"};
+}
+constexpr auto transactionJournalsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "transaction_journals", .columnName = "id"};
+}
+constexpr auto categoriesRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "categories", .columnName = "id"};
+}
+constexpr auto budgetsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "budgets", .columnName = "id"};
+}
+}  // namespace
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000001, "Create ledgers table") {
+    plan.CreateTableIfNotExists("ledgers")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("name", Varchar(128));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000002, "Create accounts table") {
+    plan.CreateTableIfNotExists("accounts")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("name", Varchar(128))
+        .RequiredColumn("kind", Integer())
+        .RequiredColumn("currency_code", Varchar(3));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000003, "Create transaction_journals table") {
+    plan.CreateTableIfNotExists("transaction_journals")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("description", Varchar(256))
+        .RequiredColumn("date", Bigint())  // Timestamp at rest -- epoch millis, per morph::time convention
+        .Column("causal_parent_id", Varchar(64));  // nullable -- empty-string "no parent" sentinel, per journal's own convention
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000004, "Create transaction_legs table") {
+    plan.CreateTableIfNotExists("transaction_legs")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("journal_id", Bigint(), transactionJournalsRef())
+        .RequiredForeignKey("account_id", Bigint(), accountsRef())
+        .RequiredColumn("amount_num", Bigint())
+        .RequiredColumn("amount_den", Bigint())
+        .RequiredColumn("amount_dp", Integer())
+        .RequiredColumn("currency_code", Varchar(3))
+        .Column("foreign_amount_num", Bigint())    // nullable triple -- present only on a
+        .Column("foreign_amount_den", Bigint())    // foreign-amount-pair leg (design spec §1 step 3)
+        .Column("foreign_amount_dp", Integer())
+        .Column("foreign_currency_code", Varchar(3));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000005, "Create categories table") {
+    plan.CreateTableIfNotExists("categories")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("name", Varchar(128));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000006, "Create budgets table") {
+    plan.CreateTableIfNotExists("budgets")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("name", Varchar(128))
+        .RequiredForeignKey("category_id", Bigint(), categoriesRef());
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000007, "Create budget_limits table") {
+    plan.CreateTableIfNotExists("budget_limits")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("budget_id", Bigint(), budgetsRef())
+        .RequiredColumn("month", Varchar(7))  // "YYYY-MM"
+        .RequiredColumn("limit_num", Bigint())
+        .RequiredColumn("limit_den", Bigint())
+        .RequiredColumn("limit_dp", Integer())
+        .RequiredColumn("currency_code", Varchar(3));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000008, "Create rules table") {
+    plan.CreateTableIfNotExists("rules")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("trigger", Integer())
+        .RequiredColumn("match_text", Varchar(256))
+        .RequiredColumn("action", Integer())
+        .RequiredColumn("action_value", Varchar(256))
+        .RequiredColumn("version", Integer());  // default applied at insert time (=1), not a DDL DEFAULT
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000009, "Create ledger_imported_ops table") {
+    // Mirrors bookmarks::db::ImportedOpRecord's exact migration shape
+    // (examples/bookmarks/src/db/schema.cpp's "Create imported_ops table",
+    // design spec §8): op-id ledger for chunk-retry dedup, keyed by
+    // (owner_principal, op_id).
+    plan.CreateTableIfNotExists("ledger_imported_ops")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("owner_principal", Varchar(64))
+        .RequiredColumn("op_id", Varchar(128))
+        .RequiredColumn("applied_at_ms", Bigint());
+    plan.CreateUniqueIndex("idx_ledger_imported_ops_owner_op", "ledger_imported_ops",
+                            {"owner_principal", "op_id"});
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000010, "Create ledger_imported_txn_hashes table") {
+    // Cross-import duplicate detection (design spec §8) -- distinct from
+    // ledger_imported_ops: this catches "same statement re-uploaded under a
+    // different opId", not "same chunk retried under the same opId".
+    plan.CreateTableIfNotExists("ledger_imported_txn_hashes")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("hash", Varchar(64));
+    plan.CreateUniqueIndex("idx_ledger_imported_txn_hashes_ledger_hash", "ledger_imported_txn_hashes",
+                            {"ledger_id", "hash"});
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000011, "Create ledger_report_jobs table") {
+    plan.CreateTableIfNotExists("ledger_report_jobs")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("job_id", Varchar(64))
+        .RequiredColumn("kind", Integer())
+        .RequiredColumn("status", Integer())
+        .Column("result_json", NVarchar(0))  // nullable, unbounded -- absent until the job completes; NVarchar(0) is
+                                              // the ladder-wide "unbounded text" convention (IMPLEMENTATION.md rule 3,
+                                              // never Text() -- see pastebin's own `content` column)
+        .RequiredColumn("created_at_ms", Bigint());
+}
+```
+
+This migration code is verified against three real, already-merged
+schema.cpp files method-by-method (not a guess needing further
+confirmation, unlike the plan's original draft of this task). The one
+open item: `date`/`applied_at_ms`/`created_at_ms` are stored as `Bigint()`
+epoch-millis integers, matching `bank::db::TxnRecord`'s own timestamp
+convention — confirm this still matches whatever `morph::time::Timestamp`
+serialization the model layer (Task 7 onward) actually uses before wiring
+the DTO⇄entity mapping, since a mismatch there is a Task 7+ concern, not
+this task's.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
