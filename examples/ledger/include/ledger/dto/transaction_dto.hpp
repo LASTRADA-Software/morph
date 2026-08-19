@@ -2,11 +2,13 @@
 #pragma once
 
 #include "ledger/core/types.hpp"
+#include "ledger/core/units.hpp"
 
 #include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +20,8 @@ namespace ledger {
 struct TransactionLeg {
     AccountId accountId;
     morph::math::Rational amount;  // real currency comes from the account this leg names, per design spec §2
+    std::optional<morph::math::Rational> foreignAmount;    // display/audit metadata only --
+    std::optional<Currency> foreignCurrency;                // never enters a zero-sum check (design spec §1 step 3)
 };
 
 /// @brief Records a multi-leg transaction against `ledgerId`'s accounts,

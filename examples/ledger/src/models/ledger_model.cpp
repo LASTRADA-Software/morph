@@ -8,6 +8,7 @@
 #include <Lightweight/SqlTransaction.hpp>
 
 #include <map>
+#include <optional>
 #include <string>
 
 namespace ledger {
@@ -185,6 +186,20 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         legRow.amountDen = action.legs[i].amount.denominator;
         legRow.amountDp = static_cast<int>(action.legs[i].amount.decimalPlaces.value);
         legRow.currencyCode = legAccounts[i].currencyCode.Value();
+        // Foreign-amount triple: display/audit metadata only, never read by
+        // the zero-sum partitioning loop above (design spec §1 step 3).
+        // Assigned unconditionally -- std::optional's own empty state
+        // already expresses "no foreign amount" through the nullable
+        // column, so this never branches on whether the leg has one.
+        const auto& foreignAmount = action.legs[i].foreignAmount;
+        legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
+        legRow.foreignAmountDen = foreignAmount ? std::optional{foreignAmount->denominator} : std::nullopt;
+        legRow.foreignAmountDp =
+            foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
+        legRow.foreignCurrencyCode =
+            action.legs[i].foreignCurrency
+                ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*action.legs[i].foreignCurrency)}}
+                : std::nullopt;
         mapper.Create(legRow);
     }
     sqlTxn.Commit();

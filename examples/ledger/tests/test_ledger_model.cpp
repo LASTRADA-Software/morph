@@ -103,3 +103,65 @@ TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "
                                                                              DecimalPlaces{2}}}}}),
         ledger::ZeroSumViolation);
 }
+
+TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently", "[ledger][model]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Travel Expense",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Wallet",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::EUR});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "EUR Merchant Payable",
+                                       .kind = ledger::AccountKind::Liability, .currency = ledger::Currency::EUR});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto usdChecking = ledgerState.accounts[0].id;
+    auto usdExpense = ledgerState.accounts[1].id;
+    auto eurWallet = ledgerState.accounts[2].id;
+    auto eurPayable = ledgerState.accounts[3].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // A real 4-leg transaction: USD partition legs sum to zero on their
+    // own (a -50.00/+50.00 pair), EUR partition legs sum to zero on their
+    // own (a -45.23/+45.23 pair) -- the foreign-amount annotation on the
+    // USD leg is display metadata only, never entering either check
+    // (design spec §1 step 3).
+    auto result = model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Travel expense with EUR receipt",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = usdChecking,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}},
+                                         .foreignAmount = morph::math::Rational{Numerator{4523}, Denominator{1},
+                                                                                 DecimalPlaces{2}},
+                                         .foreignCurrency = ledger::Currency::EUR},
+                 ledger::TransactionLeg{.accountId = usdExpense,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = eurWallet,
+                                        .amount = morph::math::Rational{Numerator{-4523}, Denominator{1},
+                                                                         DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = eurPayable,
+                                        .amount = morph::math::Rational{Numerator{4523}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // No ZeroSumViolation thrown (implicit -- the call above would have
+    // thrown otherwise); assert both currencies' balances landed correctly.
+    auto findBalance = [&](ledger::AccountId id) {
+        return std::ranges::find_if(result.accounts, [&](const auto& a) { return a.id == id; })->balance.numerator;
+    };
+    CHECK(findBalance(usdChecking) == -5000);
+    CHECK(findBalance(usdExpense) == 5000);
+    CHECK(findBalance(eurWallet) == -4523);
+    CHECK(findBalance(eurPayable) == 4523);
+}
