@@ -241,9 +241,7 @@ renderer**; no pre-decode wire validation seam (clamped `Rational`s reach
 `validate()` as plausible numbers); `reconcileDeclaredPrecision` **retags
 rather than rounds** (spec text and code disagree — rung 6 owns the
 decision); the shipped renderer **auto-fires on validity with no submit
-button** (explicit-submit mode needed before any side-effectful rung form);
-`DecimalPlaces` has a floor of 1 (zero-decimal currencies need an app
-convention).
+button** (explicit-submit mode needed before any side-effectful rung form).
 
 ## Operations and security (binding conventions)
 

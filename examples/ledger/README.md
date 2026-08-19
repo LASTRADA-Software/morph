@@ -130,9 +130,15 @@ data; the submit→poll job idiom.
   model's own zero-sum invariant (or an app-added num/den echo check)
   rejects — i.e. the mitigation is app-built scaffolding, and a pre-decode
   validation hook is a named framework gap.
-- **Zero-decimal currencies are unrepresentable at true precision**:
-  `DecimalPlaces` has a floor of 1, so JPY/KRW need an app convention
-  (dp 1 + an integer-only `x-rules` gate) with a named test.
+- **Zero-decimal currencies (JPY/KRW)**: correction to the round-5 draft —
+  `DecimalPlaces` has **no floor of 1**. `Quantity<U, 0>` is a fully legal,
+  tested first-class configuration (`rational.hpp`'s own doc comment,
+  `docs/spec/util/rational.md`, `docs/spec/util/quantity_type.md`, and
+  `tests/test_quantity.cpp` all assert `DecimalPlaces{0}` round-trips
+  correctly), so JPY/KRW need no app-side workaround — declare the currency
+  unit at `dp=0` and the type system carries it natively. Named test: a
+  JPY leg stores and displays as a true integer, with no `x-rules` gate
+  required.
 - **Locale entry**: in de-DE the group separator is "." and the shipped
   normalizer strips it anywhere — typing `1.5` submits **15**, a silent 10×
   money error. Pin the behavior, fix (positional grouping validation or
