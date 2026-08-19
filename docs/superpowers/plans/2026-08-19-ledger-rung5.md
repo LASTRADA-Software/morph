@@ -1201,6 +1201,18 @@ Expected: FAIL to compile — `account_dto.hpp` doesn't exist.
 
 - [ ] **Step 3: Implement `account_dto.hpp`**
 
+**Correction from plan self-review**: `AccountInfo::balance` cannot be
+`Quantity<Currency::USD, 2>` or any other single `Quantity<...>` —
+`Quantity<Unit, dp>`'s `Unit` template parameter is a specific enumerator
+*value* (`auto U`, confirmed at `include/morph/util/quantity.hpp` line
+461), not the enum type, so one struct cannot hold a `Quantity` generic
+over *which* currency an account uses. Resolved per design spec §2's own
+answer, and consistent with `Money<C>`'s design in `units.hpp` (Task 3):
+the DTO field is a plain `morph::math::Rational balance` alongside the
+sibling `currency: Currency` field — no type-level lie, the real currency
+always comes from the sibling field, never implied by a `Quantity`'s
+compile-time unit parameter.
+
 ```cpp
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
@@ -1209,7 +1221,7 @@ Expected: FAIL to compile — `account_dto.hpp` doesn't exist.
 #include "ledger/core/units.hpp"
 
 #include <morph/forms/forms.hpp>
-#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
 
 #include <string>
 #include <vector>
@@ -1236,7 +1248,8 @@ struct AccountInfo {
     std::string name;
     AccountKind kind;
     Currency currency;
-    morph::units::Quantity<Currency::USD, 2> balance;  // placeholder unit param -- see note below
+    morph::math::Rational balance;  // plain Rational -- real currency is the sibling `currency` field above,
+                                     // never a Quantity's compile-time unit parameter (design spec §2)
 };
 
 struct GetLedgerResult {
@@ -1245,25 +1258,6 @@ struct GetLedgerResult {
 
 }  // namespace ledger
 ```
-
-`AccountInfo::balance`'s type needs resolving properly before this
-compiles: `Quantity<Unit, dp>`'s `Unit` template parameter is a specific
-enumerator value (`auto U`), not the enum type itself, so a single
-`AccountInfo` struct cannot hold a `Quantity` generic over *which*
-currency the account uses — this is the same tension design spec §2
-identifies for `TransactionLeg.amount`. Resolve by following the spec's
-own answer: the wire-level field is a currency-agnostic representation
-(the `Rational` payload plus a separate `currency: Currency` field the
-DTO already carries), not a `Quantity<SpecificCurrency, dp>` — i.e.
-`AccountInfo` needs a plain `morph::math::Rational balanceAmount` field
-alongside `currency`, OR a `Quantity<Currency, 2>` instantiated at one
-fixed representative unit value used purely as a generic
-Rational-with-schema-metadata carrier, with the *real* currency read from
-the sibling `currency` field, never from the `Quantity`'s own compile-time
-unit parameter. Confirm which convention `morph::forms`'s existing
-multi-currency-shaped examples (if any exist elsewhere in the codebase)
-use before finalizing; if none exist, use the plain-`Rational`-plus-
-sibling-`Currency`-field shape, since it has no type-level lie in it.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
