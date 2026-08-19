@@ -75,7 +75,8 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000003, "Create transaction_journals table") {
         .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
         .RequiredColumn("description", Varchar(256))
         .RequiredColumn("date", Bigint())  // Timestamp at rest -- epoch millis, per morph::time convention
-        .Column("causal_parent_id", Varchar(64));  // nullable -- empty-string "no parent" sentinel, per journal's own convention
+        .Column("causal_parent_id", Varchar(64));  // nullable: NULL means "no parent" -- the entity layer wraps this
+                                                    // as std::optional<SqlAnsiString<64>>, not an empty-string sentinel
 }
 
 LIGHTWEIGHT_SQL_MIGRATION(20260819000004, "Create transaction_legs table") {
