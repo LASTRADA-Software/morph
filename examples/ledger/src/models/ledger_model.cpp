@@ -5,8 +5,45 @@
 #include "ledger/models/ledger_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/SqlTransaction.hpp>
+
+#include <map>
+#include <string>
 
 namespace ledger {
+
+namespace {
+
+/// @brief Sums every leg posted against @p accountId into a single
+///        `Rational`, tagged at @p decimalPlaces. In-model summation via
+///        `Rational::operator+`, never a raw SQL `SUM()` -- design spec
+///        §3's rule against combining differently-denominated rows in SQL
+///        applies here exactly as it does for budgets: each
+///        `TransactionLegRecord` row can carry its own `amount_den`
+///        (design spec §1), so only `Rational`'s own reduction logic can
+///        combine them correctly.
+/// @param mapper The data mapper to query legs through.
+/// @param accountId The account whose legs to sum.
+/// @param decimalPlaces The account's own currency precision, used to seed
+///        the running total's zero starting value.
+/// @return The account's real balance -- the sum of all its legs.
+[[nodiscard]] morph::math::Rational sumAccountLegs(Lightweight::DataMapper& mapper, std::uint64_t accountId,
+                                                    morph::math::DecimalPlaces decimalPlaces) {
+    auto legRows = mapper.Query<db::TransactionLegRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, "=", accountId)
+                        .All();
+    auto total = morph::math::Rational::zero(decimalPlaces);
+    for (const auto& legRow : legRows) {
+        const auto legAmount = morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
+                                                       morph::math::Denominator{legRow.amountDen.Value()},
+                                                       morph::math::DecimalPlaces{
+                                                           static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+        total = total + legAmount;
+    }
+    return total;
+}
+
+}  // namespace
 
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
     if (!action.validate()) {
@@ -63,25 +100,96 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
     result.accounts.reserve(rows.size());
     for (const auto& row : rows) {
         const auto currency = codeToCurrency(row.currencyCode.Value().ToStringView());
+        const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
         result.accounts.push_back(AccountInfo{
             .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
             .name = std::string{row.name.Value().ToStringView()},
             .kind = static_cast<AccountKind>(row.kind.Value()),
             .currency = currency,
-            .balance = morph::math::Rational{
-                morph::math::Numerator{0}, morph::math::Denominator{1},
-                morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals}},  // no legs
-                                                                                // exist yet at this task's
-                                                                                // scope -- Task 8 computes a
-                                                                                // real balance -- but the
-                                                                                // placeholder zero is still
-                                                                                // tagged at the account's
-                                                                                // actual currency precision
-                                                                                // (0 for JPY/KRW, 2 for
-                                                                                // USD/EUR), not a hardcoded 2
+            // Real balance: the sum of every leg posted against this
+            // account, computed in-model via Rational::operator+ (never a
+            // raw SQL SUM() -- see sumAccountLegs's own doc comment).
+            .balance = sumAccountLegs(mapper, row.id.Value(), decimalPlaces),
         });
     }
     return result;
+}
+
+GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
+    if (!action.validate()) {
+        throw ValidationError{"StoreTransaction: description and at least two legs with engaged accountIds are required"};
+    }
+    Lightweight::DataMapper mapper;
+
+    // Partition legs by the account's OWN currency, never a client-supplied
+    // field (design spec §1) -- look up every referenced account first.
+    std::map<std::string, morph::math::Rational> sumsByCurrency;
+    std::vector<db::AccountRecord> legAccounts;
+    legAccounts.reserve(action.legs.size());
+    for (const auto& leg : action.legs) {
+        auto rows = mapper.Query<db::AccountRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *leg.accountId)
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"StoreTransaction: no such account"};
+        }
+        legAccounts.push_back(rows.front());
+        const std::string currency{legAccounts.back().currencyCode.Value().ToStringView()};
+        auto it = sumsByCurrency.find(currency);
+        if (it == sumsByCurrency.end()) {
+            sumsByCurrency.emplace(currency, leg.amount);
+        } else {
+            it->second = it->second + leg.amount;
+        }
+    }
+    for (const auto& [currency, sum] : sumsByCurrency) {
+        if (sum.numerator != 0) {
+            throw ZeroSumViolation{currency, "legs did not sum to zero"};
+        }
+    }
+
+    // Constructor/commit shape copied verbatim from
+    // bank::LoanModel::execute(const dto::TakeLoan&) (examples/bank/src/
+    // models/loan_model.cpp:77-80) -- the exact multi-row-commit pattern
+    // this rung's own StoreTransaction (journal + N legs) needs.
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    db::TransactionJournalRecord journalRow;
+    journalRow.description = action.description;
+    // DateTime->epoch-millis conversion copied verbatim from
+    // bookmarks::db's own nowMs()/fromEpochMs() helpers
+    // (bookmark_model.cpp:61-63): Timestamp::value is
+    // std::optional<DateTime>, DateTime::value is
+    // std::chrono::sys_time<milliseconds> -- .time_since_epoch().count()
+    // gives the raw millisecond integer this entity column stores.
+    // action.date is a client-supplied "when did this happen" field
+    // (design spec §1) -- not a server audit stamp, so this does NOT go
+    // through morph::ladder::now() (see this rung's own note on that
+    // convention, which binds server-stamped timestamps like
+    // ImportedOpRecord::appliedAtMs/ReportJobRecord::createdAtMs in later
+    // tasks, not a client-supplied journal date).
+    journalRow.date = action.date.value.has_value() ? (*action.date.value).value.time_since_epoch().count() : 0;
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                           .All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"StoreTransaction: no such ledger"};
+    }
+    journalRow.ledger = ledgerRows.front();
+    mapper.Create(journalRow);
+
+    for (std::size_t i = 0; i < action.legs.size(); ++i) {
+        db::TransactionLegRecord legRow;
+        legRow.journal = journalRow;
+        legRow.account = legAccounts[i];
+        legRow.amountNum = action.legs[i].amount.numerator;
+        legRow.amountDen = action.legs[i].amount.denominator;
+        legRow.amountDp = static_cast<int>(action.legs[i].amount.decimalPlaces.value);
+        legRow.currencyCode = legAccounts[i].currencyCode.Value();
+        mapper.Create(legRow);
+    }
+    sqlTxn.Commit();
+
+    return execute(GetLedger{.ledgerId = action.ledgerId});
 }
 
 }  // namespace ledger

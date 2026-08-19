@@ -2,6 +2,7 @@
 #pragma once
 
 #include "ledger/dto/account_dto.hpp"
+#include "ledger/dto/transaction_dto.hpp"
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
@@ -44,6 +45,18 @@ class LedgerModel {
     /// @return Every account in the ledger, per the ladder-wide
     ///         full-rebuilt-state convention.
     GetLedgerResult execute(const GetLedger& action);
+
+    /// @brief Records a multi-leg transaction against `action.ledgerId`'s
+    ///        accounts, enforcing the per-currency zero-sum invariant
+    ///        (design spec §1): each leg's amount is partitioned by the
+    ///        currency of the account it names, and every partition must
+    ///        sum to canonical zero, or `ZeroSumViolation` is thrown and no
+    ///        row is written (the whole action runs inside one
+    ///        `Lightweight::SqlTransaction`).
+    /// @param action The ledger id, description, date, and legs to record.
+    /// @return The full rebuilt ledger state, per the ladder-wide
+    ///         full-rebuilt-state convention.
+    GetLedgerResult execute(const StoreTransaction& action);
 };
 
 }  // namespace ledger
@@ -86,6 +99,17 @@ struct morph::model::ActionKeyTraits<ledger::GetLedger> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
     static std::string key(const ledger::GetLedger& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
+
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::StoreTransaction> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::StoreTransaction& action) {
         return morph::model::keyToString(*action.ledgerId);
     }
 };

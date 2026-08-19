@@ -3,8 +3,11 @@
 
 #include "ledger/core/types.hpp"
 
+#include <morph/util/datetime.hpp>
 #include <morph/util/rational.hpp>
 
+#include <algorithm>
+#include <string>
 #include <vector>
 
 namespace ledger {
@@ -15,6 +18,23 @@ namespace ledger {
 struct TransactionLeg {
     AccountId accountId;
     morph::math::Rational amount;  // real currency comes from the account this leg names, per design spec §2
+};
+
+/// @brief Records a multi-leg transaction against `ledgerId`'s accounts,
+///        enforcing design spec §1's per-currency zero-sum invariant: every
+///        leg's amount is partitioned by the account it names' own
+///        currency, and each partition's amounts must sum to canonical
+///        zero (`LedgerModel::execute` throws `ZeroSumViolation` otherwise).
+struct StoreTransaction {
+    LedgerId ledgerId;
+    std::string description;
+    morph::time::Timestamp date;
+    std::vector<TransactionLeg> legs;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return ledgerId.hasValue() && !description.empty() && legs.size() >= 2 &&
+               std::ranges::all_of(legs, [](const auto& leg) { return leg.accountId.hasValue(); });
+    }
 };
 
 }  // namespace ledger
