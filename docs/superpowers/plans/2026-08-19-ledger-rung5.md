@@ -1315,7 +1315,7 @@ non-auto-increment id equivalent, and
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
 
     model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "Checking",
@@ -1389,7 +1389,7 @@ git commit -m "ledger: LedgerModel skeleton -- OpenAccount, GetLedger"
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
@@ -1410,7 +1410,7 @@ TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model
 }
 
 TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "[ledger][model]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     // ... open two accounts as above ...
     CHECK_THROWS_AS(
@@ -1471,7 +1471,7 @@ git commit -m "ledger: StoreTransaction -- per-currency zero-sum invariant"
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently", "[ledger][model]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "USD Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
@@ -1545,11 +1545,12 @@ git commit -m "ledger: foreign-amount pairs -- multi-currency, per-currency zero
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("GetBudgetReport sums matching legs in-model, exactly", "[ledger][budget]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel ledgerModel{ledger::LedgerId{1}};
     ledger::BudgetModel budgetModel{ledger::LedgerId{1}};
     // Open accounts, create a category, create a budget against it, store
@@ -1613,7 +1614,7 @@ git commit -m "ledger: BudgetModel -- budgets, limits, in-model spent-so-far agg
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][security]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     // Drive the call with an empty/cleared principal in context -- use
     // whichever injectable-clock/context-override mechanism an existing
@@ -1697,11 +1698,12 @@ reinvent it.
 // examples/ledger/tests/test_rule_model.cpp
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/models/rule_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("CreateRule persists a rule at version 1", "[ledger][rule]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::RuleModel model{ledger::LedgerId{1}};
     auto ruleId = model.execute(ledger::CreateRule{
         .ledgerId = ledger::LedgerId{1}, .trigger = ledger::RuleTrigger::DescriptionContains,
@@ -1808,7 +1810,7 @@ Expected: PASS.
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEntry::seq", "[ledger][rule][journal]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::RuleModel ruleModel{ledger::LedgerId{1}};
     ledger::LedgerModel ledgerModel{ledger::LedgerId{1}};
     ruleModel.execute(ledger::CreateRule{.ledgerId = ledger::LedgerId{1},
@@ -2070,7 +2072,7 @@ git commit -m "ledger: Rational overflow fuzz test + two named framework finding
 ```cpp
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances", "[ledger][undo]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     // Open two accounts, StoreTransaction a multi-currency, multi-leg
     // journal, record the resulting balances, UndoTransaction it, and
@@ -2145,11 +2147,12 @@ before implementing — copy the opId-ledger pattern precisely.
 // examples/ledger/tests/test_ledger_import.cpp
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/models/ledger_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("Replaying the same opId is a safe no-op", "[ledger][import]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     ledger::ImportOpId opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"chunk-1"});
     std::string csv = "date,description,amount\n2026-01-01,Coffee,-4.50\n";
@@ -2160,7 +2163,7 @@ TEST_CASE("Replaying the same opId is a safe no-op", "[ledger][import]") {
 }
 
 TEST_CASE("Re-importing the same statement under a different opId is caught by content-hash dedup", "[ledger][import]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     std::string csv = "date,description,amount\n2026-01-01,Coffee,-4.50\n";
 
@@ -2238,11 +2241,12 @@ git commit -m "ledger: CSV import -- opId chunk dedup + content-hash cross-impor
 // examples/ledger/tests/test_ledger_reports.cpp
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/models/ledger_model.hpp"
+#include "testkit/db_fixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending to Done", "[ledger][reports]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     ledger::LedgerModel model{ledger::LedgerId{1}};
     // ... open accounts, store a few transactions ...
 
@@ -3348,13 +3352,14 @@ git commit -m "ledger: QML views + gui/main.cpp, offscreen smoke test"
 #include "testkit/backend_rig.hpp"
 #include "testkit/client_pool.hpp"
 #include "testkit/convergence.hpp"
+#include "testkit/db_fixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdlib>
 
 TEST_CASE("N clients storing concurrent transactions converge, legs always sum zero", "[ledger][stress]") {
-    ledger::db::setup();
+    morph::ladder::testkit::DbFixture fixture;
     BackendRig rig{Mode::Local};
 
     const int nClients = std::getenv("MORPH_LADDER_CLIENTS") ? std::atoi(std::getenv("MORPH_LADDER_CLIENTS")) : 4;
