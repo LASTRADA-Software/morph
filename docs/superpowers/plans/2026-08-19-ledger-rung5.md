@@ -1283,56 +1283,92 @@ git commit -m "ledger: account_dto.hpp -- OpenAccount, GetLedger"
 - Create: `examples/ledger/src/models/ledger_model.cpp`
 - Test: `examples/ledger/tests/test_ledger_model.cpp`
 
+**Correction from plan self-review**: the original draft assumed a keyed
+model takes its key as a constructor argument
+(`LedgerModel model{LedgerId{1}}`) and that `BRIDGE_KEY_FROM` is used for
+every keyed action including the first. Both are wrong, verified against
+`polls::PollModel` (`examples/polls/include/polls/models/poll_model.hpp`,
+`examples/polls/tests/test_poll_model.cpp`): a keyed model is **plain
+default-constructible** (`PollModel model;`, no key argument anywhere) —
+the "key" is a routing concept the `Bridge`/registry layer uses to find
+or create the right *shared instance* over the wire; a model's own
+`execute()` methods just read whatever key field the *action* carries.
+`BRIDGE_MODEL_KEY(M, A, MEMBER)` (`include/morph/core/model_key.hpp`) is
+used exactly **once**, on the model's *first* keyed action — it also
+establishes `ModelKeyTraits<M>::PrimaryKey`. Every *other* action sharing
+the same key type uses `BRIDGE_KEY_FROM(A, MEMBER)` instead (which only
+adds `ActionKeyTraits<A>`, not `ModelKeyTraits<M>` — using it on the first
+action fails to compile). Since every `ledger` action already carries its
+own `ledgerId` explicitly (unlike `polls::GetPollState`, which relies on
+`PollModel`'s private `_pollId` cache set by a prior `OpenPoll` call),
+`LedgerModel` needs **no private caching member at all** — simpler than
+`PollModel`, not a peer of it.
+
 **Interfaces:**
 - Consumes: Tasks 2–6's types/entities/DTOs; `BRIDGE_REGISTER_MODEL`,
-  `BRIDGE_REGISTER_ACTION`, `BRIDGE_KEY_FROM` (`include/morph/core/
-  registry.hpp`, `model_key.hpp` — exact signatures confirmed against
-  `examples/bank/include/bank/models/transaction_model.hpp`'s usage).
-- Produces: `ledger::LedgerModel` registered and keyed by `LedgerId`
-  (`BRIDGE_KEY_FROM(OpenAccount, ledgerId)` / `BRIDGE_KEY_FROM(GetLedger,
-  ledgerId)`), implementing `execute(OpenAccount)` and `execute(GetLedger)`
-  only in this task — `StoreTransaction` lands in Task 8.
+  `BRIDGE_REGISTER_ACTION`, `BRIDGE_MODEL_KEY`, `BRIDGE_KEY_FROM`
+  (`include/morph/core/registry.hpp`, `model_key.hpp` — confirmed against
+  `polls::PollModel`'s real registration block).
+- Produces: `ledger::LedgerModel`, a plain default-constructible class
+  (`BRIDGE_MODEL_KEY(LedgerModel, OpenAccount, &OpenAccount::ledgerId)` —
+  `OpenAccount` is the model's first keyed action, establishing
+  `ModelKeyTraits<LedgerModel>::PrimaryKey`; `BRIDGE_KEY_FROM(GetLedger,
+  &GetLedger::ledgerId)` for the second), implementing
+  `execute(OpenAccount)` and `execute(GetLedger)` only in this task —
+  `StoreTransaction` lands in Task 8, and per `polls::PollModel`'s own
+  documented incremental-registration discipline (its file's own top
+  comment: `BRIDGE_REGISTER_ACTION` needs a linkable `execute()` body at
+  static-init link time, so an action is never registered ahead of its
+  body existing), Task 8 adds its own `BRIDGE_REGISTER_ACTION` line
+  alongside its own `.cpp` body, not this task.
   `TransactionLeg { accountId: AccountId, amount: /* resolved per Task 6's
   note */ }` declared in `transaction_dto.hpp` ahead of `StoreTransaction`
   itself so Task 8 can use it.
 
 - [ ] **Step 1: Read `polls::PollModel`'s keyed-model registration shape**
 
-Read `examples/polls/include/polls/models/poll_model.hpp` for the
-`BRIDGE_REGISTER_MODEL`/`BRIDGE_KEY_FROM` pattern on a model keyed by a
-non-auto-increment id equivalent, and
-`examples/bank/include/bank/models/transaction_model.hpp` for the
-`BRIDGE_REGISTER_ACTION(M, A, NAME[, Loggable])` variadic form.
+Read `examples/polls/include/polls/models/poll_model.hpp` in full
+(especially its file-level comment on the incremental-registration
+discipline and the `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` block at the
+bottom) and `examples/polls/tests/test_poll_model.cpp` (for the plain
+`PollModel model;` construction pattern) before writing any code.
 
 - [ ] **Step 2: Write the failing model test**
 
 ```cpp
 // examples/ledger/tests/test_ledger_model.cpp
 // SPDX-License-Identifier: Apache-2.0
+#include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
-    ledger::LedgerModel model{ledger::LedgerId{1}};
+    Lightweight::DataMapper mapper;
+    // This rung has no CreateLedger action in scope -- see Step 4's own
+    // note -- so the test seeds the ledgers row directly, mirroring Task
+    // 5's own schema test.
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
-    model.execute(ledger::OpenAccount{.ledgerId = ledger::LedgerId{1}, .name = "Checking",
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
 
-    auto result = model.execute(ledger::GetLedger{.ledgerId = ledger::LedgerId{1}});
+    auto result = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
     REQUIRE(result.accounts.size() == 1);
     CHECK(result.accounts[0].name == "Checking");
 }
 ```
 
-Confirm the exact constructor/`execute` call shape against
-`kanban::BoardModel`'s or `polls::PollModel`'s own test file before
-finalizing — a keyed model's constructor signature and whether `execute`
-is called directly (single-threaded unit test) or through a
-`BridgeHandler` varies by rung's existing test convention; match whichever
-`examples/polls/tests/test_poll_model.cpp` uses.
+This test's `LedgerModel model;` (no constructor argument) is copied
+verbatim from `polls::PollModel`'s own real, already-compiling test
+pattern — not a guess.
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -1341,12 +1377,167 @@ Expected: FAIL to compile.
 
 - [ ] **Step 4: Implement `transaction_dto.hpp`'s `TransactionLeg` (forward declaration only, full `StoreTransaction` in Task 8) and `ledger_model.hpp`/`.cpp`**
 
-`ledger_model.hpp` declares `class LedgerModel` with a constructor taking
-the keying `LedgerId`, and `execute(OpenAccount) -> void`,
-`execute(GetLedger) -> GetLedgerResult`. `ledger_model.cpp` implements
-both against `Lightweight::GlobalDataMapperPool()` per
-`IMPLEMENTATION.md` rule 4 — acquire a connection for the duration of one
-`execute()` call, never hold one across calls.
+```cpp
+// examples/ledger/include/ledger/dto/transaction_dto.hpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include "ledger/core/types.hpp"
+
+#include <morph/util/rational.hpp>
+
+#include <vector>
+
+namespace ledger {
+
+/// @brief One leg of a `StoreTransaction` (Task 8) or the multi-client
+///        stress harness (Task 23). Declared ahead of `StoreTransaction`
+///        itself, per this task's own scope.
+struct TransactionLeg {
+    AccountId accountId;
+    morph::math::Rational amount;  // real currency comes from the account this leg names, per design spec §2
+};
+
+}  // namespace ledger
+```
+
+```cpp
+// examples/ledger/include/ledger/models/ledger_model.hpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
+
+#include "ledger/dto/account_dto.hpp"
+
+#include <morph/core/model_key.hpp>
+#include <morph/core/registry.hpp>
+
+namespace ledger {
+
+/// @brief Accounts + transaction journal, keyed by `LedgerId` (design spec
+///        §1) -- one ledger per book. Plain default-constructible, per
+///        `polls::PollModel`'s own real shape: the key lives in each
+///        action, not in the model instance. No private caching member is
+///        needed here (unlike `PollModel`'s `_pollId`) because every
+///        action this model implements carries its own `ledgerId`
+///        explicitly.
+class LedgerModel {
+  public:
+    /// @brief Creates an account in the ledger named by `action.ledgerId`.
+    ///        The model's first keyed action -- `BRIDGE_MODEL_KEY(
+    ///        LedgerModel, OpenAccount, &OpenAccount::ledgerId)`.
+    /// @param action Ledger id, name, kind, and currency for the new account.
+    void execute(const OpenAccount& action);
+
+    /// @brief Returns the full current state of the ledger named by
+    ///        `action.ledgerId`.
+    /// @param action The ledger id.
+    /// @return Every account in the ledger, per the ladder-wide
+    ///         full-rebuilt-state convention.
+    GetLedgerResult execute(const GetLedger& action);
+};
+
+}  // namespace ledger
+
+BRIDGE_REGISTER_MODEL(ledger::LedgerModel, "LedgerModel")
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::OpenAccount, "OpenAccount")
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetLedger, "GetLedger", ::morph::model::Loggable::No)
+
+BRIDGE_MODEL_KEY(ledger::LedgerModel, ledger::OpenAccount, &ledger::OpenAccount::ledgerId);
+BRIDGE_KEY_FROM(ledger::GetLedger, &ledger::GetLedger::ledgerId);
+```
+
+`BRIDGE_REGISTER_ACTION`'s optional `::morph::model::Loggable::No` on
+`GetLedger` mirrors `polls::PollModel`'s own convention of marking
+read-only query actions non-loggable (`GetPollState`,
+`GetEventsSince`) — confirm this is still the right default for `GetLedger`
+specifically (a read has no side effect to audit) before finalizing;
+`OpenAccount` stays loggable (default), since it's a mutation.
+
+```cpp
+// examples/ledger/src/models/ledger_model.cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
+#include "ledger/models/ledger_model.hpp"
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+
+namespace ledger {
+
+void LedgerModel::execute(const OpenAccount& action) {
+    if (!action.validate()) {
+        throw ValidationError{"OpenAccount: ledgerId and name are required"};
+    }
+    Lightweight::DataMapper mapper;
+    // The ledger row must already exist -- this rung's scope has no
+    // CreateLedger action (see Step 4's own note); load it by primary key
+    // rather than fabricating a stub LedgerRecord, since BelongsTo
+    // assignment needs the real persisted parent (per
+    // polls::db::OptionRecord's own `opt.poll = poll;` usage, where `poll`
+    // is a row that has actually round-tripped through Create/Query).
+    auto ledgerRows =
+        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"OpenAccount: no such ledger"};
+    }
+    db::AccountRecord accountRow;
+    accountRow.ledger = ledgerRows.front();
+    accountRow.name = action.name;
+    accountRow.kind = static_cast<int>(action.kind);
+    accountRow.currencyCode = currencyToCode(action.currency);  // confirm/implement this helper -- see note below
+    mapper.Create(accountRow);
+}
+
+GetLedgerResult LedgerModel::execute(const GetLedger& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetLedger: ledgerId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::AccountRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *action.ledgerId)
+                    .All();
+    GetLedgerResult result;
+    result.accounts.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.accounts.push_back(AccountInfo{
+            .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
+            .name = std::string{row.name.Value().ToStringView()},
+            .kind = static_cast<AccountKind>(row.kind.Value()),
+            .currency = codeToCurrency(row.currencyCode.Value().ToStringView()),
+            .balance = morph::math::Rational{morph::math::Numerator{0}, morph::math::Denominator{1},
+                                              morph::math::DecimalPlaces{2}},  // no legs exist yet at this
+                                                                                // task's scope -- Task 8
+                                                                                // computes a real balance
+        });
+    }
+    return result;
+}
+
+}  // namespace ledger
+```
+
+**Note: ledger provisioning is out of this rung's scope.**
+`OpenAccount`'s `ledgerId` names an *existing* ledger — there is no
+`CreateLedger` action anywhere in this rung's scope (design spec §1
+lists `LedgerModel` as "keyed by ledger id," implying ledgers are
+provisioned some other way, e.g. an app-level seed/admin step outside
+this plan). Step 2's test above already reflects this: it seeds the
+`ledgers` row itself, mirroring Task 5's own schema test, rather than
+assuming `execute(OpenAccount)` auto-creates one.
+
+**One real thing this implementation needs that this task must add**:
+`currencyToCode`/`codeToCurrency` — small free functions
+(`std::string_view currencyToCode(Currency)` /
+`Currency codeToCurrency(std::string_view)`) converting between the
+`Currency` enum and its 3-letter DB code (`"USD"`, `"EUR"`, `"JPY"`,
+`"KRW"`) — a natural fit for `ledger/core/units.hpp` (Task 3), added
+as a small addition to that file in this task rather than duplicated
+ad hoc in every model that needs it. Add the declaration to
+`units.hpp` and the definition to a new `units.cpp` (or, if the
+switch is small enough to stay header-only and `constexpr`, directly
+in `units.hpp`) — confirm which convention fits this codebase's
+existing header-only-vs-`.cpp`-split pattern for small pure functions
+before choosing.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
