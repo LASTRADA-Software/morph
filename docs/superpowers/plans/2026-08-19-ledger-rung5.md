@@ -2156,19 +2156,21 @@ has no way to record which category an account belongs to.
 // IMPLEMENTATION.md rule 4, a later timestamp than Task 4's own highest
 // (20260819000011):
 LIGHTWEIGHT_SQL_MIGRATION(20260819000012, "Add category_id to accounts") {
-    plan.AlterTable("accounts").AddColumn("category_id", Bigint());  // nullable by default -- confirm exact
-                                                                        // AlterTable/AddColumn method names and
-                                                                        // nullable-by-default behavior against
-                                                                        // Lightweight's real migration DSL before
-                                                                        // finalizing; no existing rung's schema.cpp
-                                                                        // has an ALTER TABLE migration to copy from,
-                                                                        // so this is this plan's least-verified SQL
-                                                                        // DSL call -- read Lightweight/SqlMigration.hpp
-                                                                        // and Lightweight/SqlQuery/MigrationPlan.hpp
-                                                                        // directly if CreateTableIfNotExists's own
-                                                                        // shape doesn't have an obvious ALTER analogue.
+    plan.AlterTable("accounts").AddNotRequiredForeignKeyColumn("category_id", Bigint(), categoriesRef());
 }
 ```
+
+`AlterTable(std::string_view)` returns a `SqlAlterTableQueryBuilder`
+(`Lightweight/SqlQuery/Migrate.hpp`), whose
+`AddNotRequiredForeignKeyColumn(columnName, columnType,
+referencedColumn)` is the verified real method for exactly this shape (a
+nullable FK column added via `ALTER TABLE`) — confirmed directly against
+the header rather than guessed; no existing rung's `schema.cpp` has an
+`ALTER TABLE` migration to copy from, so this is the first one in the
+codebase, but the method itself is real and unambiguous. `categoriesRef()`
+is the same `SqlForeignKeyReferenceDefinition` helper Task 4's own
+`schema.cpp` already declares in its anonymous namespace — reuse it, do
+not redeclare.
 
 ```cpp
 // Modify AccountRecord in examples/ledger/include/ledger/db/ledger_entity.hpp:
