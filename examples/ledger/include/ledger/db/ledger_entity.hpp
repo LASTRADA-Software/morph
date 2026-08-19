@@ -27,6 +27,20 @@ struct LedgerRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 1
 };
 
+// Declared here, ahead of AccountRecord, rather than in its previous
+// position further down this file: AccountRecord's new nullable `category`
+// BelongsTo (Task 10) forms a pointer-to-member of &CategoryRecord::id as a
+// template argument, which requires CategoryRecord to be a *complete* type
+// at that point (a forward declaration is not enough for BelongsTo's own
+// template parameter). CategoryRecord itself depends only on LedgerRecord
+// (already declared above), so moving it here introduces no cycle.
+struct CategoryRecord {
+    static constexpr std::string_view TableName = "categories";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
+};
+
 struct AccountRecord {
     static constexpr std::string_view TableName = "accounts";
     Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
@@ -34,6 +48,12 @@ struct AccountRecord {
     Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
     Light::Field<int, Light::SqlRealName{"kind"}> kind;  // 3
     Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;  // 4
+    // Nullable: an account need not belong to a category (Task 10's schema
+    // addition -- design spec §3's budget-report join target). Added via an
+    // ALTER TABLE migration (schema.cpp's 20260819000012), the first such
+    // migration in this codebase.
+    Light::BelongsTo<&CategoryRecord::id, Light::SqlRealName{"category_id"}, Light::SqlNullable::Null>
+        category;  // 5
 };
 
 struct TransactionJournalRecord {
@@ -64,13 +84,6 @@ struct TransactionLegRecord {
     Light::Field<std::optional<int>, Light::SqlRealName{"foreign_amount_dp"}> foreignAmountDp;  // 9
     Light::Field<std::optional<Light::SqlAnsiString<3>>, Light::SqlRealName{"foreign_currency_code"}>
         foreignCurrencyCode;  // 10
-};
-
-struct CategoryRecord {
-    static constexpr std::string_view TableName = "categories";
-    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
-    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
 };
 
 struct BudgetRecord {

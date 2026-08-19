@@ -169,3 +169,14 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000011, "Create ledger_report_jobs table") {
                                               // never Text() -- see pastebin's own `content` column)
         .RequiredColumn("created_at_ms", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000012, "Add category_id to accounts") {
+    // First ALTER TABLE migration in this codebase (Task 10): a nullable FK
+    // column added to an already-created table, rather than a column
+    // declared as part of CREATE TABLE. AlterTable(std::string_view) returns
+    // a SqlAlterTableQueryBuilder (Lightweight/SqlQuery/Migrate.hpp);
+    // AddNotRequiredForeignKeyColumn(columnName, columnType, referencedColumn)
+    // is its nullable-FK-column-add method, verified directly against that
+    // header.
+    plan.AlterTable("accounts").AddNotRequiredForeignKeyColumn("category_id", Bigint(), categoriesRef());
+}
