@@ -254,7 +254,7 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
 
         for (int a = 0; a < kMovesPerBridge; ++a) {
             const QString destColumn = columns[static_cast<std::size_t>(a) % columns.size()];
-            const auto position = static_cast<int>((a * 3 + static_cast<int>(i)) % static_cast<int>(kClients));
+            const auto position = (a * 3 + static_cast<int>(i)) % static_cast<int>(kClients);
             ++outstanding;
             bridge.moveTask(taskIds[i], destColumn, swimlaneId, position);
         }
