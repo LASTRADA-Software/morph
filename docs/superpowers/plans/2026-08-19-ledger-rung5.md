@@ -923,16 +923,58 @@ Read `examples/bank/include/bank/db/account_entity.hpp` (for the
 exact `ImportedOpRecord` shape this rung's `ledger::db::ImportedOpRecord`
 mirrors verbatim, per design spec §8).
 
+**Correction from plan self-review**: Step 2's original test called
+`ledger::db::setup()` directly — same error Task 4 already corrected;
+tests use `DbFixture`, never `setup()`. Fixed below. Step 4's entity file
+was also left with a "follow the same shape" ellipsis for 9 of 11
+entities — replaced with the complete file, every field verified against
+real Lightweight usage: `Light::Field<std::optional<T>, ...>` for a plain
+nullable column (confirmed real:
+`Lightweight/DataBinder/StdOptional.hpp` provides
+`SqlDataBinder<std::optional<T>>`, and `Field.hpp`'s own
+`detail::IsStdOptionalType` exists specifically to recognize this case —
+this is NOT a guess needing further verification), and
+`Light::BelongsTo<&Target::id, Light::SqlRealName{"col"}>` for a required
+FK / `..., Light::SqlNullable::Null>` for a nullable FK (confirmed against
+`bank::db::TxnRecord`'s real nullable `counterparty` field). This task has
+no nullable FK (every `BelongsTo` here is required), only plain nullable
+scalar columns on `TransactionLegRecord` and `ReportJobRecord`.
+
 - [ ] **Step 2: Write the failing test extending schema coverage**
 
 ```cpp
 // Append to examples/ledger/tests/test_ledger_schema.cpp
 TEST_CASE("AccountRecord round-trips through the ledgers/accounts tables", "[ledger][db]") {
-    ledger::db::setup();
-    // Use db_fixture.hpp per TESTING.md; Create a LedgerRecord, then an
-    // AccountRecord BelongsTo it, Query it back, assert fields match.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    REQUIRE(ledgerRow.id.Value() != 0);
+
+    ledger::db::AccountRecord accountRow;
+    accountRow.ledger = ledgerRow;  // BelongsTo assignment: the whole parent record, per
+                                     // polls::db::OptionRecord's real usage (opt.poll = poll;),
+                                     // never a raw .SetKey(...) call
+    accountRow.name = "Checking";
+    accountRow.kind = 0;  // AccountKind::Asset
+    accountRow.currencyCode = "USD";
+    mapper.Create(accountRow);
+    REQUIRE(accountRow.id.Value() != 0);
+
+    auto loaded = mapper.Query<ledger::db::AccountRecord>()
+                      .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::ledger>, "=", ledgerRow.id.Value())
+                      .All();
+    REQUIRE(loaded.size() == 1);
+    CHECK(loaded.front().name.Value() == "Checking");
 }
 ```
+
+This test's `DataMapper::Create`/`Query<T>().Where(...).All()`/
+`BelongsTo` assignment shape is copied verbatim (adjusted for
+ledger's own types) from `examples/polls/tests/test_polls_schema.cpp`'s
+real, already-compiling schema test — not a guess.
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -949,38 +991,147 @@ Expected: FAIL to compile — `ledger_entity.hpp` doesn't exist.
 #include <Lightweight/DataMapper/Field.hpp>
 
 #include <cstdint>
-#include <string>
+#include <optional>
+#include <string_view>
 
 namespace ledger::db {
 
 struct LedgerRecord {
     static constexpr std::string_view TableName = "ledgers";
-    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 1
 };
 
 struct AccountRecord {
     static constexpr std::string_view TableName = "accounts";
-    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;
-    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;
-    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;
-    Light::Field<int, Light::SqlRealName{"kind"}> kind;
-    Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
+    Light::Field<int, Light::SqlRealName{"kind"}> kind;  // 3
+    Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;  // 4
 };
 
-// ... TransactionJournalRecord, TransactionLegRecord, CategoryRecord,
-// BudgetRecord, BudgetLimitRecord, RuleRecord, ImportedOpRecord,
-// ImportedTxnHashRecord, ReportJobRecord follow the same shape, per design
-// spec §1's field list for each. TransactionLegRecord's foreign-amount
-// triple (foreignAmountNum/Den/Dp, foreignCurrencyCode) uses
-// std::optional<std::int64_t>/std::optional<Light::SqlAnsiString<3>> for
-// nullability, matching Lightweight's own nullable-column convention
-// (confirm exact nullable-field wrapper against an existing nullable
-// column elsewhere in the codebase, e.g. bank::db::TxnRecord's nullable
-// counterparty BelongsTo, before writing this).
+struct TransactionJournalRecord {
+    static constexpr std::string_view TableName = "transaction_journals";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<256>, Light::SqlRealName{"description"}> description;  // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"date"}> date{0};  // 3 -- epoch millis
+    Light::Field<std::optional<Light::SqlAnsiString<64>>, Light::SqlRealName{"causal_parent_id"}>
+        causalParentId;  // 4 -- nullable, per design spec §5's causalParentId shape
+};
+
+struct TransactionLegRecord {
+    static constexpr std::string_view TableName = "transaction_legs";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&TransactionJournalRecord::id, Light::SqlRealName{"journal_id"}> journal;  // 1
+    Light::BelongsTo<&AccountRecord::id, Light::SqlRealName{"account_id"}> account;  // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"amount_num"}> amountNum{0};  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"amount_den"}> amountDen{1};  // 4
+    Light::Field<int, Light::SqlRealName{"amount_dp"}> amountDp{0};  // 5
+    Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;  // 6
+    // Nullable foreign-amount triple -- present only on a foreign-amount-pair
+    // leg (design spec §1 step 3). Plain std::optional<T> field, not a
+    // BelongsTo: confirmed real via Lightweight/DataBinder/StdOptional.hpp's
+    // SqlDataBinder<std::optional<T>> specialization.
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"foreign_amount_num"}> foreignAmountNum;  // 7
+    Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"foreign_amount_den"}> foreignAmountDen;  // 8
+    Light::Field<std::optional<int>, Light::SqlRealName{"foreign_amount_dp"}> foreignAmountDp;  // 9
+    Light::Field<std::optional<Light::SqlAnsiString<3>>, Light::SqlRealName{"foreign_currency_code"}>
+        foreignCurrencyCode;  // 10
+};
+
+struct CategoryRecord {
+    static constexpr std::string_view TableName = "categories";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
+};
+
+struct BudgetRecord {
+    static constexpr std::string_view TableName = "budgets";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"name"}> name;  // 2
+    Light::BelongsTo<&CategoryRecord::id, Light::SqlRealName{"category_id"}> category;  // 3
+};
+
+struct BudgetLimitRecord {
+    static constexpr std::string_view TableName = "budget_limits";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&BudgetRecord::id, Light::SqlRealName{"budget_id"}> budget;  // 1
+    Light::Field<Light::SqlAnsiString<7>, Light::SqlRealName{"month"}> month;  // 2 -- "YYYY-MM"
+    Light::Field<std::int64_t, Light::SqlRealName{"limit_num"}> limitNum{0};  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"limit_den"}> limitDen{1};  // 4
+    Light::Field<int, Light::SqlRealName{"limit_dp"}> limitDp{0};  // 5
+    Light::Field<Light::SqlAnsiString<3>, Light::SqlRealName{"currency_code"}> currencyCode;  // 6
+};
+
+struct RuleRecord {
+    static constexpr std::string_view TableName = "rules";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<int, Light::SqlRealName{"trigger"}> trigger{0};  // 2
+    Light::Field<Light::SqlAnsiString<256>, Light::SqlRealName{"match_text"}> matchText;  // 3
+    Light::Field<int, Light::SqlRealName{"action"}> action{0};  // 4
+    Light::Field<Light::SqlAnsiString<256>, Light::SqlRealName{"action_value"}> actionValue;  // 5
+    Light::Field<int, Light::SqlRealName{"version"}> version{1};  // 6
+};
+
+/// @brief Mirrors `bookmarks::db::ImportedOpRecord`'s exact shape (design
+///        spec §8): op-id ledger for chunk-retry dedup, keyed by
+///        `(owner_principal, op_id)`.
+struct ImportedOpRecord {
+    static constexpr std::string_view TableName = "ledger_imported_ops";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"owner_principal"}> ownerPrincipal;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_id"}> opId;  // 2
+    Light::Field<std::int64_t, Light::SqlRealName{"applied_at_ms"}> appliedAtMs{0};  // 3
+};
+
+/// @brief Cross-import duplicate detection (design spec §8) -- distinct
+///        from `ImportedOpRecord`; see that struct's own doc comment for
+///        the difference.
+struct ImportedTxnHashRecord {
+    static constexpr std::string_view TableName = "ledger_imported_txn_hashes";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"hash"}> hash;  // 2
+};
+
+struct ReportJobRecord {
+    static constexpr std::string_view TableName = "ledger_report_jobs";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"job_id"}> jobId;  // 2
+    Light::Field<int, Light::SqlRealName{"kind"}> kind{0};  // 3
+    Light::Field<int, Light::SqlRealName{"status"}> status{0};  // 4
+    // Nullable AND unbounded -- a combination no existing rung's entity
+    // needs yet (polls::db::VoteHistoryRecord::previousVotesJson is
+    // unbounded but always-populated, never nullable). Field<std::optional
+    // <T>, ...>'s wrapping is confirmed generic (StdOptional.hpp specializes
+    // SqlDataBinder<std::optional<T>> for any T with its own binder), so
+    // wrapping the same Light::SqlMaxDynamicAnsiString type
+    // polls::db::VoteHistoryRecord::previousVotesJson already uses in
+    // std::optional<> is the correct composition, not a new guess -- but
+    // this exact composition has no precedent in the codebase to copy
+    // verbatim, so build+test this field specifically before trusting it.
+    Light::Field<std::optional<Light::SqlMaxDynamicAnsiString>, Light::SqlRealName{"result_json"}>
+        resultJson;  // 5 -- nullable, unbounded (NVarchar(0) at the DDL layer); absent until the job completes
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 6
+};
 
 }  // namespace ledger::db
 ```
+
+Every field in this file except `resultJson` is checked directly against
+real, already-compiling entity code in this repo (bank/bookmarks/polls)
+and needs no further verification. `resultJson`'s
+`std::optional<Light::SqlMaxDynamicAnsiString>` composition is inferred
+from two separately-confirmed facts (optional-wrapping is generic;
+`SqlMaxDynamicAnsiString` is the real unbounded-string type) rather than
+copied from one existing example — build and test it specifically as the
+one field in this task worth double-checking.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
