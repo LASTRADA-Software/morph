@@ -59,8 +59,19 @@ TEST_CASE("Measure the row count at which partial-sum overflow occurs at ledger-
             if ((n & 1) != 0) {
                 result = result + term;
             }
-            term = term + term;
             n >>= 1;
+            // Skip doubling `term` once no remaining bit of `n` could ever
+            // consume it: an unconditional trailing double (as the naive
+            // "double every iteration" shape would do) squares `term` one
+            // step past what any candidate needs, overflowing int64_t --
+            // real UB -- for large `n` regardless of whether that final
+            // doubled value is ever added into `result`. Stopping here
+            // means every `term` this function ever computes is one this
+            // call actually consumes.
+            if (n == 0) {
+                break;
+            }
+            term = term + term;
         }
         return result;
     };
