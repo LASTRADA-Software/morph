@@ -382,7 +382,17 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
         script->flushBurst();
     }
 
-    REQUIRE(waitUntil([&outstanding] { return outstanding.load() == 0; }, std::chrono::milliseconds{20000}));
+    // 90s, not 20s: this loop's own real-thread-pool callback delivery
+    // (InlineExecutor, above) runs every .then()/.onError() directly on
+    // whichever pool worker resolves each completion, unlike the original
+    // Qt-based version's client-side callback delivery -- and ThreadSanitizer
+    // instrumentation adds a well-documented 5-15x slowdown on top of that.
+    // Confirmed empirically: this exact 200-action workload (4 clients x 50
+    // actions) finished in ~32s under real TSan instrumentation in CI, comfortably
+    // inside 90s but past the original, un-scaled 20s budget the Qt-based
+    // version used without ever actually needing more (its own callback
+    // delivery path happened to be fast enough not to hit this).
+    REQUIRE(waitUntil([&outstanding] { return outstanding.load() == 0; }, std::chrono::milliseconds{90000}));
     CAPTURE(failures.load());
 
     // Fetch one final GetBoardState and assert both design spec §8 invariants.
