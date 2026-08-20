@@ -6,6 +6,7 @@ severity: minor
 source: ledger rung 5, design spec §9
 disposition: open
 test: spec-cited
+issue: https://github.com/LASTRADA-Software/morph/issues/129
 ---
 
 `morph::exec::IExecutor`/`ThreadPoolExecutor` (include/morph/core/
