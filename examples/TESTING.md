@@ -232,11 +232,17 @@ DoD):
   scale via `MORPH_LADDER_CLIENTS` / `MORPH_LADDER_ACTIONS` env vars
   (soak-suite convention) — same CI run, no separate schedule. Kanban's
   stress case (`test_kanban_stress.cpp`, `[kanban][stress][tsan]`) runs at
-  N=4 — **in `Local` rig mode on `ThreadPoolExecutor`**: the repo's CI
-  deliberately keeps Qt stacks out of the `clang-asan`/`clang-tsan`/
-  `clang-ubsan` sanitizer legs ("a GUI stack under TSan is mostly noise"),
-  so this test exercises models + strands, not sockets, which lets it run
-  under real ThreadSanitizer without pulling Qt/QML into that matrix. A
+  N=4 — **against a bare `morph::bridge::Bridge`/`morph::backend::
+  LocalBackend` on a real `ThreadPoolExecutor`, never `BackendRig`**: the
+  repo's CI deliberately keeps Qt stacks out of the `clang-asan`/
+  `clang-tsan`/`clang-ubsan` sanitizer legs ("a GUI stack under TSan is
+  mostly noise"), and this test's own `Bridge`/`LocalBackend` construction
+  has zero Qt frames in its call graph (unlike `BackendRig`'s `Mode::Local`,
+  which always builds a real `morph::qt::QtExecutor` for client callback
+  delivery — see `docs/superpowers/plans/2026-08-19-kanban-tsan-ci-findings.md`
+  for why this test stopped using it), so this test exercises models +
+  strands, not sockets or Qt, which lets it run under real ThreadSanitizer
+  without pulling Qt/QML into that matrix. A
   dedicated CI job, `kanban-tsan` (`.github/workflows/ci.yml`), builds only
   `MORPH_LADDER_RUNGS=kanban` under the `clang-tsan` preset and runs this one
   test with `ctest -R ThreadSanitizer`, instrumented with `-fsanitize=thread`

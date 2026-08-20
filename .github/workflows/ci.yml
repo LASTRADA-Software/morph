@@ -303,15 +303,25 @@ jobs:
           path: build/clang-coverage/html/
 
   # ── Linux: kanban's concurrent-move stress test under ThreadSanitizer ──
-  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE runs entirely on
-  # Mode::Local's ThreadPoolExecutor{4} with no Qt/GUI involvement (see the
-  # test file's own header comment), so the "a GUI stack under TSan is
-  # mostly noise" rationale that keeps the ladder out of linux-sanitizers
-  # does not apply to this one test. This job builds only what that test
-  # needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban, no Qt GUI
-  # modules beyond the WebSockets backend the ladder testkit itself
+  # test_kanban_stress.cpp's [tsan]-tagged TEST_CASE drives BoardModel through
+  # a bare morph::bridge::Bridge/morph::backend::LocalBackend directly, on a
+  # real morph::exec::ThreadPoolExecutor{4}, with zero Qt frames anywhere in
+  # its call graph (see the test file's own header comment) -- so the "a GUI
+  # stack under TSan is mostly noise" rationale that keeps the ladder out of
+  # linux-sanitizers does not apply to this one test. This job builds only
+  # what that test needs -- MORPH_BUILD_LADDER=ON, MORPH_LADDER_RUNGS=kanban,
+  # no Qt GUI modules beyond the WebSockets backend the ladder testkit itself
   # requires -- to keep it a minimal, fast, TSan-clean addition rather than
   # pulling every rung's Qt Quick/QML code into the sanitizer matrix.
+  #
+  # (History: an earlier version of this test drove the same scenario through
+  # BackendRig{Mode::Local, ...}, whose Mode::Local unconditionally
+  # constructs a real morph::qt::QtExecutor for client-facing callback
+  # delivery -- morph#128 found 165 ThreadSanitizer warnings bottoming out in
+  # genuine Qt-internal frames reached through it, undetectable as real bugs
+  # or false positives from outside a TSan-instrumented Qt build. Rewriting
+  # the test to never construct a QtExecutor at all sidesteps the ambiguity
+  # entirely rather than resolving it.)
   kanban-tsan:
     name: Kanban / ThreadSanitizer
     runs-on: ubuntu-24.04

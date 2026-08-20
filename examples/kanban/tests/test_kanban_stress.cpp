@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Task 19: concurrent-move stress test, run under ThreadSanitizer in CI
-// (Mode::Local on ThreadPoolExecutor{4} only -- CI keeps Qt stacks out of the
-// sanitizer matrix, examples/TESTING.md's kanban-specific note).
+// (ThreadPoolExecutor{4} only -- CI keeps Qt stacks out of the sanitizer
+// matrix, examples/TESTING.md's kanban-specific note).
 //
 // This file's client-setup/interleave body was written only after reading
 // examples/common/testkit/strand_interleaver.hpp's real API, not against the
@@ -17,7 +17,7 @@
 //      `step()`/`runSchedule()`-d. It is exercised directly against
 //      `StrandExecutor` in test_strand_interleaver.cpp, naming the production
 //      `detail::` types by hand.
-//   2. `BackendRig{Mode::Local, ...}` builds its own `ThreadPoolExecutor`
+//   2. A `BackendRig{Mode::Local, ...}` builds its own `ThreadPoolExecutor`
 //      internally (backend_rig.hpp's Mode::Local branch) and hands it
 //      straight to `LocalBackend`, which wraps it in its own internal strand
 //      executor -- there is no seam for a test to substitute a
@@ -30,12 +30,12 @@
 // spec §8 actually asks for: `BoardModel` is keyed/shared per `projectId`
 // (`ModelKeyTraits<BoardModel>`, board_model.hpp), so every client attached to
 // the same project drives the *same* server-side instance, serialized behind
-// one strand backed by `Mode::Local`'s real `ThreadPoolExecutor{4}`. Determin-
-// ism here comes from `SeededScript`'s seeded RNG (reproducible action
-// sequence -- MORPH_STRESS_SEED to re-run a failure) and from the invariant
-// check happening only after every fired action has genuinely settled, not
-// from single-stepping the executor. Real concurrent dispatch across the
-// pool's 4 worker threads, racing on the shared strand, is exactly what a
+// one strand backed by a real `ThreadPoolExecutor{4}`. Determinism here comes
+// from `SeededScript`'s seeded RNG (reproducible action sequence --
+// MORPH_STRESS_SEED to re-run a failure) and from the invariant check
+// happening only after every fired action has genuinely settled, not from
+// single-stepping the executor. Real concurrent dispatch across the pool's 4
+// worker threads, racing on the shared strand, is exactly what a
 // ThreadSanitizer run over this test is meant to catch -- a `Completion`
 // resolving into a `.then/.onError` pair while another worker thread is still
 // inside `BoardModel::execute(MoveTaskPosition)` would be a real data race
@@ -48,16 +48,52 @@
 // during the run, only "generate one action, fire it, repeat" -- exactly
 // `next()`'s designed usage. Nothing here needs the eagerly-materialized
 // schedule TESTING.md's description would imply.
-#include "kanban/auth/kanban_authorizer.hpp"
+//
+// **No Qt anywhere in this file (fixing morph#128)**: the original version of
+// this test drove everything through `BackendRig{Mode::Local, ...}` and
+// `awaitQt`/`pumpUntil` (examples/common/testkit/pump.hpp), which the CI
+// job's own comment claimed involved "no Qt/GUI" -- a claim morph#128 proved
+// false: `Mode::Local` unconditionally constructs a real `morph::qt::
+// QtExecutor` for client-facing callback delivery (backend_rig.hpp's own
+// doc comment explains why: pool-thread callback delivery would race
+// pumpUntil/awaitQt's unsynchronized reads otherwise), and every one of the
+// 165 ThreadSanitizer warnings morph#128 catalogued bottoms out in genuine
+// Qt-internal frames (QMetaObject::invokeMethod, QCallableObject,
+// QObject::event) reached through that QtExecutor. Since a prebuilt,
+// non-TSan-instrumented Qt package can't be seen through by ThreadSanitizer,
+// those warnings are unusable evidence either way -- real bugs or false
+// positives, TSan cannot tell from outside an instrumented Qt build.
+//
+// This version drives `BoardModel` through a bare `morph::bridge::Bridge`
+// wrapping a `morph::backend::LocalBackend` directly (the exact pattern
+// `tests/test_concurrency_invariants.cpp`'s own concurrent-dispatch test
+// already uses), with `morph::testing::InlineExecutor`-equivalent semantics
+// for client-facing callback delivery (defined locally below -- `tests/
+// test_support.hpp` itself is private to the `tests/` target, not on
+// `examples/`'s include path, and the class is two lines) instead of
+// `QtExecutor`. `BoardModel`'s own `requireRole`/session checks are backend-
+// agnostic (they read `morph::session::current()` directly, never routed
+// through an `IAuthorizer` in `Mode::Local`'s old shape either -- confirmed
+// against board_model.hpp and backend_rig.hpp: `Mode::Local` never
+// constructs or uses an authorizer at all), so `Bridge::setDefaultSession`
+// still gates access exactly as before. `ModelKeyTraits<BoardModel>`'s
+// shared-per-project instance semantics are a `Bridge`-level mechanism
+// (`registerModelShared`), unaffected by how `Bridge`/`LocalBackend` were
+// constructed. The result: every code path this test exercises is the real
+// morph core (Bridge, LocalBackend, StrandExecutor, ThreadPoolExecutor,
+// Completion) with zero Qt frames anywhere in the call graph, making this
+// CI job's own "no Qt/GUI involvement" premise genuinely true rather than
+// merely claimed.
 #include "kanban/dto/project_dto.hpp"
 #include "kanban/models/board_model.hpp"
 #include "kanban/models/project_admin_model.hpp"
 
 #include "testkit/action_driver.hpp"
-#include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
-#include "testkit/pump.hpp"
 
+#include <morph/core/backend.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/session/session.hpp>
 #include <morph/session/session_auth.hpp>
 
@@ -65,26 +101,57 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 using morph::bridge::AllowShared;
+using morph::bridge::Bridge;
 using morph::bridge::BridgeHandler;
-using morph::ladder::testkit::awaitQt;
-using morph::ladder::testkit::BackendRig;
-using morph::ladder::testkit::DbFixture;
-using morph::ladder::testkit::Mode;
-using morph::ladder::testkit::pumpUntil;
 using morph::ladder::testkit::SeededScript;
 
 namespace {
 
+/// @brief Client-facing callback executor that runs every posted continuation
+///        immediately, on whichever thread resolves the `Completion` --
+///        never Qt's event loop. Same two-line shape as `morph::testing::
+///        InlineExecutor` (`tests/test_support.hpp`, private to the `tests/`
+///        target) and the identical role `test_concurrency_invariants.cpp`'s
+///        own `InlineExec` alias plays for `morph::bridge::Bridge`'s
+///        concurrent-dispatch test. `.then()`/`.onError()` bodies below only
+///        touch `std::atomic`s, so running them concurrently from multiple
+///        `ThreadPoolExecutor` worker threads (one per resolving completion)
+///        is race-free by construction -- no additional synchronization
+///        needed here.
+struct InlineExecutor : morph::exec::IExecutor {
+    void post(std::function<void()> fn) override { fn(); }
+};
+
+/// @brief Polls @p pred until it returns `true` or @p budget elapses,
+///        sleeping @p step between polls. Same shape as `morph::testing::
+///        waitUntil` (`tests/test_support.hpp`) and this file's own former
+///        `pumpUntil` call, minus the Qt event-loop pump -- nothing here
+///        needs one, since no callback in this file is ever queued onto a
+///        Qt event loop in the first place.
+template <typename Pred>
+[[nodiscard]] bool waitUntil(Pred pred, std::chrono::milliseconds budget = std::chrono::milliseconds{20000},
+                              std::chrono::milliseconds step = std::chrono::milliseconds{5}) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!pred()) {
+        if (std::chrono::steady_clock::now() >= deadline) {
+            return false;
+        }
+        std::this_thread::sleep_for(step);
+    }
+    return true;
+}
+
 /// @brief Builds a signed session `Context` for @p principal, issued by
 ///        @p issuer. Same pattern as test_shared_instance_lifecycle.cpp's
-///        `tokenContextFor` -- KanbanAuthorizer is SigningAuthorizer-derived,
-///        so a bare (unsigned) principal is not enough to pass `requireRole`.
+///        `tokenContextFor`.
 [[nodiscard]] morph::session::Context tokenContextFor(const morph::session::TokenIssuer& issuer,
                                                        std::string principal) {
     morph::session::Context ctx;
@@ -119,59 +186,112 @@ namespace {
 
 TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run under ThreadSanitizer",
           "[kanban][stress][tsan]") {
-    // Local rig mode on ThreadPoolExecutor only -- CI deliberately keeps Qt
-    // stacks out of the sanitizer matrix (design spec §8 / TESTING.md's own
-    // kanban-specific note).
-    DbFixture fixture;
-    constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
-    const auto authorizer =
-        std::make_shared<kanban::auth::KanbanAuthorizer>(std::string{kSecret}, morph::session::hmacSha256);
-    constexpr std::size_t kClients = 4;
-    BackendRig rig{Mode::Local, kClients, authorizer};
+    morph::ladder::testkit::DbFixture fixture;
 
+    // Real concurrent dispatch on a real pool -- no Qt anywhere in this
+    // file's call graph (see this file's own top comment for why that
+    // matters). `Bridge` owns the `LocalBackend`, which owns a strand over
+    // `workerPool`; every model action genuinely runs on one of these 4
+    // threads, serialized per-model-instance by the strand.
+    morph::exec::ThreadPoolExecutor workerPool{4};
+    Bridge bridge{std::make_unique<morph::backend::LocalBackend>(workerPool)};
+    InlineExecutor clientExecutor;
+
+    constexpr std::string_view kSecret = "test-secret-32-bytes-minimum!!!!";
     const morph::session::TokenIssuer issuer{std::string{kSecret}, morph::session::hmacSha256};
-    // Mode::Local's every "client" shares one Bridge (backend_rig.hpp's own
-    // doc comment), so all kClients calls to rig.bridge(i) return the same
-    // object -- setDefaultSession here just needs to run once, but calling it
-    // kClients times is harmless (each call simply overwrites the same
-    // default with an identical value) and keeps this loop mode-agnostic if
-    // this test is ever parameterized over Mode the way
-    // test_shared_instance_lifecycle.cpp's matrix case is.
-    for (std::size_t i = 0; i < kClients; ++i) {
-        rig.bridge(i).setDefaultSession(tokenContextFor(issuer, "alice"));
-    }
+    // `Mode::Local`'s own real shape shared one Bridge across every "client"
+    // (backend_rig.hpp's own doc comment); this test's 4 handlers below share
+    // this one `bridge` for the identical reason -- `setDefaultSession` here
+    // just needs to run once.
+    bridge.setDefaultSession(tokenContextFor(issuer, "alice"));
 
     // CreateProject via a plain (non-keyed) handler -- alice becomes this
     // project's Manager automatically (ProjectAdminModel::execute(CreateProject)).
-    auto creator = rig.client<kanban::ProjectAdminModel>(0);
-    const auto projectId = awaitQt(creator.execute(kanban::CreateProject{.name = "Stress Board"})).id;
+    BridgeHandler<kanban::ProjectAdminModel> creator{bridge, &clientExecutor};
+    kanban::CreateProjectResult createdProject;
+    {
+        std::atomic<bool> done{false};
+        creator.execute(kanban::CreateProject{.name = "Stress Board"})
+            .then([&](const kanban::CreateProjectResult& result) {
+                createdProject = result;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+    }
+    const auto projectId = createdProject.id;
 
     // Four independent AllowShared handlers, all attaching to the same
     // projectId -- BoardModel is keyed per-project, so all four share one
     // server-side instance and therefore one strand (board_model.hpp's
-    // ModelKeyTraits<BoardModel> specialization).
+    // ModelKeyTraits<BoardModel> specialization) -- a `Bridge`-level
+    // mechanism (`registerModelShared`), unaffected by dropping `BackendRig`.
+    constexpr std::size_t kClients = 4;
     std::vector<std::unique_ptr<BridgeHandler<kanban::BoardModel, AllowShared>>> handlers;
     for (std::size_t i = 0; i < kClients; ++i) {
-        handlers.push_back(
-            std::make_unique<BridgeHandler<kanban::BoardModel, AllowShared>>(rig.bridge(i), rig.executor()));
-        (void) awaitQt(handlers.back()->execute(kanban::OpenBoard{.projectId = projectId}));
+        handlers.push_back(std::make_unique<BridgeHandler<kanban::BoardModel, AllowShared>>(bridge, &clientExecutor));
+        std::atomic<bool> opened{false};
+        handlers.back()
+            ->execute(kanban::OpenBoard{.projectId = projectId})
+            .then([&](const kanban::GetBoardResult&) { opened.store(true); })
+            .onError([&](const std::exception_ptr&) { opened.store(true); });
+        REQUIRE(waitUntil([&] { return opened.load(); }));
     }
 
     // Seed the board: 2 columns (unlimited WIP -- a WIP-limit Conflict would
     // make MoveTaskPosition's failure path, not its exactly-once/renumbering
     // path, the thing under stress here), 1 swimlane, 8 tasks split across
-    // the two columns.
+    // the two columns. Seeding happens sequentially through handlers[0], each
+    // step awaited before the next -- no concurrency pressure needed yet,
+    // that starts once the board is populated.
     auto& seeder = *handlers[0];
-    const auto col1 = awaitQt(seeder.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0})).columns.back().id;
-    const auto col2 = awaitQt(seeder.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0})).columns.back().id;
-    const auto swimlaneId = awaitQt(seeder.execute(kanban::CreateSwimlane{.name = "Default"})).swimlanes.back().id;
+    kanban::ColumnId col1;
+    kanban::ColumnId col2;
+    kanban::SwimlaneId swimlaneId;
+    {
+        std::atomic<bool> done{false};
+        seeder.execute(kanban::CreateColumn{.name = "To Do", .wipLimit = 0})
+            .then([&](const kanban::GetBoardResult& state) {
+                col1 = state.columns.back().id;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+    }
+    {
+        std::atomic<bool> done{false};
+        seeder.execute(kanban::CreateColumn{.name = "Done", .wipLimit = 0})
+            .then([&](const kanban::GetBoardResult& state) {
+                col2 = state.columns.back().id;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+    }
+    {
+        std::atomic<bool> done{false};
+        seeder.execute(kanban::CreateSwimlane{.name = "Default"})
+            .then([&](const kanban::GetBoardResult& state) {
+                swimlaneId = state.swimlanes.back().id;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+    }
 
     std::vector<kanban::TaskId> taskIds;
     for (int i = 0; i < 8; ++i) {
         const auto columnId = (i % 2 == 0) ? col1 : col2;
-        const auto after = awaitQt(seeder.execute(kanban::CreateTask{
-            .columnId = columnId, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)}));
-        taskIds.push_back(after.tasks.back().id);
+        std::atomic<bool> done{false};
+        kanban::TaskId newTaskId;
+        seeder.execute(kanban::CreateTask{.columnId = columnId, .swimlaneId = swimlaneId, .title = "Task " + std::to_string(i)})
+            .then([&](const kanban::GetBoardResult& state) {
+                newTaskId = state.tasks.back().id;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+        taskIds.push_back(newTaskId);
     }
     REQUIRE(taskIds.size() == 8);
 
@@ -222,15 +342,18 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
     // Fire every client's ~50 MoveTaskPosition calls without awaiting between
     // them: BridgeHandler::execute() returns immediately with a Completion,
     // so this loop dispatches all kClients * kActionsPerClient actions before
-    // any of them necessarily has resolved. In Mode::Local, BoardModel's
-    // shared instance runs its actual work on the rig's real
-    // ThreadPoolExecutor{4} via LocalBackend's strand -- so with 4 clients
-    // each racing to post onto that one strand, this is genuine concurrent
-    // pressure on the same server-side instance, not single-threaded
-    // simulated interleaving. Completions still resolve one at a time (the
-    // strand serializes the *work*), but the *posting*/dispatch machinery
-    // around it runs from real, concurrently-scheduled pool threads --
-    // exactly what a ThreadSanitizer run over this test exists to check.
+    // any of them necessarily has resolved. BoardModel's shared instance runs
+    // its actual work on the rig's real ThreadPoolExecutor{4} via
+    // LocalBackend's strand -- so with 4 clients each racing to post onto
+    // that one strand, this is genuine concurrent pressure on the same
+    // server-side instance, not single-threaded simulated interleaving.
+    // Completions still resolve one at a time (the strand serializes the
+    // *work*), but the *posting*/dispatch machinery around it runs from real,
+    // concurrently-scheduled pool threads -- exactly what a ThreadSanitizer
+    // run over this test exists to check. `.then`/`.onError` now run inline
+    // on whichever pool thread resolves the completion (InlineExecutor,
+    // above), not on a Qt thread -- both callbacks only touch atomics, so
+    // this is race-free.
     std::atomic<int> outstanding{0};
     std::atomic<int> failures{0};
     for (std::size_t i = 0; i < kClients; ++i) {
@@ -259,11 +382,22 @@ TEST_CASE("Concurrent MoveTaskPosition calls (N=4) never desync positions -- run
         script->flushBurst();
     }
 
-    REQUIRE(pumpUntil([&outstanding] { return outstanding.load() == 0; }, std::chrono::milliseconds{20000}));
+    REQUIRE(waitUntil([&outstanding] { return outstanding.load() == 0; }, std::chrono::milliseconds{20000}));
     CAPTURE(failures.load());
 
     // Fetch one final GetBoardState and assert both design spec §8 invariants.
-    const auto finalState = awaitQt(handlers[0]->execute(kanban::GetBoardState{}));
+    kanban::GetBoardResult finalState;
+    {
+        std::atomic<bool> done{false};
+        handlers[0]
+            ->execute(kanban::GetBoardState{})
+            .then([&](const kanban::GetBoardResult& state) {
+                finalState = state;
+                done.store(true);
+            })
+            .onError([&](const std::exception_ptr&) { done.store(true); });
+        REQUIRE(waitUntil([&] { return done.load(); }));
+    }
 
     if (!positionsAreDenseAndUnique(finalState)) {
         for (const auto& column : finalState.columns) {
