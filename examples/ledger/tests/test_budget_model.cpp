@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+#include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
@@ -74,7 +75,52 @@ TEST_CASE("GetBudgetReport sums matching legs in-model, exactly", "[ledger][budg
                                         .amount = morph::math::Rational{Numerator{4550}, Denominator{1},
                                                                          DecimalPlaces{2}}}}});
 
+    // A third transaction dated outside the query month (February 2026,
+    // same Groceries account) -- proves the date-range filter actually
+    // excludes out-of-month legs rather than the test passing merely
+    // because no out-of-month transaction exists to wrongly include.
+    const auto februaryInstant = morph::time::Timestamp{morph::time::DateTime{
+        std::chrono::year{2026}, std::chrono::month{2}, std::chrono::day{15}, std::chrono::hours{12},
+        std::chrono::minutes{0}, std::chrono::seconds{0}}};
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Groceries out-of-month",
+        .date = februaryInstant,
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-9999}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{9999}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
     auto report = budgetModel.execute(ledger::GetBudgetReport{.budgetId = budgetId, .month = "2026-01"});
     CHECK(report.spent.numerator == 7550);
     CHECK(report.limit.numerator == 20000);
+}
+
+TEST_CASE("GetBudgetReport rejects a malformed month rather than silently misparsing it",
+          "[ledger][budget]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::BudgetModel budgetModel;
+    auto categoryId = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
+    auto budgetId = budgetModel.execute(
+        ledger::CreateBudget{.ledgerId = ledgerId, .name = "Monthly groceries", .categoryId = categoryId});
+
+    // "2026-13" has a well-formed length and all-digit positions but names
+    // no real calendar month -- must be rejected by validate() rather than
+    // silently producing a ~255-day range via unchecked month arithmetic.
+    CHECK_THROWS_AS(budgetModel.execute(ledger::GetBudgetReport{.budgetId = budgetId, .month = "2026-13"}),
+                    ledger::ValidationError);
+    CHECK_THROWS_AS(budgetModel.execute(ledger::SetBudgetLimit{
+                        .budgetId = budgetId, .month = "2026-13",
+                        .limit = morph::math::Rational{morph::math::Numerator{20000}, morph::math::Denominator{1},
+                                                        morph::math::DecimalPlaces{2}},
+                        .currency = ledger::Currency::USD}),
+                    ledger::ValidationError);
 }

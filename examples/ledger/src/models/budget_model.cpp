@@ -21,19 +21,34 @@ namespace {
 ///        A plain UTC month range -- not the local-timezone month-boundary
 ///        machinery a later task ("local-time month boundary handling")
 ///        builds; this task's scope only needs a defensible, simple
-///        conversion, and `SetBudgetLimit`/`GetBudgetReport` both already
-///        validate `month.size() == 7` before this runs.
-/// @param month The `"YYYY-MM"` string to parse.
+///        conversion. Callers (`SetBudgetLimit::validate()` /
+///        `GetBudgetReport::validate()`, `ledger/dto/budget_dto.hpp`) reject
+///        a malformed month -- wrong length, non-digit characters, or a
+///        month number outside `[1, 12]` -- before this ever runs. This
+///        function still double-checks both the `from_chars` parse status
+///        and `year_month_day::ok()` and throws `ValidationError` rather
+///        than silently returning a garbage range, as defense in depth
+///        against a caller that bypasses `validate()`.
+/// @param month The `"YYYY-MM"` string to parse. Must already have passed
+///        `detail::isValidYearMonth` (see `budget_dto.hpp`).
 /// @return The `[start, end)` epoch-millisecond range for that UTC month.
+/// @throws ValidationError if `month` cannot be parsed as digits or does
+///         not name a valid calendar month.
 [[nodiscard]] std::pair<std::int64_t, std::int64_t> monthRangeMs(const std::string& month) {
     int year = 0;
-    int monthNum = 1;
-    std::from_chars(month.data(), month.data() + 4, year);
-    std::from_chars(month.data() + 5, month.data() + 7, monthNum);
+    int monthNum = 0;
+    const auto yearResult = std::from_chars(month.data(), month.data() + 4, year);
+    const auto monthResult = std::from_chars(month.data() + 5, month.data() + 7, monthNum);
+    if (yearResult.ec != std::errc{} || monthResult.ec != std::errc{}) {
+        throw ValidationError{"monthRangeMs: \"" + month + "\" is not a well-formed YYYY-MM month"};
+    }
 
     const auto startDate = std::chrono::year_month_day{std::chrono::year{year},
                                                         std::chrono::month{static_cast<unsigned>(monthNum)},
                                                         std::chrono::day{1}};
+    if (!startDate.ok()) {
+        throw ValidationError{"monthRangeMs: \"" + month + "\" is not a valid calendar month"};
+    }
     const auto startSysDays = static_cast<std::chrono::sys_days>(startDate);
     const auto endSysDays = static_cast<std::chrono::sys_days>(startDate.year() / startDate.month() / std::chrono::last) +
                              std::chrono::days{1};
@@ -154,9 +169,16 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     // WhereIn -- the same shape bank::StatementModel/BudgetModel already use
     // for an identical "accounts -> legs" fan-out):
     //   1. accounts belonging to the budget's category,
-    //   2. journals whose date falls in the month's [start, end) range,
+    //   2. journals belonging to the budget's own ledger AND whose date
+    //      falls in the month's [start, end) range -- the ledger filter is
+    //      required for correctness (a budget only ever reports on its own
+    //      ledger's activity) and for scalability (without it this query
+    //      collects every journal across every ledger in the database for
+    //      that month, and step 3's WhereIn list grows unbounded as the
+    //      database grows),
     //   3. legs whose account is in (1) AND whose journal is in (2).
     const auto categoryId = budgetRows.front().category.Value();
+    const auto ledgerId = budgetRows.front().ledger.Value();
     auto categoryAccountRows = mapper.Query<db::AccountRecord>()
                                     .Where(::Lightweight::FieldNameOf<&db::AccountRecord::category>, "=", categoryId)
                                     .All();
@@ -170,6 +192,8 @@ GetBudgetReportResult BudgetModel::execute(const GetBudgetReport& action) {
     if (!accountIds.empty()) {
         const auto [monthStartMs, monthEndMs] = monthRangeMs(action.month);
         auto journalRows = mapper.Query<db::TransactionJournalRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::ledger>, "=",
+                                       ledgerId)
                                 .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, ">=",
                                        monthStartMs)
                                 .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::date>, "<",
