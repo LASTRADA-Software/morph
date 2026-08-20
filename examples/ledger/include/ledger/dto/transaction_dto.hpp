@@ -89,4 +89,32 @@ struct SetCategory {
 ///        local declaration with the same shape.
 struct SetCategoryResult {};
 
+/// @brief Undoes a previously-recorded `TransactionJournalRecord` (named by
+///        `journalId`) as a compensating action -- a second, reversing
+///        journal entry whose legs are the original legs' amounts negated
+///        via `Rational::operator-() const` (the member unary negation),
+///        never `morph::journal::undoLast()` (design spec §6): the ledger's
+///        own journal is an audit trail, so "undo" must itself be a new,
+///        visible entry, not an erasure of the original one.
+///
+///        `ledgerId` is redundant with `journalId` (the journal row already
+///        names its own ledger via `TransactionJournalRecord::ledger`), but
+///        is carried explicitly anyway so `ActionKeyTraits<UndoTransaction>::
+///        key()` stays a trivial field read like every other keyed action in
+///        this file, rather than requiring its own `Lightweight::DataMapper`
+///        lookup before any key/dispatch/transaction context exists.
+///        `LedgerModel::execute(const UndoTransaction&)` independently
+///        verifies the looked-up journal's own `ledger` really matches
+///        `ledgerId` (`throw NotFound{...}` on mismatch), so a wrong
+///        `ledgerId` cannot be used to bypass anything or target the wrong
+///        ledger's model instance.
+struct UndoTransaction {
+    LedgerId ledgerId;
+    JournalId journalId;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return ledgerId.hasValue() && journalId.hasValue();
+    }
+};
+
 }  // namespace ledger

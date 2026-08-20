@@ -417,6 +417,74 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     return result;
 }
 
+GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    if (!action.validate()) {
+        throw ValidationError{"UndoTransaction: ledgerId and journalId are required"};
+    }
+    Lightweight::DataMapper mapper;
+
+    auto journalRows = mapper.Query<db::TransactionJournalRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::id>, "=", *action.journalId)
+                            .All();
+    if (journalRows.empty()) {
+        throw NotFound{"UndoTransaction: no such journal"};
+    }
+    auto& originalJournalRow = journalRows.front();
+    // Redundant-but-required field, per this action's own doc comment: a
+    // wrong ledgerId cannot be used to target the wrong ledger's model
+    // instance or bypass anything, since the journal's own ledger is
+    // verified independently here.
+    if (originalJournalRow.ledger.Value() != static_cast<std::uint64_t>(*action.ledgerId)) {
+        throw NotFound{"UndoTransaction: journal does not belong to this ledger"};
+    }
+
+    auto originalLegRows = mapper.Query<db::TransactionLegRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=",
+                                       originalJournalRow.id.Value())
+                                .All();
+
+    std::vector<TransactionLeg> reversalLegs;
+    std::vector<db::AccountRecord> reversalLegAccounts;
+    reversalLegs.reserve(originalLegRows.size());
+    reversalLegAccounts.reserve(originalLegRows.size());
+    for (const auto& legRow : originalLegRows) {
+        const auto originalAmount = morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
+                                                            morph::math::Denominator{legRow.amountDen.Value()},
+                                                            morph::math::DecimalPlaces{
+                                                                static_cast<std::uint32_t>(legRow.amountDp.Value())}};
+        auto accountRows = mapper.Query<db::AccountRecord>()
+                                .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", legRow.account.Value())
+                                .All();
+        if (accountRows.empty()) {
+            throw NotFound{"UndoTransaction: no such account"};
+        }
+        reversalLegAccounts.push_back(accountRows.front());
+        // Member unary negation (Rational::operator-() const), never the
+        // free binary subtraction operator also declared in rational.hpp --
+        // see this action's own doc comment.
+        reversalLegs.push_back(TransactionLeg{.accountId = AccountId{static_cast<std::int64_t>(legRow.account.Value())},
+                                               .amount = -originalAmount});
+    }
+
+    // The reversal's own date is "now" (when the undo happened), via
+    // morph::time::Timestamp::now() -- the same type/convention
+    // StoreTransaction.date itself uses for a client-observable "when did
+    // this happen" field (see execute(StoreTransaction)'s own comment on
+    // why journalRow.date does NOT go through morph::ladder::now()) -- NOT
+    // the original journal's own date, which belongs to the transaction
+    // being reversed, not the reversal itself.
+    auto result = storeJournalImpl(mapper, action.ledgerId,
+                                    "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
+                                    morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts);
+
+    logAction(action, result, "transactionJournal:" + std::to_string(originalJournalRow.id.Value()));
+    return result;
+}
+
 SetCategoryResult LedgerModel::execute(const SetCategory& action) {
     const auto* ctx = morph::session::current();
     if (ctx == nullptr || ctx->principal.empty()) {
@@ -442,6 +510,44 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
     }
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());
+}
+
+GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
+                                                const std::string& description, const morph::time::Timestamp& date,
+                                                const std::vector<TransactionLeg>& legs,
+                                                const std::vector<db::AccountRecord>& legAccounts) {
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    db::TransactionJournalRecord journalRow;
+    journalRow.description = description;
+    journalRow.date = date.value.has_value() ? (*date.value).value.time_since_epoch().count() : 0;
+    auto ledgerRows =
+        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *ledgerId).All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"storeJournalImpl: no such ledger"};
+    }
+    journalRow.ledger = ledgerRows.front();
+    mapper.Create(journalRow);
+    for (std::size_t i = 0; i < legs.size(); ++i) {
+        db::TransactionLegRecord legRow;
+        legRow.journal = journalRow;
+        legRow.account = legAccounts[i];
+        legRow.amountNum = legs[i].amount.numerator;
+        legRow.amountDen = legs[i].amount.denominator;
+        legRow.amountDp = static_cast<int>(legs[i].amount.decimalPlaces.value);
+        legRow.currencyCode = legAccounts[i].currencyCode.Value();
+        const auto& foreignAmount = legs[i].foreignAmount;
+        legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
+        legRow.foreignAmountDen = foreignAmount ? std::optional{foreignAmount->denominator} : std::nullopt;
+        legRow.foreignAmountDp =
+            foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
+        legRow.foreignCurrencyCode =
+            legs[i].foreignCurrency ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*legs[i].foreignCurrency)}}
+                                     : std::nullopt;
+        mapper.Create(legRow);
+    }
+    auto result = buildLedgerState(mapper, ledgerId);
+    sqlTxn.Commit();
+    return result;
 }
 
 }  // namespace ledger

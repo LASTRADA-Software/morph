@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "ledger/db/ledger_entity.hpp"
 #include "ledger/dto/account_dto.hpp"
 #include "ledger/dto/transaction_dto.hpp"
 
@@ -12,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace Lightweight {
 class DataMapper;
@@ -83,6 +85,19 @@ class LedgerModel {
     /// @return An empty placeholder result.
     SetCategoryResult execute(const SetCategory& action);
 
+    /// @brief Undoes the previously-recorded journal named by
+    ///        `action.journalId` as a compensating action: inserts a second,
+    ///        reversing `TransactionJournalRecord` whose legs are the
+    ///        original legs' amounts negated via `Rational::operator-()
+    ///        const`, with `causalParentId` pointing at the undone entry
+    ///        (design spec §6). Never rewinds or erases the original entry --
+    ///        `morph::journal::undoLast()` is not used here.
+    /// @param action The ledger id (verified against the looked-up journal's
+    ///        own ledger) and the journal id to reverse.
+    /// @return The full rebuilt ledger state, per the ladder-wide
+    ///         full-rebuilt-state convention.
+    GetLedgerResult execute(const UndoTransaction& action);
+
     /// @brief Attaches a durable action log and this instance's stable
     ///        identity, so every subsequent mutating `execute()` records
     ///        a `morph::journal::LogEntry`. Model-level mirror of
@@ -141,6 +156,47 @@ class LedgerModel {
     ///        already-open connection/transaction.
     /// @param action The account/category to link.
     static void setCategoryImpl(Lightweight::DataMapper& mapper, const SetCategory& action);
+
+    /// @brief Shared mutation behind `execute(UndoTransaction)`'s reversal
+    ///        insert: opens its own `Lightweight::SqlTransaction`, creates
+    ///        one `TransactionJournalRecord` plus one `TransactionLegRecord`
+    ///        per @p legs/@p legAccounts pair, rebuilds the ledger's state via
+    ///        `buildLedgerState`, commits, and returns that state. Mirrors
+    ///        `execute(StoreTransaction)`'s own journal-insert + leg-insert +
+    ///        `buildLedgerState` rebuild verbatim, but holds none of that
+    ///        method's opId-ledger-write or cascade-evaluation blocks: a
+    ///        reversal has no `opId` and never re-fires rules against its own
+    ///        synthetic description, so this helper's transaction can close
+    ///        immediately after the rebuild. `execute(StoreTransaction)`
+    ///        keeps its own inline insert logic rather than calling this
+    ///        helper, since threading its opId/cascade logic through this
+    ///        signature would be more churn than sharing is worth -- this
+    ///        helper exists solely for `execute(UndoTransaction)` to call,
+    ///        mirroring `setCategoryImpl`'s own role as a single-caller
+    ///        extraction, not a refactor of `execute(StoreTransaction)`.
+    ///
+    ///        Does not re-run `execute(StoreTransaction)`'s zero-sum
+    ///        partitioning loop -- it trusts its caller already knows the
+    ///        legs it's inserting are zero-sum (negating every leg of an
+    ///        already-zero-sum set is itself zero-sum). Any future caller
+    ///        that cannot make that guarantee must validate before calling
+    ///        this helper.
+    /// @param mapper The data mapper to mutate through -- opens its own
+    ///        `Lightweight::SqlTransaction` on this mapper's connection.
+    /// @param ledgerId The ledger the new journal belongs to.
+    /// @param description The new journal's description.
+    /// @param date The new journal's client-observable "when did this
+    ///        happen" timestamp.
+    /// @param legs The new journal's legs.
+    /// @param legAccounts Each leg's own account row, positionally aligned
+    ///        with @p legs (one lookup per leg's account, same shape as
+    ///        `execute(StoreTransaction)`'s own `legAccounts`).
+    /// @return The full rebuilt ledger state, per the ladder-wide
+    ///         full-rebuilt-state convention.
+    [[nodiscard]] GetLedgerResult storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
+                                                     const std::string& description, const morph::time::Timestamp& date,
+                                                     const std::vector<TransactionLeg>& legs,
+                                                     const std::vector<db::AccountRecord>& legAccounts);
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
@@ -209,3 +265,14 @@ BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SetCategory, "SetCategory")
 // situation). model_key.hpp's ActionKeyTraits primary template already
 // defaults to hasKey = false, so this deliberately gets no specialization
 // here: it is dispatched keyless, exactly like LinkAccountToCategory.
+
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::UndoTransaction, "UndoTransaction")
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::UndoTransaction> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::UndoTransaction& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};

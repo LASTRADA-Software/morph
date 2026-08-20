@@ -472,3 +472,83 @@ TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, 
                  ledger::TransactionLeg{.accountId = expensesId, .amount = clampedLeg}}}),
         ledger::ZeroSumViolation);
 }
+
+TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances", "[ledger][undo]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // -50.00 from Checking, +50.00 to Groceries -- same shape as this
+    // file's own "StoreTransaction with two balanced USD legs commits" test.
+    model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Weekly shop",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // GetLedgerResult/StoreTransaction's own return value never exposes a
+    // journal id (design spec's own account_dto.hpp shape) -- the only way
+    // to name the journal to undo is to query the row directly, same as
+    // any other test in this file that needs a DB-assigned id its DTOs
+    // don't surface.
+    auto journalRows = mapper.Query<ledger::db::TransactionJournalRecord>()
+                            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::description>, "=",
+                                   Lightweight::SqlAnsiString<256>{"Weekly shop"})
+                            .All();
+    REQUIRE(journalRows.size() == 1);
+    const auto journalId = ledger::JournalId{static_cast<std::int64_t>(journalRows.front().id.Value())};
+
+    auto undoResult = model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = journalId});
+
+    // Post-undo balances match pre-transaction values exactly (both
+    // accounts back to their opening zero balance) -- Rational equality,
+    // not floating-point tolerance.
+    REQUIRE(undoResult.accounts.size() == 2);
+    auto checking = std::ranges::find_if(undoResult.accounts, [&](const auto& a) { return a.id == checkingId; });
+    auto groceries = std::ranges::find_if(undoResult.accounts, [&](const auto& a) { return a.id == groceriesId; });
+    REQUIRE(checking != undoResult.accounts.end());
+    REQUIRE(groceries != undoResult.accounts.end());
+    CHECK(checking->balance.numerator == 0);
+    CHECK(groceries->balance.numerator == 0);
+
+    // The reversal's own legs are the exact negation of the original's.
+    auto reversalJournalRows =
+        mapper.Query<ledger::db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::id>, "!=", *journalId)
+            .All();
+    REQUIRE(reversalJournalRows.size() == 1);
+    auto reversalLegRows =
+        mapper.Query<ledger::db::TransactionLegRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionLegRecord::journal>, "=",
+                   reversalJournalRows.front().id.Value())
+            .All();
+    REQUIRE(reversalLegRows.size() == 2);
+    for (const auto& legRow : reversalLegRows) {
+        if (legRow.account.Value() == static_cast<std::uint64_t>(*checkingId)) {
+            CHECK(legRow.amountNum.Value() == 5000);  // negation of the original -5000
+        } else {
+            CHECK(legRow.amountNum.Value() == -5000);  // negation of the original 5000
+        }
+    }
+}
