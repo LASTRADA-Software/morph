@@ -6,6 +6,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <morph/session/session.hpp>
 
 #include <map>
 #include <optional>
@@ -47,6 +48,10 @@ namespace {
 }  // namespace
 
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"OpenAccount: ledgerId and name are required"};
     }
@@ -117,6 +122,10 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
 }
 
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"StoreTransaction: description and at least two legs with engaged accountIds are required"};
     }

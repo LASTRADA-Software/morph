@@ -4,6 +4,7 @@
 #include "ledger/models/budget_model.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <morph/session/session.hpp>
 
 #include <charconv>
 #include <chrono>
@@ -62,6 +63,10 @@ namespace {
 }  // namespace
 
 CategoryId BudgetModel::execute(const CreateCategory& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"CreateCategory: ledgerId and name are required"};
     }
@@ -80,6 +85,10 @@ CategoryId BudgetModel::execute(const CreateCategory& action) {
 }
 
 AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"LinkAccountToCategory: accountId and categoryId are required"};
     }
@@ -99,6 +108,10 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
 }
 
 BudgetId BudgetModel::execute(const CreateBudget& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"CreateBudget: ledgerId, name, and categoryId are required"};
     }
@@ -121,6 +134,10 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
 }
 
 BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
     if (!action.validate()) {
         throw ValidationError{"SetBudgetLimit: budgetId and a YYYY-MM month are required"};
     }

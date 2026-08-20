@@ -6,8 +6,32 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
 
 #include <algorithm>
+
+namespace {
+
+/// @brief A `Context` carrying only @p principal. See
+///        `bookmarks::tests::test_bookmark_model.cpp`'s own `contextFor` for
+///        why this is not a designated initializer (`-Wmissing-designated-
+///        field-initializers` under `-Weverything`).
+[[nodiscard]] morph::session::Context contextFor(std::string principal) {
+    morph::session::Context ctx;
+    ctx.principal = std::move(principal);
+    return ctx;
+}
+
+class ScopedPrincipal {
+  public:
+    explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
+
+  private:
+    morph::session::Context _ctx;
+    morph::session::detail::ScopedContext _scope;
+};
+
+}  // namespace
 
 TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model]") {
     morph::ladder::testkit::DbFixture fixture;
@@ -21,6 +45,7 @@ TEST_CASE("OpenAccount creates an account visible in GetLedger", "[ledger][model
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
     auto created = model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
                                                        .kind = ledger::AccountKind::Asset,
                                                        .currency = ledger::Currency::USD});
@@ -40,6 +65,7 @@ TEST_CASE("StoreTransaction with two balanced USD legs commits", "[ledger][model
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
@@ -81,6 +107,7 @@ TEST_CASE("StoreTransaction with unbalanced USD legs throws ZeroSumViolation", "
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
@@ -113,6 +140,7 @@ TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently",
     const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
 
     ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Checking",
                                        .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
     model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "USD Travel Expense",
@@ -164,4 +192,20 @@ TEST_CASE("A foreign-amount pair balances USD and EUR partitions independently",
     CHECK(findBalance(usdExpense) == 5000);
     CHECK(findBalance(eurWallet) == -4523);
     CHECK(findBalance(eurPayable) == 4523);
+}
+
+TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][security]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    ScopedPrincipal empty{""};  // installs a Context with an empty principal for this scope
+    CHECK_THROWS_AS(
+        model.execute(ledger::StoreTransaction{.ledgerId = ledgerId, .description = "Should be refused",
+                                                 .date = morph::time::Timestamp::now(), .legs = {}}),
+        ledger::EmptyPrincipalError);
 }
