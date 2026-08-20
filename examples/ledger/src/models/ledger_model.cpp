@@ -159,21 +159,21 @@ namespace {
 }
 
 /// @brief RAII guard around a raw SQLite read-transaction snapshot
-///        (`BEGIN DEFERRED` on construction, `COMMIT` on destruction),
-///        fixing a real leak the plain sequential
-///        `ExecuteDirect("BEGIN DEFERRED"); ...; ExecuteDirect("COMMIT");`
-///        shape had: `Lightweight::DataMapperPool::Return` performs no
-///        transaction cleanup on a returned connection (it only tears down
-///        the async backend -- no `SQLEndTran`, no autocommit reset), so a
-///        connection returned to the pool with this snapshot still open
-///        (because `BEGIN DEFERRED` itself threw before the `try` even
-///        started, or because the recovery `COMMIT` on the exception path
-///        itself threw -- e.g. a real `SQLITE_BUSY` on commit, which
-///        replaces the in-flight exception and used to propagate with the
-///        transaction still live) is silently inherited by whichever
+///        (`BEGIN DEFERRED` on construction, `COMMIT` on destruction).
+///
+///        Load-bearing because `Lightweight::DataMapperPool::Return`
+///        performs no transaction cleanup on a returned connection (it
+///        only tears down the async backend -- no `SQLEndTran`, no
+///        autocommit reset): a connection returned to the pool with a
+///        snapshot still open is silently inherited by whichever
 ///        unrelated caller acquires that connection next, which then
 ///        blocks for the full 60s `busy_timeout` the very first time it
-///        tries to write. Task 16's own review found this gap.
+///        tries to write. This guard's destructor always runs exactly
+///        once per successful construction -- on the normal-exit path and
+///        on every exception unwinding through it alike -- so every path
+///        out of a scope holding one closes the transaction; a
+///        constructor that itself throws leaves no transaction open in
+///        the first place (see the constructor's own doc comment).
 ///
 ///        The destructor's own `COMMIT` is wrapped in `catch (...)`: a
 ///        failed release of a read-only transaction has nothing further to
@@ -908,23 +908,16 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
                 // exactly the connection DataMapper::Connection() exposes,
                 // so the pin covers every query below.
                 //
-                // WalSnapshotGuard (not a bare sequential
-                // ExecuteDirect("BEGIN DEFERRED")/ExecuteDirect("COMMIT")
-                // pair) so the COMMIT is unconditional and failure-proof:
-                // Lightweight::DataMapperPool::Return performs no
-                // transaction cleanup, so any path that could leave this
-                // scope with the transaction still open would leak an open
-                // read lock onto the pooled connection, silently inherited
-                // by whichever unrelated caller acquires it next -- which
-                // then blocks for the full 60s busy_timeout on its first
-                // write. The guard's own destructor closes the transaction
-                // (via COMMIT, swallowing any failure) no matter how this
-                // scope is exited, including if BEGIN DEFERRED itself had
-                // thrown before construction completed (in which case the
-                // guard was never constructed and there is nothing to
-                // close) or if a later COMMIT attempt would itself have
-                // thrown (now impossible to leave unhandled, since the
-                // guard's destructor never lets that escape).
+                // WalSnapshotGuard's destructor closes this transaction
+                // (via COMMIT, swallowing any failure -- see its own doc
+                // comment) no matter how this scope is exited: on the
+                // normal-exit path here, or via stack unwinding if
+                // computeReportJson throws. Its own COMMIT can never
+                // itself escape and leave the transaction open, which is
+                // exactly why a bare sequential pair of ExecuteDirect
+                // calls would not be safe here -- see WalSnapshotGuard's
+                // own doc comment for why an open transaction on a
+                // returned pooled connection matters.
                 WalSnapshotGuard snapshot{workerMapper->Connection()};
                 resultJson = computeReportJson(workerMapper.Get(), ledgerId);
             }
