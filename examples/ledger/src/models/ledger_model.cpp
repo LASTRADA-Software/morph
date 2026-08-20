@@ -4,8 +4,11 @@
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
 
+#include "clock.hpp"
+
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 #include <map>
@@ -47,6 +50,44 @@ namespace {
 
 }  // namespace
 
+void LedgerModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
+    _log = std::move(log);
+    _entityKeyStr = std::move(entityKey);
+}
+
+template <typename Action, typename Result>
+void LedgerModel::logAction(const Action& action, const Result& result, std::string causalParentId) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "LedgerModel";
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
+    entry.outcome = ::morph::journal::Outcome::Succeeded;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
+                                                                                            // timestamp -- goes
+                                                                                            // through the ladder's
+                                                                                            // injectable clock
+                                                                                            // convention, unlike
+                                                                                            // StoreTransaction's own
+                                                                                            // client-supplied date
+    entry.causalParentId = std::move(causalParentId);
+    _log->append(std::move(entry));
+    // See kanban's own identical comment (design spec §5's citation) for
+    // why this flush is load-bearing, not optional: append() writes
+    // through buffered C stdio with no implicit flush for FileActionLog,
+    // and entries() reads through a separate stream that cannot see
+    // unflushed bytes. InMemoryActionLog::flush() is a no-op, so this
+    // costs nothing for the log type most tests attach.
+    _log->flush();
+}
+
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
     const auto* ctx = morph::session::current();
     if (ctx == nullptr || ctx->principal.empty()) {
@@ -76,7 +117,7 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
     // Returns the freshly created account's info, not void -- see
     // ledger_model.hpp's doc comment on this method for why a void
     // execute() cannot be registered via BRIDGE_REGISTER_ACTION.
-    return AccountInfo{
+    auto result = AccountInfo{
         .id = AccountId{static_cast<std::int64_t>(accountRow.id.Value())},
         .name = action.name,
         .kind = action.kind,
@@ -92,6 +133,8 @@ AccountInfo LedgerModel::execute(const OpenAccount& action) {
                                                                             // precision (0 for JPY/KRW, 2 for
                                                                             // USD/EUR), not a hardcoded 2
     };
+    logAction(action, result);
+    return result;
 }
 
 GetLedgerResult LedgerModel::execute(const GetLedger& action) {
@@ -213,7 +256,9 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
     }
     sqlTxn.Commit();
 
-    return execute(GetLedger{.ledgerId = action.ledgerId});
+    auto result = execute(GetLedger{.ledgerId = action.ledgerId});
+    logAction(action, result);
+    return result;
 }
 
 }  // namespace ledger

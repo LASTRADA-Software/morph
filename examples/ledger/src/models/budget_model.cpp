@@ -3,7 +3,10 @@
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/budget_model.hpp"
 
+#include "clock.hpp"
+
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 #include <charconv>
@@ -62,6 +65,37 @@ namespace {
 
 }  // namespace
 
+void BudgetModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
+    _log = std::move(log);
+    _entityKeyStr = std::move(entityKey);
+}
+
+template <typename Action, typename Result>
+void BudgetModel::logAction(const Action& action, const Result& result, std::string causalParentId) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "BudgetModel";
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
+    entry.outcome = ::morph::journal::Outcome::Succeeded;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
+                                                                                            // timestamp -- see
+                                                                                            // LedgerModel::logAction's
+                                                                                            // identical comment
+    entry.causalParentId = std::move(causalParentId);
+    _log->append(std::move(entry));
+    // See LedgerModel::logAction's identical comment for why this flush is
+    // load-bearing, not optional.
+    _log->flush();
+}
+
 CategoryId BudgetModel::execute(const CreateCategory& action) {
     const auto* ctx = morph::session::current();
     if (ctx == nullptr || ctx->principal.empty()) {
@@ -81,7 +115,9 @@ CategoryId BudgetModel::execute(const CreateCategory& action) {
     categoryRow.ledger = ledgerRows.front();
     categoryRow.name = action.name;
     mapper.Create(categoryRow);
-    return CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
+    auto result = CategoryId{static_cast<std::int64_t>(categoryRow.id.Value())};
+    logAction(action, result);
+    return result;
 }
 
 AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
@@ -104,7 +140,9 @@ AccountId BudgetModel::execute(const LinkAccountToCategory& action) {
     }
     accountRows.front().category = categoryRows.front();
     mapper.Update(accountRows.front());
-    return AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
+    auto result = AccountId{static_cast<std::int64_t>(accountRows.front().id.Value())};
+    logAction(action, result);
+    return result;
 }
 
 BudgetId BudgetModel::execute(const CreateBudget& action) {
@@ -130,7 +168,9 @@ BudgetId BudgetModel::execute(const CreateBudget& action) {
     budgetRow.name = action.name;
     budgetRow.category = categoryRows.front();
     mapper.Create(budgetRow);
-    return BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
+    auto result = BudgetId{static_cast<std::int64_t>(budgetRow.id.Value())};
+    logAction(action, result);
+    return result;
 }
 
 BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
@@ -156,6 +196,7 @@ BudgetId BudgetModel::execute(const SetBudgetLimit& action) {
     limitRow.limitDp = static_cast<int>(action.limit.decimalPlaces.value);
     limitRow.currencyCode = currencyToCode(action.currency);  // Task 7's helper
     mapper.Create(limitRow);
+    logAction(action, action.budgetId);
     return action.budgetId;
 }
 

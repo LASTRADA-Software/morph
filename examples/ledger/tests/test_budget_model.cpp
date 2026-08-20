@@ -7,6 +7,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 namespace {
@@ -163,4 +164,33 @@ TEST_CASE("CreateCategory refuses an empty principal", "[ledger][budget][securit
     ScopedPrincipal empty{""};
     CHECK_THROWS_AS(model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"}),
                      ledger::EmptyPrincipalError);
+}
+
+TEST_CASE("CreateCategory records a LogEntry once a log is attached, and is a no-op without one",
+          "[ledger][budget][journal]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::BudgetModel model;
+    const ScopedPrincipal principal{"alice"};
+
+    // No log attached: succeeds, no crash, nothing recorded anywhere to
+    // check against -- this half of the test exists to prove the no-op
+    // path doesn't throw or misbehave when _log is null.
+    model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Food"});
+
+    // Attach a log, then repeat -- this call must be recorded.
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    model.attachActionLog(log, std::to_string(*ledgerId));
+    model.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Rent"});
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);  // only the second call was journaled -- the first ran before attachActionLog
+    CHECK(entries[0].actionType == "CreateCategory");
+    CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
+    CHECK(entries[0].entityKey == std::to_string(*ledgerId));
 }

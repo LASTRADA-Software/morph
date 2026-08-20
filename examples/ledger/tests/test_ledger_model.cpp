@@ -6,6 +6,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 #include <algorithm>
@@ -208,4 +209,35 @@ TEST_CASE("StoreTransaction refuses an empty principal", "[ledger][model][securi
         model.execute(ledger::StoreTransaction{.ledgerId = ledgerId, .description = "Should be refused",
                                                  .date = morph::time::Timestamp::now(), .legs = {}}),
         ledger::EmptyPrincipalError);
+}
+
+TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op without one",
+          "[ledger][model][journal]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+
+    // No log attached: succeeds, no crash, nothing recorded anywhere to
+    // check against -- this half of the test exists to prove the no-op
+    // path doesn't throw or misbehave when _log is null.
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+
+    // Attach a log, then repeat -- this call must be recorded.
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    model.attachActionLog(log, std::to_string(*ledgerId));
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Savings",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);  // only the second call was journaled -- the first ran before attachActionLog
+    CHECK(entries[0].actionType == "OpenAccount");
+    CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
+    CHECK(entries[0].entityKey == std::to_string(*ledgerId));
 }

@@ -7,6 +7,11 @@
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
+#include <morph/journal/action_log.hpp>
+
+#include <memory>
+#include <optional>
+#include <string>
 
 namespace ledger {
 
@@ -57,6 +62,44 @@ class LedgerModel {
     /// @return The full rebuilt ledger state, per the ladder-wide
     ///         full-rebuilt-state convention.
     GetLedgerResult execute(const StoreTransaction& action);
+
+    /// @brief Attaches a durable action log and this instance's stable
+    ///        identity, so every subsequent mutating `execute()` records
+    ///        a `morph::journal::LogEntry`. Model-level mirror of
+    ///        `morph::model::detail::IModelHolder::attachActionLog` for a
+    ///        plain-constructed instance that never goes through the
+    ///        framework's registry/dispatcher path: a `LedgerModel` a unit
+    ///        test (or any caller) constructs directly with
+    ///        `ledger::LedgerModel model;` has no `IModelHolder` wrapping
+    ///        it, so `model.execute(action)` calls `LedgerModel::execute`
+    ///        straight, never touching `IModelHolder` or the dispatcher's
+    ///        runner -- `recordIfAttached`'s auto-append never fires for
+    ///        this path. `LedgerModel` therefore keeps its own
+    ///        `shared_ptr<IActionLog>` and appends its own `LogEntry` at
+    ///        the end of every successful mutating `execute()` (see
+    ///        `logAction` below) -- functionally the same effect
+    ///        `recordIfAttached` gives a holder-wrapped instance, achieved
+    ///        without one.
+    /// @param log Sink entries are forwarded to.
+    /// @param entityKey Stable identity stamped onto every LogEntry this
+    ///        instance produces (this rung's ledger id, as a string).
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
+
+  private:
+    /// @brief Records @p action/@p result as a LogEntry if a log is
+    ///        attached; no-op otherwise.
+    /// @tparam Action Concrete action type.
+    /// @tparam Result Concrete result type.
+    /// @param action The executed action.
+    /// @param result The action's result.
+    /// @param causalParentId Empty (the default) for every ordinary call
+    ///        site; Task 12's evaluateRules is the only caller that
+    ///        passes a non-empty value.
+    template <typename Action, typename Result>
+    void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
+
+    std::optional<std::string> _entityKeyStr;
+    std::shared_ptr<::morph::journal::IActionLog> _log;
 };
 
 }  // namespace ledger
