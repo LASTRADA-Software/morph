@@ -88,12 +88,16 @@ TEST_CASE("Measure the row count at which partial-sum overflow occurs at ledger-
     while (highOverflow - lowNoOverflow > 1) {
         const std::int64_t mid = lowNoOverflow + (highOverflow - lowNoOverflow) / 2;
         const bool wouldOverflow = mid > INT64_MAX / perLeg;
-        const auto summed = sumOfNLegs(mid);
-        // Real Rational::operator+ agrees with the closed-form expectation
-        // whenever no overflow occurs; once overflow is possible, the
-        // closed-form oracle (not Rational's own now-UB output) decides
-        // which half of the search range to keep.
+        // The closed-form oracle decides which half of the search range to
+        // keep BEFORE sumOfNLegs is ever called on this probe: calling it
+        // unconditionally (even just to discard the result on the
+        // overflow side) would still run its real, unchecked
+        // Rational::operator+= additions on values already known to
+        // exceed int64_t's range -- real UB, not the boundary this test
+        // safely observes. sumOfNLegs is therefore only ever invoked on
+        // probes the oracle has already certified as overflow-free.
         if (!wouldOverflow) {
+            const auto summed = sumOfNLegs(mid);
             CHECK(summed.numerator == mid * perLeg);
             lowNoOverflow = mid;
         } else {
