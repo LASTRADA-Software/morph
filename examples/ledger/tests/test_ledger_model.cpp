@@ -8,6 +8,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <glaze/glaze.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
@@ -420,13 +421,17 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
 }
 
 TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, not by validate()", "[ledger][rational][security]") {
-    // Construct a StoreTransaction whose wire JSON encodes a leg with
-    // {"num":5,"den":0,"dp":2} -- setWire clamps this to 5/1 rather than
-    // rejecting. Decode it into a StoreTransaction (bypassing validate()'s
-    // own inability to detect the clamp), and assert the resulting legs
-    // fail the zero-sum check (ZeroSumViolation thrown) rather than
-    // silently committing -- proving the invariant's incidental catch,
-    // per design spec §7.
+    // Decode the raw wire JSON {"num":5,"den":0,"dp":2} through glaze's
+    // real JSON codec (glz::read_json), which reaches Rational::setWire
+    // (the glz::meta<Rational> specialization in
+    // include/morph/util/rational.hpp) rather than the in-process 3-arg
+    // constructor. setWire clamps the zero denominator to 1 instead of
+    // rejecting the decode, so the decode itself succeeds with a
+    // silently-clamped 5/1 value. Use that decoded Rational as a leg's
+    // amount and assert the resulting legs fail the zero-sum check
+    // (ZeroSumViolation thrown) rather than silently committing --
+    // proving it's the ledger's own zero-sum invariant that catches this,
+    // incidentally, not validate(), per design spec §7.
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
     ledger::db::LedgerRecord ledgerRow;
@@ -449,11 +454,15 @@ TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, 
     using morph::math::Numerator;
     using morph::math::Rational;
 
-    // One leg is normal, one is clamped (den=0 becomes den=1).
+    // One leg is normal, one is decoded from wire JSON with den=0 and
+    // comes back clamped (den=0 becomes den=1) by Rational::setWire.
     // Together they won't sum to zero because the clamped leg changed value.
     // This should be caught by the zero-sum check, throwing ZeroSumViolation.
     Rational normalLeg{Numerator{-500}, Denominator{1}, DecimalPlaces{2}};  // -5.00
-    Rational clampedLeg{Numerator{5}, Denominator{0}, DecimalPlaces{2}};    // 0 denominator -> clamped to 5/1
+
+    Rational clampedLeg;
+    auto err = glz::read_json(clampedLeg, std::string{R"({"num":5,"den":0,"dp":2})"});
+    REQUIRE_FALSE(err);  // decode succeeds -- clamping is silent, not a decode failure
 
     CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{
         .ledgerId = ledgerId,
