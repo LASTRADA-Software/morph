@@ -7,13 +7,17 @@
 #include "clock.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <Lightweight/DataMapper/Pool.hpp>
+#include <Lightweight/SqlStatement.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <morph/core/logger.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
 #include <glaze/glaze.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <map>
 #include <optional>
@@ -152,6 +156,85 @@ namespace {
     const std::int64_t numerator = (sign == "-") ? -magnitude : magnitude;
     return morph::math::Rational{morph::math::Numerator{numerator}, morph::math::Denominator{1},
                                   morph::math::DecimalPlaces{decimalPlaces}};
+}
+
+/// @brief Computes @p ledgerId's report body -- every account's balance
+///        summed per currency -- against @p mapper, and serializes it to
+///        JSON.
+///
+///        Deliberately simple for this rung's scope: `ReportKind` selects
+///        nothing yet beyond being stored with the job.
+///        `ReportKind::BudgetReport`'s own distinct aggregation is out of
+///        scope here -- Task 10's `GetBudgetReport` already computes
+///        budget-vs-spent, and this job does not duplicate that logic.
+/// @param mapper The data mapper to query through -- expected to already be
+///        inside a pinned read snapshot (see the worker lambda in
+///        `execute(SubmitReport)`).
+/// @param ledgerId The ledger to report on.
+/// @return The serialized report body.
+[[nodiscard]] std::string computeReportJson(Lightweight::DataMapper& mapper, const LedgerId& ledgerId) {
+    auto accountRows = mapper.Query<db::AccountRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
+                            .All();
+    std::map<std::string, morph::math::Rational> totalsByCurrency;
+    for (const auto& accountRow : accountRows) {
+        const auto currency = codeToCurrency(accountRow.currencyCode.Value().ToStringView());
+        const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
+        const auto balance = sumAccountLegs(mapper, accountRow.id.Value(), decimalPlaces);
+        const std::string code{accountRow.currencyCode.Value().ToStringView()};
+        auto it = totalsByCurrency.find(code);
+        if (it == totalsByCurrency.end()) {
+            totalsByCurrency.emplace(code, balance);
+        } else {
+            it->second = it->second + balance;
+        }
+    }
+    std::vector<ReportLine> lines;
+    lines.reserve(totalsByCurrency.size());
+    for (const auto& [code, total] : totalsByCurrency) {
+        lines.push_back(ReportLine{.currency = code,
+                                   .numerator = total.numerator,
+                                   .denominator = total.denominator,
+                                   .decimalPlaces = total.decimalPlaces.value});
+    }
+    std::string resultJson;
+    if (auto err = glz::write_json(lines, resultJson); err) {
+        throw LedgerError{"SubmitReport: failed to serialize report result"};
+    }
+    return resultJson;
+}
+
+/// @brief Sets the `status` column of the report job row whose id is
+///        @p jobId to @p status, and (when engaged) its `result_json` to
+///        @p resultJson. A no-op if the row is gone (a test fixture dropping
+///        every table out from under an in-flight worker is the realistic
+///        way that happens; it is not an error worth throwing over).
+/// @param mapper The data mapper to mutate through.
+/// @param jobId The job row's primary key.
+/// @param status The terminal status to record.
+/// @param resultJson The serialized report body, or `std::nullopt` to leave
+///        the column untouched.
+void finishReportJob(Lightweight::DataMapper& mapper, std::int64_t jobId, ReportStatus status,
+                      std::optional<std::string> resultJson) {
+    auto jobRows = mapper.Query<db::ReportJobRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                               static_cast<std::uint64_t>(jobId))
+                        .All();
+    if (jobRows.empty()) {
+        return;
+    }
+    auto row = jobRows.front();
+    row.status = static_cast<int>(status);
+    if (resultJson.has_value()) {
+        // Explicit std::optional{...} wrap, matching this file's own
+        // established idiom for a nullable Field (see
+        // execute(StoreTransaction)'s foreignAmountNum assignment):
+        // resultJson's column type is
+        // std::optional<Light::SqlMaxDynamicAnsiString>, not a bare
+        // std::string.
+        row.resultJson = std::optional{*std::move(resultJson)};
+    }
+    mapper.Update(row);
 }
 
 }  // namespace
@@ -712,6 +795,143 @@ ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
     auto result = ImportResult{.imported = imported, .duplicates = duplicates};
     logAction(action, result);
     return result;
+}
+
+ReportJobId LedgerModel::execute(const SubmitReport& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    if (!action.validate()) {
+        throw ValidationError{"SubmitReport: ledgerId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ledgerRows =
+        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"SubmitReport: no such ledger"};
+    }
+
+    db::ReportJobRecord jobRow;
+    jobRow.ledger = ledgerRows.front();
+    jobRow.kind = static_cast<int>(action.kind);
+    jobRow.status = static_cast<int>(ReportStatus::Pending);
+    jobRow.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+    mapper.Create(jobRow);
+    // job_id stores the row's own stringified id. ReportJobRecord::job_id (a
+    // string column) and ReportJobId (an int64-based strong id) both predate
+    // this task, which is the first to populate either; reconciling them this
+    // way keeps the column consistent with `id` rather than leaving it dead
+    // schema, and needs no migration. (A later reviewer could reasonably
+    // observe the column is now redundant with `id` and drop it -- out of
+    // this task's scope to decide unilaterally.)
+    jobRow.jobId = std::to_string(jobRow.id.Value());
+    mapper.Update(jobRow);
+
+    const auto jobId = ReportJobId{static_cast<std::int64_t>(jobRow.id.Value())};
+
+    // Only plain values cross the thread boundary: the job's own integer id
+    // and the ledger id, both copied. Nothing from this stack frame -- not
+    // `mapper`, not `ctx` (a thread-local session pointer), not `action` --
+    // is captured: `execute()` returns and tears all of that down long
+    // before the worker runs. See _reportExecutor's own comment (and
+    // docs/findings/003) for why this model owns an executor at all.
+    const auto jobIdValue = *jobId;
+    const auto ledgerId = action.ledgerId;
+    _reportExecutor->post([jobIdValue, ledgerId] {
+        try {
+            auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+            std::string resultJson;
+            {
+                // Read-transaction snapshot pinning (IMPLEMENTATION.md rule
+                // 4's pre-cleared raw-SQL escape tier): a raw BEGIN DEFERRED
+                // as the FIRST statement on this connection, before any
+                // DataMapper::Query<T>() call, so every query the
+                // aggregation makes sees one consistent snapshot rather than
+                // a partial concurrent write mid-aggregation.
+                // Lightweight::SqlTransaction cannot do this -- it only
+                // toggles SQL_ATTR_AUTOCOMMIT via ODBC and issues no BEGIN
+                // of its own (see examples/common/testkit/db_busy_fixture.hpp's
+                // own doc comment, which demonstrates this same raw pattern
+                // with IMMEDIATE). DataMapper::Query issues its SQL through
+                // exactly the connection DataMapper::Connection() exposes,
+                // so the pin covers every query below.
+                //
+                // COMMIT (never ROLLBACK) on both paths: this transaction
+                // only ever reads, so there is nothing to undo, and ending
+                // it promptly is what matters -- a read transaction left
+                // open holds a SHARED lock that blocks every writer on every
+                // other connection until it closes.
+                //
+                // The `(void)` discards match the same raw-statement idiom
+                // in examples/common/testkit/db_busy_fixture.hpp:
+                // ExecuteDirect returns a [[nodiscard]] value that carries
+                // nothing useful for a BEGIN/COMMIT (a genuine failure
+                // throws, and is handled by the catch blocks below).
+                (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("BEGIN DEFERRED");
+                try {
+                    resultJson = computeReportJson(workerMapper.Get(), ledgerId);
+                } catch (...) {
+                    (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
+                    throw;
+                }
+                (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
+            }
+            // Written only after the read snapshot has been released, so this
+            // connection is not simultaneously holding a read lock and asking
+            // for a write one.
+            finishReportJob(workerMapper.Get(), jobIdValue, ReportStatus::Done, std::move(resultJson));
+        } catch (...) {
+            // Catch-all, not just `const std::exception&`: an escaping
+            // exception of any type must still leave the job in a terminal
+            // state, or a poller would spin against Pending forever. The
+            // pool's own worker loop would log-and-continue on such a throw,
+            // but it cannot record Failed on this job's behalf.
+            std::string detail = "unknown exception";
+            try {
+                throw;
+            } catch (const std::exception& exc) {
+                detail = exc.what();
+            } catch (...) {
+                // keep the placeholder
+            }
+            ::morph::log::logError("[ledger] SubmitReport worker failed: " + detail);
+            try {
+                auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+                finishReportJob(workerMapper.Get(), jobIdValue, ReportStatus::Failed, std::nullopt);
+            } catch (...) {
+                // A failure recording the failure has nowhere left to go at
+                // this rung's scope -- the job stays Pending, an accepted
+                // limitation rather than a silently swallowed one (the same
+                // shape bookmarks' own fetchMetadataOnce() catch block
+                // settles for).
+                ::morph::log::logError("[ledger] SubmitReport worker failed and could not record failure");
+            }
+        }
+    });
+
+    return jobId;
+}
+
+GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetReportStatus: jobId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto jobRows = mapper.Query<db::ReportJobRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                               static_cast<std::uint64_t>(*action.jobId))
+                        .All();
+    if (jobRows.empty()) {
+        throw NotFound{"GetReportStatus: no such job"};
+    }
+    const auto& row = jobRows.front();
+    return GetReportStatusResult{
+        .status = static_cast<ReportStatus>(row.status.Value()),
+        .result = row.resultJson.Value().has_value()
+                      ? std::optional{std::string{row.resultJson.Value()->ToStringView()}}
+                      : std::nullopt,
+    };
 }
 
 SetCategoryResult LedgerModel::execute(const SetCategory& action) {

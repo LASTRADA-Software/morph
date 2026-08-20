@@ -4,9 +4,11 @@
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/dto/account_dto.hpp"
 #include "ledger/dto/import_dto.hpp"
+#include "ledger/dto/report_dto.hpp"
 #include "ledger/dto/transaction_dto.hpp"
 
 #include <morph/core/bridge.hpp>
+#include <morph/core/executor.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -118,6 +120,33 @@ class LedgerModel {
     ///        content-hash duplicates.
     ImportResult execute(const ImportLedgerChunk& action);
 
+    /// @brief Enqueues a report computation for `action.ledgerId` and returns
+    ///        its job id immediately (design spec §9's submit->poll pair).
+    ///        Creates one `db::ReportJobRecord` in `ReportStatus::Pending`,
+    ///        then posts the actual aggregation to `_reportExecutor` -- see
+    ///        that member's own comment for why this model owns an executor
+    ///        at all, and `docs/findings/003-no-model-level-background-job-seam.md`
+    ///        for the missing framework seam this works around.
+    ///
+    ///        The posted worker acquires its OWN pooled `DataMapper` and
+    ///        captures only plain values: nothing from this call's stack
+    ///        frame (its `mapper`, its `morph::session::Context*`) survives
+    ///        into the worker, since `execute()` returns long before the
+    ///        worker runs.
+    /// @param action The ledger id, report kind, and JSON-encoded params.
+    /// @return The freshly created job's id, immediately -- long before the
+    ///         report itself is computed.
+    ReportJobId execute(const SubmitReport& action);
+
+    /// @brief Reads the current state of the job named by `action.jobId`.
+    ///        A pure read with no session-scoped side effect, so (like
+    ///        `execute(GetLedger)`) it carries no empty-principal gate and is
+    ///        registered `Loggable::No`.
+    /// @param action The job id to poll.
+    /// @return The job's status, plus its serialized report body once the
+    ///         status has reached `ReportStatus::Done`.
+    GetReportStatusResult execute(const GetReportStatus& action);
+
     /// @brief Attaches a durable action log and this instance's stable
     ///        identity, so every subsequent mutating `execute()` records
     ///        a `morph::journal::LogEntry`. Model-level mirror of
@@ -220,6 +249,30 @@ class LedgerModel {
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
+
+    /// @brief Where `execute(SubmitReport)` posts the actual report
+    ///        computation. Infrastructure, not model state -- it holds no
+    ///        per-ledger data and does not violate this class's own "the key
+    ///        lives in each action, not the instance" rule; every posted task
+    ///        carries the ids it needs by value.
+    ///
+    ///        A member at all because no framework-level seam exists for a
+    ///        model's own `execute()` to post background work: every other
+    ///        "background job" in this codebase (bookmarks' metadata fetch)
+    ///        lives at the App/Bridge/RemoteServer layer and re-enters its
+    ///        model as an ordinary client dispatch, a layer this rung simply
+    ///        does not have. Filed as
+    ///        `docs/findings/003-no-model-level-background-job-seam.md`.
+    ///
+    ///        Declared LAST among the data members so it is destroyed FIRST:
+    ///        `~ThreadPoolExecutor()` joins its workers, so by the time any
+    ///        other member is torn down no posted task can still be running.
+    ///        A `shared_ptr<IExecutor>` rather than a `ThreadPoolExecutor`
+    ///        by value so a caller can substitute a different executor
+    ///        (a `MainThreadExecutor`, a deterministic double) without this
+    ///        class changing shape.
+    std::shared_ptr<::morph::exec::IExecutor> _reportExecutor =
+        std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
 };
 
 }  // namespace ledger
@@ -305,5 +358,34 @@ struct morph::model::ActionKeyTraits<ledger::ImportLedgerChunk> {
     static constexpr bool fromResult = false;
     static std::string key(const ledger::ImportLedgerChunk& action) {
         return morph::model::keyToString(*action.ledgerId);
+    }
+};
+
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SubmitReport, "SubmitReport")
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetReportStatus, "GetReportStatus", ::morph::model::Loggable::No)
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::SubmitReport> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::SubmitReport& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
+
+// GetReportStatus carries no ledgerId, only jobId -- resolving its key by
+// looking up the job row's own ledger_id would repeat Task 14's already-
+// rejected DB-lookup-inside-key() pattern, so it keys directly on jobId
+// itself. ModelKeyTraits<LedgerModel>::PrimaryKey is already declared
+// std::int64_t, and a ReportJobId's own underlying integer is just as valid
+// a value for that key type as a LedgerId's: nothing requires every keyed
+// action on one model to key by the same semantic field, only that the key
+// type matches.
+template <>
+struct morph::model::ActionKeyTraits<ledger::GetReportStatus> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::GetReportStatus& action) {
+        return morph::model::keyToString(*action.jobId);
     }
 };
