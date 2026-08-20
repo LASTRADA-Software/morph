@@ -392,7 +392,7 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
                                          *expenseAccountId)
                                   .All();
     REQUIRE(accountRowsBefore.front().category.Value().has_value());
-    CHECK(accountRowsBefore.front().category.Value().value() == *categoryA);
+    CHECK(static_cast<std::int64_t>(accountRowsBefore.front().category.Value().value()) == *categoryA);
 
     // Edit RuleX to v2: now sets Groceries instead of Dining.
     ruleModel.execute(ledger::UpdateRule{.ruleId = ruleId, .matchText = "Coffee", .actionValue = "Groceries"});
@@ -416,8 +416,8 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
                                         *expenseAccountId)
                                  .All();
     REQUIRE(accountRowsAfter.front().category.Value().has_value());
-    CHECK(accountRowsAfter.front().category.Value().value() == *categoryA);
-    CHECK(accountRowsAfter.front().category.Value().value() != *categoryB);
+    CHECK(static_cast<std::int64_t>(accountRowsAfter.front().category.Value().value()) == *categoryA);
+    CHECK(static_cast<std::int64_t>(accountRowsAfter.front().category.Value().value()) != *categoryB);
 }
 
 TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, not by validate()", "[ledger][rational][security]") {
