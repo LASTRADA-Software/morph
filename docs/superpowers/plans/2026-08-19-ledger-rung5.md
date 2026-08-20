@@ -2836,6 +2836,206 @@ git commit -m "ledger: self-journaling infrastructure on LedgerModel/BudgetModel
 
 ---
 
+## Task 11b: `StoreTransaction` exactly-once (opId + applied-ops ledger)
+
+**Inserted during SDD execution, before Task 12**: pre-verifying Task
+12's divergence test surfaced a real, pre-existing gap in Task 8's
+`execute(StoreTransaction)`: unlike kanban's `MoveTaskPosition`
+(naturally idempotent — replaying it just re-sets a task to the same
+position), `StoreTransaction` is a pure insert (a new
+`TransactionJournalRecord` + legs every call). `morph::journal::
+replay()` re-dispatches every recorded entry against a fresh model
+instance — including the trigger `StoreTransaction` entry itself, not
+just the cascade — so without an idempotency mechanism, replay would
+insert a *second* journal+legs row and double every affected balance.
+This is exactly the "exactly-once" cross-cutting strain LADDER.md names
+(`kanban` establishes the pattern at rung 4; `ledger` was always meant
+to "re-test it with money," per LADDER.md's own recurring-strains list)
+— not a new invention, a scope item this plan should have picked up
+earlier and didn't. Fixed now, before Task 12 needs replay to actually
+converge.
+
+**Files:**
+- Modify: `examples/ledger/include/ledger/dto/transaction_dto.hpp`
+- Modify: `examples/ledger/include/ledger/db/ledger_entity.hpp`
+- Modify: `examples/ledger/src/db/schema.cpp`
+- Modify: `examples/ledger/src/models/ledger_model.cpp`
+- Test: `examples/ledger/tests/test_ledger_model.cpp`
+
+**Interfaces:**
+- Consumes: the exact pattern kanban's real, verified
+  `execute(MoveTaskPosition)` already establishes
+  (`ladder-kanban-impl:examples/kanban/src/models/board_model.cpp`):
+  client-supplied `opId`, a server-side applied-ops table storing the
+  full serialized result, checked (after any auth/role gate — none
+  applies to `StoreTransaction` beyond Task 11's empty-principal check,
+  already the first statement) before any re-validation or mutation. A
+  hit returns the stored result verbatim, with **no re-journaling** (a
+  ledger hit performed nothing new, so nothing new is logged — confirmed
+  against kanban's own doc comment on this exact point, itself verified
+  against a live capture: the framework's own auto-append does not
+  double-log this path, so skipping `logAction` on a ledger hit is
+  correct, not a workaround).
+- Produces: `StoreTransaction` gains an `opId: ImportOpId` field
+  (reusing bookmarks' own `ImportOpId` type/shape per design spec §8's
+  already-established rule-of-three tracking — this is the *second*
+  occurrence of the same op-id-ledger pattern in this rung, after §8's
+  own import dedup; a third occurrence anywhere in the ladder would
+  trigger `IMPLEMENTATION.md`'s promotion rule, noted for whoever builds
+  the next rung needing it). `ledger_applied_ops` table + `AppliedOpRecord`
+  entity, keyed by `(ledger_id, op_id)`.
+
+- [ ] **Step 1: Write the failing test for opId replay-safety**
+
+```cpp
+// Append to examples/ledger/tests/test_ledger_model.cpp
+TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second insert", "[ledger][model][exactly-once]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    const auto opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"txn-op-1"});
+    const auto txn = ledger::StoreTransaction{
+        .ledgerId = ledgerId, .description = "Groceries", .date = morph::time::Timestamp::now(), .opId = opId,
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-3000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                        .amount = morph::math::Rational{Numerator{3000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}};
+
+    auto first = model.execute(txn);
+    auto second = model.execute(txn);  // identical opId -- must be a no-op replay, not a second insert
+
+    auto findBalance = [&](ledger::AccountId id, const ledger::GetLedgerResult& r) {
+        return std::ranges::find_if(r.accounts, [&](const auto& a) { return a.id == id; })->balance.numerator;
+    };
+    CHECK(findBalance(ledgerState.accounts[0].id, first) == -3000);
+    CHECK(findBalance(ledgerState.accounts[0].id, second) == -3000);  // still -3000, not -6000
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `ctest --preset cl-debug -R "exactly-once" --output-on-failure`
+Expected: FAIL — `opId` field doesn't exist on `StoreTransaction` yet.
+
+- [ ] **Step 3: Add `opId` to `StoreTransaction`, the `ledger_applied_ops` table/entity**
+
+```cpp
+// Modify StoreTransaction in transaction_dto.hpp -- reuse bookmarks'
+// ImportOpId shape verbatim (per design spec §8's own citation):
+#include "ledger/core/import_op_id.hpp"  // or wherever this task declares ImportOpId -- see note below
+
+struct StoreTransaction {
+    LedgerId ledgerId;
+    std::string description;
+    morph::time::Timestamp date;
+    std::vector<TransactionLeg> legs;
+    ImportOpId opId;
+
+    [[nodiscard]] bool validate() const noexcept {
+        return ledgerId.hasValue() && !description.empty() && legs.size() >= 2 &&
+               std::ranges::all_of(legs, [](const auto& leg) { return leg.accountId.hasValue(); });
+    }
+};
+```
+
+`ImportOpId` was originally scoped to Task 15 (import dedup) in this
+plan's own design spec §8 discussion, but this task needs it first —
+declare it now, in a small shared header both this task and Task 15 can
+include (e.g. `ledger/core/import_op_id.hpp`), rather than duplicating
+the type. Shape copied verbatim from
+`examples/bookmarks/include/bookmarks/core/types.hpp`'s `ImportOpId`
+(`std::optional<std::string> value`, `hasValue()`, `fromOptional()`).
+
+```cpp
+// Append to examples/ledger/src/db/schema.cpp:
+LIGHTWEIGHT_SQL_MIGRATION(20260819000013, "Create ledger_applied_ops table") {
+    plan.CreateTableIfNotExists("ledger_applied_ops")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("op_id", Varchar(128))
+        .RequiredColumn("result_json", NVarchar(0))
+        .RequiredColumn("created_at_ms", Bigint());
+    plan.CreateUniqueIndex("idx_ledger_applied_ops_ledger_op", "ledger_applied_ops", {"ledger_id", "op_id"});
+}
+```
+
+```cpp
+// Append to ledger_entity.hpp:
+struct AppliedOpRecord {
+    static constexpr std::string_view TableName = "ledger_applied_ops";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_id"}> opId;  // 2
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"result_json"}> resultJson;  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
+};
+```
+
+- [ ] **Step 4: Implement the ledger lookup-before-mutate, write-after-commit pattern in `execute(StoreTransaction)`**
+
+Copied verbatim in shape from kanban's own real `execute
+(MoveTaskPosition)` (cited above): immediately after Task 11's
+empty-principal check and `validate()`, before any account lookup or
+zero-sum partitioning, check `action.opId.hasValue()`; if so, query
+`AppliedOpRecord` by `(ledger_id, op_id)` — a hit means: deserialize
+`resultJson` back into a `GetLedgerResult` (confirm `glz::read_json`'s
+exact signature against kanban's own usage, or an existing rung's own
+JSON-roundtrip test), return it verbatim, **do not call `logAction`** (a
+ledger hit performed nothing new — nothing to journal), and do not touch
+the zero-sum/leg-insertion logic at all. A miss proceeds exactly as
+Task 8 already implemented, with one addition: after `sqlTxn.Commit()`
+and after computing the rebuilt `GetLedgerResult`, if `opId.hasValue()`,
+serialize that result to JSON and `mapper.Create()` an `AppliedOpRecord`
+row *inside the same transaction* (before `sqlTxn.Commit()`, not after —
+confirm this ordering against kanban's own real code, which creates the
+`AppliedOpRecord` before `transaction.Commit()`, so the op-id write and
+the business mutation are atomic together).
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `ctest --preset cl-debug -R "exactly-once" --output-on-failure`
+Expected: PASS.
+
+- [ ] **Step 6: Run the full ledger test suite to confirm Task 8/9's own tests still pass**
+
+Run: `ctest --preset cl-debug -L ladder-ledger --output-on-failure`
+Expected: PASS — Task 8/9's existing `StoreTransaction` tests don't set
+`opId` (or set it as disengaged/empty), so they exercise the "no opId,
+no ledger check, ordinary insert" path unchanged. Confirm this is
+actually true rather than assumed: an empty/disengaged `opId` must skip
+the whole lookup-and-write-ledger-row logic, never attempt a lookup
+against an empty string key.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add examples/ledger/include/ledger/dto/transaction_dto.hpp \
+        examples/ledger/include/ledger/db/ledger_entity.hpp \
+        examples/ledger/src/db/schema.cpp \
+        examples/ledger/src/models/ledger_model.cpp \
+        examples/ledger/tests/test_ledger_model.cpp
+git commit -m "ledger: StoreTransaction exactly-once via opId + applied-ops ledger (replay-safety prerequisite for Task 12)"
+```
+
+---
+
 ## Task 12: `RuleModel` + cascade-journaling (causal parent-id)
 
 **Files:**
@@ -2870,6 +3070,29 @@ Read this plan's own spec (§4) and, if accessible, kanban's design spec
 before implementing — this task must match that mechanism precisely, not
 reinvent it.
 
+**Correction from plan self-review**: `RuleModel`'s constructor
+(`explicit RuleModel(LedgerId ledgerId)`) and the principal check
+(`context.principal.hasValue()`) both predate this plan's own real
+corrections from Tasks 7 and 11 — `RuleModel` must be plain
+default-constructible (Task 7's real, verified pattern: no keyed model
+in this rung takes its key as a constructor argument), and the
+empty-principal check is `morph::session::current()` returning `nullptr`
+or an empty `.principal` string (Task 11's real, verified pattern),
+never `.hasValue()`. Both fixed below. Also, Step 8's cascade mechanism
+was left as "mint a stable app-level identity... resolve the exact
+mechanism" — kanban's own real, already-implemented `evaluateRules`
+(`ladder-kanban-impl:examples/kanban/src/models/board_model.cpp`)
+answers this precisely: mint the identity from a real DB row's
+auto-increment id that already exists in the same transaction
+regardless of whether any rule matches (kanban uses its own
+`BoardEventRecord`'s id; ledger's exact equivalent is
+`TransactionJournalRecord`'s own id, already created earlier in
+`execute(StoreTransaction)`), and call the cascade's *implementation*
+directly (bypassing any public `execute()` overload, which would
+double-log) — `logAction`'s cascade call is the *only* logger for that
+entry, invoked with the trigger's identity as `causalParentId`. Fully
+specified below rather than left for the implementer to resolve.
+
 - [ ] **Step 2: Write the failing rule-creation test**
 
 ```cpp
@@ -2878,21 +3101,53 @@ reinvent it.
 #include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("CreateRule persists a rule at version 1", "[ledger][rule]") {
     morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
     ledger::RuleModel model;
+    ScopedPrincipal principal{"alice"};  // per Task 11's convention -- mutating actions require a principal
     auto ruleId = model.execute(ledger::CreateRule{
-        .ledgerId = ledger::LedgerId{1}, .trigger = ledger::RuleTrigger::DescriptionContains,
+        .ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
         .matchText = "Coffee", .action = ledger::RuleAction::SetCategory, .actionValue = "Dining"});
-    // Assert the persisted RuleRecord's version == 1.
+    REQUIRE(ruleId.hasValue());
+
+    auto ruleRows = mapper.Query<ledger::db::RuleRecord>()
+                        .Where(::Lightweight::FieldNameOf<&ledger::db::RuleRecord::id>, "=", *ruleId)
+                        .All();
+    REQUIRE(ruleRows.size() == 1);
+    CHECK(ruleRows.front().version.Value() == 1);
 }
 
 TEST_CASE("UpdateRule bumps the version", "[ledger][rule]") {
-    // Create then update; assert version == 2.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::RuleModel model;
+    ScopedPrincipal principal{"alice"};
+    auto ruleId = model.execute(ledger::CreateRule{
+        .ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
+        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory, .actionValue = "Dining"});
+
+    auto updated = model.execute(
+        ledger::UpdateRule{.ruleId = ruleId, .matchText = "Cafe", .actionValue = "Dining Out"});
+    CHECK(updated.version == 2);
 }
 ```
+
+`ScopedPrincipal` is the same helper Task 11 added to this file's own
+anonymous namespace — reuse it, do not redeclare.
 
 - [ ] **Step 3: Run test to verify it fails**
 
@@ -2945,38 +3200,133 @@ struct RuleInfo {
 // examples/ledger/include/ledger/models/rule_model.hpp
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
-#include "ledger/core/types.hpp"
 #include "ledger/dto/rule_dto.hpp"
+
+#include <morph/core/registry.hpp>
 
 namespace ledger {
 
-/// @brief Keyed by LedgerId, mirroring LedgerModel/BudgetModel. Owns rule
-///        CRUD only -- rule *evaluation* during StoreTransaction lives in
-///        LedgerModel (Step 8 below), which reads RuleRecord rows directly
-///        rather than calling back into a live RuleModel instance.
+/// @brief Rule CRUD, keyed by LedgerId. Plain default-constructible, per
+///        LedgerModel's own real shape (Task 7) -- the key lives in each
+///        action. Rule *evaluation* during StoreTransaction lives in
+///        LedgerModel (Step 8 below), which reads RuleRecord rows via a
+///        direct Query<RuleRecord> rather than calling back into a live
+///        RuleModel instance -- there is no established cross-model
+///        read pattern in this codebase to reuse instead.
 class RuleModel {
   public:
-    explicit RuleModel(LedgerId ledgerId);
-
     RuleId execute(const CreateRule& action);
     RuleInfo execute(const UpdateRule& action);
-
-  private:
-    LedgerId _ledgerId;
 };
+
+}  // namespace ledger
+
+BRIDGE_REGISTER_MODEL(ledger::RuleModel, "RuleModel")
+BRIDGE_REGISTER_ACTION(ledger::RuleModel, ledger::CreateRule, "CreateRule")
+BRIDGE_REGISTER_ACTION(ledger::RuleModel, ledger::UpdateRule, "UpdateRule")
+
+// Hand-written ModelKeyTraits/ActionKeyTraits, per Task 7's real,
+// verified discovery: LedgerId fails morph::model::ModelKey's
+// std::integral/std::string constraint, so BRIDGE_MODEL_KEY/
+// BRIDGE_KEY_FROM cannot be used.
+template <>
+struct morph::model::ModelKeyTraits<ledger::RuleModel> {
+    using PrimaryKey = std::int64_t;
+};
+template <>
+struct morph::model::ActionKeyTraits<ledger::CreateRule> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::CreateRule& action) { return morph::model::keyToString(*action.ledgerId); }
+};
+```
+
+`UpdateRule` gets no `ActionKeyTraits` specialization — it carries a
+`ruleId`, not a `ledgerId`, so it cannot share `CreateRule`'s key type;
+confirm against `include/morph/core/model_key.hpp`'s real primary-template
+default (`hasKey = false`) whether that's the correct answer for it too,
+the same way Task 10 confirmed it for `LinkAccountToCategory`.
+
+```cpp
+// examples/ledger/src/models/rule_model.cpp
+// SPDX-License-Identifier: Apache-2.0
+#include "ledger/core/errors.hpp"
+#include "ledger/db/ledger_entity.hpp"
+#include "ledger/models/rule_model.hpp"
+
+#include <Lightweight/DataMapper/DataMapper.hpp>
+#include <morph/session/session.hpp>
+
+namespace ledger {
+
+RuleId RuleModel::execute(const CreateRule& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    if (!action.validate()) {
+        throw ValidationError{"CreateRule: ledgerId and matchText are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ledgerRows = mapper.Query<db::LedgerRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId)
+                           .All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"CreateRule: no such ledger"};
+    }
+    db::RuleRecord ruleRow;
+    ruleRow.ledger = ledgerRows.front();
+    ruleRow.trigger = static_cast<int>(action.trigger);
+    ruleRow.matchText = action.matchText;
+    ruleRow.action = static_cast<int>(action.action);
+    ruleRow.actionValue = action.actionValue;
+    ruleRow.version = 1;
+    mapper.Create(ruleRow);
+    auto ruleId = RuleId{static_cast<std::int64_t>(ruleRow.id.Value())};
+    logAction(action, ruleId);  // needs RuleModel's own attachActionLog/logAction pair -- see the note below
+    return ruleId;
+}
+
+RuleInfo RuleModel::execute(const UpdateRule& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    if (!action.validate()) {
+        throw ValidationError{"UpdateRule: ruleId and matchText are required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ruleRows = mapper.Query<db::RuleRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::id>, "=", *action.ruleId)
+                         .All();
+    if (ruleRows.empty()) {
+        throw NotFound{"UpdateRule: no such rule"};
+    }
+    auto& ruleRow = ruleRows.front();
+    ruleRow.matchText = action.matchText;
+    ruleRow.actionValue = action.actionValue;
+    ruleRow.version = ruleRow.version.Value() + 1;
+    mapper.Update(ruleRow);
+    RuleInfo result{.id = action.ruleId, .trigger = static_cast<RuleTrigger>(ruleRow.trigger.Value()),
+                     .matchText = ruleRow.matchText.Value().ToStringView().data(),
+                     .action = static_cast<RuleAction>(ruleRow.action.Value()),
+                     .actionValue = ruleRow.actionValue.Value().ToStringView().data(),
+                     .version = ruleRow.version.Value()};
+    logAction(action, result);
+    return result;
+}
 
 }  // namespace ledger
 ```
 
-`rule_model.cpp` implements both against `Lightweight::GlobalDataMapperPool()`
-per `IMPLEMENTATION.md` rule 4: `execute(CreateRule)` inserts a
-`RuleRecord` with `version = 1`; `execute(UpdateRule)` loads the existing
-row, updates `matchText`/`actionValue`, increments `version`, persists,
-and returns the updated `RuleInfo`. Both check
-`context.principal.hasValue()` first, throwing `EmptyPrincipalError`
-otherwise, per design spec §11 (this model is a mutating model like
-`LedgerModel`/`BudgetModel`, so it is bound by the same rule even though
-Task 11 only added the check to the other two).
+**`RuleModel` needs its own `attachActionLog`/`logAction` pair, per Task
+11a's own pattern** (this plan did not originally scope Task 11a to
+cover `RuleModel`, since `RuleModel` did not exist yet when Task 11a was
+written — add the identical `attachActionLog`/`logAction` shape to
+`RuleModel`'s own header/`.cpp` as part of this task, following Task
+11a's exact template, `modelType = "RuleModel"`). Every mutating
+`execute()` on `RuleModel` (`CreateRule`, `UpdateRule`) calls `logAction`
+at the end, exactly like `LedgerModel`/`BudgetModel`.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -2989,20 +3339,62 @@ Expected: PASS.
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEntry::seq", "[ledger][rule][journal]") {
     morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
     ledger::RuleModel ruleModel;
-    ledger::LedgerModel ledgerModel;
-    ruleModel.execute(ledger::CreateRule{.ledgerId = ledger::LedgerId{1},
-                                          .trigger = ledger::RuleTrigger::DescriptionContains,
+    ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
                                           .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
                                           .actionValue = "Dining"});
-    // Store a transaction whose description contains "Coffee"; inspect the
-    // model's attached IActionLog (or a fixture wrapping one) and assert:
-    // two LogEntry rows exist (trigger + cascade), the cascade's
-    // causalParentId equals the trigger's own app-minted identity (never
-    // its LogEntry::seq value), and the cascade's payload carries
-    // ruleId + ruleVersion.
+
+    ledger::LedgerModel ledgerModel;
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining",
+                                             .kind = ledger::AccountKind::Expense,
+                                             .currency = ledger::Currency::USD});
+    auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Coffee at the cafe",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 2);  // trigger + cascade
+    CHECK(entries[0].actionType == "StoreTransaction");
+    CHECK(entries[0].causalParentId.empty());  // the trigger itself has no parent
+    CHECK(entries[1].actionType == "SetCategory");
+    CHECK_FALSE(entries[1].causalParentId.empty());
+    CHECK(entries[1].causalParentId != std::to_string(entries[0].seq));  // never LogEntry::seq
+    CHECK(entries[1].payload.find("ruleId") != std::string::npos);
+    CHECK(entries[1].payload.find("ruleVersion") != std::string::npos);
 }
 ```
+
+Confirm `LogEntry::payload`'s exact type (`std::string`, already
+JSON-encoded, per `action_log.hpp`) before finalizing the `payload.find(...)`
+assertions — a substring check on already-serialized JSON is this plan's
+simplest verifiable assertion shape, but confirm it against the real
+`toJson()` output shape (does `SetCategory`'s DTO literally carry fields
+named `ruleId`/`ruleVersion`? see Step 8's `SetCategory` DTO below) rather
+than guessing the JSON key names blind.
 
 - [ ] **Step 7: Run test to verify it fails**
 
@@ -3011,17 +3403,147 @@ Expected: FAIL — no cascade logic exists yet.
 
 - [ ] **Step 8: Implement rule evaluation in `LedgerModel::execute(StoreTransaction)`**
 
-After committing the journal+legs, if `!morph::journal::isReplaying()`,
-evaluate every active rule (fetched via `RuleModel`'s own store, or a
-shared read path — resolve the exact cross-model read mechanism against
-how kanban's own rules-consuming code, if present on
-`ladder-kanban-impl`, reads sibling-model state, or fall back to a direct
-`Query<RuleRecord>` inside `LedgerModel` if no established cross-model
-read pattern exists) against the new journal's description. On a match,
-mint a stable app-level identity for the trigger `LogEntry` (never reuse
-`LogEntry::seq`), append a second `LogEntry` for the `SetCategory`
-cascade with `causalParentId` set to that identity and `payload`
-containing `{ruleId, ruleVersion}`.
+Add a `SetCategory` action DTO to `transaction_dto.hpp` (or a new
+`rule_cascade_dto.hpp` if that fits this codebase's file-organization
+convention better) — the cascade's own action type, carrying the fields
+the causal-link test above checks for:
+
+```cpp
+struct SetCategory {
+    AccountId accountId;
+    CategoryId categoryId;
+    RuleId ruleId;
+    std::int32_t ruleVersion;
+};
+
+/// @brief Empty result placeholder for SetCategory's cascade logging --
+///        this rung's own name for the same empty-result shape kanban's
+///        `Ack` (`examples/kanban/include/kanban/dto/project_dto.hpp`)
+///        serves there; not imported from kanban (a different rung's
+///        type), a fresh local declaration with the same shape.
+struct SetCategoryResult {};
+```
+
+**`SetCategory` must still be `BRIDGE_REGISTER_ACTION`'d and have a
+public `execute()` overload, even though design spec §4 never calls for
+a client to dispatch it directly.** Verified against `morph::journal::
+replay()`'s real implementation (`include/morph/journal/journal.hpp`):
+`replay()` re-dispatches every entry via
+`dispatcher.dispatch(entry.modelType, entry.actionType, *holder,
+entry.payload)`, which looks up the action type string in the
+dispatcher's *registered*-action table regardless of who originally
+created the entry — an unregistered `"SetCategory"` entry would make
+`replay()` throw `std::runtime_error` the moment it reaches that entry.
+Kanban's own `ApplyTagMutation` (the equivalent cascade action there) is
+registered for exactly this reason (confirmed:
+`BRIDGE_REGISTER_ACTION(kanban::BoardModel, kanban::ApplyTagMutation,
+"ApplyTagMutation")`), even though its `execute()` overload's own doc
+comment states plainly that `evaluateRules` never calls through it (to
+avoid double-logging) — the registration exists purely so `replay()` can
+route the type, not because a client is expected to dispatch it that
+way.
+
+Add:
+- `SetCategoryResult execute(const SetCategory& action)` — the *public*,
+  directly-dispatchable overload. Body: validate, call
+  `setCategoryImpl(action)`, call `logAction(action, SetCategoryResult{})`
+  (empty `causalParentId` — the default, since this is an ordinary,
+  non-cascaded call site), return `SetCategoryResult{}`. Register it:
+  `BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SetCategory,
+  "SetCategory")`.
+- A private `setCategoryImpl(const SetCategory&)` method holding the
+  actual mutation (link `accountId` to `categoryId` — reusing
+  `BudgetModel::execute(LinkAccountToCategory)`'s same schema addition
+  from Task 10, `AccountRecord::category`). Called by BOTH the public
+  `execute(SetCategory)` above AND the cascade path below — the mutation
+  logic itself is shared; only the *logging* differs (once, unconditionally,
+  in the public overload; once, with a causal link, in the cascade path —
+  never both for the same firing, exactly kanban's own documented
+  reasoning for why `evaluateRules` bypasses the public overload).
+
+In `execute(StoreTransaction)`, after `mapper.Create(journalRow)` (the
+journal row's `id` now exists) and after the full per-leg commit loop,
+before this method's own `logAction(action, result)` call at the very
+end:
+
+**Two design decisions this task resolves concretely, not left
+speculative:**
+
+1. **Which account does a description-match rule categorize?** The
+   design spec's own step 4 describes the rule as "task moved to Done ⇒
+   ..." for kanban, transliterated to "description contains X ⇒ set
+   category Y" for ledger — the natural ledger reading is: the rule
+   categorizes the **expense/revenue leg** of the matching transaction
+   (the non-asset side), not the asset account being debited/credited.
+   Resolved by picking the first leg in `action.legs` whose account's
+   `kind` is `Expense` or `Revenue`, reusing the `legAccounts` vector
+   `execute(StoreTransaction)`'s own zero-sum partitioning loop (Task 8)
+   already populated — no re-query needed.
+2. **How does `actionValue` (a category *name* string, e.g. `"Dining"`)
+   resolve to a `CategoryId`?** Resolved as **lookup, never
+   auto-create**: the category must already exist (via `CreateCategory`,
+   Task 10) — consistent with `OpenAccount`'s own established precedent
+   of requiring its ledger to already exist rather than auto-provisioning
+   one. If no such category exists, the rule silently does not fire for
+   this transaction (not an error — a dangling rule referencing a
+   deleted/never-created category is a misconfiguration, not a reason to
+   fail the triggering `StoreTransaction` itself).
+
+```cpp
+if (!morph::journal::isReplaying()) {
+    const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
+    auto rules = mapper.Query<db::RuleRecord>()
+                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::ledger>, "=", *action.ledgerId)
+                     .Where(::Lightweight::FieldNameOf<&db::RuleRecord::trigger>, "=",
+                            static_cast<int>(RuleTrigger::DescriptionContains))
+                     .All();
+    // Decision 1: the leg to categorize is the first Expense/Revenue
+    // account among this transaction's own legs -- legAccounts is the
+    // same vector the zero-sum partitioning loop above already built,
+    // positionally aligned with action.legs.
+    std::optional<std::size_t> categorizableLegIndex;
+    for (std::size_t i = 0; i < legAccounts.size(); ++i) {
+        const auto kind = static_cast<AccountKind>(legAccounts[i].kind.Value());
+        if (kind == AccountKind::Expense || kind == AccountKind::Revenue) {
+            categorizableLegIndex = i;
+            break;
+        }
+    }
+    if (categorizableLegIndex.has_value()) {
+        for (const auto& rule : rules) {
+            if (action.description.find(rule.matchText.Value().ToStringView()) == std::string::npos) {
+                continue;
+            }
+            // Decision 2: lookup, never auto-create -- a rule naming a
+            // category that doesn't exist in this ledger simply doesn't
+            // fire; it is not an error on the triggering transaction.
+            auto categoryRows =
+                mapper.Query<db::CategoryRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::ledger>, "=", *action.ledgerId)
+                    .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::name>, "=", rule.actionValue.Value())
+                    .All();
+            if (categoryRows.empty()) {
+                continue;
+            }
+            const SetCategory cascadeAction{
+                .accountId = AccountId{static_cast<std::int64_t>(legAccounts[*categorizableLegIndex].id.Value())},
+                .categoryId = CategoryId{static_cast<std::int64_t>(categoryRows.front().id.Value())},
+                .ruleId = RuleId{static_cast<std::int64_t>(rule.id.Value())},
+                .ruleVersion = rule.version.Value()};
+            setCategoryImpl(cascadeAction);
+            logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
+        }
+    }
+}
+```
+
+`rule.actionValue.Value()`'s exact comparison against
+`CategoryRecord::name` (a `Light::SqlAnsiString<128>`) may need an
+explicit type match — confirm `Where(...)`'s value-comparison overload
+accepts a `Light::SqlAnsiString<N>` on both sides, or convert one to
+`std::string_view`/`std::string` first, against how an existing rung's
+own string-column `Where` clause does this (e.g. `polls`' own
+`participantName` filters, if any exist) before finalizing.
 
 - [ ] **Step 9: Run tests to verify they pass**
 
@@ -3031,14 +3553,103 @@ Expected: PASS.
 - [ ] **Step 10: Write and pass the named divergence test**
 
 ```cpp
+// Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 outcome", "[ledger][rule][journal][divergence]") {
-    // Record a StoreTransaction that fires RuleX v1 (sets category A).
-    // UpdateRule to v2 (sets category B).
-    // morph::journal::replay() the journal.
-    // Assert replayed state has category A, never category B -- per
-    // design spec §4's "named divergence test, not a bullet".
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
+    ledger::BudgetModel budgetModel;
+    auto categoryA = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Dining"});
+    auto categoryB = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Groceries"});
+
+    ledger::RuleModel ruleModel;
+    auto ruleId = ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId,
+                                                        .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
+                                                        .actionValue = "Dining"});  // v1: sets Dining
+
+    ledger::LedgerModel ledgerModel;
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining Out",
+                                             .kind = ledger::AccountKind::Expense,
+                                             .currency = ledger::Currency::USD});
+    auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto expenseAccountId = ledgerState.accounts[1].id;
+
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Coffee run",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = expenseAccountId,
+                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // The expense account is now linked to category A (Dining) -- confirm
+    // this directly before editing the rule, so the assertion after replay
+    // is a genuine "still A, never B" check, not a vacuous one.
+    auto accountRowsBefore = mapper.Query<ledger::db::AccountRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
+                                         *expenseAccountId)
+                                  .All();
+    REQUIRE(accountRowsBefore.front().category.hasValue());
+    CHECK(accountRowsBefore.front().category.Value() == *categoryA);
+
+    // Edit RuleX to v2: now sets Groceries instead of Dining.
+    ruleModel.execute(ledger::UpdateRule{.ruleId = ruleId, .matchText = "Coffee", .actionValue = "Groceries"});
+
+    // Replay the captured log against a fresh model instance.
+    auto replayedEntries = log->entries();
+    auto replayedHolder = morph::journal::replay("LedgerModel", replayedEntries);
+    (void)replayedHolder;  // confirm exact IModelHolder access pattern for reading back post-replay state --
+                            // this plan's replay-read-back shape is its least-verified part of this task; check
+                            // an existing rung's own replay test (if one exists, e.g. tests/test_action_log.cpp
+                            // or kanban's own divergence test on ladder-kanban-impl) for how a test actually
+                            // inspects state through the returned IModelHolder, rather than guessing further.
+
+    // The replayed database state must still show category A, never B --
+    // the cascade's own recorded entry (payload includes ruleVersion=1)
+    // pins the v1 outcome; replay's isReplaying()-gated rule suppression
+    // means the trigger entry never re-evaluates against the now-v2 rule.
+    auto accountRowsAfter = mapper.Query<ledger::db::AccountRecord>()
+                                 .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
+                                        *expenseAccountId)
+                                 .All();
+    REQUIRE(accountRowsAfter.front().category.hasValue());
+    CHECK(accountRowsAfter.front().category.Value() == *categoryA);
+    CHECK(accountRowsAfter.front().category.Value() != *categoryB);
 }
 ```
+
+This test's replay-read-back mechanism (the `(void)replayedHolder;` line)
+is deliberately flagged as unresolved rather than guessed: `replay()`
+returns a type-erased `std::unique_ptr<IModelHolder>`, and this plan has
+not independently verified the exact API to read persisted state back
+out of it (vs. simply re-querying the database directly afterward, which
+this test already does via `mapper.Query<AccountRecord>()` — since
+`LedgerModel`'s own mutations are persisted to the real SQLite database,
+not held in memory, re-querying the database after `replay()` completes
+is very likely sufficient on its own, making the `IModelHolder` return
+value possibly unused by this test entirely). Confirm this reasoning (or
+correct it) against `include/morph/journal/journal.hpp`'s own doc
+comments on `replay()`'s return value before finalizing — if the
+database-requery-only approach is correct, drop the unused
+`replayedHolder` variable entirely rather than keep a needless
+`(void)`-cast placeholder.
 
 Run: `ctest --preset cl-debug -R "divergence" --output-on-failure`
 Expected: PASS once implemented (this is the test the whole cascade
