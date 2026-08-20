@@ -2606,6 +2606,236 @@ git commit -m "ledger: refuse empty-principal writes at the model (design spec �
 
 ---
 
+## Task 11a: `LedgerModel`/`BudgetModel` self-journaling infrastructure (retrofit)
+
+**Inserted during SDD execution, before Task 12**: Task 12's cascade-
+journaling requires `LedgerModel` to append a manually-constructed
+`LogEntry` for a rule cascade, with `causalParentId` set. This is only
+possible if the model already journals its *own* triggering actions —
+kanban's real, already-implemented pattern
+(`ladder-kanban-impl:examples/kanban/src/models/board_model.{hpp,cpp}`,
+unmerged) shows why: a plain-constructed model (`LedgerModel model;`, as
+every test in this plan already does) is never wrapped by the
+framework's registry `IModelHolder`, so `IModelHolder::attachActionLog`/
+`recordIfAttached`'s automatic per-call journaling never fires for it —
+`model.execute(action)` calls `LedgerModel::execute` directly, bypassing
+the dispatcher entirely. `BoardModel` therefore keeps its own
+`shared_ptr<IActionLog>`, attached explicitly via a model-level
+`attachActionLog(log, entityKey)` method, and calls a private
+`logAction(action, result, causalParentId = {})` helper at the end of
+**every** successful mutating `execute()` — not just the ones that might
+cascade. This task retrofits that same infrastructure into
+`LedgerModel`/`BudgetModel` before Task 12 needs to append a cascade
+entry on top of it.
+
+**Files:**
+- Modify: `examples/ledger/include/ledger/models/ledger_model.hpp`
+- Modify: `examples/ledger/src/models/ledger_model.cpp`
+- Modify: `examples/ledger/include/ledger/models/budget_model.hpp`
+- Modify: `examples/ledger/src/models/budget_model.cpp`
+- Test: `examples/ledger/tests/test_ledger_model.cpp`,
+  `examples/ledger/tests/test_budget_model.cpp`
+
+**Interfaces:**
+- Consumes: `morph::journal::IActionLog`, `morph::journal::LogEntry`,
+  `morph::model::ActionTraits<Action>::typeId()`/`toJson()`/
+  `resultToJson()` (`include/morph/journal/action_log.hpp`,
+  `include/morph/core/registry.hpp`).
+- Produces: `LedgerModel::attachActionLog(shared_ptr<IActionLog>,
+  std::string entityKey)` and a private `logAction(action, result,
+  causalParentId = {})` template, called unconditionally (no-op when no
+  log is attached) at the end of every mutating `execute()`
+  (`OpenAccount`, `StoreTransaction`). Identical shape on `BudgetModel`
+  for `CreateCategory`, `LinkAccountToCategory`, `CreateBudget`,
+  `SetBudgetLimit`. No behavior change for any existing test — none of
+  them call `attachActionLog`, so `_log` stays null and `logAction`
+  no-ops exactly as before this task.
+
+- [ ] **Step 1: Read kanban's real `attachActionLog`/`logAction` pair in full**
+
+Read `attachActionLog`'s doc comment and `logAction`'s implementation
+(cited above) in full before writing anything — the doc comment's own
+explanation of *why* a plain-constructed model needs this (not the
+framework's automatic path) is the fact this task exists to apply.
+
+- [ ] **Step 2: Write the failing test proving `logAction` fires (and no-ops without an attached log)**
+
+```cpp
+// Append to examples/ledger/tests/test_ledger_model.cpp
+#include <morph/journal/action_log.hpp>
+
+TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op without one", "[ledger][model][journal]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+
+    // No log attached: succeeds, no crash, nothing recorded anywhere to
+    // check against -- this half of the test exists to prove the no-op
+    // path doesn't throw or misbehave when _log is null.
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+
+    // Attach a log, then repeat -- this call must be recorded.
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    model.attachActionLog(log, std::to_string(*ledgerId));
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Savings",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 1);  // only the second call was journaled -- the first ran before attachActionLog
+    CHECK(entries[0].actionType == "OpenAccount");
+    CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
+    CHECK(entries[0].entityKey == std::to_string(*ledgerId));
+}
+```
+
+Confirm `morph::journal::InMemoryActionLog`'s exact constructor/`entries()`
+signature against `tests/test_action_log.cpp`'s own usage before
+finalizing — this plan has not independently verified that specific type
+the way it has verified other framework surfaces in this session; if the
+constructor or `entries()` shape differs from what's written above,
+match the real header rather than guessing further.
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `ctest --preset cl-debug -R "records a LogEntry" --output-on-failure`
+Expected: FAIL to compile — `attachActionLog` doesn't exist on
+`LedgerModel` yet.
+
+- [ ] **Step 4: Implement `attachActionLog`/`logAction` on `LedgerModel`**
+
+```cpp
+// Append to LedgerModel's class body in ledger_model.hpp:
+public:
+    /// @brief Attaches a durable action log and this instance's stable
+    ///        identity, so every subsequent mutating `execute()` records
+    ///        a `morph::journal::LogEntry`. Model-level mirror of
+    ///        `morph::model::detail::IModelHolder::attachActionLog` for a
+    ///        plain-constructed instance that never goes through the
+    ///        framework's registry/dispatcher path (see this class's own
+    ///        file-level doc comment, or Task 11a's own plan text, for
+    ///        why that path never fires for a directly-constructed
+    ///        LedgerModel).
+    /// @param log Sink entries are forwarded to.
+    /// @param entityKey Stable identity stamped onto every LogEntry this
+    ///        instance produces (this rung's ledger id, as a string).
+    void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
+
+private:
+    /// @brief Records @p action/@p result as a LogEntry if a log is
+    ///        attached; no-op otherwise.
+    /// @tparam Action Concrete action type.
+    /// @tparam Result Concrete result type.
+    /// @param action The executed action.
+    /// @param result The action's result.
+    /// @param causalParentId Empty (the default) for every ordinary call
+    ///        site; Task 12's evaluateRules is the only caller that
+    ///        passes a non-empty value.
+    template <typename Action, typename Result>
+    void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
+
+    std::optional<std::string> _entityKeyStr;
+    std::shared_ptr<::morph::journal::IActionLog> _log;
+```
+
+```cpp
+// Append to ledger_model.cpp:
+void LedgerModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
+    _log = std::move(log);
+    _entityKeyStr = std::move(entityKey);
+}
+
+template <typename Action, typename Result>
+void LedgerModel::logAction(const Action& action, const Result& result, std::string causalParentId) const {
+    if (!_log) {
+        return;
+    }
+    ::morph::journal::LogEntry entry;
+    entry.modelType = "LedgerModel";
+    entry.entityKey = _entityKeyStr.value_or(std::string{});
+    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
+    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
+    entry.outcome = ::morph::journal::Outcome::Succeeded;
+    if (const auto* ctx = ::morph::session::current()) {
+        entry.principal = ctx->principal;
+    }
+    entry.timestampMs = (*morph::ladder::now().value).value.time_since_epoch().count();  // server-stamped audit
+                                                                                            // timestamp -- goes
+                                                                                            // through the ladder's
+                                                                                            // injectable clock
+                                                                                            // convention, unlike
+                                                                                            // StoreTransaction's own
+                                                                                            // client-supplied date
+    entry.causalParentId = std::move(causalParentId);
+    _log->append(std::move(entry));
+    // See kanban's own identical comment (design spec §5's citation) for
+    // why this flush is load-bearing, not optional: append() writes
+    // through buffered C stdio with no implicit flush for FileActionLog,
+    // and entries() reads through a separate stream that cannot see
+    // unflushed bytes. InMemoryActionLog::flush() is a no-op, so this
+    // costs nothing for the log type most tests attach.
+    _log->flush();
+}
+
+// Add explicit instantiations for every (Action, Result) pair this file
+// actually calls logAction with, at the bottom of the file (templates
+// defined in a .cpp need this, since nothing outside this TU calls
+// logAction directly) -- confirm the exact instantiation-declaration
+// syntax against an existing rung's own template method defined in a
+// .cpp if this doesn't compile as a bare member-function-template
+// definition; ledger_model.cpp already has the includes logAction's own
+// body needs (registry.hpp via ledger_model.hpp, journal headers added
+// here).
+```
+
+Add `logAction(action, result);` as the last statement before each
+`return` in `execute(OpenAccount)` and `execute(StoreTransaction)` (after
+the mutation has genuinely committed — for `StoreTransaction`, after
+`sqlTxn.Commit()`, mirroring kanban's own placement).
+
+Add `#include <morph/journal/action_log.hpp>` and
+`#include <morph/session/session.hpp>` to `ledger_model.hpp`/`.cpp` as
+needed (Task 11 already added the session include if this branch already
+has it).
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `ctest --preset cl-debug -R "records a LogEntry" --output-on-failure`
+Expected: PASS.
+
+- [ ] **Step 6: Repeat Steps 2-5 for `BudgetModel`**
+
+Identical shape, `modelType = "BudgetModel"`, `logAction` called at the
+end of `CreateCategory`, `LinkAccountToCategory`, `CreateBudget`,
+`SetBudgetLimit` (never the two read-only actions). Add the equivalent
+test to `test_budget_model.cpp`.
+
+- [ ] **Step 7: Run the full ledger test suite to confirm no regressions**
+
+Run: `ctest --preset cl-debug -L ladder-ledger --output-on-failure`
+Expected: PASS — every existing test still passes unchanged, since none
+of them attach a log (this task is additive-only in effect).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add examples/ledger/include/ledger/models/ledger_model.hpp \
+        examples/ledger/src/models/ledger_model.cpp \
+        examples/ledger/include/ledger/models/budget_model.hpp \
+        examples/ledger/src/models/budget_model.cpp \
+        examples/ledger/tests/test_ledger_model.cpp \
+        examples/ledger/tests/test_budget_model.cpp
+git commit -m "ledger: self-journaling infrastructure on LedgerModel/BudgetModel (attachActionLog/logAction, retrofit for Task 12)"
+```
+
+---
+
 ## Task 12: `RuleModel` + cascade-journaling (causal parent-id)
 
 **Files:**
