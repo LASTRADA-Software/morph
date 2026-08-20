@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include "ledger/core/import_op_id.hpp"
 #include "ledger/core/types.hpp"
 #include "ledger/core/units.hpp"
 
@@ -29,11 +30,21 @@ struct TransactionLeg {
 ///        leg's amount is partitioned by the account it names' own
 ///        currency, and each partition's amounts must sum to canonical
 ///        zero (`LedgerModel::execute` throws `ZeroSumViolation` otherwise).
+///
+///        `opId` (Task 11b) is this action's exactly-once key: a disengaged
+///        `opId` (the default -- Task 8/9's own existing call sites, which
+///        predate this field) skips the applied-ops ledger entirely and
+///        takes the ordinary insert-only path. An engaged `opId` that has
+///        already been applied for this ledger returns the previously
+///        stored `GetLedgerResult` verbatim instead of inserting a second
+///        journal+legs row -- the mechanism `morph::journal::replay()`
+///        (Task 12) relies on to re-dispatch this entry safely.
 struct StoreTransaction {
     LedgerId ledgerId;
     std::string description;
     morph::time::Timestamp date;
     std::vector<TransactionLeg> legs;
+    ImportOpId opId;
 
     [[nodiscard]] bool validate() const noexcept {
         return ledgerId.hasValue() && !description.empty() && legs.size() >= 2 &&

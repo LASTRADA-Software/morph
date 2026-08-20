@@ -116,6 +116,26 @@ struct RuleRecord {
     Light::Field<int, Light::SqlRealName{"version"}> version{1};  // 6
 };
 
+/// @brief Exactly-once ledger for `StoreTransaction` (Task 11b, this
+///        rung's own re-test of the pattern kanban's `execute
+///        (MoveTaskPosition)` establishes at rung 4): one row per
+///        `(ledger_id, op_id)`, storing the full serialized
+///        `GetLedgerResult` the original call produced. A lookup hit
+///        means the call has already been applied -- the stored result is
+///        returned verbatim, with no re-journaling and no re-mutation.
+///        Distinct from `ImportedOpRecord` below (Task 15's own chunk-
+///        retry dedup, keyed by `(owner_principal, op_id)` instead --
+///        different scope, different key, same pattern occurring for the
+///        second time in this rung).
+struct AppliedOpRecord {
+    static constexpr std::string_view TableName = "ledger_applied_ops";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&LedgerRecord::id, Light::SqlRealName{"ledger_id"}> ledger;  // 1
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_id"}> opId;  // 2
+    Light::Field<Light::SqlMaxDynamicAnsiString, Light::SqlRealName{"result_json"}> resultJson;  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 4
+};
+
 /// @brief Mirrors `bookmarks::db::ImportedOpRecord`'s exact shape (design
 ///        spec §8): op-id ledger for chunk-retry dedup, keyed by
 ///        `(owner_principal, op_id)`.

@@ -180,3 +180,17 @@ LIGHTWEIGHT_SQL_MIGRATION(20260819000012, "Add category_id to accounts") {
     // header.
     plan.AlterTable("accounts").AddNotRequiredForeignKeyColumn("category_id", Bigint(), categoriesRef());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260819000013, "Create ledger_applied_ops table") {
+    // Exactly-once ledger (Task 11b): one row per (ledger, opId), storing
+    // the full serialized GetLedgerResult the original StoreTransaction
+    // call produced. Mirrors kanban::db's own board_applied_ops migration
+    // shape exactly (ladder-kanban-impl:examples/kanban/src/db/schema.cpp).
+    plan.CreateTableIfNotExists("ledger_applied_ops")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("ledger_id", Bigint(), ledgersRef())
+        .RequiredColumn("op_id", Varchar(128))
+        .RequiredColumn("result_json", NVarchar(0))
+        .RequiredColumn("created_at_ms", Bigint());
+    plan.CreateUniqueIndex("idx_ledger_applied_ops_ledger_op", "ledger_applied_ops", {"ledger_id", "op_id"});
+}

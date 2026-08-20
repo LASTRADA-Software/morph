@@ -11,6 +11,8 @@
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
+#include <glaze/glaze.hpp>
+
 #include <map>
 #include <optional>
 #include <string>
@@ -46,6 +48,40 @@ namespace {
         total = total + legAmount;
     }
     return total;
+}
+
+/// @brief Builds the full current `GetLedgerResult` for @p ledgerId using
+///        @p mapper directly -- the same pattern as kanban's own free
+///        `buildState(mapper, project)` helper
+///        (`ladder-kanban-impl:examples/kanban/src/models/board_model.cpp`).
+///        Declared so `execute(StoreTransaction)` can rebuild the ledger's
+///        state through the *same* mapper/transaction its own mutation
+///        just ran on -- needed for Task 11b's applied-ops ledger write,
+///        which must serialize this exact result and commit it atomically
+///        with the journal+legs insert, not through a second, separate
+///        `Lightweight::DataMapper` connection as a follow-up call would.
+/// @param mapper The data mapper to query through.
+/// @param ledgerId The ledger whose accounts/balances to rebuild.
+/// @return Every account in the ledger, per the ladder-wide
+///         full-rebuilt-state convention.
+[[nodiscard]] GetLedgerResult buildLedgerState(Lightweight::DataMapper& mapper, LedgerId ledgerId) {
+    auto rows = mapper.Query<db::AccountRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
+                    .All();
+    GetLedgerResult result;
+    result.accounts.reserve(rows.size());
+    for (const auto& row : rows) {
+        const auto currency = codeToCurrency(row.currencyCode.Value().ToStringView());
+        const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
+        result.accounts.push_back(AccountInfo{
+            .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
+            .name = std::string{row.name.Value().ToStringView()},
+            .kind = static_cast<AccountKind>(row.kind.Value()),
+            .currency = currency,
+            .balance = sumAccountLegs(mapper, row.id.Value(), decimalPlaces),
+        });
+    }
+    return result;
 }
 
 }  // namespace
@@ -142,26 +178,12 @@ GetLedgerResult LedgerModel::execute(const GetLedger& action) {
         throw ValidationError{"GetLedger: ledgerId is required"};
     }
     Lightweight::DataMapper mapper;
-    auto rows = mapper.Query<db::AccountRecord>()
-                    .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *action.ledgerId)
-                    .All();
-    GetLedgerResult result;
-    result.accounts.reserve(rows.size());
-    for (const auto& row : rows) {
-        const auto currency = codeToCurrency(row.currencyCode.Value().ToStringView());
-        const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
-        result.accounts.push_back(AccountInfo{
-            .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
-            .name = std::string{row.name.Value().ToStringView()},
-            .kind = static_cast<AccountKind>(row.kind.Value()),
-            .currency = currency,
-            // Real balance: the sum of every leg posted against this
-            // account, computed in-model via Rational::operator+ (never a
-            // raw SQL SUM() -- see sumAccountLegs's own doc comment).
-            .balance = sumAccountLegs(mapper, row.id.Value(), decimalPlaces),
-        });
-    }
-    return result;
+    // Real balance per account: the sum of every leg posted against it,
+    // computed in-model via Rational::operator+ (never a raw SQL SUM() --
+    // see sumAccountLegs's own doc comment), via the shared buildLedgerState
+    // helper (also used by execute(StoreTransaction) against its own
+    // in-flight transaction's mapper -- see that helper's doc comment).
+    return buildLedgerState(mapper, action.ledgerId);
 }
 
 GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
@@ -173,6 +195,32 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         throw ValidationError{"StoreTransaction: description and at least two legs with engaged accountIds are required"};
     }
     Lightweight::DataMapper mapper;
+
+    // Task 11b, design spec §1 (kanban's execute(MoveTaskPosition) pattern,
+    // ladder-kanban-impl:examples/kanban/src/models/board_model.cpp):
+    // ledger lookup, after the empty-principal/validate() checks above
+    // (this action has no further role/auth gate), before any account
+    // lookup or zero-sum partitioning. A disengaged opId (Task 8/9's own
+    // existing call sites, which predate this field) skips this whole
+    // block -- never attempts a lookup against an empty string key.
+    if (action.opId.hasValue()) {
+        auto existingOp = mapper.Query<db::AppliedOpRecord>()
+                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::ledger>, "=", *action.ledgerId)
+                               .Where(::Lightweight::FieldNameOf<&db::AppliedOpRecord::opId>, "=", *action.opId)
+                               .All();
+        if (!existingOp.empty()) {
+            GetLedgerResult replayed;
+            if (auto err = glz::read_json(replayed, std::string{existingOp.front().resultJson.Value()}); err) {
+                throw LedgerError{"StoreTransaction: corrupt applied-ops ledger entry"};
+            }
+            // A ledger hit means this call performed nothing new -- it only
+            // returned a previously-stored result -- so there is nothing to
+            // journal here (verified against kanban's own identical point:
+            // the framework's own auto-append does not double-log this
+            // path, so skipping logAction on a ledger hit is correct).
+            return replayed;
+        }
+    }
 
     // Partition legs by the account's OWN currency, never a client-supplied
     // field (design spec §1) -- look up every referenced account first.
@@ -254,9 +302,33 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
                 : std::nullopt;
         mapper.Create(legRow);
     }
+
+    // Rebuilt through the same mapper/in-flight transaction as the mutation
+    // above (buildLedgerState, not a fresh execute(GetLedger{...}) call
+    // against a second Lightweight::DataMapper connection) -- Task 11b's
+    // applied-ops row below serializes this exact result and must commit
+    // atomically with it.
+    auto result = buildLedgerState(mapper, action.ledgerId);
+
+    // Task 11b: written *inside* the same transaction, before sqlTxn.Commit()
+    // -- confirmed against kanban's own real execute(MoveTaskPosition), which
+    // creates its AppliedOpRecord before transaction.Commit() so the op-id
+    // write and the business mutation commit atomically together.
+    if (action.opId.hasValue()) {
+        std::string resultJson;
+        if (auto err = glz::write_json(result, resultJson); err) {
+            throw LedgerError{"StoreTransaction: failed to serialize result for the applied-ops ledger"};
+        }
+        db::AppliedOpRecord op;
+        op.ledger = ledgerRows.front();
+        op.opId = *action.opId;
+        op.resultJson = resultJson;
+        op.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+        mapper.Create(op);
+    }
+
     sqlTxn.Commit();
 
-    auto result = execute(GetLedger{.ledgerId = action.ledgerId});
     logAction(action, result);
     return result;
 }

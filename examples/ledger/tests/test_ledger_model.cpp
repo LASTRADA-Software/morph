@@ -241,3 +241,43 @@ TEST_CASE("OpenAccount records a LogEntry once a log is attached, and is a no-op
     CHECK(entries[0].outcome == morph::journal::Outcome::Succeeded);
     CHECK(entries[0].entityKey == std::to_string(*ledgerId));
 }
+
+TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second insert", "[ledger][model][exactly-once]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
+    ledger::LedgerModel model;
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    const auto opId = ledger::ImportOpId::fromOptional(std::optional<std::string>{"txn-op-1"});
+    const auto txn = ledger::StoreTransaction{
+        .ledgerId = ledgerId, .description = "Groceries", .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-3000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                        .amount = morph::math::Rational{Numerator{3000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}},
+        .opId = opId};
+
+    auto first = model.execute(txn);
+    auto second = model.execute(txn);  // identical opId -- must be a no-op replay, not a second insert
+
+    auto findBalance = [&](ledger::AccountId id, const ledger::GetLedgerResult& r) {
+        return std::ranges::find_if(r.accounts, [&](const auto& a) { return a.id == id; })->balance.numerator;
+    };
+    CHECK(findBalance(ledgerState.accounts[0].id, first) == -3000);
+    CHECK(findBalance(ledgerState.accounts[0].id, second) == -3000);  // still -3000, not -6000
+}
