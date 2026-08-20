@@ -4505,21 +4505,132 @@ git commit -m "ledger: CSV import -- content-hash cross-import dedup, opId ledge
 - Modify: `examples/ledger/src/models/ledger_model.cpp`
 - Test: `examples/ledger/tests/test_ledger_reports.cpp`
 
+**Corrections from plan self-review** (a dedicated research pass ran
+before dispatch, since this task's own brief flagged a genuine
+uncertainty -- "confirm the exact API against whatever rung 2's own
+README/spec documents; if unavailable... use `ThreadPoolExecutor::post`
+directly"; the research resolved every question the brief left open,
+with three real findings):
+
+1. **No worker-pool-from-inside-a-model seam exists anywhere in this
+   codebase, and the design spec's own claim that rung 2 "establishes"
+   one is not actually true.** Exhaustive search of every `execute()` in
+   bank/bookmarks/pastebin/polls confirms: bookmarks' own metadata-fetch
+   "background job" (`examples/bookmarks/src/app/app.cpp:187`'s
+   `App::fetchMetadataOnce()`) lives entirely at the App/Bridge/
+   RemoteServer layer -- it re-enters `BookmarkModel::execute()` as a
+   fresh, ordinary, fully-authorized client dispatch (through a real
+   `BridgeHandler`/service-principal token), never by a model calling an
+   executor directly from inside its own `execute()`. `LedgerModel` has
+   no App, no Bridge, no RemoteServer -- that whole layer does not exist
+   for this rung. Ruling (raised to the user, decided): `LedgerModel`
+   gains its own `std::shared_ptr<morph::exec::IExecutor>` member,
+   defaulting to a real `morph::exec::ThreadPoolExecutor`, and
+   `execute(SubmitReport)` posts to it directly. This is a genuinely new
+   pattern for this codebase, not an application of an existing one --
+   file `docs/findings/003-no-model-level-background-job-seam.md`
+   documenting that no shared, framework-level seam exists for this yet
+   (per `IMPLEMENTATION.md` rule 4's own escape-tier requirement: using a
+   sanctioned escape tier or inventing a local workaround for a missing
+   mechanism gets a mandatory finding entry).
+2. **The raw-query facility's exact API, confirmed against the real
+   Lightweight header**: `Lightweight::SqlStatement{someConnection}.ExecuteDirect(rawSql)`
+   (`SqlStatement.hpp`'s own class doc comment gives this exact shape).
+   Pinning a WAL read snapshot needs a raw `BEGIN DEFERRED` issued this
+   way, BEFORE any `DataMapper::Query<T>()` call touches the same
+   connection -- confirmed `Lightweight::SqlTransaction` does NOT do this
+   itself (it only toggles `SQL_ATTR_AUTOCOMMIT` via ODBC, issuing no
+   `BEGIN` of its own; `examples/common/testkit/db_busy_fixture.hpp`'s own
+   doc comment states this explicitly and demonstrates the same raw-
+   `SqlStatement::ExecuteDirect("BEGIN IMMEDIATE")` pattern this task
+   needs, just with `IMMEDIATE` instead of `DEFERRED`). Once the raw
+   `BEGIN DEFERRED` has run on a `DataMapper`'s own connection, every
+   subsequent `mapper.Query<T>()`/`mapper->Query<T>()` call against that
+   SAME `DataMapper` instance runs inside that pinned snapshot (confirmed:
+   `DataMapper::Query` ultimately issues SQL through the exact connection
+   `DataMapper::Connection()` exposes, the same connection the raw
+   `SqlStatement` ran against).
+3. **`ReportJobRecord.jobId` (a `Light::SqlAnsiString<64>` string column)
+   and `ReportJobId` (Task 2's strong id, wrapping `std::optional<std::int64_t>`)
+   are a genuine type mismatch this task is the first to actually
+   exercise** -- no earlier task ever populated or read `jobId`.
+   Resolved: `jobId` stores the stringified form of the row's own
+   `id.Value()` (`std::to_string(...)`), and `ReportJobId` continues to
+   wrap that same integer (`ReportJobId{static_cast<std::int64_t>(row.id.Value())}`)
+   -- the column is populated consistently rather than left as dead
+   schema, with no new migration needed (a later task/reviewer could
+   still observe the column is redundant with `id` and drop it, but
+   that's out of this task's own scope to decide unilaterally).
+4. **Ledger's own model code has not adopted the pooled-`DataMapper`
+   convention every later rung (bookmarks/pastebin/polls) already uses**
+   (`::Lightweight::GlobalDataMapperPool().Acquire()`, confirmed
+   thread-safe by its own `Pool<Config>`'s `std::mutex`-guarded
+   implementation, safe to call from a worker thread). This task's own
+   NEW background-worker code uses the pooled idiom (it needs to safely
+   acquire its own connection on a worker thread, which a bare
+   `Lightweight::DataMapper mapper;` would also do safely -- each
+   instance opens its own independent connection, confirmed no shared
+   mutable state races across instances -- but the pooled idiom is the
+   established later-rung convention and avoids a fresh
+   `SQLAllocHandle`/`Connect()` per report job). This does NOT mean
+   retrofitting every EXISTING `execute()` in this file to the pooled
+   idiom -- that is a separate, out-of-scope refactor; only this task's
+   own new code adopts it.
+5. **No same-thread/deferred `IExecutor` test double exists for testing
+   the worker-pool side of an async job** (only client-callback-executor
+   doubles exist, e.g. `DeterministicExecutor`, always paired with a
+   REAL thread pool doing the actual work) -- every real async-job test
+   in this codebase (`examples/bookmarks/tests/test_app.cpp`,
+   `examples/pastebin/tests/test_paste_model.cpp`) genuinely spins real
+   threads and polls with a bounded, hard-capped retry loop, exactly the
+   shape this task's own Step 1 test already uses. No change needed to
+   that test shape; confirmed it matches the only precedent that exists.
+
 **Interfaces:**
-- Consumes: `Lightweight`'s raw-query facility (for the WAL read
-  transaction — `IMPLEMENTATION.md`'s pre-cleared escape tier), a
-  worker-pool task-submission seam (rung 2's internal-client-with-
-  service-principal pattern, per design spec §9 — confirm the exact API
-  against whatever rung 2's own README/spec documents; if unavailable in
-  this checkout, use `ThreadPoolExecutor::post` directly as the
-  interim seam, noting the gap in a comment for later reconciliation).
+- Consumes: `Lightweight::SqlStatement{connection}.ExecuteDirect(rawSql)`
+  for the raw `BEGIN DEFERRED`/`COMMIT` pair pinning the WAL snapshot
+  (`IMPLEMENTATION.md`'s pre-cleared escape tier -- correction 2 above);
+  a NEW `std::shared_ptr<morph::exec::IExecutor>` member on `LedgerModel`
+  (correction 1 above) for posting the report-computation task.
 - Produces: `ledger::SubmitReport { ledgerId, kind: ReportKind, params:
   std::string /* JSON-encoded report-specific parameters incl. timezone
   offset per design spec §9 */ } -> ReportJobId`; `ledger::GetReportStatus
   { jobId: ReportJobId } -> GetReportStatusResult { status: ReportStatus,
   result: std::optional<std::string> }`.
 
-- [ ] **Step 1: Write the failing test for the submit->poll shape**
+- [ ] **Step 1: File the finding**
+
+Create `docs/findings/003-no-model-level-background-job-seam.md`:
+```markdown
+---
+id: 003
+title: No framework seam for a model's own execute() to post background work and later update its own state
+subsystem: core
+severity: minor
+source: ledger rung 5, design spec §9
+disposition: open
+test: spec-cited
+---
+
+`morph::exec::IExecutor`/`ThreadPoolExecutor` (include/morph/core/
+executor.hpp) has no usage anywhere inside a model's own `execute()` in
+this codebase. Every existing "background job" (bookmarks' metadata-
+fetch worker, examples/bookmarks/src/app/app.cpp) lives at the App/
+Bridge/RemoteServer layer, re-entering the model as a fresh, ordinary,
+fully-authorized client dispatch through a service-principal token --
+not something a bare model with no App/Bridge/RemoteServer around it
+can do. Ledger rung 5's report job (`SubmitReport`/`GetReportStatus`)
+needed this and found no existing seam, so `LedgerModel` grew its own
+`std::shared_ptr<morph::exec::IExecutor>` member as a local workaround.
+A framework-level "background task from inside a model" primitive
+(with a defined service-principal/session-propagation story for the
+worker thread) would let future rungs avoid re-inventing this
+per-model, and would let a future report job be tested with a
+deferred/deterministic executor double instead of always spinning a
+real thread pool.
+```
+
+- [ ] **Step 2: Write the failing test for the submit->poll shape**
 
 ```cpp
 // examples/ledger/tests/test_ledger_reports.cpp
@@ -4527,66 +4638,394 @@ git commit -m "ledger: CSV import -- content-hash cross-import dedup, opId ledge
 #include "ledger/models/ledger_model.hpp"
 #include "testkit/db_fixture.hpp"
 
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <morph/session/session.hpp>
+
+namespace {
+struct ScopedPrincipal {
+    explicit ScopedPrincipal(std::string principal)
+        : _ctx{[&] { morph::session::Context c; c.principal = std::move(principal); return c; }()}, _scope{_ctx} {}
+    morph::session::Context _ctx;
+    morph::session::detail::ScopedContext _scope;
+};
+}  // namespace
 
 TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending to Done", "[ledger][reports]") {
     morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
     ledger::LedgerModel model;
-    // ... open accounts, store a few transactions ...
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Weekly shop",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
 
     auto jobId = model.execute(ledger::SubmitReport{
-        .ledgerId = ledger::LedgerId{1}, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+        .ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
     REQUIRE(jobId.hasValue());
 
-    // Poll until Done (bounded loop, not a sleep -- follow pump.hpp's
-    // pumpUntil-equivalent discipline even in a non-Qt unit test context,
-    // or a small bounded retry loop with a hard iteration cap if this
-    // test runs outside the Qt pump machinery).
+    // Poll until Done -- a bounded retry loop with a hard iteration cap,
+    // matching the only precedent for testing an async job in this
+    // codebase (correction 5 above: no deferred-executor test double
+    // exists for the worker-pool side, so this genuinely spins the real
+    // pool with std::this_thread::sleep_for between polls).
     ledger::GetReportStatusResult status;
     for (int i = 0; i < 100; ++i) {
         status = model.execute(ledger::GetReportStatus{.jobId = jobId});
         if (status.status != ledger::ReportStatus::Pending) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     REQUIRE(status.status == ledger::ReportStatus::Done);
     REQUIRE(status.result.has_value());
 }
 
 TEST_CASE("Re-polling the same completed job returns byte-identical results", "[ledger][reports]") {
-    // Submit, wait for Done, GetReportStatus twice more; assert both
-    // results are byte-identical (design spec §9's DoD bullet, scoped to
-    // one job's own idempotent retrieval).
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+
+    auto jobId = model.execute(ledger::SubmitReport{
+        .ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = "{}"});
+
+    ledger::GetReportStatusResult status;
+    for (int i = 0; i < 100; ++i) {
+        status = model.execute(ledger::GetReportStatus{.jobId = jobId});
+        if (status.status != ledger::ReportStatus::Pending) break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    REQUIRE(status.status == ledger::ReportStatus::Done);
+
+    // Two more polls of the SAME completed job -- byte-identical results
+    // (design spec §9's DoD bullet, scoped to one job's own idempotent
+    // retrieval; a fresh SubmitReport for the same period is explicitly
+    // allowed to differ, per that same section -- not tested here).
+    auto secondPoll = model.execute(ledger::GetReportStatus{.jobId = jobId});
+    auto thirdPoll = model.execute(ledger::GetReportStatus{.jobId = jobId});
+    CHECK(secondPoll.result == thirdPoll.result);
+    CHECK(secondPoll.status == thirdPoll.status);
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 3: Run test to verify it fails**
 
-Run: `ctest --preset cl-debug -R "reports" --output-on-failure`
+Run (this branch's real build convention -- never `ctest --preset
+cl-debug`): build `ladder_ledger_tests`, run
+`./build/clangcl-release/target/ladder_ledger_tests.exe "[reports]"`.
 Expected: FAIL to compile.
 
-- [ ] **Step 3: Implement `SubmitReport`/`GetReportStatus`**
+- [ ] **Step 4: Implement `report_dto.hpp`**
 
-`SubmitReport` inserts a `ledger_report_jobs` row (`status = Pending`) and
-posts a worker-pool task that: opens a WAL read transaction via
-Lightweight's raw-query facility (per `IMPLEMENTATION.md` rule 4's
-pre-cleared case), runs the report's aggregation against that pinned
-view, serializes the result, updates the row to `status = Done,
-resultJson = <serialized>` (or `Failed` on any exception). `GetReportStatus`
-is a plain read of that row.
+```cpp
+// SPDX-License-Identifier: Apache-2.0
+#pragma once
 
-- [ ] **Step 4: Run tests to verify they pass**
+#include "ledger/core/types.hpp"
 
-Run: `ctest --preset cl-debug -R "reports" --output-on-failure`
-Expected: PASS.
+#include <optional>
+#include <string>
 
-- [ ] **Step 5: Commit**
+namespace ledger {
+
+struct SubmitReport {
+    LedgerId ledgerId;
+    ReportKind kind;
+    std::string params;  // JSON-encoded, report-specific (design spec §9)
+
+    [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue(); }
+};
+
+struct GetReportStatus {
+    ReportJobId jobId;
+
+    [[nodiscard]] bool validate() const noexcept { return jobId.hasValue(); }
+};
+
+struct GetReportStatusResult {
+    ReportStatus status{ReportStatus::Pending};
+    std::optional<std::string> result;  // engaged only once status == Done
+};
+
+}  // namespace ledger
+```
+
+- [ ] **Step 5: Implement `LedgerModel::execute(SubmitReport)`/`execute(GetReportStatus)`**
+
+Add to `ledger_model.hpp`:
+```cpp
+#include "ledger/dto/report_dto.hpp"
+#include <morph/core/executor.hpp>
+```
+Public interface additions:
+```cpp
+[[nodiscard]] ReportJobId execute(const SubmitReport& action);
+[[nodiscard]] GetReportStatusResult execute(const GetReportStatus& action);
+```
+Private member addition (correction 1 above -- the new, local
+background-job seam this task itself introduces):
+```cpp
+std::shared_ptr<::morph::exec::IExecutor> _reportExecutor =
+    std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
+```
+And the keyed-action boilerplate:
+```cpp
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SubmitReport, "SubmitReport")
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetReportStatus, "GetReportStatus", ::morph::model::Loggable::No)
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::SubmitReport> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::SubmitReport& action) { return morph::model::keyToString(*action.ledgerId); }
+};
+```
+(`GetReportStatus` carries no `ledgerId`, only `jobId` -- resolving its
+key by looking up the job row's own `ledger_id` would repeat Task 14's
+already-rejected DB-lookup-inside-`key()` pattern, so it isn't used
+here either. Instead, `GetReportStatus` keys directly on `jobId` itself,
+not the ledger: `ModelKeyTraits<LedgerModel>::PrimaryKey` is already
+declared `std::int64_t`, and a `ReportJobId`'s own underlying integer is
+just as valid a value for that key type as a `LedgerId`'s -- nothing
+requires every keyed action on the same model to key by the same
+semantic field, only that the key type matches):
+```cpp
+template <>
+struct morph::model::ActionKeyTraits<ledger::GetReportStatus> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::GetReportStatus& action) { return morph::model::keyToString(*action.jobId); }
+};
+```
+
+In `ledger_model.cpp`, implement:
+
+```cpp
+ReportJobId LedgerModel::execute(const SubmitReport& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    if (!action.validate()) {
+        throw ValidationError{"SubmitReport: ledgerId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto ledgerRows =
+        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"SubmitReport: no such ledger"};
+    }
+
+    db::ReportJobRecord jobRow;
+    jobRow.ledger = ledgerRows.front();
+    jobRow.kind = static_cast<int>(action.kind);
+    jobRow.status = static_cast<int>(ReportStatus::Pending);
+    jobRow.createdAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+    mapper.Create(jobRow);
+    // jobId is the row's own stringified id -- design spec's own
+    // correction 3 above: ReportJobRecord::jobId (a string column) and
+    // ReportJobId (an int64-based strong id) predate this task's own
+    // choice of how to reconcile them; this is that reconciliation.
+    jobRow.jobId = std::to_string(jobRow.id.Value());
+    mapper.Update(jobRow);
+
+    const auto jobId = ReportJobId{static_cast<std::int64_t>(jobRow.id.Value())};
+    const auto ledgerId = action.ledgerId;
+    const auto kind = action.kind;
+
+    // Posted to this model's own executor (correction 1 above -- no
+    // shared framework seam exists for this). Runs on a worker thread,
+    // with its own pooled DataMapper (correction 4 above) -- never
+    // touches `mapper`/`ctx` from the calling thread, both of which are
+    // about to go out of scope when execute() returns.
+    _reportExecutor->post([jobId, ledgerId, kind] {
+        try {
+            auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+            // WAL read-transaction snapshot pinning (IMPLEMENTATION.md
+            // rule 4's pre-cleared escape tier; correction 2 above for the
+            // exact API): BEGIN DEFERRED as the FIRST statement on this
+            // connection, before any DataMapper::Query<T>() call, so every
+            // query below runs against one consistent snapshot rather than
+            // seeing a partial write mid-aggregation.
+            ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("BEGIN DEFERRED");
+            std::string resultJson;
+            try {
+                // Aggregation is intentionally simple for this rung's own
+                // scope (design spec's "not a full OFX implementation"-
+                // style scoping applies to reports too): sum every
+                // account's balance, grouped by currency. kind is
+                // currently unused beyond being stored -- BudgetReport's
+                // own distinct aggregation is explicitly out of this
+                // task's scope (SetBudgetLimit/GetBudgetReport, Task 10,
+                // already computes budget-vs-spent; this report job does
+                // not duplicate that logic).
+                auto accountRows = workerMapper->Query<db::AccountRecord>()
+                                       .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
+                                       .All();
+                std::map<std::string, morph::math::Rational> totalsByCurrency;
+                for (const auto& accountRow : accountRows) {
+                    const auto currency = codeToCurrency(accountRow.currencyCode.Value().ToStringView());
+                    const auto decimalPlaces =
+                        morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
+                    const auto balance = sumAccountLegs(workerMapper.Get(), accountRow.id.Value(), decimalPlaces);
+                    const std::string code{accountRow.currencyCode.Value().ToStringView()};
+                    auto it = totalsByCurrency.find(code);
+                    if (it == totalsByCurrency.end()) {
+                        totalsByCurrency.emplace(code, balance);
+                    } else {
+                        it->second = it->second + balance;
+                    }
+                }
+                struct ReportRow {
+                    std::string currency;
+                    std::int64_t numerator;
+                    std::int64_t denominator;
+                    std::uint32_t decimalPlaces;
+                };
+                std::vector<ReportRow> rows;
+                for (const auto& [currency, total] : totalsByCurrency) {
+                    rows.push_back(ReportRow{currency, total.numerator, total.denominator, total.decimalPlaces.value});
+                }
+                if (auto err = glz::write_json(rows, resultJson); err) {
+                    throw LedgerError{"SubmitReport: failed to serialize report result"};
+                }
+            } catch (...) {
+                ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
+                throw;
+            }
+            ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
+
+            auto jobRows = workerMapper->Query<db::ReportJobRecord>()
+                               .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                                      static_cast<std::uint64_t>(*jobId))
+                               .All();
+            if (!jobRows.empty()) {
+                auto row = jobRows.front();
+                row.status = static_cast<int>(ReportStatus::Done);
+                // Explicit std::optional{...} wrap, matching this file's own
+                // established idiom for a nullable Field (see
+                // execute(StoreTransaction)'s own foreignAmountNum
+                // assignment) -- resultJson's column type is
+                // std::optional<Light::SqlMaxDynamicAnsiString>, not a bare
+                // std::string. AppliedOpRecord::resultJson (non-nullable,
+                // same underlying string type) already assigns a plain
+                // std::string directly elsewhere in this file, confirming
+                // SqlMaxDynamicAnsiString itself constructs implicitly from
+                // std::string -- only the optional wrapper needs spelling
+                // out here.
+                row.resultJson = std::optional{resultJson};
+                workerMapper->Update(row);
+            }
+        } catch (...) {
+            try {
+                auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
+                auto jobRows = workerMapper->Query<db::ReportJobRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                                          static_cast<std::uint64_t>(*jobId))
+                                   .All();
+                if (!jobRows.empty()) {
+                    auto row = jobRows.front();
+                    row.status = static_cast<int>(ReportStatus::Failed);
+                    workerMapper->Update(row);
+                }
+            } catch (...) {
+                // A failure recording the failure has nowhere left to go
+                // for this rung's own scope -- the job stays Pending
+                // forever, an accepted limitation, not silently swallowed
+                // (logged via morph::log if this rung's own convention for
+                // background-pass failures, matching bookmarks' own
+                // fetchMetadataOnce()'s catch block, applies here too).
+                ::morph::log::logError("[ledger] SubmitReport worker failed and could not record failure");
+            }
+        }
+    });
+
+    return jobId;
+}
+
+GetReportStatusResult LedgerModel::execute(const GetReportStatus& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetReportStatus: jobId is required"};
+    }
+    Lightweight::DataMapper mapper;
+    auto jobRows = mapper.Query<db::ReportJobRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::ReportJobRecord::id>, "=",
+                               static_cast<std::uint64_t>(*action.jobId))
+                        .All();
+    if (jobRows.empty()) {
+        throw NotFound{"GetReportStatus: no such job"};
+    }
+    const auto& row = jobRows.front();
+    return GetReportStatusResult{
+        .status = static_cast<ReportStatus>(row.status.Value()),
+        .result = row.resultJson.Value().has_value() ? std::optional{std::string{row.resultJson.Value()->ToStringView()}}
+                                                      : std::nullopt,
+    };
+}
+```
+(`GetReportStatus` has no empty-principal check -- it is a pure read
+with no session-scoped side effect, matching `GetLedger`'s own identical
+exemption for the same reason, and its `BRIDGE_REGISTER_ACTION` line
+above already marks it `Loggable::No`.)
+
+- [ ] **Step 6: Wire the new test file into the build**
+
+Confirmed (Task 15's own review already established this): `tests/`
+sources under `examples/ledger/` are auto-discovered via
+`file(GLOB_RECURSE ... CONFIGURE_DEPENDS "${_dir}/tests/*.cpp")` in
+`morph_add_rung.cmake` -- no `CMakeLists.txt` edit is needed for the new
+test file to be picked up. Do not add one.
+
+- [ ] **Step 7: Run tests to verify they pass**
+
+Run: rebuild `ladder_ledger_tests`, run
+`./build/clangcl-release/target/ladder_ledger_tests.exe "[reports]"`.
+Expected: PASS. Then run the full suite with no filter to confirm no
+regressions. **This task's tests genuinely spin a real thread pool and
+poll with real sleeps** (correction 5 above) -- if a test run seems to
+hang, check whether the worker thread is actually blocked (e.g. on a
+SQLite lock from another connection) rather than assuming a slow
+compile; a single report job over a tiny test ledger should complete in
+well under the 100×10ms=1s poll budget.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add examples/ledger/include/ledger/dto/report_dto.hpp \
         examples/ledger/include/ledger/models/ledger_model.hpp \
         examples/ledger/src/models/ledger_model.cpp \
         examples/ledger/tests/test_ledger_reports.cpp \
-        examples/ledger/CMakeLists.txt
-git commit -m "ledger: reports -- submit->poll job idiom, WAL-snapshot semantics"
+        docs/findings/003-no-model-level-background-job-seam.md
+git commit -m "ledger: reports -- submit->poll job idiom, WAL-snapshot semantics, model-owned executor"
 ```
 
 ---
