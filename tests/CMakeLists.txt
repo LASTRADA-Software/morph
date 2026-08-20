@@ -104,6 +104,27 @@ target_link_libraries(morph_tests
 
 apply_warnings(morph_tests)
 
+# Same local-machine fastcache-cc opt-out examples/ledger/CMakeLists.txt
+# already applies to ladder_ledger_lib/ladder_ledger_tests, for the same
+# reason: the machine-local fastcache-cc/fastcached compiler-cache launcher
+# was observed serving a stale cached object for a genuinely-changed source
+# file in this target too (tests/test_ledger_rational_fuzz.cpp -- a debug
+# print added directly to the source never appeared in the executed binary,
+# reproduced across repeated rebuilds, and the same stale object survived a
+# full FastCached service restart). No eviction primitive exists in the tool
+# and the daemon's on-disk cache directory is outside this checkout, so this
+# target opts out of the launcher entirely rather than risk silently linking
+# a stale object again. CI is unaffected (fastcache-cc is only found/enabled
+# when a daemon actually answers on the build machine, never true in CI) --
+# this is a local-development-experience fix only. Safe to remove once the
+# underlying cache bug is fixed upstream (see fastcache-cc --help /
+# D:/caching/README.md for the tool this refers to, and
+# https://github.com/LASTRADA-Software/fastcached/issues/51 for the filed
+# report).
+set_target_properties(morph_tests PROPERTIES
+    C_COMPILER_LAUNCHER ""
+    CXX_COMPILER_LAUNCHER "")
+
 # Several individual test files (schema/rule template instantiation over many
 # action/form types, e.g. test_quantity_forms.cpp) have independently pushed
 # their .obj's COFF section count past the 32-bit SN_LOFF format's limit
