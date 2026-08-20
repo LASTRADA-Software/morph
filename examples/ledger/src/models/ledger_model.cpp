@@ -158,6 +158,57 @@ namespace {
                                   morph::math::DecimalPlaces{decimalPlaces}};
 }
 
+/// @brief RAII guard around a raw SQLite read-transaction snapshot
+///        (`BEGIN DEFERRED` on construction, `COMMIT` on destruction),
+///        fixing a real leak the plain sequential
+///        `ExecuteDirect("BEGIN DEFERRED"); ...; ExecuteDirect("COMMIT");`
+///        shape had: `Lightweight::DataMapperPool::Return` performs no
+///        transaction cleanup on a returned connection (it only tears down
+///        the async backend -- no `SQLEndTran`, no autocommit reset), so a
+///        connection returned to the pool with this snapshot still open
+///        (because `BEGIN DEFERRED` itself threw before the `try` even
+///        started, or because the recovery `COMMIT` on the exception path
+///        itself threw -- e.g. a real `SQLITE_BUSY` on commit, which
+///        replaces the in-flight exception and used to propagate with the
+///        transaction still live) is silently inherited by whichever
+///        unrelated caller acquires that connection next, which then
+///        blocks for the full 60s `busy_timeout` the very first time it
+///        tries to write. Task 16's own review found this gap.
+///
+///        The destructor's own `COMMIT` is wrapped in `catch (...)`: a
+///        failed release of a read-only transaction has nothing further to
+///        report and must never mask whatever exception is already
+///        propagating (or, on the non-exceptional path, silently eat a
+///        real return value -- there is none here, this guard is void-only).
+class WalSnapshotGuard {
+  public:
+    /// @brief Pins a read snapshot on @p connection's connection by issuing
+    ///        `BEGIN DEFERRED` as the first statement.
+    /// @param connection The connection to pin. Must not already have an
+    ///        open transaction -- this class does not check.
+    explicit WalSnapshotGuard(Lightweight::SqlConnection& connection) : _connection{connection} {
+        (void)::Lightweight::SqlStatement{_connection}.ExecuteDirect("BEGIN DEFERRED");
+    }
+
+    /// @brief Releases the pinned snapshot via `COMMIT`, swallowing any
+    ///        failure (see this class's own doc comment for why).
+    ~WalSnapshotGuard() {
+        try {
+            (void)::Lightweight::SqlStatement{_connection}.ExecuteDirect("COMMIT");
+        } catch (...) {
+            // Nothing left to report; must not mask a propagating exception.
+        }
+    }
+
+    WalSnapshotGuard(const WalSnapshotGuard&) = delete;
+    WalSnapshotGuard& operator=(const WalSnapshotGuard&) = delete;
+    WalSnapshotGuard(WalSnapshotGuard&&) = delete;
+    WalSnapshotGuard& operator=(WalSnapshotGuard&&) = delete;
+
+  private:
+    Lightweight::SqlConnection& _connection;
+};
+
 /// @brief Computes @p ledgerId's report body -- every account's balance
 ///        summed per currency -- against @p mapper, and serializes it to
 ///        JSON.
@@ -857,25 +908,25 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
                 // exactly the connection DataMapper::Connection() exposes,
                 // so the pin covers every query below.
                 //
-                // COMMIT (never ROLLBACK) on both paths: this transaction
-                // only ever reads, so there is nothing to undo, and ending
-                // it promptly is what matters -- a read transaction left
-                // open holds a SHARED lock that blocks every writer on every
-                // other connection until it closes.
-                //
-                // The `(void)` discards match the same raw-statement idiom
-                // in examples/common/testkit/db_busy_fixture.hpp:
-                // ExecuteDirect returns a [[nodiscard]] value that carries
-                // nothing useful for a BEGIN/COMMIT (a genuine failure
-                // throws, and is handled by the catch blocks below).
-                (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("BEGIN DEFERRED");
-                try {
-                    resultJson = computeReportJson(workerMapper.Get(), ledgerId);
-                } catch (...) {
-                    (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
-                    throw;
-                }
-                (void) ::Lightweight::SqlStatement{workerMapper->Connection()}.ExecuteDirect("COMMIT");
+                // WalSnapshotGuard (not a bare sequential
+                // ExecuteDirect("BEGIN DEFERRED")/ExecuteDirect("COMMIT")
+                // pair) so the COMMIT is unconditional and failure-proof:
+                // Lightweight::DataMapperPool::Return performs no
+                // transaction cleanup, so any path that could leave this
+                // scope with the transaction still open would leak an open
+                // read lock onto the pooled connection, silently inherited
+                // by whichever unrelated caller acquires it next -- which
+                // then blocks for the full 60s busy_timeout on its first
+                // write. The guard's own destructor closes the transaction
+                // (via COMMIT, swallowing any failure) no matter how this
+                // scope is exited, including if BEGIN DEFERRED itself had
+                // thrown before construction completed (in which case the
+                // guard was never constructed and there is nothing to
+                // close) or if a later COMMIT attempt would itself have
+                // thrown (now impossible to leave unhandled, since the
+                // guard's destructor never lets that escape).
+                WalSnapshotGuard snapshot{workerMapper->Connection()};
+                resultJson = computeReportJson(workerMapper.Get(), ledgerId);
             }
             // Written only after the read snapshot has been released, so this
             // connection is not simultaneously holding a read lock and asking
