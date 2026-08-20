@@ -3,6 +3,7 @@
 
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/dto/account_dto.hpp"
+#include "ledger/dto/import_dto.hpp"
 #include "ledger/dto/transaction_dto.hpp"
 
 #include <morph/core/bridge.hpp>
@@ -97,6 +98,25 @@ class LedgerModel {
     /// @return The full rebuilt ledger state, per the ladder-wide
     ///         full-rebuilt-state convention.
     GetLedgerResult execute(const UndoTransaction& action);
+
+    /// @brief Imports one CSV chunk (`date,description,account_id,amount`
+    ///        rows, one header line skipped) into `action.ledgerId`,
+    ///        posting a two-leg entry per row against that row's own
+    ///        `account_id` and `action.counterAccountId` (design spec §8).
+    ///        Two layers of dedup: an opId-keyed `ledger_imported_ops` row
+    ///        is populated per chunk (Task 15's own scope-narrowing --
+    ///        populated for future use, not yet read back for an early
+    ///        return; see this method's own implementation comment) and a
+    ///        content-hash check against `ledger_imported_txn_hashes`
+    ///        skips (never throws) any row whose `description + date +
+    ///        amount` hash was already imported into this ledger, so the
+    ///        same statement re-uploaded under a different opId is still
+    ///        only recorded once.
+    /// @param action The ledger id, counter account, raw CSV chunk, and
+    ///        this chunk's idempotency key.
+    /// @return How many rows were newly imported vs. skipped as
+    ///        content-hash duplicates.
+    ImportResult execute(const ImportLedgerChunk& action);
 
     /// @brief Attaches a durable action log and this instance's stable
     ///        identity, so every subsequent mutating `execute()` records
@@ -273,6 +293,17 @@ struct morph::model::ActionKeyTraits<ledger::UndoTransaction> {
     static constexpr bool hasKey = true;
     static constexpr bool fromResult = false;
     static std::string key(const ledger::UndoTransaction& action) {
+        return morph::model::keyToString(*action.ledgerId);
+    }
+};
+
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ImportLedgerChunk, "ImportLedgerChunk")
+
+template <>
+struct morph::model::ActionKeyTraits<ledger::ImportLedgerChunk> {
+    static constexpr bool hasKey = true;
+    static constexpr bool fromResult = false;
+    static std::string key(const ledger::ImportLedgerChunk& action) {
         return morph::model::keyToString(*action.ledgerId);
     }
 };

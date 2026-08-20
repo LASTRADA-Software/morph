@@ -14,6 +14,7 @@
 
 #include <glaze/glaze.hpp>
 
+#include <functional>
 #include <map>
 #include <optional>
 #include <string>
@@ -84,6 +85,73 @@ namespace {
         });
     }
     return result;
+}
+
+/// @brief Splits @p text on every occurrence of @p delimiter, keeping empty
+///        fields (so `"a,,b"` yields `{"a", "", "b"}`, and a trailing
+///        delimiter yields a trailing empty field) -- the plain building
+///        block `execute(ImportLedgerChunk)` uses twice: once to split a
+///        CSV chunk into lines (on `'\n'`), once to split a line into its
+///        four comma-separated fields (on `','`).
+/// @param text The text to split.
+/// @param delimiter The single character to split on.
+/// @return Every field between consecutive delimiters, in order.
+[[nodiscard]] std::vector<std::string> splitOn(std::string_view text, char delimiter) {
+    std::vector<std::string> fields;
+    std::size_t start = 0;
+    while (true) {
+        const auto pos = text.find(delimiter, start);
+        if (pos == std::string_view::npos) {
+            fields.emplace_back(text.substr(start));
+            break;
+        }
+        fields.emplace_back(text.substr(start, pos - start));
+        start = pos + 1;
+    }
+    return fields;
+}
+
+/// @brief Parses a decimal amount string like `"-4.50"` or `"12"` into a
+///        `morph::math::Rational` by hand -- never through `std::stod`/
+///        `std::atof` (a `double` intermediate reintroduces exactly the
+///        floating-point imprecision `Rational`'s entire design exists to
+///        avoid; see design spec §2/§7). Splits on `'.'`: the integer part
+///        and fractional part concatenate into the numerator (`sign *
+///        (integerPart * 10^fractionalDigits + fractionalPart)`),
+///        `decimalPlaces` is the fractional part's own digit count (`0` for
+///        a whole-amount field with no `'.'`), `denominator = 1`.
+/// @param field The raw CSV amount field, e.g. `"-4.50"`.
+/// @return The exact `Rational` the field denotes.
+[[nodiscard]] morph::math::Rational parseAmount(const std::string& field) {
+    std::string sign;
+    std::string_view rest = field;
+    if (!rest.empty() && (rest.front() == '-' || rest.front() == '+')) {
+        sign = rest.front();
+        rest = rest.substr(1);
+    }
+    const auto dotPos = rest.find('.');
+    std::string integerPart;
+    std::string fractionalPart;
+    if (dotPos == std::string_view::npos) {
+        integerPart = std::string{rest};
+    } else {
+        integerPart = std::string{rest.substr(0, dotPos)};
+        fractionalPart = std::string{rest.substr(dotPos + 1)};
+    }
+    if (integerPart.empty()) {
+        integerPart = "0";
+    }
+    const auto decimalPlaces = static_cast<std::uint32_t>(fractionalPart.size());
+    // Concatenate the integer and fractional digit strings directly (rather
+    // than computing integerPart * 10^decimalPlaces + fractionalPart in
+    // std::int64_t arithmetic) so a field's magnitude is bounded only by
+    // std::stoll's own range, not by an intermediate power-of-ten multiply
+    // overflowing first.
+    const std::string digits = integerPart + fractionalPart;
+    const std::int64_t magnitude = digits.empty() ? 0 : std::stoll(digits);
+    const std::int64_t numerator = (sign == "-") ? -magnitude : magnitude;
+    return morph::math::Rational{morph::math::Numerator{numerator}, morph::math::Denominator{1},
+                                  morph::math::DecimalPlaces{decimalPlaces}};
 }
 
 }  // namespace
@@ -482,6 +550,167 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
                                     morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts);
 
     logAction(action, result, "transactionJournal:" + std::to_string(originalJournalRow.id.Value()));
+    return result;
+}
+
+ImportResult LedgerModel::execute(const ImportLedgerChunk& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    const std::string principal = ctx->principal;
+
+    if (action.csvChunk.empty() || !action.ledgerId.hasValue() || !action.counterAccountId.hasValue()) {
+        throw ValidationError{"ImportLedgerChunk: ledgerId, counterAccountId, and csvChunk are required"};
+    }
+
+    Lightweight::DataMapper mapper;
+
+    // Chunk-retry dedup (design spec §8, Task 15's own scope-narrowing
+    // ruling): the opId ledger is populated below (once per chunk, after
+    // every row has been processed) so `ledger_imported_ops` satisfies this
+    // task's own "chunk-level opId dedup" interface line, but it is
+    // deliberately NOT read back here for an early return. `ImportedOpRecord`
+    // (unlike `StoreTransaction`'s `AppliedOpRecord`) stores no
+    // `result_json` -- mirroring bookmarks::db::ImportedOpRecord's own
+    // shape exactly -- so an early return on a ledger hit could only ever
+    // produce a zeroed `ImportResult{}`, which would UNDER-report a genuine
+    // replay's real imported/duplicates counts. A replay is still a safe
+    // no-op without this early return: re-parsing the identical csvChunk
+    // re-derives identical content hashes, which the hash-dedup check below
+    // re-skips on its own. Building a correctly-counted early return would
+    // require storing those counts, which this task's own test does not
+    // need -- recorded as a deliberate ruling, not an unresolved TODO.
+    //
+    // No single `Lightweight::SqlTransaction` wraps this whole loop:
+    // `storeJournalImpl` (reused per row below) opens and commits its own
+    // `SqlTransaction` on this same `mapper.Connection()`, and
+    // `Lightweight::SqlTransaction`'s constructor/destructor toggle
+    // `SQL_ATTR_AUTOCOMMIT` on the connection directly (confirmed against
+    // its real implementation) -- nesting a second one around it would
+    // have the inner `Commit()` re-enable autocommit and end the
+    // transaction out from under the still-open outer one, silently
+    // breaking rollback-on-throw for every row after the first. Every
+    // other multi-row commit in this file (`execute(StoreTransaction)`,
+    // `execute(UndoTransaction)`) also opens exactly one
+    // `Lightweight::SqlTransaction` per call, never two nested ones on the
+    // same connection -- this loop instead commits one row at a time,
+    // atomically, via `storeJournalImpl`'s own transaction: a thrown
+    // `ValidationError`/`NotFound` on a malformed row still leaves every
+    // already-committed row from earlier in the same chunk in place
+    // (each was its own complete, self-balancing journal entry), it just
+    // does not roll the whole chunk back to empty.
+    auto ledgerRows =
+        mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *action.ledgerId).All();
+    if (ledgerRows.empty()) {
+        throw NotFound{"ImportLedgerChunk: no such ledger"};
+    }
+
+    auto counterAccountRows = mapper.Query<db::AccountRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.counterAccountId)
+                                   .All();
+    if (counterAccountRows.empty()) {
+        throw NotFound{"ImportLedgerChunk: no such account"};
+    }
+    const auto& counterAccountRow = counterAccountRows.front();
+
+    std::int64_t imported = 0;
+    std::int64_t duplicates = 0;
+
+    // Split on '\n', skip the header line (row 0).
+    auto lines = splitOn(action.csvChunk, '\n');
+    for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        if (lineIndex == 0) {
+            continue;  // header row
+        }
+        if (lines[lineIndex].empty()) {
+            continue;
+        }
+        auto fields = splitOn(lines[lineIndex], ',');
+        if (fields.size() != 4) {
+            throw ValidationError{"ImportLedgerChunk: malformed CSV row"};
+        }
+        const auto& dateField = fields[0];
+        const auto& descriptionField = fields[1];
+        const auto& accountIdField = fields[2];
+        const auto& amountField = fields[3];
+
+        auto parsedDate = morph::time::DateTime::fromIso8601(dateField);
+        if (!parsedDate.has_value()) {
+            throw ValidationError{"ImportLedgerChunk: malformed date"};
+        }
+        const auto rowAccountId = AccountId{std::stoll(accountIdField)};
+        const auto amount = parseAmount(amountField);
+
+        auto rowAccountRows = mapper.Query<db::AccountRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *rowAccountId)
+                                   .All();
+        if (rowAccountRows.empty()) {
+            throw NotFound{"ImportLedgerChunk: no such account"};
+        }
+        const auto& rowAccountRow = rowAccountRows.front();
+
+        // Content hash (design spec §8's "description + date + legs,
+        // canonicalized" -- the amount IS the leg here, since each row is a
+        // single two-leg entry whose only client-supplied amount is this one
+        // value): description + "|" + ISO date string + "|" + numerator +
+        // "|" + denominator + "|" + decimalPlaces.
+        const std::string hashInput = descriptionField + "|" + dateField + "|" + std::to_string(amount.numerator) +
+                                       "|" + std::to_string(amount.denominator) + "|" +
+                                       std::to_string(amount.decimalPlaces.value);
+        const std::string hash = std::to_string(std::hash<std::string>{}(hashInput));
+
+        auto existingHashRows = mapper.Query<db::ImportedTxnHashRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::ledger>, "=",
+                                            *action.ledgerId)
+                                     .Where(::Lightweight::FieldNameOf<&db::ImportedTxnHashRecord::hash>, "=", hash)
+                                     .All();
+        if (!existingHashRows.empty()) {
+            ++duplicates;
+            continue;
+        }
+
+        const std::vector<TransactionLeg> legs{
+            TransactionLeg{.accountId = rowAccountId, .amount = amount},
+            TransactionLeg{.accountId = action.counterAccountId, .amount = -amount}};
+        const std::vector<db::AccountRecord> legAccounts{rowAccountRow, counterAccountRow};
+        [[maybe_unused]] auto rowResult =
+            storeJournalImpl(mapper, action.ledgerId, descriptionField, morph::time::Timestamp{*parsedDate}, legs, legAccounts);
+
+        db::ImportedTxnHashRecord hashRow;
+        hashRow.ledger = ledgerRows.front();
+        hashRow.hash = hash;
+        mapper.Create(hashRow);
+
+        ++imported;
+    }
+
+    // Populated (not read back for an early-return -- see this method's own
+    // comment above), but still guarded by a lookup rather than an
+    // unconditional insert: `ledger_imported_ops` has a real UNIQUE index on
+    // `(owner_principal, op_id)` (the migration's own constraint, mirroring
+    // bookmarks::db::ImportedOpRecord's identical shape), so a replayed
+    // chunk under the same opId would otherwise violate it on its second
+    // call -- turning the intended safe no-op into a thrown SQL error. The
+    // lookup here exists purely to keep the replay safe, not to short-
+    // circuit any of the work above.
+    if (action.opId.hasValue()) {
+        auto existingOpRows = mapper.Query<db::ImportedOpRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::ownerPrincipal>, "=",
+                                          principal)
+                                   .Where(::Lightweight::FieldNameOf<&db::ImportedOpRecord::opId>, "=", *action.opId)
+                                   .All();
+        if (existingOpRows.empty()) {
+            db::ImportedOpRecord opRow;
+            opRow.ownerPrincipal = principal;
+            opRow.opId = *action.opId;
+            opRow.appliedAtMs = (*morph::ladder::now().value).value.time_since_epoch().count();
+            mapper.Create(opRow);
+        }
+    }
+
+    auto result = ImportResult{.imported = imported, .duplicates = duplicates};
+    logAction(action, result);
     return result;
 }
 
