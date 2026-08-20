@@ -3850,11 +3850,30 @@ git commit -m "ledger: Rational overflow fuzz test + two named framework finding
 - Modify: `examples/ledger/tests/test_ledger_model.cpp`
 
 **Interfaces:**
-- Produces: `ledger::UndoTransaction { journalId: JournalId }` with
-  `validate()`; `LedgerModel::execute(UndoTransaction) -> GetLedgerResult`
-  — constructs and commits a reversing `TransactionJournalRecord` whose
-  legs are the originals negated via `Rational`'s unary `operator-`, per
-  design spec §6, with `causalParentId` pointing at the undone entry.
+- Produces: `ledger::UndoTransaction { ledgerId: LedgerId, journalId:
+  JournalId }` with `validate()`; `LedgerModel::execute(UndoTransaction)
+  -> GetLedgerResult` — constructs and commits a reversing
+  `TransactionJournalRecord` whose legs are the originals negated via
+  `Rational::operator-() const` (the member unary negation), per design
+  spec §6, with `causalParentId` pointing at the undone entry.
+
+**Ruling on the key-resolution question this task raises**: every other
+keyed action in this file derives its key directly from a `ledgerId`
+field it already carries; `UndoTransaction` naturally has only
+`journalId`, which would force `ActionKeyTraits<UndoTransaction>::key()`
+to open its own `Lightweight::DataMapper` and query the journal's
+`ledger_id` before any key/dispatch/transaction context exists -- a
+genuinely new pattern with no precedent anywhere in this codebase or
+kanban's, and unclear performance/threading implications for something
+called on every dispatch. Decided: `UndoTransaction` carries `ledgerId`
+explicitly (redundant with `journalId`, but the client already knows
+which ledger it's undoing within -- it's displaying that ledger's own
+activity stream), keeping `key()` a trivial field read exactly like
+every other action here. `execute()` independently verifies the looked-up
+journal's own `ledger` really matches `action.ledgerId` (`throw
+NotFound{"UndoTransaction: journal does not belong to this ledger"}` on
+mismatch), so a wrong `ledgerId` cannot be used to bypass anything or
+target the wrong ledger's model instance.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3862,13 +3881,82 @@ git commit -m "ledger: Rational overflow fuzz test + two named framework finding
 // Append to examples/ledger/tests/test_ledger_model.cpp
 TEST_CASE("UndoTransaction produces an exact negation that re-passes zero-sum and restores balances", "[ledger][undo]") {
     morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
     ledger::LedgerModel model;
-    // Open two accounts, StoreTransaction a multi-currency, multi-leg
-    // journal, record the resulting balances, UndoTransaction it, and
-    // assert: the reversal's legs are the exact negation (Rational
-    // equality, not tolerance), the zero-sum check re-passes per
-    // currency, and post-undo balances match pre-transaction balances
-    // exactly.
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Groceries",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    // -50.00 from Checking, +50.00 to Groceries -- same shape as this
+    // file's own "StoreTransaction with two balanced USD legs commits" test.
+    model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Weekly shop",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                         .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = groceriesId,
+                                        .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // GetLedgerResult/StoreTransaction's own return value never exposes a
+    // journal id (design spec's own account_dto.hpp shape) -- the only way
+    // to name the journal to undo is to query the row directly, same as
+    // any other test in this file that needs a DB-assigned id its DTOs
+    // don't surface.
+    auto journalRows = mapper.Query<ledger::db::TransactionJournalRecord>()
+                            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::description>, "=",
+                                   Lightweight::SqlAnsiString<256>{"Weekly shop"})
+                            .All();
+    REQUIRE(journalRows.size() == 1);
+    const auto journalId = ledger::JournalId{static_cast<std::int64_t>(journalRows.front().id.Value())};
+
+    auto undoResult = model.execute(ledger::UndoTransaction{.ledgerId = ledgerId, .journalId = journalId});
+
+    // Post-undo balances match pre-transaction values exactly (both
+    // accounts back to their opening zero balance) -- Rational equality,
+    // not floating-point tolerance.
+    REQUIRE(undoResult.accounts.size() == 2);
+    auto checking = std::ranges::find_if(undoResult.accounts, [&](const auto& a) { return a.id == checkingId; });
+    auto groceries = std::ranges::find_if(undoResult.accounts, [&](const auto& a) { return a.id == groceriesId; });
+    REQUIRE(checking != undoResult.accounts.end());
+    REQUIRE(groceries != undoResult.accounts.end());
+    CHECK(checking->balance.numerator == 0);
+    CHECK(groceries->balance.numerator == 0);
+
+    // The reversal's own legs are the exact negation of the original's.
+    auto reversalJournalRows =
+        mapper.Query<ledger::db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionJournalRecord::id>, "!=", *journalId)
+            .All();
+    REQUIRE(reversalJournalRows.size() == 1);
+    auto reversalLegRows =
+        mapper.Query<ledger::db::TransactionLegRecord>()
+            .Where(::Lightweight::FieldNameOf<&ledger::db::TransactionLegRecord::journal>, "=",
+                   reversalJournalRows.front().id.Value())
+            .All();
+    REQUIRE(reversalLegRows.size() == 2);
+    for (const auto& legRow : reversalLegRows) {
+        if (legRow.account.Value().id.Value() == static_cast<std::uint64_t>(*checkingId)) {
+            CHECK(legRow.amountNum.Value() == 5000);  // negation of the original -5000
+        } else {
+            CHECK(legRow.amountNum.Value() == -5000);  // negation of the original 5000
+        }
+    }
 }
 ```
 
@@ -3879,13 +3967,162 @@ Expected: FAIL to compile.
 
 - [ ] **Step 3: Implement `UndoTransaction`**
 
-Look up the target journal + legs, build a new `StoreTransaction`-shaped
-commit whose legs are `{accountId: originalLeg.accountId, amount:
--originalLeg.amount}` for every original leg (unary `Rational::operator-`,
-confirmed in `include/morph/util/rational.hpp`), route it through the
-exact same commit path `StoreTransaction` uses (reusing that private
-implementation, not duplicating it), and set `causalParentId` on the
-resulting entry to the undone journal's own stable identity.
+**Correction from plan self-review**: "route it through the exact same
+commit path `StoreTransaction` uses" needed a concrete mechanism -- left
+vague, an implementer could either duplicate `execute(StoreTransaction)`'s
+insert logic (a real DRY violation) or call the *public*
+`execute(StoreTransaction)` overload reentrantly (which would double-log:
+that overload's own `logAction(action, result)` call has no way to carry
+this task's `causalParentId`, and its opId/cascade-evaluation blocks are
+meaningless noise for a reversal). The precedent this rung already
+established for exactly this shape is `SetCategory`/`setCategoryImpl`
+(Task 12): a private, mapper-taking helper holds the pure mutation, the
+*public* `execute()` overload calls it and logs with no `causalParentId`,
+and Task 12's *cascade* caller calls the same helper directly then logs
+with a non-default `causalParentId` -- never through the public overload.
+`UndoTransaction` follows the identical shape:
+
+1. In `ledger_model.cpp`, extract `execute(StoreTransaction)`'s journal-
+   insert + leg-insert + `buildLedgerState` rebuild (the code from
+   `Lightweight::SqlTransaction sqlTxn{...}` through
+   `auto result = buildLedgerState(mapper, action.ledgerId);`, i.e. lines
+   258-313 of the current file, NOT including the opId-ledger-write block
+   or the cascade-evaluation block that follow -- those two blocks stay in
+   `execute(StoreTransaction)` itself, since a reversal has no `opId` and
+   never re-fires rules against its own synthetic description) into a
+   private helper:
+   ```cpp
+   [[nodiscard]] GetLedgerResult LedgerModel::storeJournalImpl(
+       Lightweight::DataMapper& mapper, const LedgerId& ledgerId, const std::string& description,
+       const morph::time::Timestamp& date, const std::vector<TransactionLeg>& legs,
+       const std::vector<db::AccountRecord>& legAccounts) {
+       Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+       db::TransactionJournalRecord journalRow;
+       journalRow.description = description;
+       journalRow.date = date.value.has_value() ? (*date.value).value.time_since_epoch().count() : 0;
+       auto ledgerRows =
+           mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *ledgerId).All();
+       if (ledgerRows.empty()) {
+           throw NotFound{"storeJournalImpl: no such ledger"};
+       }
+       journalRow.ledger = ledgerRows.front();
+       mapper.Create(journalRow);
+       for (std::size_t i = 0; i < legs.size(); ++i) {
+           db::TransactionLegRecord legRow;
+           legRow.journal = journalRow;
+           legRow.account = legAccounts[i];
+           legRow.amountNum = legs[i].amount.numerator;
+           legRow.amountDen = legs[i].amount.denominator;
+           legRow.amountDp = static_cast<int>(legs[i].amount.decimalPlaces.value);
+           legRow.currencyCode = legAccounts[i].currencyCode.Value();
+           const auto& foreignAmount = legs[i].foreignAmount;
+           legRow.foreignAmountNum = foreignAmount ? std::optional{foreignAmount->numerator} : std::nullopt;
+           legRow.foreignAmountDen = foreignAmount ? std::optional{foreignAmount->denominator} : std::nullopt;
+           legRow.foreignAmountDp =
+               foreignAmount ? std::optional{static_cast<int>(foreignAmount->decimalPlaces.value)} : std::nullopt;
+           legRow.foreignCurrencyCode =
+               legs[i].foreignCurrency ? std::optional{Lightweight::SqlAnsiString<3>{currencyToCode(*legs[i].foreignCurrency)}}
+                                       : std::nullopt;
+           mapper.Create(legRow);
+       }
+       auto result = buildLedgerState(mapper, ledgerId);
+       sqlTxn.Commit();
+       return result;
+   }
+   ```
+   Note this version moves `sqlTxn.Commit()` to the end of the helper
+   itself (the original inline code commits later, after the opId-ledger
+   write and cascade block run inside the *same* transaction) -- since
+   `UndoTransaction` has neither of those follow-on blocks, its own
+   transaction can close right here. `execute(StoreTransaction)` cannot
+   simply call this helper unmodified, because it still needs the opId
+   write and cascade evaluation to run *before* commit, in the same
+   transaction the journal+legs insert used -- so `execute(StoreTransaction)`
+   keeps its own inline `SqlTransaction`/`Commit()` exactly as today and
+   does NOT call `storeJournalImpl` (extracting it fully to share with
+   `execute(StoreTransaction)` too would require threading the opId/cascade
+   logic through the helper's signature, which is more churn than this
+   task's scope justifies) -- `storeJournalImpl` exists solely for
+   `UndoTransaction` to call, mirroring `setCategoryImpl`'s own role as a
+   cascade-only helper, not a refactor of the original method.
+2. Add to `transaction_dto.hpp`:
+   ```cpp
+   struct UndoTransaction {
+       LedgerId ledgerId;
+       JournalId journalId;
+
+       [[nodiscard]] bool validate() const noexcept {
+           return ledgerId.hasValue() && journalId.hasValue();
+       }
+   };
+   ```
+   (per this task's own ruling above: `ledgerId` is redundant with
+   `journalId` but keeps key resolution trivial and consistent with every
+   other action in this file, rather than requiring a DB lookup inside
+   `ActionKeyTraits::key()`.)
+3. Add `GetLedgerResult execute(const UndoTransaction& action);` to
+   `LedgerModel`'s public interface (`ledger_model.hpp`), plus the private
+   `storeJournalImpl` declaration, and:
+   ```cpp
+   template <>
+   struct morph::model::ActionKeyTraits<ledger::UndoTransaction> {
+       static constexpr bool hasKey = true;
+       static constexpr bool fromResult = false;
+       static std::string key(const ledger::UndoTransaction& action) {
+           return morph::model::keyToString(*action.ledgerId);
+       }
+   };
+   ```
+   (a trivial field read, same shape as `ActionKeyTraits<StoreTransaction>`
+   and every other keyed action already declared in this header -- no DB
+   lookup, no new pattern) and
+   `BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::UndoTransaction, "UndoTransaction")`.
+4. Implement `execute(const UndoTransaction& action)` in `ledger_model.cpp`:
+   empty-principal check first (same shape as every other mutating
+   action); `if (!action.validate()) throw ValidationError{...};`; look up
+   the target `TransactionJournalRecord` by `*action.journalId` (`throw
+   NotFound{"UndoTransaction: no such journal"}` if missing) and its own
+   `ledger` (`BelongsTo`, already loaded); verify
+   `journalRow.ledger.Value().id.Value() == static_cast<std::uint64_t>(*action.ledgerId)`
+   (`throw NotFound{"UndoTransaction: journal does not belong to this ledger"}`
+   otherwise -- the plan's own ruling above on why `ledgerId` is a
+   redundant-but-required field); look up every
+   `TransactionLegRecord` whose `journal` matches; build a
+   `std::vector<TransactionLeg>` whose `amount` is each original leg's
+   amount negated via `-originalLeg.amount` (confirmed real:
+   `include/morph/util/rational.hpp`'s `Rational::operator-() const` --
+   a MEMBER unary negation, e.g. `Rational{Numerator{-numerator}, ...}`
+   internally -- not the free binary `operator-(lhs, rhs)` subtraction
+   also declared in that header; the unary form is what `-leg.amount`
+   actually calls) and whose `accountId` is unchanged; also build the matching
+   `std::vector<db::AccountRecord>` (one lookup per leg's account, same
+   shape as `execute(StoreTransaction)`'s own `legAccounts` loop) for
+   `storeJournalImpl`'s second parameter; call `storeJournalImpl(mapper,
+   action.ledgerId, "Reversal of: " + originalJournalRow.description.Value(),
+   morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts)` --
+   the reversal's own date is "now" (when the undo happened), via
+   `morph::time::Timestamp::now()`, the SAME type/convention
+   `StoreTransaction.date` itself already uses (a client-observable
+   "when did this happen" field, per this file's own existing comment on
+   why `journalRow.date` does NOT go through `morph::ladder::now()` --
+   that convention is reserved for server-audit stamps like
+   `LogEntry::timestampMs`, which `logAction` sets internally regardless
+   of what this task passes) -- NOT the original journal's own date,
+   which belongs to the transaction being reversed, not the reversal
+   itself; then `logAction(action, result,
+   "transactionJournal:" + std::to_string(originalJournalRow.id.Value()))`
+   (same causal-id-minting shape Task 12's cascade already uses -- a
+   stable DB row id, never `LogEntry::seq`); `return result;`.
+
+**Re-passing zero-sum is automatic, not a separate check**: negating
+every leg of an already-zero-sum set is itself zero-sum (design spec §6's
+own stated reasoning) -- `storeJournalImpl` does not re-run the
+partitioning/zero-sum loop `execute(StoreTransaction)` runs, because it
+trusts its caller already knows the legs it's inserting are safe (both
+current callers, `UndoTransaction`'s reversal and any future caller,
+independently uphold this). If a future caller cannot make that guarantee,
+that caller's own task must add its own validation before calling
+`storeJournalImpl` -- not this task's concern.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
