@@ -418,3 +418,48 @@ TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 o
     CHECK(accountRowsAfter.front().category.Value().value() == *categoryA);
     CHECK(accountRowsAfter.front().category.Value().value() != *categoryB);
 }
+
+TEST_CASE("A clamped Rational leg is caught incidentally by the zero-sum check, not by validate()", "[ledger][rational][security]") {
+    // Construct a StoreTransaction whose wire JSON encodes a leg with
+    // {"num":5,"den":0,"dp":2} -- setWire clamps this to 5/1 rather than
+    // rejecting. Decode it into a StoreTransaction (bypassing validate()'s
+    // own inability to detect the clamp), and assert the resulting legs
+    // fail the zero-sum check (ZeroSumViolation thrown) rather than
+    // silently committing -- proving the invariant's incidental catch,
+    // per design spec §7.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                       .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Expenses",
+                                       .kind = ledger::AccountKind::Expense, .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    auto checkingId = ledgerState.accounts[0].id;
+    auto expensesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    using morph::math::Rational;
+
+    // One leg is normal, one is clamped (den=0 becomes den=1).
+    // Together they won't sum to zero because the clamped leg changed value.
+    // This should be caught by the zero-sum check, throwing ZeroSumViolation.
+    Rational normalLeg{Numerator{-500}, Denominator{1}, DecimalPlaces{2}};  // -5.00
+    Rational clampedLeg{Numerator{5}, Denominator{0}, DecimalPlaces{2}};    // 0 denominator -> clamped to 5/1
+
+    CHECK_THROWS_AS(model.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Unbalanced with clamped leg",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = checkingId, .amount = normalLeg},
+                 ledger::TransactionLeg{.accountId = expensesId, .amount = clampedLeg}}}),
+        ledger::ZeroSumViolation);
+}
