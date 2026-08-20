@@ -9,6 +9,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
 #include <glaze/glaze.hpp>
@@ -16,6 +17,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace ledger {
 
@@ -327,10 +329,119 @@ GetLedgerResult LedgerModel::execute(const StoreTransaction& action) {
         mapper.Create(op);
     }
 
+    // Cascade rule evaluation (design spec §4/§5): a matching
+    // RuleTrigger::DescriptionContains rule cascades into a second,
+    // causally-linked SetCategory mutation. The mutation itself
+    // (setCategoryImpl below) runs inside this same SQL transaction, before
+    // sqlTxn.Commit(), so it commits atomically with the triggering
+    // journal+legs insert -- exactly like the applied-ops row above. The
+    // *logging* of each fired cascade is deferred (into cascadesToLog) and
+    // only emitted after the trigger's own logAction(action, result) call
+    // below, so the trigger entry is always seq-ordered ahead of any cascade
+    // entry it caused -- entries[0] is the trigger, per design spec §5's own
+    // causal-order expectation and this task's own journal test.
+    //
+    // Gated on !isReplaying(): replay() re-dispatches this StoreTransaction
+    // entry to reconstruct state, and the cascade it originally produced is
+    // its own separate, already-recorded SetCategory entry later in the same
+    // log -- re-evaluating rules here during replay would either double-apply
+    // the cascade (if the rule is unchanged) or apply a *different* outcome
+    // than what was actually recorded (if the rule was edited since), which
+    // is exactly the divergence the causalParentId/ruleVersion pinning exists
+    // to prevent. Live dispatch (isReplaying() == false) is the only time
+    // this block ever runs.
+    std::vector<SetCategory> cascadesToLog;
+    if (!morph::journal::isReplaying()) {
+        auto rules = mapper.Query<db::RuleRecord>()
+                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::ledger>, "=", *action.ledgerId)
+                         .Where(::Lightweight::FieldNameOf<&db::RuleRecord::trigger>, "=",
+                                static_cast<int>(RuleTrigger::DescriptionContains))
+                         .All();
+        // Decision 1 (design spec's own step 4, transliterated for ledger):
+        // the leg to categorize is the first Expense/Revenue account among
+        // this transaction's own legs -- legAccounts is the same vector the
+        // zero-sum partitioning loop above already built, positionally
+        // aligned with action.legs.
+        std::optional<std::size_t> categorizableLegIndex;
+        for (std::size_t i = 0; i < legAccounts.size(); ++i) {
+            const auto kind = static_cast<AccountKind>(legAccounts[i].kind.Value());
+            if (kind == AccountKind::Expense || kind == AccountKind::Revenue) {
+                categorizableLegIndex = i;
+                break;
+            }
+        }
+        if (categorizableLegIndex.has_value()) {
+            for (const auto& rule : rules) {
+                if (action.description.find(std::string{rule.matchText.Value().ToStringView()}) ==
+                    std::string::npos) {
+                    continue;
+                }
+                // Decision 2: lookup, never auto-create -- a rule naming a
+                // category that doesn't exist in this ledger simply doesn't
+                // fire; it is not an error on the triggering transaction.
+                auto categoryRows =
+                    mapper.Query<db::CategoryRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::ledger>, "=", *action.ledgerId)
+                        .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::name>, "=", rule.actionValue.Value())
+                        .All();
+                if (categoryRows.empty()) {
+                    continue;
+                }
+                const SetCategory cascadeAction{
+                    .accountId = AccountId{static_cast<std::int64_t>(legAccounts[*categorizableLegIndex].id.Value())},
+                    .categoryId = CategoryId{static_cast<std::int64_t>(categoryRows.front().id.Value())},
+                    .ruleId = RuleId{static_cast<std::int64_t>(rule.id.Value())},
+                    .ruleVersion = rule.version.Value()};
+                setCategoryImpl(mapper, cascadeAction);
+                cascadesToLog.push_back(cascadeAction);
+            }
+        }
+    }
+
     sqlTxn.Commit();
 
     logAction(action, result);
+
+    // Logged only now, after the trigger's own entry above, so the cascade
+    // always lands strictly after its trigger in the log's seq order.
+    // logAction is the *only* logger for each of these entries --
+    // setCategoryImpl holds no logging of its own, and the public
+    // execute(SetCategory) overload (which also calls setCategoryImpl, then
+    // logs unconditionally with an empty causalParentId) is deliberately not
+    // called from here, to avoid double-logging the same firing.
+    const std::string triggerCausalId = "transactionJournal:" + std::to_string(journalRow.id.Value());
+    for (const auto& cascadeAction : cascadesToLog) {
+        logAction(cascadeAction, SetCategoryResult{}, triggerCausalId);
+    }
+
     return result;
+}
+
+SetCategoryResult LedgerModel::execute(const SetCategory& action) {
+    const auto* ctx = morph::session::current();
+    if (ctx == nullptr || ctx->principal.empty()) {
+        throw EmptyPrincipalError{};
+    }
+    Lightweight::DataMapper mapper;
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+    setCategoryImpl(mapper, action);
+    sqlTxn.Commit();
+    logAction(action, SetCategoryResult{});
+    return SetCategoryResult{};
+}
+
+void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCategory& action) {
+    auto accountRows = mapper.Query<db::AccountRecord>()
+                            .Where(::Lightweight::FieldNameOf<&db::AccountRecord::id>, "=", *action.accountId)
+                            .All();
+    auto categoryRows = mapper.Query<db::CategoryRecord>()
+                             .Where(::Lightweight::FieldNameOf<&db::CategoryRecord::id>, "=", *action.categoryId)
+                             .All();
+    if (accountRows.empty() || categoryRows.empty()) {
+        throw NotFound{"SetCategory: no such account or category"};
+    }
+    accountRows.front().category = categoryRows.front();
+    mapper.Update(accountRows.front());
 }
 
 }  // namespace ledger

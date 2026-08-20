@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/core/errors.hpp"
 #include "ledger/db/ledger_entity.hpp"
+#include "ledger/models/budget_model.hpp"
 #include "ledger/models/ledger_model.hpp"
+#include "ledger/models/rule_model.hpp"
 #include "testkit/db_fixture.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
 
 #include <algorithm>
@@ -280,4 +283,138 @@ TEST_CASE("StoreTransaction with a repeated opId is a safe no-op, not a second i
     };
     CHECK(findBalance(ledgerState.accounts[0].id, first) == -3000);
     CHECK(findBalance(ledgerState.accounts[0].id, second) == -3000);  // still -3000, not -6000
+}
+
+TEST_CASE("A matching rule cascades SetCategory with a causalParentId, not LogEntry::seq", "[ledger][rule][journal]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
+    ledger::RuleModel ruleModel;
+    ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId, .trigger = ledger::RuleTrigger::DescriptionContains,
+                                          .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
+                                          .actionValue = "Dining"});
+
+    ledger::BudgetModel budgetModel;
+    budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Dining"});
+
+    ledger::LedgerModel ledgerModel;
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining",
+                                             .kind = ledger::AccountKind::Expense,
+                                             .currency = ledger::Currency::USD});
+    auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
+
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Coffee at the cafe",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = ledgerState.accounts[1].id,
+                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    auto entries = log->entries();
+    REQUIRE(entries.size() == 2);  // trigger + cascade
+    CHECK(entries[0].actionType == "StoreTransaction");
+    CHECK(entries[0].causalParentId.empty());  // the trigger itself has no parent
+    CHECK(entries[1].actionType == "SetCategory");
+    CHECK_FALSE(entries[1].causalParentId.empty());
+    CHECK(entries[1].causalParentId != std::to_string(entries[0].seq));  // never LogEntry::seq
+    CHECK(entries[1].payload.find("ruleId") != std::string::npos);
+    CHECK(entries[1].payload.find("ruleVersion") != std::string::npos);
+}
+
+TEST_CASE("Replay after editing a rule reproduces the v1 cascade, never the v2 outcome", "[ledger][rule][journal][divergence]") {
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ScopedPrincipal principal{"alice"};
+    ledger::BudgetModel budgetModel;
+    auto categoryA = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Dining"});
+    auto categoryB = budgetModel.execute(ledger::CreateCategory{.ledgerId = ledgerId, .name = "Groceries"});
+
+    ledger::RuleModel ruleModel;
+    auto ruleId = ruleModel.execute(ledger::CreateRule{.ledgerId = ledgerId,
+                                                        .trigger = ledger::RuleTrigger::DescriptionContains,
+                                                        .matchText = "Coffee", .action = ledger::RuleAction::SetCategory,
+                                                        .actionValue = "Dining"});  // v1: sets Dining
+
+    ledger::LedgerModel ledgerModel;
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Checking",
+                                             .kind = ledger::AccountKind::Asset, .currency = ledger::Currency::USD});
+    ledgerModel.execute(ledger::OpenAccount{.ledgerId = ledgerId, .name = "Dining Out",
+                                             .kind = ledger::AccountKind::Expense,
+                                             .currency = ledger::Currency::USD});
+    auto ledgerState = ledgerModel.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto expenseAccountId = ledgerState.accounts[1].id;
+
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ledgerModel.attachActionLog(log, std::to_string(*ledgerId));
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    ledgerModel.execute(ledger::StoreTransaction{
+        .ledgerId = ledgerId,
+        .description = "Coffee run",
+        .date = morph::time::Timestamp::now(),
+        .legs = {ledger::TransactionLeg{.accountId = ledgerState.accounts[0].id,
+                                         .amount = morph::math::Rational{Numerator{-450}, Denominator{1},
+                                                                          DecimalPlaces{2}}},
+                 ledger::TransactionLeg{.accountId = expenseAccountId,
+                                        .amount = morph::math::Rational{Numerator{450}, Denominator{1},
+                                                                         DecimalPlaces{2}}}}});
+
+    // The expense account is now linked to category A (Dining) -- confirm
+    // this directly before editing the rule, so the assertion after replay
+    // is a genuine "still A, never B" check, not a vacuous one.
+    auto accountRowsBefore = mapper.Query<ledger::db::AccountRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
+                                         *expenseAccountId)
+                                  .All();
+    REQUIRE(accountRowsBefore.front().category.Value().has_value());
+    CHECK(accountRowsBefore.front().category.Value().value() == *categoryA);
+
+    // Edit RuleX to v2: now sets Groceries instead of Dining.
+    ruleModel.execute(ledger::UpdateRule{.ruleId = ruleId, .matchText = "Coffee", .actionValue = "Groceries"});
+
+    // Replay the captured log against a fresh model instance. LedgerModel's
+    // own mutations are persisted to the real SQLite database, not held in
+    // memory -- replay() re-dispatches every recorded entry (including the
+    // cascade's own recorded SetCategory entry) against those same rows, so
+    // re-querying the database directly afterward (as this test already
+    // does via mapper.Query<AccountRecord>() below) is sufficient on its
+    // own; the returned IModelHolder is not needed to observe the effect.
+    auto replayedEntries = log->entries();
+    morph::journal::replay("LedgerModel", replayedEntries);
+
+    // The replayed database state must still show category A, never B --
+    // the cascade's own recorded entry (payload includes ruleVersion=1)
+    // pins the v1 outcome; replay's isReplaying()-gated rule suppression
+    // means the trigger entry never re-evaluates against the now-v2 rule.
+    auto accountRowsAfter = mapper.Query<ledger::db::AccountRecord>()
+                                 .Where(::Lightweight::FieldNameOf<&ledger::db::AccountRecord::id>, "=",
+                                        *expenseAccountId)
+                                 .All();
+    REQUIRE(accountRowsAfter.front().category.Value().has_value());
+    CHECK(accountRowsAfter.front().category.Value().value() == *categoryA);
+    CHECK(accountRowsAfter.front().category.Value().value() != *categoryB);
 }

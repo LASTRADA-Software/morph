@@ -13,6 +13,10 @@
 #include <optional>
 #include <string>
 
+namespace Lightweight {
+class DataMapper;
+}  // namespace Lightweight
+
 namespace ledger {
 
 /// @brief Accounts + transaction journal, keyed by `LedgerId` (design spec
@@ -63,6 +67,22 @@ class LedgerModel {
     ///         full-rebuilt-state convention.
     GetLedgerResult execute(const StoreTransaction& action);
 
+    /// @brief Links `action.accountId` to `action.categoryId`, the ordinary,
+    ///        directly-dispatchable path. Journals unconditionally with an
+    ///        empty `causalParentId` (the default -- this is not a cascaded
+    ///        call). See `SetCategory`'s own doc comment
+    ///        (`transaction_dto.hpp`) for why this overload exists at all
+    ///        even though design spec §4 never has a client dispatch it
+    ///        directly: `morph::journal::replay()` re-dispatches every
+    ///        recorded entry by its registered action-type string, and an
+    ///        unregistered `"SetCategory"` would make `replay()` throw the
+    ///        moment it reaches a cascade-produced entry.
+    /// @param action The account/category to link, plus the firing rule's
+    ///        identity and version (unused by this path's own logic, but
+    ///        part of the wire shape shared with the cascade path).
+    /// @return An empty placeholder result.
+    SetCategoryResult execute(const SetCategory& action);
+
     /// @brief Attaches a durable action log and this instance's stable
     ///        identity, so every subsequent mutating `execute()` records
     ///        a `morph::journal::LogEntry`. Model-level mirror of
@@ -97,6 +117,30 @@ class LedgerModel {
     ///        passes a non-empty value.
     template <typename Action, typename Result>
     void logAction(const Action& action, const Result& result, std::string causalParentId = {}) const;
+
+    /// @brief Shared mutation behind both `execute(SetCategory)` and the
+    ///        cascade path inside `execute(StoreTransaction)`: links
+    ///        `action.accountId` to `action.categoryId`
+    ///        (`AccountRecord::category`, Task 10's schema addition). Holds
+    ///        no logging of its own -- callers log once, either
+    ///        unconditionally (the public overload) or with a
+    ///        `causalParentId` (the cascade path) -- never both for the
+    ///        same firing.
+    ///
+    ///        Takes @p mapper by reference rather than opening its own --
+    ///        the cascade call site is already inside `execute
+    ///        (StoreTransaction)`'s own `Lightweight::SqlTransaction`, and
+    ///        this mutation must commit atomically with the triggering
+    ///        journal+legs insert (never through a second, separate
+    ///        connection, which would not see the in-flight transaction's
+    ///        uncommitted rows and would not be covered by its commit/
+    ///        rollback). `execute(SetCategory)`'s own, non-cascaded call
+    ///        site passes its own freshly opened mapper for the same reason
+    ///        `buildLedgerState` takes one instead of opening its own.
+    /// @param mapper The data mapper to mutate through -- the caller's own,
+    ///        already-open connection/transaction.
+    /// @param action The account/category to link.
+    static void setCategoryImpl(Lightweight::DataMapper& mapper, const SetCategory& action);
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
@@ -156,3 +200,12 @@ struct morph::model::ActionKeyTraits<ledger::StoreTransaction> {
         return morph::model::keyToString(*action.ledgerId);
     }
 };
+
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SetCategory, "SetCategory")
+
+// SetCategory carries accountId and categoryId -- two co-equal ids and no
+// single natural "the" key, same shape as BudgetModel's own
+// LinkAccountToCategory (see that model's own comment on this exact
+// situation). model_key.hpp's ActionKeyTraits primary template already
+// defaults to hasKey = false, so this deliberately gets no specialization
+// here: it is dispatched keyless, exactly like LinkAccountToCategory.

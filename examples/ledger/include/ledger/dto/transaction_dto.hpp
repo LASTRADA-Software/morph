@@ -52,4 +52,41 @@ struct StoreTransaction {
     }
 };
 
+/// @brief Links `accountId` to `categoryId` -- the same mutation
+///        `BudgetModel::execute(LinkAccountToCategory)` (Task 10) performs,
+///        reused here as the cascade's own action type so a `RuleTrigger::
+///        DescriptionContains` match in `LedgerModel::execute(StoreTransaction)`
+///        (Task 12, design spec §4/§5) has a loggable, replayable action to
+///        record for the categorization it performs. Carries `ruleId` and
+///        `ruleVersion` -- the firing rule's identity and the exact version
+///        that fired -- so the recorded `LogEntry::payload` pins which rule
+///        (and which edit of that rule) produced this cascade, per the
+///        divergence test's own requirement: replaying an edited rule must
+///        reproduce the original firing's outcome, never the edited rule's.
+///
+///        Registered via `BRIDGE_REGISTER_ACTION` and given a public
+///        `execute()` overload purely so `morph::journal::replay()` can
+///        route a recorded `"SetCategory"` entry back through the
+///        dispatcher's registered-action table -- not because a client is
+///        expected to dispatch it this way. The cascade path in
+///        `execute(StoreTransaction)` never calls through that public
+///        overload (it would double-log); it calls the shared
+///        `setCategoryImpl` directly, then journals with a `causalParentId`
+///        the public overload never sets. See kanban's own `ApplyTagMutation`
+///        (`ladder-kanban-impl:examples/kanban/src/models/board_model.cpp`)
+///        for the identical reasoning.
+struct SetCategory {
+    AccountId accountId;
+    CategoryId categoryId;
+    RuleId ruleId;
+    std::int32_t ruleVersion;
+};
+
+/// @brief Empty result placeholder for `SetCategory`'s cascade logging --
+///        this rung's own name for the same empty-result shape kanban's
+///        `Ack` (`examples/kanban/include/kanban/dto/project_dto.hpp`) serves
+///        there; not imported from kanban (a different rung's type), a fresh
+///        local declaration with the same shape.
+struct SetCategoryResult {};
+
 }  // namespace ledger
