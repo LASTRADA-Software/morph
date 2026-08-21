@@ -2,14 +2,25 @@
 #pragma once
 
 #include "gui/presenter.hpp"
-#include "ledger/dto/account_dto.hpp"
 #include "ledger/core/import_op_id.hpp"
+#include "ledger/dto/account_dto.hpp"
 #include "ledger/dto/import_dto.hpp"
 #include "ledger/dto/transaction_dto.hpp"
+
+// Guarded exactly like `board_presenter.hpp`'s own includes, and for the same
+// reason it documents: AUTOMOC runs moc over this header, and moc must not be
+// pointed at morph's template-heavy bridge.hpp -- nor, here, at the model
+// header, which reaches Lightweight's ORM. moc mis-parses those namespace
+// structures and then believes every later namespace is nested inside
+// `Lightweight`, emitting `Lightweight::ledger::gui::LedgerPresenter` and
+// failing with "no member named 'ledger' in namespace 'Lightweight'". moc
+// needs none of these declarations; the real compiler still sees them all.
+#ifndef Q_MOC_RUN
 #include "ledger/models/ledger_model.hpp"
 
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
+#endif
 
 #include <QObject>
 #include <QString>
