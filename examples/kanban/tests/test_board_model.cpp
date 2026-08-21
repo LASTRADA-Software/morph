@@ -581,17 +581,23 @@ TEST_CASE("MoveTaskPosition into a swimlane deleted mid-drag throws NotFound, no
                     kanban::NotFound);
 }
 
-// Task 12: divergence test. Phase 6's automation-rules engine (the real
-// trigger for a cascade -- "task moved to Done => add a comment") does not
-// exist yet, so this simulates the cascade by hand, exactly the way a rule
-// would once it does: two journal entries, the second carrying
-// `causalParentId` set to the first's own (app-minted, not `seq`-derived)
-// identity, per design spec §9. What this test actually proves today: a
-// cascaded mutation recorded once and replayed via
+// Task 12: divergence test, kept deliberately independent of the rules
+// engine. It hand-builds the cascade -- two journal entries, the second
+// carrying `causalParentId` set to the first's own (app-minted, not
+// `seq`-derived) identity, per design spec §9 -- and proves that a cascaded
+// mutation recorded once and replayed via
 // `morph::journal::replay("BoardModel", ...)` reconstructs to *exactly one*
-// application of that mutation, not two -- the same invariant Phase 6's
-// rules engine will rely on once it exists and checks `morph::journal::
-// isReplaying()` before firing again on the replayed trigger.
+// application of that mutation, not two.
+//
+// That is a property of replay itself, which is why it is asserted here
+// against a cascade owed to nothing but this test. Phase 6's automation-rules
+// engine now exists and relies on the same invariant, guarding on
+// `morph::journal::isReplaying()` before firing again on a replayed trigger;
+// "Replaying a move-to-Done journal entry does not re-fire its rule"
+// (`[kanban][rules]`, Task 14) covers that path end to end. The two are
+// complementary: break the replay invariant and this test fails whether or
+// not any rule exists; break the engine's replay guard and only Task 14's
+// does.
 TEST_CASE("Replaying a cascaded journal entry does not re-fire the cascade", "[kanban][journal]") {
     DbFixture fixture;
     auto log = std::make_shared<::morph::journal::InMemoryActionLog>();
