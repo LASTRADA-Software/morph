@@ -792,7 +792,18 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
     // Mappers() is holding) stays alive across this entire loop and the
     // joins below, per its own contract -- released only afterward.
     std::vector<std::thread> workers;
-    std::vector<bool> threw(kBoards, false);
+    // `std::vector<char>`, deliberately not `std::vector<bool>`: each worker
+    // thread below writes only its own `threw[i]`, which is independent for
+    // every element type except `bool`. `vector<bool>` is the bit-packed
+    // specialisation, where neighbouring elements share an underlying word,
+    // so those writes become concurrent read-modify-writes of one object --
+    // a data race that silently drops updates. A lost `threw[i] = 1` makes a
+    // board whose call *failed* look like one that succeeded, and the
+    // verification loop below then demands its move be applied
+    // (`CHECK(movedCount == 1)`) when correctly it was not. That is exactly
+    // how this test failed in CI, in both journal modes, on different board
+    // indices each run.
+    std::vector<char> threw(kBoards, 0);
     std::atomic<int> succeeded{0};
     std::atomic<int> failed{0};
     workers.reserve(kBoards);
@@ -811,7 +822,7 @@ TEST_CASE("32 boards writing concurrently under SQLite contention: no timeout-th
                                                         .opId = "contend-1"});
                 ++succeeded;
             } catch (const std::exception&) {
-                threw[static_cast<std::size_t>(i)] = true;
+                threw[static_cast<std::size_t>(i)] = 1;
                 ++failed;
             }
         });
@@ -1091,7 +1102,18 @@ TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no
     }};
 
     std::vector<std::thread> workers;
-    std::vector<bool> threw(kBoards, false);
+    // `std::vector<char>`, deliberately not `std::vector<bool>`: each worker
+    // thread below writes only its own `threw[i]`, which is independent for
+    // every element type except `bool`. `vector<bool>` is the bit-packed
+    // specialisation, where neighbouring elements share an underlying word,
+    // so those writes become concurrent read-modify-writes of one object --
+    // a data race that silently drops updates. A lost `threw[i] = 1` makes a
+    // board whose call *failed* look like one that succeeded, and the
+    // verification loop below then demands its move be applied
+    // (`CHECK(movedCount == 1)`) when correctly it was not. That is exactly
+    // how this test failed in CI, in both journal modes, on different board
+    // indices each run.
+    std::vector<char> threw(kBoards, 0);
     std::vector<std::string> throwMsg(kBoards);
     std::atomic<int> succeeded{0};
     std::atomic<int> failed{0};
@@ -1111,7 +1133,7 @@ TEST_CASE("32 boards writing concurrently under SQLite contention (WAL mode): no
                                                         .opId = "contend-1"});
                 ++succeeded;
             } catch (const std::exception& ex) {
-                threw[static_cast<std::size_t>(i)] = true;
+                threw[static_cast<std::size_t>(i)] = 1;
                 throwMsg[static_cast<std::size_t>(i)] = ex.what();
                 ++failed;
             }
