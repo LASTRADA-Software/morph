@@ -46,7 +46,23 @@ Models: `LedgerModel` (accounts + transactions, keyed by ledger/book id),
 (asset/expense/revenue/liability), transaction journal, transaction leg,
 currency, category, budget + budget limit, rule (trigger/action pairs).
 
-Build order:
+Build order (status as of rung 5's implementation, see
+`docs/superpowers/plans/2026-08-19-ledger-rung5.md`):
+
+- **Steps 1-7: implemented.** Accounts and composite transactions,
+  multi-currency with foreign-amount pairs, budgets, rules, undo as a
+  compensating action, CSV import with dedup, and the submit->poll report
+  pair -- each with model, presenter, QML bridge and tests. The desktop
+  client wiring all four bridges is in `gui/`.
+- **Step 8: prose delivered, one scenario's test pending.**
+  `SYNC-BENCHMARK.md` states the philosophy and both scenarios in full.
+  Scenario B is reproducible against `UpdateRule`'s real version conflict.
+  Scenario A -- two offline clients editing the same *transaction* -- has no
+  surface to exercise yet: this rung ships no transaction-edit action, no
+  base version on `transaction_journals`, and no offline-queue wiring. That
+  gap is tracked in morph#144 rather than papered over with a test that
+  would pass under the scenario's name without testing it.
+
 
 1. Accounts + `StoreTransaction { description, date, legs[] }` — one
    composite, all-or-nothing action creating the journal and all legs.
