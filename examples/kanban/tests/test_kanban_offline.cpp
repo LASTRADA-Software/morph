@@ -158,6 +158,19 @@ struct SeededBoard {
 
 TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once, not double-applied",
           "[kanban][offline]") {
+    // Declared before every object below, so they are destroyed after all of
+    // them. Dropping the reply leaves this test's MoveTaskPosition Completion
+    // permanently unsettled, and tearing the Bridge down at end of scope
+    // fails it -- which runs the .onError handler attached further down. At
+    // their natural place next to that execute() call, these two bools would
+    // be destroyed *before* the Bridge, and the handler would write into dead
+    // stack slots: AddressSanitizer reports precisely that as a
+    // stack-use-after-scope (caught by the ladder's ASan+UBSan leg). Same
+    // hazard, and same cause, as morph#137 -- a callback outliving the frame
+    // it captured by reference.
+    bool firstResolved = false;
+    bool firstFailed = false;
+
     DbFixture fixture;
     const auto board = seedBoard("alice", "Offline Board");
 
@@ -197,8 +210,6 @@ TEST_CASE("Dropping MoveTaskPosition's reply frame and retrying is exactly-once,
         }
     });
 
-    bool firstResolved = false;
-    bool firstFailed = false;
     const kanban::MoveTaskPosition move{
         .taskId = board.taskId, .columnId = board.columnB, .swimlaneId = board.swimlaneId, .position = 0,
         .opId = "move-1"};
