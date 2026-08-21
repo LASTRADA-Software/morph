@@ -105,6 +105,29 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
             [&owner](const std::exception_ptr&) { owner.reset(); });
     }
 
+    /// @brief Destroys this presenter from inside onOk and *then* throws.
+    ///        track()'s catch block re-checks liveness for the same reason its
+    ///        normal exit does — the callback may already have ended the
+    ///        presenter's life before it threw — and only a callback doing
+    ///        both reaches that particular check.
+    void bumpDestroySelfAndThrow(std::unique_ptr<ProbePresenter>& owner) {
+        track<int>(_handler.execute(PresenterProbeAction{0}), [&owner](int) {
+            owner.reset();
+            throw std::runtime_error{"presenter probe: onOk destroyed the presenter, then threw"};
+        });
+    }
+
+    /// @brief The onErr counterpart of bumpDestroySelfAndThrow().
+    void failDestroySelfAndThrow(std::unique_ptr<ProbePresenter>& owner) {
+        track<int>(
+            _failHandler.execute(PresenterProbeFailAction{}),
+            [](int) { FAIL("onOk must not run for a failed action"); },
+            [&owner](const std::exception_ptr&) {
+                owner.reset();
+                throw std::runtime_error{"presenter probe: onErr destroyed the presenter, then threw"};
+            });
+    }
+
     /// @brief Drives the model that always throws, using the three-argument
     ///        track(onOk, onErr) overload so a test can assert the onErr
     ///        callback itself actually fires. Regression coverage for
@@ -414,6 +437,35 @@ TEST_CASE("Presenter::track() tolerates an onErr callback that destroys the pres
     morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
     auto owner = std::make_unique<ProbePresenter>(ctx.bridge(), ctx.executor());
     owner->failAndDestroySelf(owner);
+
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return owner == nullptr; }));
+    CHECK(owner == nullptr);
+}
+
+TEST_CASE("Presenter::track() survives an onOk callback that destroys the presenter and then throws",
+          "[ladder][testkit][gui][presenter]") {
+    // The exception-safety contract and the liveness guard meeting in one
+    // place. track()'s catch block still has to decide whether finishOne() is
+    // safe to call, and the answer is "only if the callback did not just
+    // destroy the presenter". The completion machinery logs and swallows a
+    // throwing handler (see completion.hpp), so the throw does not escape the
+    // pump -- what matters is that nothing touches the freed presenter on the
+    // way out.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto owner = std::make_unique<ProbePresenter>(ctx.bridge(), ctx.executor());
+    owner->bumpDestroySelfAndThrow(owner);
+
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return owner == nullptr; }));
+    CHECK(owner == nullptr);
+}
+
+TEST_CASE("Presenter::track() survives an onErr callback that destroys the presenter and then throws",
+          "[ladder][testkit][gui][presenter]") {
+    // Same crossing of the two contracts on the error branch, which carries
+    // its own copy of the catch-block guard.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto owner = std::make_unique<ProbePresenter>(ctx.bridge(), ctx.executor());
+    owner->failDestroySelfAndThrow(owner);
 
     REQUIRE(morph::ladder::testkit::pumpUntil([&] { return owner == nullptr; }));
     CHECK(owner == nullptr);
