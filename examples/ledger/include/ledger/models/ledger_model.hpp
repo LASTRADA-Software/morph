@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
-#include "ledger/db/ledger_entity.hpp"
 #include "ledger/dto/account_dto.hpp"
 #include "ledger/dto/import_dto.hpp"
 #include "ledger/dto/report_dto.hpp"
@@ -18,9 +17,42 @@
 #include <string>
 #include <vector>
 
+// Hidden from moc, which mis-parses this block: moc's own parser treats the
+// forward declaration's `}` as closing the *class* rather than the
+// namespace, leaves `namespace Lightweight` open, and then believes every
+// later namespace is nested inside it -- emitting
+// `Lightweight::ledger::gui::LedgerPresenter` and failing to compile with
+// "no member named 'ledger' in namespace 'Lightweight'". `Q_MOC_RUN` is
+// defined only while moc parses, so the real compiler still sees the
+// declaration and moc skips a declaration it has no use for (it never needs
+// to know what `DataMapper` is).
+//
+// Latent until now rather than new: this is the first Q_OBJECT header in the
+// rung to include this one, which is why no earlier task tripped it, and why
+// kanban -- whose model header carries no such block -- never did.
+#ifndef Q_MOC_RUN
 namespace Lightweight {
 class DataMapper;
 }  // namespace Lightweight
+#endif
+
+namespace ledger::db {
+/// @brief Forward-declared rather than included: `ledger_entity.hpp` pulls in
+///        `<Lightweight/DataMapper/DataMapper.hpp>`, and this header is
+///        reachable from `ledger_presenter.hpp`, a `Q_OBJECT` header moc must
+///        parse. moc mis-parses Lightweight's namespace structure and then
+///        believes every later namespace is nested inside `Lightweight`,
+///        emitting `Lightweight::ledger::gui::LedgerPresenter` and failing to
+///        compile.
+///
+///        Only a reference to `std::vector<AccountRecord>` appears below, so
+///        a declaration suffices; `ledger_model.cpp` includes the real header
+///        for the definitions. This also matches rung 4's shape --
+///        `kanban/models/board_model.hpp` includes only core and dto headers
+///        and never its own entity header, which is precisely why no kanban
+///        presenter ever hit this.
+struct AccountRecord;
+}  // namespace ledger::db
 
 namespace ledger {
 
