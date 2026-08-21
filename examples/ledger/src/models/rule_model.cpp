@@ -86,6 +86,14 @@ RuleInfo RuleModel::execute(const UpdateRule& action) {
         throw NotFound{"UpdateRule: no such rule"};
     }
     auto& ruleRow = ruleRows.front();
+    // Optimistic concurrency (design spec §10, Scenario B). An engaged
+    // expectedVersion that no longer matches means the row moved on after the
+    // client read it: refuse outright rather than overwrite the change that
+    // landed in between, or merge the two. A disengaged one applies
+    // unconditionally, which is what every caller predating this did.
+    if (action.expectedVersion.has_value() && *action.expectedVersion != ruleRow.version.Value()) {
+        throw VersionConflict{};
+    }
     ruleRow.matchText = action.matchText;
     ruleRow.actionValue = action.actionValue;
     ruleRow.version = ruleRow.version.Value() + 1;

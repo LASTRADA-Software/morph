@@ -37,6 +37,21 @@ class ZeroSumViolation : public LedgerError {
     std::string currencyCode;
 };
 
+/// @brief Thrown when an update carries a base version that no longer matches
+///        the stored row -- someone else committed a change in between.
+///
+///        Distinct from `ValidationError`: the action was well-formed and the
+///        principal was entitled to make it. What failed is that it was
+///        computed against state that no longer exists, which is a *conflict*
+///        to report to the user, not a malformed request to reject. Design
+///        spec §10's Scenario B: rejected outright, never merged and never
+///        silently overwritten.
+class VersionConflict : public LedgerError {
+  public:
+    VersionConflict()
+        : LedgerError{"update rejected: the record changed since it was read"} {}
+};
+
 /// @brief Thrown when a mutating action dispatches with an empty principal
 ///        (design spec §11) — never silently proceeds.
 class EmptyPrincipalError : public LedgerError {

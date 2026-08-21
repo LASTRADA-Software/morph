@@ -51,7 +51,11 @@ user did, recorded in the journal with its own identity, and its failure is
 *visible*. A field-level merge produces a transaction that no user ever
 authored — correct-looking, and traceable to nobody.
 
-Reproduced in `tests/test_ledger_offline.cpp`, `[ledger][sync-benchmark]`.
+**Not yet reproducible.** This rung ships no transaction-edit action, no base
+version on `transaction_journals`, and no offline-queue wiring, so there is
+nothing to make two clients disagree *about* a transaction. Tracked in
+morph#144. Stated here rather than demonstrated with a test that would pass
+under the scenario's name without exercising it.
 
 ## Scenario B — a stale base version is rejected, never merged
 
@@ -67,7 +71,19 @@ conflict to resolve — it is a decision made on information now known to be
 wrong. Applying it anyway would mean writing a number the user would not have
 chosen had they seen the current state.
 
-Reproduced in `tests/test_ledger_offline.cpp`, `[ledger][sync-benchmark]`.
+Reproduced in `tests/test_sync_benchmark.cpp`, `[ledger][sync-benchmark]` --
+three cases: the rejection itself, that the winner's edit survives it intact
+(a merge or a silent overwrite would both leave different state), and that a
+client can re-read and reapply afterwards. That last one matters: rejecting a
+stale edit is only defensible if the work is recoverable, otherwise "rejected
+outright" would mean the user simply loses it, which is worse than the merge
+this document argues against.
+
+The mechanism is `UpdateRule::expectedVersion` -- optional, so an
+unconditional update stays unconditional, and engaged when a client wants its
+edit refused rather than applied blind. Before morph#144 the `version` column
+existed and incremented on every write but nothing ever compared it: this
+section described intended behaviour with no code behind it.
 
 ## Clock skew: client timestamps are claimed, never authoritative
 
