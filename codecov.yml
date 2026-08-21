@@ -170,3 +170,17 @@ ignore:
   - "examples/pastebin/tests/**"
   - "examples/pastebin/gui/**"
   - "examples/pastebin/gui_wasm/**"
+  # Rungs 2-4, on exactly the same terms as rung 1 above: a rung's own test
+  # sources are excluded so the suite does not score itself, and `gui/` +
+  # `gui_wasm/` are `main()` shells with no unit-testable seam. These entries
+  # arrive with morph#141, which is what first put these rungs into the
+  # coverage report at all -- scripts/coverage.sh had only ever named rung 1.
+  - "examples/bookmarks/tests/**"
+  - "examples/bookmarks/gui/**"
+  - "examples/bookmarks/gui_wasm/**"
+  - "examples/polls/tests/**"
+  - "examples/polls/gui/**"
+  - "examples/polls/gui_wasm/**"
+  - "examples/kanban/tests/**"
+  - "examples/kanban/gui/**"
+  - "examples/kanban/gui_wasm/**"

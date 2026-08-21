@@ -31,13 +31,30 @@ fi
 # Per-rung test binaries, added on exactly the same "only if it was built"
 # terms. Each rung's models are what examples/IMPLEMENTATION.md rule 5's
 # 100% bar actually names, so a rung that ships models must contribute its
-# profile data or the gate below measures nothing. A rung that hasn't been
-# built (or doesn't exist yet) simply contributes nothing, so this list can
-# grow one line per rung with no other change.
-PASTEBIN_TEST_EXE="$OUT/examples/pastebin/ladder_pastebin_tests"
-if [ -x "$PASTEBIN_TEST_EXE" ]; then
-    OBJECT_ARGS+=(-object "$PASTEBIN_TEST_EXE")
-fi
+# profile data or the gate below measures nothing.
+#
+# Driven by a loop rather than one hand-written block per rung, because the
+# hand-written form silently rotted: rungs 2, 3 and 4 shipped without ever
+# being added here, leaving ~15k lines of models, presenters and QML adapters
+# outside the coverage number entirely while the percentage still looked
+# healthy (morph#141). Nothing fails when a rung is forgotten -- the script
+# runs, the report uploads, and the figure is simply computed over a
+# shrinking fraction of the ladder. A loop over the known rungs cannot be
+# forgotten in the same way; a new rung needs its name added here and
+# nowhere else.
+#
+# `_MORPH_LADDER_RUNGS` deliberately mirrors examples/CMakeLists.txt's own
+# `_morph_known_rungs` list. A rung that was not configured in this build
+# contributes nothing, exactly as before, via the `-x` guard.
+_MORPH_LADDER_RUNGS=(pastebin bookmarks polls kanban)
+RUNG_TEST_EXES=()
+for _rung in "${_MORPH_LADDER_RUNGS[@]}"; do
+    _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"
+    if [ -x "$_exe" ]; then
+        OBJECT_ARGS+=(-object "$_exe")
+        RUNG_TEST_EXES+=("$_rung")
+    fi
+done
 
 # Positional source-path filters to llvm-cov: include/morph is the library
 # proper; examples/common is the ladder's hand-written GUI/testkit code
@@ -55,16 +72,24 @@ SOURCES=(include/morph)
 if [ -x "$LADDER_TEST_EXE" ]; then
     SOURCES+=(examples/common)
 fi
-if [ -x "$PASTEBIN_TEST_EXE" ]; then
-    # include/ + src/ are the rung's DTOs and models (rule 5's own 100% bar);
-    # gui_lib/ is its hand-written presenter/adapter code, held to the same bar
-    # for the same reason examples/common/gui is — it is real coverage of
-    # morph's own client stack, not app-specific domain logic. gui/ and
-    # gui_wasm/ are deliberately absent: those are `main()` shells (engine
-    # setup, argv parsing, setInitialProperties) with no unit-testable seam,
-    # exercised only by the offscreen QML smoke test and by hand.
-    SOURCES+=(examples/pastebin/include examples/pastebin/src examples/pastebin/gui_lib)
-fi
+# include/ + src/ are each rung's DTOs and models (rule 5's own 100% bar);
+# gui_lib/ is its hand-written presenter/adapter code, held to the same bar
+# for the same reason examples/common/gui is — it is real coverage of
+# morph's own client stack, not app-specific domain logic. gui/ and
+# gui_wasm/ are deliberately absent: those are `main()` shells (engine
+# setup, argv parsing, setInitialProperties) with no unit-testable seam,
+# exercised only by the offscreen QML smoke test and by hand.
+#
+# Only rungs whose test binary was actually built (RUNG_TEST_EXES, above)
+# contribute sources, so a partial `-DMORPH_LADDER_RUNGS=` configure still
+# produces a coherent report rather than naming paths with no profile data.
+for _rung in "${RUNG_TEST_EXES[@]}"; do
+    for _sub in include src gui_lib; do
+        if [ -d "examples/${_rung}/${_sub}" ]; then
+            SOURCES+=("examples/${_rung}/${_sub}")
+        fi
+    done
+done
 
 # examples/common/testkit/ mixes real, reusable test-support headers/.cpp
 # (backend_rig.hpp, db_fixture.hpp, strand_interleaver.hpp, ...) with actual
