@@ -599,6 +599,157 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: ctest --preset gcc-debug -L ladder -LE stress --output-on-failure
 
+  # ── Linux: every rung's tests under AddressSanitizer + UBSan ──────────
+  # Before this job, no rung test ran under any sanitizer: ladder-tests above
+  # builds plain gcc-debug, and the linux-sanitizers matrix deliberately skips
+  # the ladder (only its clang-coverage leg sets MORPH_BUILD_LADDER). So every
+  # rung's models, presenters and QML adapters — the code the ladder exists to
+  # exercise — were compiled and run with no memory or UB instrumentation
+  # anywhere in CI.
+  #
+  # ASan and UBSan, not TSan. `apply_sanitizers(<target> asan)` compiles with
+  # -fsanitize=address,undefined (cmake/compiler_options.cmake), so this one
+  # preset delivers both and a separate ubsan leg for the ladder would re-run
+  # a strict subset. TSan is deliberately absent: a rung's tests drive Qt on
+  # every path, and against an uninstrumented system Qt that produces warnings
+  # bottoming out in Qt-internal frames which cannot be classified as real
+  # races or false positives from outside a TSan-instrumented Qt build —
+  # morph#128 hit exactly that, 165 warnings deep. The resolution there was to
+  # rewrite the one test that mattered to construct no QtExecutor at all and
+  # run only it under TSan, which is what kanban-tsan above does. Thread-
+  # sanitising a rung means following that pattern per test, not adding a
+  # blanket -DAF_SANITIZER=tsan leg here.
+  #
+  # -LE stress mirrors ladder-tests: the stress cases are long-running by
+  # design and ASan's shadow-memory overhead compounds that.
+  ladder-sanitizers:
+    name: Application ladder / ASan+UBSan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need history for the changed-paths diff below
+
+      # Same filter, and deliberately the same path list, as ladder-tests: the
+      # two jobs build the identical tree and differ only in instrumentation,
+      # so a change that warrants running one warrants running the other.
+      - name: Determine whether the ladder needs to run
+        id: filter
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base" 2>/dev/null; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$base" HEAD)
+          if echo "$changed" | grep -qE '^(examples/(common|pastebin|bookmarks|polls|kanban)/|examples/CMakeLists\.txt$|include/morph/|src/qt/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|\.github/workflows/ci\.yml$|examples/LADDER\.md|examples/IMPLEMENTATION\.md|examples/TESTING\.md)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache apt packages
+        if: steps.filter.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives
+          key: apt-ladder-asan-${{ hashFiles('.github/workflows/ci.yml') }}
+          restore-keys: apt-ladder-asan-
+
+      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, Qt6 WebSockets
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          sudo apt-get update -q
+          # unixodbc-dev + libsqliteodbc: the ladder fetches the Lightweight
+          # ORM, whose CMake runs `pkg_check_modules(ODBC REQUIRED odbc)` and
+          # whose fixtures open a real `DRIVER=SQLite3` connection at test
+          # time. Named explicitly rather than relied on from the runner image
+          # — same rationale as ladder-tests' own install step.
+          sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
+            qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev \
+            unixodbc-dev libsqliteodbc
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      - name: Cache sccache
+        if: steps.filter.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-ladder-asan-${{ github.sha }}
+          restore-keys: sccache-ladder-asan-
+
+      - name: Install sccache
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
+            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
+
+      - name: Configure (clang-asan, ladder + Qt on)
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          cmake --preset clang-asan \
+            -DMORPH_BUILD_QT=ON \
+            -DMORPH_BUILD_LADDER=ON \
+            -DMORPH_LADDER_RUNGS=all \
+            -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+
+      # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
+      # catch_discover_tests() runs each Qt-linked test binary once during the
+      # build to enumerate its cases — see ladder-tests' own Build step.
+      - name: Build
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: cmake --build --preset clang-asan
+
+      # A sanitizer job whose binaries are not actually instrumented is worse
+      # than no job: it runs the full suite, costs the full runtime and always
+      # passes, so a missing apply_sanitizers() call in morph_add_rung.cmake
+      # would read as "rungs are ASan-clean" rather than "rungs were never
+      # checked". That is not hypothetical — before the AF_SANITIZER blocks
+      # landed in cmake/morph_add_rung.cmake and examples/common/CMakeLists.txt,
+      # -DAF_SANITIZER=asan instrumented morph_tests and nothing under
+      # examples/. Assert the instrumentation is really there before trusting
+      # a green run.
+      - name: Verify rung binaries are actually instrumented
+        if: steps.filter.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          missing=0
+          for exe in build/clang-asan/examples/*/ladder_*_tests; do
+            [ -x "$exe" ] || continue
+            if nm -C "$exe" 2>/dev/null | grep -q "__asan_"; then
+              echo "instrumented: $exe"
+            else
+              echo "NOT INSTRUMENTED: $exe" >&2
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::ladder test binaries were built without ASan instrumentation" >&2
+            exit 1
+          fi
+
+      # detect_leaks=0: LeakSanitizer reports allocations the Qt platform
+      # plugins and QML engine intentionally keep for process lifetime, which
+      # are not leaks this repo can fix or meaningfully suppress per-frame.
+      # The memory-error and UB checks — what this job is actually for — stay
+      # fully on. Drop this once a Qt-aware suppression file proves workable.
+      - name: Test (offscreen Qt platform, ladder tests only, stress excluded)
+        if: steps.filter.outputs.run == 'true'
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ASAN_OPTIONS: detect_leaks=0
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --preset clang-asan -L ladder -LE stress --output-on-failure
+
   # ── Linux: every optional feature enabled at once ─────────────────────
   # Every MORPH_BUILD_* option below is off by default, and until this job
   # existed no CI configuration turned any of them on — so several thousand

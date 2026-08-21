@@ -400,6 +400,43 @@ root `CMakeLists.txt` — don't repeat that eight times):
   entity types still need a persistence-free stand-in on the WASM include
   path (see `polls::db::PollRecord` et al.'s own `#ifndef __EMSCRIPTEN__`
   branch, `poll_entity.hpp`) — no rung's *model* header needs this today.
+- **Sanitizer wiring.** Every rung's targets and every `examples/common`
+  target carry an `if(DEFINED AF_SANITIZER) apply_sanitizers(<target>
+  ${AF_SANITIZER})` block, the same shape and placement as their
+  `if(AF_COVERAGE) apply_coverage()` block
+  (`cmake/morph_add_rung.cmake`, `examples/common/CMakeLists.txt`). Two CI
+  jobs consume it:
+
+  - **`Application ladder / ASan+UBSan`** (`ladder-sanitizers`) configures
+    `--preset clang-asan` with
+    `-DMORPH_BUILD_QT=ON -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=all`
+    and runs `ctest -L ladder -LE stress`, so every rung's tests run under
+    both sanitizers. One preset covers both: `apply_sanitizers(<target>
+    asan)` compiles with `-fsanitize=address,undefined`
+    (`cmake/compiler_options.cmake`), so a separate ubsan leg for the ladder
+    would re-run a strict subset. It shares `ladder-tests`' changed-paths
+    filter verbatim — the two build the same tree and differ only in
+    instrumentation. `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer
+    reports allocations Qt's platform plugins and QML engine keep for
+    process lifetime; the memory-error and UB checks stay on. The job
+    asserts (via `nm`) that each `ladder_<rung>_tests` binary really
+    contains `__asan_` references before trusting a green run — an
+    uninstrumented sanitizer job passes unconditionally and reads as proof
+    when it is the absence of proof.
+  - **`Kanban / ThreadSanitizer`** (`kanban-tsan`) runs one test under
+    `clang-tsan`.
+
+  **TSan is deliberately not applied to rungs wholesale.** A rung's tests
+  drive Qt on every path, and against an uninstrumented system Qt that
+  yields warnings bottoming out in Qt-internal frames that cannot be
+  classified as real races or false positives from outside a
+  TSan-instrumented Qt build — morph#128 hit exactly that, 165 warnings
+  deep. Thread-sanitising a rung therefore means writing a test that
+  constructs no `QtExecutor` at all — driving the model through a bare
+  `morph::bridge::Bridge`/`morph::backend::LocalBackend` on a real
+  `morph::exec::ThreadPoolExecutor` — and running just that test under
+  `clang-tsan`, which is what `kanban-tsan` does.
+
 - **Coverage wiring (proven by rung 0, on `examples/common`; the same
   recipe applies to every future rung's `src/models/`/`include/<rung>/models/`
   per [`IMPLEMENTATION.md`](IMPLEMENTATION.md) rule 5).** The `clang-coverage`
@@ -407,7 +444,8 @@ root `CMakeLists.txt` — don't repeat that eight times):
   `qt6-base-dev`/`qt6-websockets-dev`/`qt6-tools-dev`/`libgl1-mesa-dev` and
   configures with
   `-DMORPH_BUILD_QT=ON -DMORPH_BUILD_LADDER=ON -DMORPH_LADDER_RUNGS=all`
-  (asan/tsan/ubsan never build the ladder at all, so this cost is paid once);
+  (of the sanitizer-matrix legs, asan/tsan/ubsan still never build the
+  ladder, so this cost is paid once there);
   its `ctest` invocation runs
   with `QT_QPA_PLATFORM=offscreen` since the runner has no display. Every
   ladder CMake target (`morph_ladder_gui`, `morph_ladder_app`,
