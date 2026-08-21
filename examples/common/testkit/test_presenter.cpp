@@ -83,6 +83,28 @@ class ProbePresenter : public morph::ladder::gui::Presenter {
                    [](int) -> void { throw std::runtime_error{"presenter probe: onOk threw"}; });
     }
 
+    /// @brief Drives the probe action with an onOk callback that destroys
+    ///        *this presenter*, through the `unique_ptr` that owns it.
+    ///        track()'s post-callback `if (self)` re-check exists for exactly
+    ///        this case: the guard taken before onOk ran cannot be trusted
+    ///        afterwards, because the callback may be the very thing that
+    ///        ended the presenter's life. Safe to do from inside the handler
+    ///        — the lambda lives in the completion's own state, not in the
+    ///        presenter, so it outlives the object it just destroyed.
+    void bumpAndDestroySelf(std::unique_ptr<ProbePresenter>& owner) {
+        track<int>(_handler.execute(PresenterProbeAction{0}), [&owner](int) { owner.reset(); });
+    }
+
+    /// @brief The onErr counterpart of bumpAndDestroySelf(): both of track()'s
+    ///        handler branches carry the same post-callback re-check, so both
+    ///        need a case where the callback destroys the presenter.
+    void failAndDestroySelf(std::unique_ptr<ProbePresenter>& owner) {
+        track<int>(
+            _failHandler.execute(PresenterProbeFailAction{}),
+            [](int) { FAIL("onOk must not run for a failed action"); },
+            [&owner](const std::exception_ptr&) { owner.reset(); });
+    }
+
     /// @brief Drives the model that always throws, using the three-argument
     ///        track(onOk, onErr) overload so a test can assert the onErr
     ///        callback itself actually fires. Regression coverage for
@@ -366,6 +388,35 @@ TEST_CASE("Presenter::track()'s error path also survives the presenter being des
 
     REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
     SUCCEED("posted track() error completion resolved after destruction without touching freed memory");
+}
+
+TEST_CASE("Presenter::track() tolerates an onOk callback that destroys the presenter",
+          "[ladder][testkit][gui][presenter]") {
+    // The destroyed-*during* case, as opposed to the destroyed-before cases
+    // above. track() re-checks its QPointer after onOk returns rather than
+    // reusing the check it made before calling it, because a callback is
+    // allowed to end the presenter's life -- closing the screen it belongs to
+    // is an ordinary thing for a handler to do. Without that second check,
+    // finishOne() would run on the object the callback just destroyed.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto owner = std::make_unique<ProbePresenter>(ctx.bridge(), ctx.executor());
+    owner->bumpAndDestroySelf(owner);
+
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return owner == nullptr; }));
+    CHECK(owner == nullptr);
+}
+
+TEST_CASE("Presenter::track() tolerates an onErr callback that destroys the presenter",
+          "[ladder][testkit][gui][presenter]") {
+    // Same as above for the error branch: a failed action is at least as
+    // likely to be the thing that tears a screen down, and track() carries the
+    // identical re-check there.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    auto owner = std::make_unique<ProbePresenter>(ctx.bridge(), ctx.executor());
+    owner->failAndDestroySelf(owner);
+
+    REQUIRE(morph::ladder::testkit::pumpUntil([&] { return owner == nullptr; }));
+    CHECK(owner == nullptr);
 }
 
 TEST_CASE("Presenter::busy() stays true while a second tracked completion is still in flight",
