@@ -25,6 +25,28 @@ struct SubmitReport {
     [[nodiscard]] bool validate() const noexcept { return ledgerId.hasValue(); }
 };
 
+/// @brief `SubmitReport::params` as a `ReportKind::MonthlyStatement` reads
+///        it: the local calendar month to report on, plus the client's
+///        offset from UTC at the time it asked.
+///
+///        `params` is opaque to the model in general (see `SubmitReport`);
+///        this is the one kind that interprets it. Declared here rather than
+///        privately inside `ledger_model.cpp` for exactly the reason
+///        `ReportLine` below is -- a client, or a test, encodes `params`
+///        from the same type the model decodes it into, instead of both
+///        sides hand-writing the same JSON object shape and drifting. It
+///        also has to have external linkage for glaze's reflection to see
+///        it at all, which a `.cpp`-private anonymous-namespace type does
+///        not.
+///
+///        A fixed offset rather than a zone name: exact for any period with
+///        no DST transition inside it, which is what this rung claims.
+struct MonthlyStatementParams {
+    int year{};
+    unsigned month{};
+    int timezoneOffsetMinutes{};
+};
+
 /// @brief Polls the job `SubmitReport` returned. A pure read with no
 ///        session-scoped side effect (hence no empty-principal gate and
 ///        `Loggable::No` on its registration, matching `GetLedger`).
@@ -61,6 +83,21 @@ struct ReportLine {
     std::int64_t numerator{0};
     std::int64_t denominator{1};
     std::uint32_t decimalPlaces{0};
+
+    /// @brief How many transactions this line's total was computed over.
+    ///
+    ///        Carried because the balance alone cannot answer the question a
+    ///        monthly statement exists to answer. `StoreTransaction` enforces
+    ///        a per-currency zero-sum (design spec §1), so *any* whole set of
+    ///        transactions nets to exactly zero per currency -- which makes
+    ///        the total identical whether the report covers one month or all
+    ///        time, and leaves "did my 23:30-on-the-31st transaction land in
+    ///        the right month?" (design spec §9's own stated assertion)
+    ///        unanswerable from the body.
+    ///
+    ///        The count does vary with the period, so it is what makes the
+    ///        local-month boundary observable rather than merely computed.
+    std::int64_t transactionCount{0};
 };
 
 }  // namespace ledger

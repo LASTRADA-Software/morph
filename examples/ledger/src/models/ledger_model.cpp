@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger/core/errors.hpp"
+#include "ledger/core/time_util.hpp"
 #include "ledger/core/units.hpp"
 #include "ledger/db/ledger_entity.hpp"
 #include "ledger/models/ledger_model.hpp"
@@ -22,6 +23,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ledger {
@@ -40,14 +42,24 @@ namespace {
 /// @param accountId The account whose legs to sum.
 /// @param decimalPlaces The account's own currency precision, used to seed
 ///        the running total's zero starting value.
-/// @return The account's real balance -- the sum of all its legs.
+/// @param journalFilter When non-null, the set of journal ids inside the
+///        report's period: legs belonging to any other journal are skipped.
+///        Null sums every leg, which is what an all-time balance wants.
+/// @return The account's balance over the legs the filter admits.
 [[nodiscard]] morph::math::Rational sumAccountLegs(Lightweight::DataMapper& mapper, std::uint64_t accountId,
-                                                    morph::math::DecimalPlaces decimalPlaces) {
+                                                    morph::math::DecimalPlaces decimalPlaces,
+                                                    const std::unordered_set<std::uint64_t>* journalFilter = nullptr) {
     auto legRows = mapper.Query<db::TransactionLegRecord>()
                         .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, "=", accountId)
                         .All();
     auto total = morph::math::Rational::zero(decimalPlaces);
     for (const auto& legRow : legRows) {
+        // A period-scoped report counts only legs whose journal falls inside
+        // the period; @p journalFilter is null for an all-time report, which
+        // is every caller but the monthly statement.
+        if (journalFilter != nullptr && !journalFilter->contains(legRow.journal.Value())) {
+            continue;
+        }
         const auto legAmount = morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
                                                        morph::math::Denominator{legRow.amountDen.Value()},
                                                        morph::math::DecimalPlaces{
@@ -209,6 +221,28 @@ class WalSnapshotGuard {
     Lightweight::SqlConnection& _connection;
 };
 
+/// @brief Decodes @p paramsJson as `MonthlyStatementParams`.
+/// @param paramsJson The raw `SubmitReport::params` payload.
+/// @return The decoded params, or `std::nullopt` when @p paramsJson is
+///         absent, malformed, or names a month outside 1-12 -- in which case
+///         the report falls back to an all-time balance rather than failing
+///         the job, since a statement over a nonsensical month is a client
+///         bug and an empty report is the more useful answer than a
+///         permanently Failed row.
+[[nodiscard]] std::optional<MonthlyStatementParams> decodeMonthlyParams(std::string_view paramsJson) {
+    if (paramsJson.empty()) {
+        return std::nullopt;
+    }
+    MonthlyStatementParams params;
+    if (auto err = glz::read_json(params, paramsJson); err) {
+        return std::nullopt;
+    }
+    if (params.month < 1 || params.month > 12) {
+        return std::nullopt;
+    }
+    return params;
+}
+
 /// @brief Computes @p ledgerId's report body -- every account's balance
 ///        summed per currency -- against @p mapper, and serializes it to
 ///        JSON.
@@ -222,17 +256,68 @@ class WalSnapshotGuard {
 ///        inside a pinned read snapshot (see the worker lambda in
 ///        `execute(SubmitReport)`).
 /// @param ledgerId The ledger to report on.
+/// @param period When engaged, the local calendar month to scope the report
+///        to; disengaged computes an all-time balance.
 /// @return The serialized report body.
-[[nodiscard]] std::string computeReportJson(Lightweight::DataMapper& mapper, const LedgerId& ledgerId) {
+[[nodiscard]] std::string computeReportJson(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
+                                            const std::optional<MonthlyStatementParams>& period) {
+    // A monthly statement is a claim about the *client's* calendar, so the
+    // month's own boundaries are converted to UTC instants once, here, and
+    // every stored (UTC) journal date is compared against them -- never the
+    // other way round. See ledger/core/time_util.hpp for why that direction
+    // is the one that survives the boundary hours.
+    std::optional<std::unordered_set<std::uint64_t>> journalsInPeriod;
+    if (period.has_value()) {
+        const auto [periodStart, periodEnd] =
+            localMonthToUtcRange(period->year, period->month, period->timezoneOffsetMinutes);
+        const auto startMillis = periodStart.value.time_since_epoch().count();
+        const auto endMillis = periodEnd.value.time_since_epoch().count();
+        journalsInPeriod.emplace();
+        auto journalRows =
+            mapper.Query<db::TransactionJournalRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::ledger>, "=", *ledgerId)
+                .All();
+        for (const auto& journalRow : journalRows) {
+            const auto date = journalRow.date.Value();
+            // Half-open: an instant exactly at `end` is the next month's
+            // first moment, so consecutive statements tile without counting
+            // the boundary transaction twice.
+            if (date >= startMillis && date < endMillis) {
+                journalsInPeriod->insert(journalRow.id.Value());
+            }
+        }
+    }
+    const std::unordered_set<std::uint64_t>* const journalFilter =
+        journalsInPeriod.has_value() ? &*journalsInPeriod : nullptr;
+
     auto accountRows = mapper.Query<db::AccountRecord>()
                             .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
                             .All();
     std::map<std::string, morph::math::Rational> totalsByCurrency;
+    // Journals counted per currency, so the body says how many transactions
+    // it covered rather than only what they netted to. Counted over journals
+    // (not legs) so a two-leg transaction counts once, and through a set so
+    // a transaction touching two accounts of the same currency still counts
+    // once.
+    std::map<std::string, std::unordered_set<std::uint64_t>> journalsByCurrency;
     for (const auto& accountRow : accountRows) {
         const auto currency = codeToCurrency(accountRow.currencyCode.Value().ToStringView());
         const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
-        const auto balance = sumAccountLegs(mapper, accountRow.id.Value(), decimalPlaces);
+        const auto balance = sumAccountLegs(mapper, accountRow.id.Value(), decimalPlaces, journalFilter);
         const std::string code{accountRow.currencyCode.Value().ToStringView()};
+        {
+            auto accountLegs =
+                mapper.Query<db::TransactionLegRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, "=", accountRow.id.Value())
+                    .All();
+            for (const auto& legRow : accountLegs) {
+                const auto journalId = legRow.journal.Value();
+                if (journalFilter != nullptr && !journalFilter->contains(journalId)) {
+                    continue;
+                }
+                journalsByCurrency[code].insert(journalId);
+            }
+        }
         auto it = totalsByCurrency.find(code);
         if (it == totalsByCurrency.end()) {
             totalsByCurrency.emplace(code, balance);
@@ -243,10 +328,15 @@ class WalSnapshotGuard {
     std::vector<ReportLine> lines;
     lines.reserve(totalsByCurrency.size());
     for (const auto& [code, total] : totalsByCurrency) {
-        lines.push_back(ReportLine{.currency = code,
-                                   .numerator = total.numerator,
-                                   .denominator = total.denominator,
-                                   .decimalPlaces = total.decimalPlaces.value});
+        const auto journalsForCode = journalsByCurrency.find(code);
+        lines.push_back(ReportLine{
+            .currency = code,
+            .numerator = total.numerator,
+            .denominator = total.denominator,
+            .decimalPlaces = total.decimalPlaces.value,
+            .transactionCount = journalsForCode == journalsByCurrency.end()
+                                    ? 0
+                                    : static_cast<std::int64_t>(journalsForCode->second.size())});
     }
     std::string resultJson;
     if (auto err = glz::write_json(lines, resultJson); err) {
@@ -889,7 +979,17 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
     // docs/findings/003) for why this model owns an executor at all.
     const auto jobIdValue = *jobId;
     const auto ledgerId = action.ledgerId;
-    _reportExecutor->post([jobIdValue, ledgerId] {
+    // Decoded here, on the caller's thread, so what crosses the boundary
+    // stays a plain value: `MonthlyStatementParams` is three ints, copied
+    // like `jobIdValue` and `ledgerId` above. A kind other than
+    // MonthlyStatement leaves this disengaged and reports all-time, which is
+    // also the fallback when the params fail to decode -- see
+    // decodeMonthlyParams for why that beats failing the job.
+    std::optional<MonthlyStatementParams> reportPeriod;
+    if (action.kind == ReportKind::MonthlyStatement) {
+        reportPeriod = decodeMonthlyParams(action.params);
+    }
+    _reportExecutor->post([jobIdValue, ledgerId, reportPeriod] {
         try {
             auto workerMapper = ::Lightweight::GlobalDataMapperPool().Acquire();
             std::string resultJson;
@@ -919,7 +1019,7 @@ ReportJobId LedgerModel::execute(const SubmitReport& action) {
                 // own doc comment for why an open transaction on a
                 // returned pooled connection matters.
                 WalSnapshotGuard snapshot{workerMapper->Connection()};
-                resultJson = computeReportJson(workerMapper.Get(), ledgerId);
+                resultJson = computeReportJson(workerMapper.Get(), ledgerId, reportPeriod);
             }
             // Written only after the read snapshot has been released, so this
             // connection is not simultaneously holding a read lock and asking

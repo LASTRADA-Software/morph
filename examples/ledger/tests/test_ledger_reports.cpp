@@ -117,6 +117,84 @@ TEST_CASE("SubmitReport returns immediately; GetReportStatus transitions Pending
     CHECK(lines[0].decimalPlaces == 2);
 }
 
+TEST_CASE("A 23:30-local transaction is reported in its local month, not its UTC one",
+          "[ledger][reports][time]") {
+    // Design spec §9's own stated assertion. At UTC-5:
+    //   2026-02-01T04:30Z == 2026-01-31T23:30 local -> belongs to JANUARY
+    //   2026-02-01T05:01Z == 2026-02-01T00:01 local -> belongs to FEBRUARY
+    // Both are already February by the UTC date stored in the column, so a
+    // report that compared stored dates against a UTC month would put both in
+    // February and neither in January.
+    morph::ladder::testkit::DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::db::LedgerRecord ledgerRow;
+    ledgerRow.name = "Personal";
+    mapper.Create(ledgerRow);
+    const auto ledgerId = ledger::LedgerId{static_cast<std::int64_t>(ledgerRow.id.Value())};
+
+    ledger::LedgerModel model;
+    const ScopedPrincipal principal{"alice"};
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Checking",
+                                      .kind = ledger::AccountKind::Asset,
+                                      .currency = ledger::Currency::USD});
+    model.execute(ledger::OpenAccount{.ledgerId = ledgerId,
+                                      .name = "Groceries",
+                                      .kind = ledger::AccountKind::Expense,
+                                      .currency = ledger::Currency::USD});
+    auto ledgerState = model.execute(ledger::GetLedger{.ledgerId = ledgerId});
+    const auto checkingId = ledgerState.accounts[0].id;
+    const auto groceriesId = ledgerState.accounts[1].id;
+
+    using morph::math::DecimalPlaces;
+    using morph::math::Denominator;
+    using morph::math::Numerator;
+    const auto storeAt = [&](std::string_view iso, std::string_view description) {
+        const auto instant = morph::time::DateTime::fromIso8601(iso);
+        REQUIRE(instant.has_value());
+        model.execute(ledger::StoreTransaction{
+            .ledgerId = ledgerId,
+            .description = std::string{description},
+            .date = morph::time::Timestamp{*instant},
+            .legs = {ledger::TransactionLeg{.accountId = checkingId,
+                                            .amount = morph::math::Rational{Numerator{-5000}, Denominator{1},
+                                                                            DecimalPlaces{2}}},
+                     ledger::TransactionLeg{.accountId = groceriesId,
+                                            .amount = morph::math::Rational{Numerator{5000}, Denominator{1},
+                                                                            DecimalPlaces{2}}}}});
+    };
+    storeAt("2026-02-01T04:30:00Z", "late on the 31st, local");
+    storeAt("2026-02-01T05:01:00Z", "just after midnight, local");
+
+    const auto countFor = [&](int year, unsigned month) {
+        const ledger::MonthlyStatementParams params{
+            .year = year, .month = month, .timezoneOffsetMinutes = -300};
+        std::string paramsJson;
+        REQUIRE(!glz::write_json(params, paramsJson));
+        const auto jobId = model.execute(ledger::SubmitReport{
+            .ledgerId = ledgerId, .kind = ledger::ReportKind::MonthlyStatement, .params = paramsJson});
+        REQUIRE(jobId.hasValue());
+        const auto status = pollUntilSettled(model, jobId);
+        REQUIRE(status.status == ledger::ReportStatus::Done);
+        REQUIRE(status.result.has_value());
+        std::vector<ledger::ReportLine> lines;
+        REQUIRE(!glz::read_json(lines, *status.result));
+        REQUIRE(lines.size() == 1);
+        CHECK(lines[0].currency == "USD");
+        // Zero-sum per currency holds whatever the period -- which is exactly
+        // why the count, not the total, is what distinguishes the months.
+        CHECK(lines[0].numerator == 0);
+        return lines[0].transactionCount;
+    };
+
+    CHECK(countFor(2026, 1) == 1);  // the 23:30-local transaction, and only it
+    CHECK(countFor(2026, 2) == 1);  // the 00:01-local one, and only it
+
+    // A month with neither transaction reports zero rather than everything --
+    // proves the filter is applied at all, not merely computed and dropped.
+    CHECK(countFor(2026, 3) == 0);
+}
+
 TEST_CASE("Re-polling the same completed job returns byte-identical results", "[ledger][reports]") {
     morph::ladder::testkit::DbFixture fixture;
     Lightweight::DataMapper mapper;
