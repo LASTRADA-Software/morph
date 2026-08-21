@@ -52,6 +52,16 @@ apply_warnings(morph_ladder_gui)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_gui)
 endif()
+# AF_SANITIZER (asan/tsan/ubsan): applied the same way apply_coverage() is
+# above, and for the same reason -- without it, a --preset clang-tsan build
+# of the ladder compiles this target with no sanitizer instrumentation at
+# all, so any race in code it contributes would never be caught even though
+# the preset name suggests otherwise. See .github/workflows/ci.yml's
+# kanban-tsan job, the first CI leg to actually build ladder code under a
+# sanitizer preset.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_gui ${AF_SANITIZER})
+endif()
 
 # ── morph_ladder_app: AppContext — the deployment-mode-choosing layer ───────
 # Split out of morph_ladder_gui so that target can stay Qt6::Core-only (see
@@ -70,6 +80,10 @@ set_target_properties(morph_ladder_app PROPERTIES AUTOMOC ON)
 apply_warnings(morph_ladder_app)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_app)
+endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_app ${AF_SANITIZER})
 endif()
 
 # ── WebAssembly build ────────────────────────────────────────────────────────
@@ -113,8 +127,13 @@ set(LIGHTWEIGHT_BUILD_BENCHMARK OFF CACHE BOOL "" FORCE)
 set(LIGHTWEIGHT_BUILD_SHARED    OFF CACHE BOOL "" FORCE)
 FetchContent_Declare(Lightweight
     GIT_REPOSITORY https://github.com/LASTRADA-Software/Lightweight.git
-    GIT_TAG        v0.20260625.0
-    GIT_SHALLOW    TRUE
+    # Pinned to master's tip commit, not the latest tag (v0.20260625.0) --
+    # LASTRADA-Software/Lightweight#551 (BelongsTo's silent-modification-loss
+    # bug this rung's MoveTaskPosition worked around) merged to master after
+    # that tag was cut, with no newer tag since. Bump this SHA when a new
+    # tag lands.
+    GIT_TAG        bbb972a78e1962b968a2c6ad93f7dade736eaa01
+    GIT_SHALLOW    FALSE
 )
 # Lightweight's own install() rules unconditionally reference
 # $<TARGET_PDB_FILE:Lightweight> on WIN32 (its CMakeLists.txt), which CMake
@@ -156,6 +175,14 @@ set_target_properties(morph_ladder_testkit PROPERTIES AUTOMOC ON)
 if(AF_COVERAGE)
     apply_coverage(morph_ladder_testkit)
 endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above. BackendRig and
+# DbFixture live in this target, and BoardModel's strand-serialized dispatch
+# (the thing kanban-tsan's stress test actually exercises) runs through the
+# testkit's own pump/rig plumbing, so it needs instrumentation exactly as
+# much as ladder_<rung>_tests itself does.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(morph_ladder_testkit ${AF_SANITIZER})
+endif()
 
 # ── ladder_common_tests: the testkit's own self-test suite ──────────────────
 add_executable(ladder_common_tests
@@ -172,6 +199,10 @@ add_executable(ladder_common_tests
     testkit/test_fault_proxy.cpp
     testkit/test_strand_interleaver.cpp
     testkit/test_wasm_registration_path_native.cpp
+    testkit/test_action_driver.cpp
+    testkit/test_offline_rig.cpp
+    testkit/test_convergence.cpp
+    testkit/test_client_pool.cpp
 )
 target_link_libraries(ladder_common_tests PRIVATE morph::ladder_testkit)
 # morph::ladder_testkit links Lightweight::Lightweight PUBLIC (above), and
@@ -191,6 +222,10 @@ set_target_properties(ladder_common_tests PROPERTIES AUTOMOC ON)
 apply_warnings(ladder_common_tests)
 if(AF_COVERAGE)
     apply_coverage(ladder_common_tests)
+endif()
+# See morph_ladder_gui's identical AF_SANITIZER block above.
+if(DEFINED AF_SANITIZER)
+    apply_sanitizers(ladder_common_tests ${AF_SANITIZER})
 endif()
 
 include(Catch)

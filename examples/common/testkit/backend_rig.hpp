@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <QCoreApplication>
+#include <QEventLoop>
 #include <QTimer>
 #include <QUrl>
 #include <chrono>
@@ -271,11 +273,58 @@ public:
     BackendRig(BackendRig&&) = delete;
     BackendRig& operator=(BackendRig&&) = delete;
 
-    /// @brief Teardown order: gracefully close the socket server (if any)
-    ///        before its bridges/pool are torn down by member destruction.
+    /// @brief Teardown order: gracefully close the socket server (if any),
+    ///        join the worker pool early, drain the Qt event loop, then let
+    ///        ordinary member destruction finish (client executors last).
+    ///
+    /// The member-declaration comment below documents why `_workerPool` (its
+    /// destructor joins every worker thread) must be gone before the client
+    /// executors (`_qtExecutor`/`_mainThreadExecutor`) are — reverse
+    /// declaration order already guarantees that ordering. What plain member
+    /// destruction cannot guarantee is that every task the pool ran had
+    /// *finished being delivered* by the time the executor it posted to dies:
+    /// `QtExecutor::post()` (`morph/qt/qt_executor.hpp`) uses
+    /// `Qt::QueuedConnection` — it enqueues the callback on the Qt event loop
+    /// and returns immediately, it does not run it. A pool thread's task can
+    /// itself resolve a `Completion` whose continuation chains a *second*,
+    /// nested `post()` (`morph::bridge::Bridge::executeVia`'s
+    /// `.then`/`.onError` pair, `morph/core/bridge.hpp`, each wrapping a
+    /// `morph::async::detail::CompletionState` that posts again from inside
+    /// the first posted callback) — so "the pool has joined" only proves
+    /// every `post()` call was *made*, not that every resulting event was
+    /// *pumped*. A caller's own `pumpUntil` (tracking only its own top-level
+    /// completions, e.g. test_kanban_stress.cpp's `outstanding` counter) has
+    /// no visibility into that inner, nested completion, so it can observe
+    /// "done" and let this rig tear down while a second post from that
+    /// nested continuation is still sitting, undelivered, in the Qt event
+    /// queue. When it finally runs, it touches an already-freed
+    /// `QtExecutor`/`CompletionState` — a heap-use-after-free ThreadSanitizer
+    /// catches reliably and an uninstrumented build sometimes just segfaults
+    /// on instead. Resetting `_workerPool` explicitly here (rather than
+    /// waiting for its turn in the member-destruction sequence) forces every
+    /// pool-issued `post()` to have happened *before* the drain below runs,
+    /// so the drain has something to actually flush; skipping the reset and
+    /// draining first would race the still-running pool threads themselves.
     ~BackendRig() {
         if (_wsServer) {
             _wsServer->closeGracefully(std::chrono::milliseconds{2000});
+        }
+        // Join the pool now (not at its natural place in member-destruction
+        // order) so every task it ran -- and every post() that task made,
+        // including a nested one chained from inside another posted callback
+        // -- has already happened by the time the drain below runs.
+        _workerPool.reset();
+        // Flush whatever those posts queued on the Qt event loop before any
+        // client executor (still alive; destroyed after this constructor
+        // body returns) is freed. A fixed number of slices, not a single
+        // pass: one posted callback's own continuation can chain another
+        // post (the nested case above), so draining needs enough slices for
+        // that second event to both arrive and run, not just the first.
+        // `processEvents()` returns void in Qt6 -- there is no "did any work"
+        // signal to loop on -- so this is deliberately unconditional rather
+        // than adaptive.
+        for (int slice = 0; slice < 5; ++slice) {
+            QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         }
     }
 

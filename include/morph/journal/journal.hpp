@@ -16,6 +16,62 @@
 
 namespace morph::journal {
 
+namespace detail {
+
+/// @brief Thread-local flag telling executing model code whether the current
+///        dispatch is happening inside `replay()`.
+///
+/// Installed by `replay()` around its dispatch loop via `ScopedReplayFlag`,
+/// mirroring how `morph::session::detail::tlsCurrent()`/`ScopedContext` thread
+/// a per-call `Context` through dispatch -- same shape (a thread-local slot
+/// plus an RAII guard that restores the previous value on scope exit), applied
+/// to a `bool` instead of a `const Context*`. Model/rule code never touches
+/// this directly; it reads the public accessor `isReplaying()`.
+inline bool& tlsIsReplaying() {
+    thread_local bool tls = false;
+    return tls;
+}
+
+/// @brief RAII helper that sets the thread-local replay flag for its scope,
+///        restoring the previous value on destruction.
+///
+/// Nests correctly: a `replay()` call that itself triggers another `replay()`
+/// (not a pattern this framework uses today, but not precluded) leaves the
+/// flag `true` for the whole nested extent and restores the outer call's value
+/// on the inner guard's destruction -- the same nesting behavior
+/// `session::detail::ScopedContext` already has for `Context`.
+class ScopedReplayFlag {
+  public:
+    /// @brief Sets the thread-local replay flag to `true`, saving whatever
+    ///        value was there before.
+    ScopedReplayFlag() : _previous{tlsIsReplaying()} { tlsIsReplaying() = true; }
+    /// @brief Restores the saved value.
+    ~ScopedReplayFlag() { tlsIsReplaying() = _previous; }
+
+    ScopedReplayFlag(const ScopedReplayFlag&) = delete;
+    ScopedReplayFlag& operator=(const ScopedReplayFlag&) = delete;
+    ScopedReplayFlag(ScopedReplayFlag&&) = delete;
+    ScopedReplayFlag& operator=(ScopedReplayFlag&&) = delete;
+
+  private:
+    bool _previous;
+};
+
+}  // namespace detail
+
+/// @brief Returns `true` if the calling thread is currently inside a
+///        `replay()` dispatch, `false` otherwise.
+///
+/// This is the signal Phase 6's automation-rules engine (and any other model
+/// code that reacts to its own actions) checks before evaluating a rule: a
+/// rule that fires again while `replay()` re-applies its recorded trigger
+/// entry would double-apply a cascade that is also being replayed from its own
+/// recorded entry (see `docs/spec/journal/journal.md`'s cascade-journaling
+/// section). Reading this outside of any `replay()` call (the ordinary,
+/// live-dispatch case) always returns `false`.
+/// @return `true` during `replay()`'s dispatch loop on this thread, `false` otherwise.
+[[nodiscard]] inline bool isReplaying() noexcept { return detail::tlsIsReplaying(); }
+
 /// @brief Reconstructs model state by replaying @p entries, in order, against a
 ///        freshly created model instance.
 ///
@@ -24,6 +80,15 @@ namespace morph::journal {
 /// replay engine is needed. Because a model's entire state is exactly "initial
 /// state plus the ordered actions replayed against it", this both reconstructs
 /// state from a durable log and powers `SessionLog::undoLast()` below.
+///
+/// Sets `isReplaying()` to `true` for the duration of the dispatch loop below
+/// (via `detail::ScopedReplayFlag`), so any model/rule code executed as part of
+/// a replayed dispatch can tell it is being replayed rather than live-dispatched
+/// -- this is what lets Phase 6's rules engine suppress rule evaluation on
+/// replay while `replay()` re-applies the cascade's own recorded entry
+/// unchanged. The flag is restored to its prior value (`false`, for any
+/// ordinary top-level caller) once this function returns, so it never leaks
+/// into dispatches that happen after `replay()` completes.
 ///
 /// @param modelTypeId String type-id of the model to reconstruct (`ModelTraits<M>::typeId()`).
 /// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`. Entries
@@ -42,6 +107,7 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
     // recorded actions, and without this each replayed dispatch would re-record
     // into the live sink, corrupting the very audit trail we are reading from.
     holder->attachActionLog(nullptr, {});
+    const detail::ScopedReplayFlag replayFlag;
     for (const auto& entry : entries) {
         // A Failed entry (see action_log.hpp's `Outcome`) never mutated model
         // state -- Model::execute threw or the validator rejected it before any

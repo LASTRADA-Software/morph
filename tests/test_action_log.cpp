@@ -142,6 +142,20 @@ struct morph::model::ModelTraits<ALLegacyModel> {
     static constexpr std::string_view typeId() { return "AL_LegacyModel"; }
 };
 
+// A model that reads morph::journal::isReplaying() from inside execute() --
+// the shape Phase 6's rules engine will use to suppress rule evaluation.
+struct RMModel {
+    bool sawReplayingDuringExecute = false;
+    int execute(const ALDeposit& a) {
+        sawReplayingDuringExecute = morph::journal::isReplaying();
+        return a.amount;
+    }
+};
+template <>
+struct morph::model::ModelTraits<RMModel> {
+    static constexpr std::string_view typeId() { return "RM_Model"; }
+};
+
 // ── InMemoryActionLog ────────────────────────────────────────────────────────
 
 TEST_CASE("morph::journal::InMemoryActionLog: append assigns increasing seq, preserves order", "[action_log]") {
@@ -884,4 +898,86 @@ TEST_CASE("ModelFactory::create: auto-attach also reaches server-created holders
     dispatcher.dispatch("AL_Model", "AL_Deposit", *holder, depositJson);
 
     REQUIRE(log->entries().size() == 1);
+}
+
+// ── LogEntry::causalParentId ─────────────────────────────────────────────────
+
+TEST_CASE("LogEntry::causalParentId defaults to empty and round-trips through toJson/fromJson",
+          "[action_log][causal]") {
+    LogEntry entry = makeEntry("AL_Model", "acct-1", "AL_Deposit");
+    REQUIRE(entry.causalParentId.empty());  // sentinel for "no parent", mirroring idempotencyKey's empty default
+
+    entry.causalParentId = "cause-123";
+    const auto json = morph::journal::toJson(entry);
+    const auto decoded = morph::journal::fromJson(json);
+    REQUIRE(decoded.causalParentId == "cause-123");
+}
+
+TEST_CASE("LogEntry::causalParentId is additive: a legacy line missing the key decodes with the empty default",
+          "[action_log][causal]") {
+    // A pre-existing on-disk line written before causalParentId existed has no
+    // such key -- fromJson's leniency (error_on_unknown_keys = false plus every
+    // absent key falling back to its member default) must still decode it, the
+    // same guarantee `v`/`idempotencyKey` already document.
+    const std::string legacyLine =
+        R"({"seq":1,"modelType":"AL_Model","entityKey":"","actionType":"AL_Deposit","payload":"{}","result":"7",)"
+        R"("outcome":"Succeeded","error":"","principal":"","timestampMs":123})";
+    const auto decoded = morph::journal::fromJson(legacyLine);
+    REQUIRE(decoded.causalParentId.empty());
+}
+
+// ── morph::journal::isReplaying() ────────────────────────────────────────────
+
+TEST_CASE("journal::isReplaying: false outside of replay()", "[action_log][journal][replay-mode]") {
+    REQUIRE_FALSE(morph::journal::isReplaying());
+}
+
+TEST_CASE("journal::isReplaying: true for every dispatch inside replay(), false again afterward",
+          "[action_log][journal][replay-mode]") {
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<ALModel>("AL_Model");
+    dispatcher.registerAction<ALModel, ALDeposit>("AL_Model", "AL_Deposit");
+
+    // ALModel::execute doesn't itself observe isReplaying() -- this test only
+    // confirms replay() doesn't leave the flag stuck on afterward. The next
+    // test case (RMModel) confirms the flag is actually true from inside a
+    // replayed Model::execute.
+    REQUIRE_FALSE(morph::journal::isReplaying());
+
+    std::vector<LogEntry> entries{
+        makeEntry("AL_Model", "", "AL_Deposit", morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 10})),
+    };
+    auto holder = morph::journal::replay("AL_Model", entries, registry, dispatcher);
+    REQUIRE(holder->into<ALModel>().balance == 10);
+
+    REQUIRE_FALSE(morph::journal::isReplaying());  // flag is scoped to replay()'s own call, not left set
+}
+
+TEST_CASE("journal::isReplaying: observable as true from inside a replayed Model::execute",
+          "[action_log][journal][replay-mode]") {
+    // A model that reads morph::journal::isReplaying() from inside execute()
+    // (the shape Phase 6's rules engine will use to suppress rule evaluation)
+    // must see true while replay() is dispatching, and false for an ordinary
+    // (non-replayed) call.
+    morph::model::detail::ActionDispatcher dispatcher;
+    morph::model::detail::ModelRegistryFactory registry;
+    registry.registerModel<RMModel>("RM_Model");
+    dispatcher.registerAction<RMModel, ALDeposit>("RM_Model", "AL_Deposit");
+
+    // Ordinary (non-replayed) dispatch: isReplaying() must read false.
+    {
+        auto holder = registry.create("RM_Model");
+        auto depositJson = morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3});
+        dispatcher.dispatch("RM_Model", "AL_Deposit", *holder, depositJson);
+        REQUIRE_FALSE(holder->into<RMModel>().sawReplayingDuringExecute);
+    }
+
+    // Replayed dispatch: isReplaying() must read true from inside execute().
+    {
+        std::vector<LogEntry> entries{makeEntry("RM_Model", "", "AL_Deposit",
+                                                morph::model::ActionTraits<ALDeposit>::toJson(ALDeposit{.amount = 3}))};
+        auto holder = morph::journal::replay("RM_Model", entries, registry, dispatcher);
+        REQUIRE(holder->into<RMModel>().sawReplayingDuringExecute);
+    }
 }

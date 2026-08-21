@@ -28,7 +28,7 @@ QUrl FaultProxy::start() {
     _listener = std::make_unique<QWebSocketServer>(QStringLiteral("morph-ladder-fault-proxy"),
                                                    QWebSocketServer::NonSecureMode);
     connect(_listener.get(), &QWebSocketServer::newConnection, this, &FaultProxy::onClientConnection);
-    detail::throwIfListenFailed(_listener->listen(QHostAddress::LocalHost, 0));
+    detail::throwIfFaultProxyListenFailed(_listener->listen(QHostAddress::LocalHost, 0));
     _url = QUrl{QString("ws://127.0.0.1:%1").arg(_listener->serverPort())};
     return _url;
 }

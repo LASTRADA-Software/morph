@@ -1,13 +1,16 @@
 # kanban — rung 4 of the [application ladder](../LADDER.md)
 
-**Status: planned — committed scope, and the ladder's designated
-showcase.** A multi-project kanban board: columns, swimlanes, tasks,
-drag-and-drop moves, WIP limits, comments, per-project roles, an activity
-stream, and automation rules. The mid-tier flagship: the first app where
-concurrency, authorization, offline, and the journal are all load-bearing at
-once. As the one polished showcase (round-7 audience decision), this rung
-alone may spend effort on visual presentation; every other rung stays
-deliberately unstyled.
+**Status: shipped** — every rung-4 task is complete, including automation
+rules and attachments (originally deferred, now implemented); see
+[Definition of done](#definition-of-done) for what that does and does not
+mean (one disclosed gap: no `--seed` demo path yet, per `LADDER.md`'s
+ladder-wide convention). A multi-project kanban board: columns, swimlanes,
+tasks, drag-and-drop moves, WIP limits, comments, per-project roles, an
+activity stream, and automation rules. The mid-tier flagship: the first
+app where concurrency, authorization, offline, and the journal are all
+load-bearing at once. As the one polished showcase (round-7 audience
+decision), this rung alone may spend effort on visual presentation; every
+other rung stays deliberately unstyled.
 
 ## Reference implementations
 
@@ -47,23 +50,47 @@ Build order:
    many-clients stress test around exactly this action.
 3. WIP limit enforcement — server-side validation rejecting a move; the
    client renders the typed error.
-4. Per-project RBAC (viewer/member/manager) via `IAuthorizer` consulting
-   `project_has_roles` — Kanboard enforces permissions per procedure; mirror
-   that per action.
+4. Per-project RBAC (viewer/member/manager), enforced **inside
+   `BoardModel::execute()`** by a `requireRole(Role)` helper querying
+   `project_has_roles` directly — mirroring `polls::PollModel::requireAdmin()`'s
+   exact precedent, not a change to `IAuthorizer`.
+   `docs/spec/core/shared_instances.md` already settles this for shared
+   instances generally ("the alternative — teaching `authorizeInstance` about
+   a set of owners — makes a simple, shipped, verified hook substantially more
+   complex to serve a case the model layer can handle"; "an application that
+   needs per-instance ownership on a shared model must enforce it inside the
+   model"), and `docs/spec/security.md` requires model-level enforcement
+   regardless, since `authorizeInstance` never runs on the `LocalBackend` path
+   at all — an `IAuthorizer`-only check would silently not exist for local
+   callers. `requireRole` needs a *trustworthy* `Context::principal` to key
+   its lookup on, though, which a permissive `AllowAllAuthorizer`-derived
+   authorizer cannot supply (`security.md`: an authorizer that never
+   authenticates has its principal cleared to empty before dispatch) — so
+   `KanbanAuthorizer` is `SigningAuthorizer`-derived, mirroring
+   `bookmarks::auth::BookmarksAuthorizer`'s shape, not `PollsAuthorizer`'s.
+   Kanboard enforces permissions per procedure, so this rung mirrors that per
+   action, at the model layer, on top of a verified identity.
 5. Activity stream — Kanboard's `project_activities` table is a journal
    cousin: derive the stream *from the morph journal* instead of a parallel
    table.
 6. **Automatic actions** — Kanboard's event→condition→mutation rules (e.g.
    "task moved to Done ⇒ assign to closer, add tag"). One client action
-   cascades into further model mutations. **Review sharpened the decision —
-   both naive answers diverge on replay**: unjournaled cascades make replay
-   incomplete, but journaled cascades *double-apply* when replay re-executes
-   the trigger and the rules re-fire. Choose one of: journal cascades with
-   a causal parent-id and suppress rule evaluation during replay, or don't
-   journal cascades and require rule determinism (which breaks when rules
-   are edited — see [`ledger`](../ledger)'s rule-versioning). State the
-   choice in writing with a divergence test; note morph today provides
-   neither replay-mode signaling nor causal links [framework gap].
+   cascades into further model mutations. **Cascades are journaled with a
+   causal parent-id, and rule evaluation is suppressed during replay.** A
+   cascaded mutation's `LogEntry` carries `causalParentId` set to the
+   triggering entry's identity, so the activity feed can render "caused by
+   task move X," and `replay()` re-applies every recorded entry — trigger
+   and cascade alike — without re-running rule evaluation, so a rule firing
+   again on the replayed trigger can never double-apply the cascade. This
+   requires `morph::journal` to carry a causal-parent-id field and to signal
+   replay mode to executing code — both are new, general-purpose framework
+   capabilities (`docs/spec/journal/journal.md`), not kanban-specific code;
+   see the divergence test this rung adds once the rules engine lands.
+   `causalParentId` must key on a stable id independent of `LogEntry::seq`
+   (sink-local, re-stamped on every forward — see
+   `docs/spec/journal/journal.md`'s Invariants section, and this rung's
+   design spec §9 for the full reasoning). [`ledger`](../ledger) reuses
+   this same answer.
 7. **Offline drag-a-card** — this rung's framework-level deliverable, with
    a **scope correction from review: the offline stack does not run on WASM
    today.** `NetworkMonitor` is a background probe thread (WASM build is
@@ -126,7 +153,8 @@ authorization at Kanboard's granularity (4), journal-derived activity + undo
   pool=4, 32 boards writing concurrently, WAL on and off; measure
   throughput collapse; assert no timeout-then-committed double-apply.
 - **Offline queue growth is unbounded**: no depth bound exists on any
-  shipped queue — define an overflow policy [framework gap]. (Scope
+  shipped queue — define an overflow policy
+  [framework gap, filed as morph#112]. (Scope
   correction from verification: the linear-scan/quadratic enqueue applies
   to `FileOfflineQueue` only; this rung's `SqliteOfflineQueue` dedups via
   an index. Measure depth growth on the SQLite queue; the 10⁴–10⁵-item
@@ -135,18 +163,30 @@ authorization at Kanboard's granularity (4), journal-derived activity + undo
 - Attachment bytes must bypass the JSON protocol; only metadata is an
   action — and the side channel is **the largest new attack surface in the
   ladder** (a hand-written HTTP server beside the WebSocket server): it
-  must reuse `TokenVerifier` (same secret, same clock), enforce its own
-  size bound, and its request parser joins the fuzz corpus. Test the
-  upload dying after metadata commit (dangling row).
+  reuses `TokenVerifier` (same secret, same clock), enforces its own
+  size bound, and — since no `MORPH_BUILD_FUZZERS` harness targets HTTP
+  parsing — its request parser is instead proven against a dedicated
+  adversarial test (`test_attachment_server.cpp`'s garbage-input case:
+  truncated/malformed/negative-length/binary-garbage requests, asserting
+  only "does not crash or hang," the same bar a fuzz harness would set).
+  Tests the upload dying after metadata commit (dangling row), and
+  authorizes reads by the caller's project role, not bearer-token validity
+  alone (a validly-signed token for a different project gets 404, same as
+  a nonexistent key).
 
-## Deferred within this rung (delivery review)
+## Steps 6 and 8: implemented
 
-Steps 6 (automation rules) and 8 (attachments) are each independently
-large, and the attachments answer is duplicated at forge phase 2. They move
-to a "later" bucket: steps 1–5 + 7 deliver every DoD bullet except the
-cascade divergence test — and [`ledger`](../ledger) needs only the
-cascade-journaling *decision*, which is written from a spike, not from a
-full rules engine.
+Steps 6 (automation rules) and 8 (attachments) were originally deferred to a
+"later" bucket (each is independently large, and the attachments answer is
+duplicated at forge phase 2) — both are now implemented. Automation rules
+(tag add/remove, triggered on move-to-column) are scoped to the two mutation
+kinds this rung's schema actually supports; the README's own illustrative
+"assign to closer" example is not implemented, since no "closer" concept
+exists anywhere in this rung and inventing one would be ungrounded scope
+creep — a genuine follow-up if a future rung wants it. Attachments are a
+hand-written HTTP side channel next to the WebSocket server, authorizing
+reads by the caller's project role (not bearer-token validity alone).
+[`ledger`](../ledger) reuses this rung's cascade-journaling decision.
 
 ## Definition of done
 
@@ -157,9 +197,13 @@ full rules engine.
 - Exactly-once proven under reply-frame loss (fault-injection proxy in the
   testkit by this rung).
 - Kill the network mid-drag: client keeps queuing, reconnect replays, board
-  converges; the five-flap dead-letter path surfaces in the GUI; demo
-  scripted. The offline tests assert the framework's own
-  `morph::observe` metrics (`queueDepth`, reconnect attempt/outcome) — the
-  observability seam gains its first app-scale coverage here.
+  converges; the five-flap dead-letter path surfaces in the GUI — proven by
+  test (`test_board_offline_bridge.cpp`), not yet by a runnable `--seed`
+  demo walkthrough (`LADDER.md`'s ladder-wide "every rung ships a `--seed`
+  path" convention is not yet implemented for this rung — a real, separate
+  gap, tracked but not yet closed). The offline tests assert the
+  framework's own `morph::observe` metrics (`queueDepth`, reconnect
+  attempt/outcome) — the observability seam gains its first app-scale
+  coverage here.
 - Activity stream rendered from the journal, with the cascade-journaling
   decision recorded and its divergence test green.

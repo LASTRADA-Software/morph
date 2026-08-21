@@ -362,10 +362,10 @@ TEST_CASE("FaultProxy::killAfter drops the connection instead of the targeted re
 // test-only seam on Qt's own socket classes — the decision logic that would
 // run in either case is factored into these two plain functions instead, so
 // it's what gets tested. See their doc comments in fault_proxy.hpp.
-TEST_CASE("FaultProxy's throwIfListenFailed throws exactly when its argument is false",
+TEST_CASE("FaultProxy's throwIfFaultProxyListenFailed throws exactly when its argument is false",
           "[ladder][testkit][fault-proxy]") {
-    REQUIRE_THROWS_AS(::morph::ladder::testkit::detail::throwIfListenFailed(false), std::runtime_error);
-    REQUIRE_NOTHROW(::morph::ladder::testkit::detail::throwIfListenFailed(true));
+    REQUIRE_THROWS_AS(::morph::ladder::testkit::detail::throwIfFaultProxyListenFailed(false), std::runtime_error);
+    REQUIRE_NOTHROW(::morph::ladder::testkit::detail::throwIfFaultProxyListenFailed(true));
 }
 
 TEST_CASE("isValidIncomingConnection rejects null, accepts non-null", "[ladder][testkit][fault-proxy]") {
