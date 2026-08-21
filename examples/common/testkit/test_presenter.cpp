@@ -325,6 +325,49 @@ TEST_CASE("Presenter::trackBound() still emits bound() when the presenter is des
     SUCCEED("posted whenBound() completion resolved after destruction without crashing");
 }
 
+TEST_CASE("Presenter::track() does not touch a presenter destroyed before its completion resolves",
+          "[ladder][testkit][gui][presenter]") {
+    // The track() counterpart of the trackBound() case above, and regression
+    // coverage for morph#137. track() used to capture a bare `this`, while
+    // trackBound() -- the method immediately above it in presenter.hpp --
+    // already used a QPointer and documented why. A Completion resolves
+    // through the executor (posted, never delivered inline), so a presenter
+    // destroyed before that post runs had finishOne() write to freed memory:
+    // AddressSanitizer reported a stack-use-after-scope on the atomic
+    // fetch_sub, from a completion flushed by BackendRig's teardown pump.
+    //
+    // Constructing the presenter in a nested scope and pumping after it dies
+    // reproduces that exactly. There is nothing to assert but "this does not
+    // corrupt memory", which is a real assertion under the ASan/UBSan ladder
+    // leg -- the same shape, and the same reasoning, as the trackBound() case.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    {
+        ProbePresenter presenter{ctx.bridge(), ctx.executor()};
+        presenter.bump(7);
+        // Deliberately no pump here: the completion must still be in flight
+        // when the presenter goes out of scope on the next line.
+    }
+
+    REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
+    SUCCEED("posted track() completion resolved after destruction without touching freed memory");
+}
+
+TEST_CASE("Presenter::track()'s error path also survives the presenter being destroyed first",
+          "[ladder][testkit][gui][presenter]") {
+    // Same as the case above, for track()'s .onError branch: both handlers
+    // captured `this`, so both had to be guarded, and a fix that only covered
+    // the success path would leave the failure path corrupting memory exactly
+    // where error handling makes it hardest to notice.
+    morph::ladder::gui::AppContext ctx{morph::ladder::gui::Local{}};
+    {
+        ProbePresenter presenter{ctx.bridge(), ctx.executor()};
+        presenter.bumpAndFail();
+    }
+
+    REQUIRE_FALSE(morph::ladder::testkit::pumpUntil([] { return false; }, std::chrono::milliseconds{50}));
+    SUCCEED("posted track() error completion resolved after destruction without touching freed memory");
+}
+
 TEST_CASE("Presenter::busy() stays true while a second tracked completion is still in flight",
           "[ladder][testkit][gui][presenter]") {
     // Every other track()-driving test in this file starts exactly one

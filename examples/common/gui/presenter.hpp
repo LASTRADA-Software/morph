@@ -113,8 +113,29 @@ class Presenter : public QObject {
     void track(::morph::async::Completion<T> completion, std::function<void(T)> onOk,
                std::function<void(const std::exception_ptr&)> onErr = {}) {
         _inFlight.fetch_add(1);
+        // `QPointer`, not a bare `this` capture — for exactly the reason
+        // `trackBound()` above documents, and which applies here just as
+        // much: a `Completion` resolves through the executor, so this
+        // presenter can already have been destroyed by the time either
+        // handler below runs. A presenter declared *after* the rig whose
+        // bridge it wraps (the only order possible, since it is constructed
+        // from that rig) is destroyed *before* it, and `BackendRig`'s
+        // destructor then deliberately pumps the Qt event loop to flush
+        // queued posts — resolving completions into a presenter that is
+        // already gone. AddressSanitizer caught that as a
+        // `stack-use-after-scope` write in `finishOne()` (morph#137).
+        //
+        // The guard covers `onOk`/`onErr` as well as `finishOne()`: a
+        // subclass's callback captures *its* `this`, so running it against a
+        // destroyed presenter is the same use-after-free one frame further
+        // out. `self` is re-checked after the callback returns because the
+        // callback itself may destroy the presenter.
+        QPointer<Presenter> self{this};
         completion
-            .then([this, onOk = std::move(onOk)](T value) {
+            .then([self, onOk = std::move(onOk)](T value) {
+                if (!self) {
+                    return;
+                }
                 // finishOne() must run even if onOk throws. Otherwise the
                 // in-flight counter never decrements, `busy()` stays true
                 // forever, and every subsequent `settle()` burns its full
@@ -125,23 +146,34 @@ class Presenter : public QObject {
                 try {
                     onOk(std::move(value));
                 } catch (...) {
-                    finishOne();
+                    if (self) {
+                        self->finishOne();
+                    }
                     throw;
                 }
-                finishOne();
+                if (self) {
+                    self->finishOne();
+                }
             })
-            .onError([this, onErr = std::move(onErr)](const std::exception_ptr& err) {
+            .onError([self, onErr = std::move(onErr)](const std::exception_ptr& err) {
+                if (!self) {
+                    return;
+                }
                 // Same exception-safety contract as the onOk branch above:
                 // finishOne() must still run if onErr throws.
                 if (onErr) {
                     try {
                         onErr(err);
                     } catch (...) {
-                        finishOne();
+                        if (self) {
+                            self->finishOne();
+                        }
                         throw;
                     }
                 }
-                finishOne();
+                if (self) {
+                    self->finishOne();
+                }
             });
     }
 
