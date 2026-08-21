@@ -660,19 +660,29 @@ jobs:
           key: apt-ladder-asan-${{ hashFiles('.github/workflows/ci.yml') }}
           restore-keys: apt-ladder-asan-
 
-      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, Qt6 WebSockets
+      - name: Install Clang ${{ env.CLANG_VERSION }}, ninja, catch2, ODBC
         if: steps.filter.outputs.run == 'true'
         run: |
           sudo apt-get update -q
           # unixodbc-dev + libsqliteodbc: the ladder fetches the Lightweight
           # ORM, whose CMake runs `pkg_check_modules(ODBC REQUIRED odbc)` and
           # whose fixtures open a real `DRIVER=SQLite3` connection at test
-          # time. Named explicitly rather than relied on from the runner image
-          # — same rationale as ladder-tests' own install step.
+          # time. libyaml-cpp-dev/libzip-dev/libgl1-mesa-dev round out the
+          # same set every other ladder-building Linux job installs.
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev \
-            qt6-base-dev qt6-websockets-dev qt6-tools-dev libgl1-mesa-dev \
-            unixodbc-dev libsqliteodbc
+            unixodbc-dev libsqliteodbc libyaml-cpp-dev libzip-dev libgl1-mesa-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+
+      # Not the distro's Qt: examples/common/CMakeLists.txt requires 6.5+
+      # unconditionally and Ubuntu 24.04 still ships 6.4.2 — the same gap
+      # every other job that builds the ladder on Linux already documents.
+      - name: Install Qt ${{ env.QT_VERSION }}
+        if: steps.filter.outputs.run == 'true'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtwebsockets
+          cache: true
 
       - name: Cache sccache
         if: steps.filter.outputs.run == 'true'
