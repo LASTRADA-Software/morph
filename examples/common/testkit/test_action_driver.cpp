@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <cstdlib>
 #include <optional>
 #include <string>
@@ -151,4 +152,50 @@ TEST_CASE("SeededScript reads its seed from MORPH_STRESS_SEED when set, ignoring
     SeededScript<int> overridden{/*seed=*/1, /*generators=*/{{1, [] { return 0; }}}, /*burstSize=*/1,
                                   /*onBurst=*/[](const std::vector<int>&) {}};
     CHECK(overridden.seed() == 424242);
+}
+
+TEST_CASE("SeededScript falls back to the caller's default when MORPH_STRESS_SEED is set but empty",
+          "[testkit][action_driver]") {
+    // resolveSeed()'s guard is `env != nullptr && *env != '\0'`. The
+    // TEST_CASE above covers a set, non-empty value; an unset variable is
+    // covered by every other case in this file. Neither reaches the second
+    // conjunct's false arm -- a variable that is *present but empty*, which
+    // an `export MORPH_STRESS_SEED=` in a CI shell produces easily. Without
+    // the emptiness check that value would reach std::stoull(""), which
+    // throws std::invalid_argument rather than falling back.
+    using morph::ladder::testkit::SeededScript;
+
+    const ScopedEnvVar emptyOverride{"MORPH_STRESS_SEED", ""};
+
+    SeededScript<int> script{/*seed=*/7'777, /*generators=*/{{1, [] { return 0; }}}, /*burstSize=*/1,
+                             /*onBurst=*/[](const std::vector<int>&) {}};
+    CHECK(script.seed() == 7'777);
+}
+
+TEST_CASE("SeededScript can pick the last generator, which absorbs the leftover weight",
+          "[testkit][action_driver]") {
+    // next() walks only the first N-1 weight ranges and lets the final
+    // generator absorb the remainder, so "the loop ran to completion" is the
+    // ordinary last-generator-won path. Weighting the last entry heavily
+    // makes both outcomes -- an early break and a run to completion -- occur
+    // within a single script, so neither arm of that loop goes unexercised.
+    using morph::ladder::testkit::SeededScript;
+
+    std::vector<int> generated;
+    SeededScript<int> script{/*seed=*/2'024,
+                             /*generators=*/{{1, [] { return 100; }}, {9, [] { return 200; }}},
+                             /*burstSize=*/100,
+                             /*onBurst=*/[](const std::vector<int>&) {}};
+
+    for (int i = 0; i < 60; ++i) {
+        generated.push_back(script.next());
+    }
+
+    // Both generators must actually have been selected, or this test would
+    // silently stop covering one of the two paths it exists to cover.
+    CHECK(std::count(generated.begin(), generated.end(), 100) > 0);
+    CHECK(std::count(generated.begin(), generated.end(), 200) > 0);
+    for (int v : generated) {
+        CHECK((v == 100 || v == 200));
+    }
 }

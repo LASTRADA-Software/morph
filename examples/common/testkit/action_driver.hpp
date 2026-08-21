@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstddef>
 #include <cstdlib>
 #include <functional>
 #include <random>
@@ -56,19 +57,32 @@ class SeededScript {
     [[nodiscard]] Action next() {
         std::uniform_int_distribution<int> dist{0, _totalWeight - 1};
         int pick = dist(_rng);
-        for (const auto& g : _generators) {
-            if (pick < g.weight) {
-                Action action = g.generate();
-                _burst.push_back(action);
-                if (_burst.size() >= _burstSize) {
-                    _onBurst(_burst);
-                    _burst.clear();
-                }
-                return action;
+        // Walk the first N-1 weight ranges only; the last generator absorbs
+        // whatever weight is left over. `pick` is drawn from
+        // [0, _totalWeight) and the weights sum to `_totalWeight`, so
+        // running off the end of this loop *is* the "last generator won"
+        // case, not an error. Selecting it that way (rather than testing
+        // every generator and falling through to a post-loop
+        // `_generators.front()`) leaves no unreachable statement behind:
+        // the old fallback could not be reached by any input, so llvm-cov
+        // scored it as a permanently-missed line, and the loop's own
+        // "condition went false" arm was equally unreachable because some
+        // generator always matched first.
+        std::size_t chosen = _generators.size() - 1;
+        for (std::size_t i = 0; i + 1 < _generators.size(); ++i) {
+            if (pick < _generators[i].weight) {
+                chosen = i;
+                break;
             }
-            pick -= g.weight;
+            pick -= _generators[i].weight;
         }
-        return _generators.front().generate();  // unreachable if totalWeight > 0
+        Action action = _generators[chosen].generate();
+        _burst.push_back(action);
+        if (_burst.size() >= _burstSize) {
+            _onBurst(_burst);
+            _burst.clear();
+        }
+        return action;
     }
 
     /// @brief Calls `onBurst` with whatever partial burst remains, then
