@@ -1,0 +1,86 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "report_job_poller.hpp"
+
+#include <utility>
+
+namespace ledger::gui {
+
+ReportJobPoller::ReportJobPoller(::morph::bridge::Bridge& bridge, ReportJobId jobId, Dispatch dispatch,
+                                 OnDone onDone, OnFailed onFailed, std::chrono::milliseconds interval,
+                                 std::chrono::milliseconds executeDeadline)
+    : _jobId{jobId},
+      _dispatch{std::move(dispatch)},
+      _onDone{std::move(onDone)},
+      _onFailed{std::move(onFailed)} {
+    bridge.setExecuteDeadline(executeDeadline);
+    // `&_timer` as the connection's context object, not `this`: this class is
+    // not a QObject, and `_timer` is a member that always outlives the
+    // connection it owns -- the identical idiom, and the identical reason,
+    // EventPoller documents.
+    QObject::connect(&_timer, &QTimer::timeout, &_timer, [this] { pollOnce(); });
+    _timer.start(interval);
+}
+
+void ReportJobPoller::disarm() {
+    _finished = true;
+    _timer.stop();
+}
+
+void ReportJobPoller::pollOnce() {
+    if (_finished) {
+        return;
+    }
+    _dispatch(
+        _jobId,
+        [this, alive = std::weak_ptr<const void>{_liveness}](GetReportStatusResult result) {
+            if (alive.expired() || _finished) {
+                return;
+            }
+            switch (result.status) {
+                case ReportStatus::Done:
+                    // Disarm *before* the callback: a handler that reacts by
+                    // destroying this poller must not return into a live
+                    // timer, and a late reply from an already-dispatched tick
+                    // must not produce a second terminal callback.
+                    disarm();
+                    if (_onDone) {
+                        _onDone(result.result.value_or(std::string{}));
+                    }
+                    return;
+                case ReportStatus::Failed:
+                    disarm();
+                    if (_onFailed) {
+                        _onFailed(QStringLiteral("report job failed"));
+                    }
+                    return;
+                case ReportStatus::Pending:
+                default:
+                    // Still working; the timer fires again.
+                    return;
+            }
+        },
+        [this, alive = std::weak_ptr<const void>{_liveness}](std::exception_ptr err) {
+            if (alive.expired() || _finished) {
+                return;
+            }
+            // A dispatch error is terminal for this poller rather than
+            // retried: the deadline armed above already bounds one attempt,
+            // and silently retrying a failing call forever is how a "stuck at
+            // Pending" bug hides. The presenter above decides whether to
+            // resubmit.
+            disarm();
+            QString message = QStringLiteral("report status poll failed");
+            try {
+                std::rethrow_exception(err);
+            } catch (const std::exception& ex) {
+                message = QString::fromStdString(ex.what());
+            } catch (...) {
+                // keep the generic message
+            }
+            if (_onFailed) {
+                _onFailed(message);
+            }
+        });
+}
+
+}  // namespace ledger::gui
