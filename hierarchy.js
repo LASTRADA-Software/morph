@@ -59,6 +59,7 @@ var hierarchy =
     [ "morph::forms::RuleList&lt; Rules &gt;", "d3/d8b/structmorph_1_1forms_1_1RuleList.html", null ],
     [ "morph::forms::VisibleWhen&lt; V, A, Cond &gt;", "d8/d10/structmorph_1_1forms_1_1VisibleWhen.html", null ],
     [ "morph::journal::detail::EscapingWriteOpts", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html", null ],
+    [ "morph::journal::detail::ScopedReplayFlag", "d5/d82/classmorph_1_1journal_1_1detail_1_1ScopedReplayFlag.html", null ],
     [ "morph::journal::IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", [
       [ "morph::journal::FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", null ],
       [ "morph::journal::InMemoryActionLog", "d4/dc5/classmorph_1_1journal_1_1InMemoryActionLog.html", null ],

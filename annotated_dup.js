@@ -80,7 +80,8 @@ var annotated_dup =
       ] ],
       [ "journal", null, [
         [ "detail", null, [
-          [ "EscapingWriteOpts", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts" ]
+          [ "EscapingWriteOpts", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts.html", "da/d0c/structmorph_1_1journal_1_1detail_1_1EscapingWriteOpts" ],
+          [ "ScopedReplayFlag", "d5/d82/classmorph_1_1journal_1_1detail_1_1ScopedReplayFlag.html", "d5/d82/classmorph_1_1journal_1_1detail_1_1ScopedReplayFlag" ]
         ] ],
         [ "FileActionLog", "d0/d2e/classmorph_1_1journal_1_1FileActionLog.html", "d0/d2e/classmorph_1_1journal_1_1FileActionLog" ],
         [ "IActionLog", "df/d4e/structmorph_1_1journal_1_1IActionLog.html", "df/d4e/structmorph_1_1journal_1_1IActionLog" ],
