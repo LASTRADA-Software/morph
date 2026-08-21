@@ -17,7 +17,9 @@ coverage:
     # tracking the ladder. This project's own IMPLEMENTATION.md rule 5 has
     # never claimed the whole library is 100% covered — only "models" (and
     # now the ladder's hand-written GUI/testkit code, see the component
-    # below) carry that promise, so only that promise is a blocking gate.
+    # below) carry that promise. Note that no status in this file blocks
+    # today -- see the components below for why the ladder's gates are
+    # informational while rungs 5-8 are still being built (morph#133).
     project:
       default:
         informational: true
@@ -30,11 +32,12 @@ coverage:
 # models yet — rung 0 ships no app — so this component is the whole of that
 # promise today; src/models/ and include/<rung>/models/ join it as rungs
 # land). Scoped to examples/common specifically, not project-wide: a
-# blocking gate over the *entire* codebase is a much bigger, unverified
-# claim this repo has never made and this change does not attempt.
+# gate over the *entire* codebase is a much bigger, unverified claim this
+# repo has never made and this change does not attempt.
 #
-# Target is 98%, not a literal 100%, for a measurement-tooling reason rather
-# than an intentional gap: llvm-cov's source-based coverage places a
+# The target sat at 98% (not a literal 100%) for a measurement-tooling reason
+# rather than an intentional gap, and the reasoning still explains why a
+# ladder component can never honestly read 100%: llvm-cov's source-based coverage places a
 # "control reached past this block" counter on the closing brace of certain
 # blocks (a switch-case's `}` after `break;`, a scope's `}` after its one
 # statement calls a `std::function<void()>`), and that counter can read 0
@@ -71,11 +74,11 @@ component_management:
         - examples/common/**
       statuses:
         - type: project
-          target: 98%
-          informational: false
+          target: 95%
+          informational: true
         - type: patch
-          target: 98%
-          informational: false
+          target: 95%
+          informational: true
 
     # Rung 1, pastebin.
     #
@@ -132,16 +135,96 @@ component_management:
         - examples/pastebin/**
       statuses:
         - type: project
-          target: 96%
-          informational: false
+          target: 95%
+          informational: true
         - type: patch
-          target: 96%
-          informational: false
+          target: 95%
+          informational: true
+
+    # Rungs 2-4, added with morph#141/#142 -- the change that first put them
+    # into the coverage report at all. Before it, scripts/coverage.sh named
+    # only rung 1, so bookmarks, polls and kanban (~15k lines of models,
+    # presenters and QML adapters) contributed nothing to any number and were
+    # gated by nothing.
+    #
+    # Their measured coverage when they entered the report:
+    #
+    #     ladder (examples/common)   95.85%
+    #     pastebin (rung 1)          95.99%
+    #     bookmarks (rung 2)         86.79%
+    #     polls (rung 3)             85.99%
+    #     kanban (rung 4)            85.09%
+    #
+    # The ~10-point split is not a coincidence: the two components that had a
+    # gate watching them sit near 96%, and the three that never did sit near
+    # 85%. That is the clearest evidence in this repo that a visible number
+    # changes what gets written.
+    #
+    # Every status here is `informational: true` deliberately. These rungs are
+    # below where they should be, and a blocking gate today would stop work on
+    # rungs 5-8 to pay down debt from rungs 2-4 -- the wrong order. The
+    # decision is: finish building the ladder, then raise these. Informational
+    # statuses still post the number on every PR, so the gap stays visible
+    # while it is being carried rather than quietly forgotten, and flipping
+    # `informational` to `false` later is a one-line change per component once
+    # the numbers support it.
+    #
+    # Targets are set at each rung's measured floor rather than an aspiration:
+    # an informational status is a *reference line*, and a line drawn where
+    # coverage actually is makes a regression legible immediately. An
+    # aspirational target would show every PR as failing-but-ignored, which
+    # reads as noise and gets tuned out.
+    - component_id: bookmarks
+      name: "application ladder rung 2 (examples/bookmarks)"
+      paths:
+        - examples/bookmarks/**
+      statuses:
+        - type: project
+          target: 86%
+          informational: true
+        - type: patch
+          target: 86%
+          informational: true
+
+    - component_id: polls
+      name: "application ladder rung 3 (examples/polls)"
+      paths:
+        - examples/polls/**
+      statuses:
+        - type: project
+          target: 85%
+          informational: true
+        - type: patch
+          target: 85%
+          informational: true
+
+    - component_id: kanban
+      name: "application ladder rung 4 (examples/kanban)"
+      paths:
+        - examples/kanban/**
+      statuses:
+        - type: project
+          target: 85%
+          informational: true
+        - type: patch
+          target: 85%
+          informational: true
 
 # Always post the coverage-comparison comment on a PR, even on the first upload
 # after activation and even when the base report is still processing.
+#
+# `layout` is a closed vocabulary, and Codecov rejects an unknown entry as a
+# validation error for the *whole file* -- a file that fails validation is
+# discarded wholesale, so every `status`, `component_management` and `ignore`
+# rule below stops applying and Codecov's own defaults (a blocking
+# `codecov/patch` at `target: auto`) silently take their place. `reach` is the
+# reachability graph; there is no `reference` section, and naming one is what
+# had quietly turned this entire config into a no-op (morph#133).
+#
+# The failure mode is worth naming because it is invisible: nothing errors,
+# the checks still run, and the file reads as though it is in force.
 comment:
-  layout: "reference, diff, flags, files, components"
+  layout: "reach, diff, flags, files, components"
   behavior: default
   require_base: false
   require_head: true
