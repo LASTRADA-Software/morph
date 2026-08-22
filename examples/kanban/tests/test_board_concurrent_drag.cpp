@@ -271,7 +271,11 @@ TEST_CASE("Concurrent BoardBridge::moveTask calls (N=4) never desync positions",
     const auto finalConnection =
         QObject::connect(&reader, &kanban::gui::BoardBridge::boardChanged, [&] { finalRefreshed = true; });
     reader.refresh();
-    REQUIRE(pumpUntil([&] { return finalRefreshed; }));
+    // The same 20s budget the outstanding-drag wait above uses, and for the
+    // same reason: this refresh queues behind that scenario's whole backlog,
+    // so pumpUntil's 5s default (sized for a single cheap action) fails
+    // deterministically on any machine slower than CI's rather than flaking.
+    REQUIRE(pumpUntil([&] { return finalRefreshed; }, std::chrono::milliseconds{20000}));
     QObject::disconnect(finalConnection);
 
     const QVariantMap finalBoard = reader.board();
