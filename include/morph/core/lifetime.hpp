@@ -48,11 +48,29 @@ namespace morph::async {
 /// presenters and QML-owned bridges cannot comply.
 class HasLifetime {
   public:
+    /// @brief Creates a fresh lifetime token for this object.
     HasLifetime() : _token{std::make_shared<char>()} {}
 
+    /// @brief Copy-constructs with a *new* token rather than sharing the source's.
+    ///
+    /// A token is an identity, not a value: sharing one would let a copy's
+    /// destruction silence callbacks bound to the original. The same reasoning
+    /// applies to every other special member below, which is why none of them
+    /// is defaulted.
     HasLifetime(const HasLifetime&) : _token{std::make_shared<char>()} {}
+
+    /// @brief Copy-assigns, leaving this object's own token untouched.
+    /// @return `*this`.
     HasLifetime& operator=(const HasLifetime&) { return *this; }
+
+    /// @brief Move-constructs with a new token; the source keeps its own.
+    ///
+    /// A moved-from receiver is still a live object, and callbacks already
+    /// bound to it must keep firing until it is actually destroyed.
     HasLifetime(HasLifetime&&) noexcept : _token{std::make_shared<char>()} {}
+
+    /// @brief Move-assigns, leaving this object's own token untouched.
+    /// @return `*this`.
     HasLifetime& operator=(HasLifetime&&) noexcept { return *this; }
 
     /// @brief Destroys the token, so every guarded callback becomes a no-op.
@@ -68,8 +86,12 @@ class HasLifetime {
     std::shared_ptr<const char> _token;
 };
 
-/// @brief A receiver that can be passed to `Completion::then`/`onError`.
-/// @tparam Owner Candidate receiver type.
+/// @brief A receiver that can be passed to `Completion::then`/`onError` --
+///        satisfied by any type deriving from `HasLifetime`.
+///
+/// No `@tparam` here on purpose: clang's `-Wdocumentation` does not treat a
+/// concept as a template declaration, and the repository builds with
+/// `-Werror`.
 template <typename Owner>
 concept LifetimeBound = std::derived_from<Owner, HasLifetime>;
 
