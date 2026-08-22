@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <limits>
 #include <stdexcept>
@@ -413,19 +414,56 @@ inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
 /// round-trip byte-for-byte.
 ///
 /// @param env Envelope to serialize.
+/// @brief The serialisation primitive `encode` calls, as an injectable strategy.
+///
+/// Same shape and rationale as `morph::core::FileIoOps`: the member defaults
+/// to the real call it stands in for, so a default-constructed `WireCodecOps`
+/// is byte-for-byte what `encode` did before this seam existed.
+///
+/// @par Why this exists
+/// `encode`'s write-failure arm is unreachable through any `Envelope` value.
+/// Glaze only sets a write-time error for `invalid_partial_key`/`unknown_key`
+/// (its partial-write-by-key-list feature, which `encode` does not use) or
+/// `invalid_variant_object` (a `std::variant` member, which `Envelope` does
+/// not have). Confirmed by experiment as well as by reading glaze: five
+/// flavours of invalid UTF-8, an embedded NUL, a raw control byte and an 8 MiB
+/// payload all encode successfully.
+///
+/// That left a permanently uncovered branch guarding a real invariant. Rather
+/// than reshape `Envelope` to make a test possible, or wait on a
+/// fault-injection hook in glaze (LASTRADA-Software/morph#96 asked for one),
+/// this puts the seam on morph's side of the boundary — where the repository
+/// already puts it for the identical problem with file I/O.
+struct WireCodecOps {
+    /// @brief Serialises @p env into @p out. Mirrors the `glz::write` call
+    ///        `encode` would otherwise make directly.
+    /// @return Glaze's error context; falsy on success.
+    std::function<glz::error_ctx(const Envelope& env, std::string& out)> writeEnvelope =
+        [](const Envelope& env, std::string& out) { return glz::write<detail::EscapingWriteOpts{}>(env, out); };
+};
+
+/// @brief The shared default `WireCodecOps`.
+///
+/// A function-local static, not a default-constructed temporary in `encode`'s
+/// signature: `encode` runs on every outbound message, and building a fresh
+/// `std::function` per call would put an allocation on that path purely to
+/// support a test seam.
+/// @return Reference to the process-wide default operations.
+[[nodiscard]] inline const WireCodecOps& defaultWireCodecOps() {
+    static const WireCodecOps ops;
+    return ops;
+}
+
 /// @return The serialized envelope as valid, re-decodable JSON.
+/// @param ops Serialisation strategy; defaults to the real `glz::write` call.
+///        A test injects a failing one to exercise the throw path, which no
+///        `Envelope` value can reach — see `WireCodecOps`.
 /// @throws std::runtime_error on serialisation failure (should never happen for valid input).
-inline std::string encode(const Envelope& env) {
+inline std::string encode(const Envelope& env, const WireCodecOps& ops = defaultWireCodecOps()) {
     std::string out;
-    if (auto errCode = glz::write<detail::EscapingWriteOpts{}>(env, out)) {
-        // Not covered by this file's own test suite: every glaze write-error
-        // trigger site (`invalid_partial_key`/`unknown_key` from partial writes,
-        // `invalid_variant_object` from a `std::variant` member) is unreachable
-        // for `Envelope` -- it has no variant fields and `encode` never uses
-        // glaze's partial-write-by-key-list feature. Forcing this branch would
-        // need a fault-injection seam glaze does not expose (see
-        // LASTRADA-Software/morph#96, requesting one). Left uncovered rather
-        // than reshaping `Envelope` purely to make a test possible.
+    if (auto errCode = ops.writeEnvelope(env, out)) {
+        // Unreachable through any `Envelope` value -- see `WireCodecOps` for
+        // why, and for how a test covers this arm anyway.
         throw std::runtime_error("envelope encode failed: " + glz::format_error(errCode, out));
     }
     return out;
