@@ -210,6 +210,52 @@ component_management:
           target: 85%
           informational: true
 
+    # Rung 5, ledger. Scoped to the rung's models -- what
+    # examples/IMPLEMENTATION.md rule 5's bar actually names -- rather than the
+    # whole rung directory, so the number describes domain logic rather than
+    # being diluted by presenters and QML adapters that have their own tests.
+    #
+    # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
+    # rounded report percentage) over the full ledger suite:
+    #
+    #     src/models/ledger_model.cpp            611/688   88.81%
+    #     src/models/budget_model.cpp            187/211   88.63%
+    #     src/models/rule_model.cpp               69/79    87.34%
+    #     include/ledger/models/ledger_model.hpp  15/21    71.43%
+    #     include/ledger/models/budget_model.hpp  12/12   100.00%
+    #     include/ledger/models/rule_model.hpp     1/1    100.00%
+    #     ------------------------------------------------------
+    #     total                                  895/1012  88.44%
+    #
+    # Target 87%, a small margin below that ceiling so an ordinary refactor
+    # does not trip it while a real regression does.
+    #
+    # `informational: true`, deviating from this rung's own plan (Task 25 says
+    # `false`). That plan predates the decision recorded in morph#133: every
+    # ladder gate is informational until the ladder is built, then raised
+    # together. Making rung 5 the single blocking component -- while rungs 2-4
+    # sit informational near 85% -- would invert that policy and gate the
+    # newest code most strictly precisely because it is newest.
+    #
+    # Measuring this honestly was worth doing rather than rounding past: the
+    # first measurement put rule_model.cpp at 60.76%, which turned out to be
+    # two documented obligations nothing verified -- Task 11's empty-principal
+    # refusal and Task 11a's self-journaling, both claimed by the rung and
+    # neither executed. Covering them moved the file to 87.34% and the
+    # component from 86.36% to 88.44%.
+    - component_id: ledger
+      name: "application ladder rung 5 (examples/ledger models)"
+      paths:
+        - examples/ledger/src/models/**
+        - examples/ledger/include/ledger/models/**
+      statuses:
+        - type: project
+          target: 87%
+          informational: true
+        - type: patch
+          target: 87%
+          informational: true
+
 # Always post the coverage-comparison comment on a PR, even on the first upload
 # after activation and even when the base report is still processing.
 #

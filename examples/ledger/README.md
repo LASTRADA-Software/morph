@@ -46,7 +46,23 @@ Models: `LedgerModel` (accounts + transactions, keyed by ledger/book id),
 (asset/expense/revenue/liability), transaction journal, transaction leg,
 currency, category, budget + budget limit, rule (trigger/action pairs).
 
-Build order:
+Build order (status as of rung 5's implementation, see
+`docs/superpowers/plans/2026-08-19-ledger-rung5.md`):
+
+- **Steps 1-7: implemented.** Accounts and composite transactions,
+  multi-currency with foreign-amount pairs, budgets, rules, undo as a
+  compensating action, CSV import with dedup, and the submit->poll report
+  pair -- each with model, presenter, QML bridge and tests. The desktop
+  client wiring all four bridges is in `gui/`.
+- **Step 8: prose delivered, one scenario's test pending.**
+  `SYNC-BENCHMARK.md` states the philosophy and both scenarios in full.
+  Scenario B is reproducible against `UpdateRule`'s real version conflict.
+  Scenario A -- two offline clients editing the same *transaction* -- has no
+  surface to exercise yet: this rung ships no transaction-edit action, no
+  base version on `transaction_journals`, and no offline-queue wiring. That
+  gap is tracked in morph#144 rather than papered over with a test that
+  would pass under the scenario's name without testing it.
+
 
 1. Accounts + `StoreTransaction { description, date, legs[] }` — one
    composite, all-or-nothing action creating the journal and all legs.
@@ -130,9 +146,15 @@ data; the submit→poll job idiom.
   model's own zero-sum invariant (or an app-added num/den echo check)
   rejects — i.e. the mitigation is app-built scaffolding, and a pre-decode
   validation hook is a named framework gap.
-- **Zero-decimal currencies are unrepresentable at true precision**:
-  `DecimalPlaces` has a floor of 1, so JPY/KRW need an app convention
-  (dp 1 + an integer-only `x-rules` gate) with a named test.
+- **Zero-decimal currencies (JPY/KRW)**: correction to the round-5 draft —
+  `DecimalPlaces` has **no floor of 1**. `Quantity<U, 0>` is a fully legal,
+  tested first-class configuration (`rational.hpp`'s own doc comment,
+  `docs/spec/util/rational.md`, `docs/spec/util/quantity_type.md`, and
+  `tests/test_quantity.cpp` all assert `DecimalPlaces{0}` round-trips
+  correctly), so JPY/KRW need no app-side workaround — declare the currency
+  unit at `dp=0` and the type system carries it natively. Named test: a
+  JPY leg stores and displays as a true integer, with no `x-rules` gate
+  required.
 - **Locale entry**: in de-DE the group separator is "." and the shipped
   normalizer strips it anywhere — typing `1.5` submits **15**, a silent 10×
   money error. Pin the behavior, fix (positional grouping validation or
