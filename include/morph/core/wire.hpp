@@ -402,18 +402,6 @@ inline Envelope makeHello(std::uint32_t protocolVersion = kProtocolVersion) {
     return env;
 }
 
-/// @brief Encodes @p env as a single JSON line.
-///
-/// Writes with `detail::EscapingWriteOpts`, so raw ASCII control bytes in any
-/// string field become `\uXXXX` escapes. Without it, a single 0x0B anywhere in
-/// `body`, `modelType`, `contextKey`, `typeId`, `actionType`, or the session's
-/// `principal`/`token` yields an envelope the peer's `decode` throws on — and,
-/// where the same string also contains a `\` or `"`, one glaze silently
-/// corrupts before it is ever sent. Both are payload-triggered transport
-/// failures, not caller errors. The escape is lossless, so such bytes still
-/// round-trip byte-for-byte.
-///
-/// @param env Envelope to serialize.
 /// @brief The serialisation primitive `encode` calls, as an injectable strategy.
 ///
 /// Same shape and rationale as `morph::core::FileIoOps`: the member defaults
@@ -454,10 +442,22 @@ struct WireCodecOps {
     return ops;
 }
 
-/// @return The serialized envelope as valid, re-decodable JSON.
+/// @brief Encodes @p env as a single JSON line.
+///
+/// Writes with `detail::EscapingWriteOpts`, so raw ASCII control bytes in any
+/// string field become `\uXXXX` escapes. Without it, a single 0x0B anywhere in
+/// `body`, `modelType`, `contextKey`, `typeId`, `actionType`, or the session's
+/// `principal`/`token` yields an envelope the peer's `decode` throws on — and,
+/// where the same string also contains a `\` or `"`, one glaze silently
+/// corrupts before it is ever sent. Both are payload-triggered transport
+/// failures, not caller errors. The escape is lossless, so such bytes still
+/// round-trip byte-for-byte.
+///
+/// @param env Envelope to serialize.
 /// @param ops Serialisation strategy; defaults to the real `glz::write` call.
 ///        A test injects a failing one to exercise the throw path, which no
 ///        `Envelope` value can reach — see `WireCodecOps`.
+/// @return The serialized envelope as valid, re-decodable JSON.
 /// @throws std::runtime_error on serialisation failure (should never happen for valid input).
 inline std::string encode(const Envelope& env, const WireCodecOps& ops = defaultWireCodecOps()) {
     std::string out;
