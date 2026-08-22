@@ -406,6 +406,7 @@ if(MORPH_BUILD_QT)
         FILE_SET HEADERS
         BASE_DIRS include
         FILES
+            include/morph/qt/forms/qml_forms_bridge.hpp
             include/morph/qt/qt_executor.hpp
             include/morph/qt/qt_tls.hpp
             include/morph/qt/qt_websocket_server.hpp

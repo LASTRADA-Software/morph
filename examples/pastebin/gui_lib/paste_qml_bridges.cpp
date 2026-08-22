@@ -68,28 +68,6 @@ namespace {
 
 }  // namespace
 
-FormsBridge::FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
-    : QObject{parent}, _controller{bridge, executor, pasteSchemasJson()} {}
-
-QString FormsBridge::schemasJson() const {
-    return QString::fromStdString(_controller.schemasJson());
-}
-
-void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJson) {
-    _controller.submitIfValid(
-        actionType.toStdString(), bodyJson.toStdString(),
-        [this, actionType](std::string resultJson) {
-            emit replyReceived(actionType, true, QString::fromStdString(resultJson));
-        },
-        [this, actionType](const std::exception_ptr& err) {
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& e) {
-                emit replyReceived(actionType, false, QString::fromUtf8(e.what()));
-            }
-        });
-}
-
 PasteBridge::PasteBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent)
     : QObject{parent}, _presenter{bridge, executor} {
     // Direct (same-thread) connections throughout — see this header's

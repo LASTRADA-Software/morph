@@ -13,8 +13,17 @@
 // of the file inside a namespace it wrongly believes is still open. moc needs
 // nothing from these headers: the macros, signals and `Q_INVOKABLE`
 // signatures below are all it reads.
+// Outside the Q_MOC_RUN guard, and it must stay outside: this header defines
+// MORPH_QML_FORMS_BRIDGE_MEMBERS, and moc has to expand it. Guarded, the macro
+// is undefined under moc and its invocation expands to *nothing* -- moc then
+// emits a metaobject with no submitIfValid at all, silently, and the bridge
+// compiles and links while QML's calls into it go nowhere. The macro guards
+// its own template-heavy member internally instead.
+#include <morph/qt/forms/qml_forms_bridge.hpp>
+
 #ifndef Q_MOC_RUN
-#include "paste_forms_controller.hpp"
+#include "paste_schemas.hpp"
+
 #include "paste_presenter.hpp"
 
 #include <morph/core/bridge.hpp>
@@ -32,7 +41,7 @@
 ///
 /// @par Why these adapters exist at all
 /// Neither Task 10 class is directly consumable from QML — deliberately.
-/// `PasteFormsController` is a plain class (no `Q_OBJECT`) whose
+/// `FormsControllerCore<PasteModel>` is a plain class template (no `Q_OBJECT`) whose
 /// `submitIfValid` takes C++ callbacks, and `PastePresenter`'s signals carry
 /// raw C++ DTOs (`PasteView`, `ListPastesResult`) that QML has no reading of.
 /// The two classes below are the thinnest possible translation from those
@@ -67,7 +76,9 @@
 
 namespace pastebin::gui {
 
-/// @brief QML-facing face of `pastebin::gui::PasteFormsController`.
+/// @brief QML-facing forms adapter, built on
+///        `morph::qt::forms::FormsControllerCore<PasteModel>` via
+///        `MORPH_QML_FORMS_BRIDGE_MEMBERS`.
 ///
 /// Same surface `DynamicForm.qml` expects of a controller — a `schemasJson`
 /// property, `submitIfValid(actionType, bodyJson)`, and a `replyReceived`
@@ -78,22 +89,13 @@ class FormsBridge : public QObject {
     /// @brief `{actionType: schema}` JSON — everything the QML renderer needs.
     Q_PROPERTY(QString schemasJson READ schemasJson CONSTANT)
 
-public:
-    /// @param bridge   The shared `Bridge` `AppContext` owns.
-    /// @param executor The executor `Completion` callbacks land on.
-    /// @param parent   Optional `QObject` parent.
-    FormsBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IExecutor* executor, QObject* parent = nullptr);
-
-    /// @brief The schema document supplied to the wrapped controller
-    ///        (`paste_schemas.hpp`).
-    /// @return `{actionType: schema}` JSON.
-    [[nodiscard]] QString schemasJson() const;
-
-    /// @brief Dispatches @p bodyJson as @p actionType's body, emitting
-    ///        `replyReceived` when the reply (or the error) arrives.
-    /// @param actionType Registered action type id.
-    /// @param bodyJson   Fully-assembled JSON body, as `DynamicForm` builds it.
-    Q_INVOKABLE void submitIfValid(const QString& actionType, const QString& bodyJson);
+    // Constructor, schemasJson() and submitIfValid() are byte-for-byte
+    // identical in every rung's forms bridge; the macro holds that half once
+    // (morph/qt/forms/qml_forms_bridge.hpp). Q_OBJECT, the Q_PROPERTY above
+    // and the signals block below stay here because moc does not see a
+    // `signals:` specifier that arrives through a macro expansion -- see the
+    // macro's own doc comment.
+    MORPH_QML_FORMS_BRIDGE_MEMBERS(FormsBridge, ::pastebin::PasteModel, ::pastebin::gui::pasteSchemasJson())
 
 signals:
     /// @brief Emitted once per `submitIfValid`. @p payload is the result JSON
@@ -103,10 +105,6 @@ signals:
     /// @param payload    Result JSON, or the error message.
     void replyReceived(const QString& actionType, bool ok, const QString& payload);
 
-private:
-#ifndef Q_MOC_RUN
-    PasteFormsController _controller;
-#endif
 };
 
 /// @brief QML-facing face of `pastebin::gui::PastePresenter`.

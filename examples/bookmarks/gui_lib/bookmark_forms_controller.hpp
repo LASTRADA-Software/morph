@@ -29,7 +29,8 @@ namespace bookmarks::gui {
 ///        (`examples/IMPLEMENTATION.md` rule 2 justification (b)) — the
 ///        schema/validation/rendering machinery is untouched; only the
 ///        backend-wiring seam differs. Verbatim in shape from
-///        `pastebin::gui::PasteFormsController`, which established it.
+///        pastebin's forms bridge, which established it (pastebin has since
+///        moved onto `MORPH_QML_FORMS_BRIDGE_MEMBERS`).
 ///
 /// @par The one thing that is genuinely new here: routing
 /// The shipped core, and pastebin's copy of it, are templates over a *single*
@@ -61,7 +62,7 @@ namespace bookmarks::gui {
 /// `Bridge`.
 ///
 /// @par No `fetchOptions()`
-/// Deliberately absent, exactly as in `PasteFormsController`: it exists on
+/// Deliberately absent, exactly as in pastebin's forms bridge: it exists on
 /// the shipped core to serve a `morph::forms::Choice<T, …>` field's combo-box
 /// options, and none of this rung's DTOs declare a `Choice` field —
 /// `CreateBookmark::visibility` is a plain reflected enum, not a
