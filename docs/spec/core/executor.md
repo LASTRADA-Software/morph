@@ -132,6 +132,37 @@ runs later, once that thread's event loop processes the queued event. The
 caller does **not** need to be (or supply) a `QObject` — only the constructor
 optionally takes one, to pick the target thread.
 
+### Teardown: queued tasks are dropped, not delivered
+
+`post()` enqueues and returns. The queued Qt event outlives that call, so
+joining the worker pool whose task made the call proves only that the
+`post()` **happened** — never that the event was **delivered**. A task still
+sitting on the Qt queue when its `QtExecutor` is destroyed would otherwise be
+delivered against a freed executor and read `_context` off freed memory.
+
+Each queued task therefore carries a weak observer of its executor's lifetime
+and does nothing if the executor is already gone.
+
+This is not a theoretical hazard. [`Bridge::executeVia`](bridge.md) chains
+three `Completion` objects per dispatched action, each settled from *inside*
+the previous one's delivered callback, so a caller waiting only on its own
+top-level completion can observe "done" while an intermediate post is still
+queued; when that stale event is finally pumped, its body calls `post()` for
+the next link. Before the guard this segfaulted ordinary uninstrumented
+builds, not merely sanitizer runs (morph#127).
+
+Dropping is the correct outcome rather than the lesser evil: a chain being
+torn down has nobody left to observe its result, and
+[`Completion`](completion.md)'s orphan logging already covers a completion
+that never resolves. Owners consequently do **not** need to drain the event
+loop before destroying an executor.
+
+**Boundary.** The check assumes the executor is destroyed on the same thread
+that runs its context's event loop, which holds for every owner in this
+repository. Destroying one from another thread while its loop is mid-delivery
+still needs external synchronisation: this closes the "torn down with events
+still queued" hole, not a genuine cross-thread race.
+
 Passing a non-default `context` — e.g. a plain `QObject` that has been
 `moveToThread()`'d onto a worker `QThread` with its own event loop — lets a
 `QtExecutor` dispatch to that worker thread instead of the GUI thread. This is
