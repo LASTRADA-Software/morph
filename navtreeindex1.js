@@ -12,7 +12,8 @@ var NAVTREEINDEX1 =
 "d4/d11/forms_8hpp.html":[3,0,0,2,3],
 "d4/d11/forms_8hpp_source.html":[3,0,0,2,3],
 "d4/d30/classmorph_1_1qt_1_1QtExecutor.html":[2,0,0,16,1],
-"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f":[2,0,0,16,1,1],
+"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a134e15e6a49cdb6c4474eb45cb951766":[2,0,0,16,1,1],
+"d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a2d369ad4c6f855ff345339374b451b1f":[2,0,0,16,1,2],
 "d4/d30/classmorph_1_1qt_1_1QtExecutor.html#a4f32eb604dfa5c0ea08bc945e4a2391b":[2,0,0,16,1,0],
 "d4/d49/structmorph_1_1exec_1_1IExecutor.html":[2,0,0,6,0],
 "d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5":[2,0,0,6,0,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX1 =
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0":[2,0,0,19,0,0],
 "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html":[2,0,0,14,2],
 "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d":[2,0,0,14,2,1],
-"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#aeb75413a91143b4543503d59adb8553d":[2,0,0,14,2,0],
-"d8/dc3/qt__websocket__backend_8hpp_source.html":[3,0,0,6,3]
+"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#aeb75413a91143b4543503d59adb8553d":[2,0,0,14,2,0]
 };

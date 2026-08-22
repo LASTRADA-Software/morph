@@ -139,15 +139,31 @@ Inheritance diagram for morph::qt::QtExecutor:</div>
 Public Member Functions</h2></td></tr>
 <tr class="memitem:a4f32eb604dfa5c0ea08bc945e4a2391b" id="r_a4f32eb604dfa5c0ea08bc945e4a2391b"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> (QObject *context=QCoreApplication::instance())</td></tr>
 <tr class="memdesc:a4f32eb604dfa5c0ea08bc945e4a2391b"><td class="mdescLeft">&#160;</td><td class="mdescRight">Constructs an executor that posts tasks to <code class="param">context's</code> thread.  <br /></td></tr>
+<tr class="memitem:a590b93a8818fc5a89eb591f8204df573" id="r_a590b93a8818fc5a89eb591f8204df573"><td class="memItemLeft"><a id="a590b93a8818fc5a89eb591f8204df573" name="a590b93a8818fc5a89eb591f8204df573"></a>
+&#160;</td><td class="memItemRight"><b>QtExecutor</b> (const QtExecutor &amp;)=delete</td></tr>
+<tr class="memitem:ae1f1d2f64ea013bff5e69ab2b631ab6a" id="r_ae1f1d2f64ea013bff5e69ab2b631ab6a"><td class="memItemLeft"><a id="ae1f1d2f64ea013bff5e69ab2b631ab6a" name="ae1f1d2f64ea013bff5e69ab2b631ab6a"></a>
+<a class="el" href="#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (const <a class="el" href="#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> &amp;)=delete</td></tr>
+<tr class="memitem:a6a9e306c624e1ed5d2ed4d3d7b262e56" id="r_a6a9e306c624e1ed5d2ed4d3d7b262e56"><td class="memItemLeft"><a id="a6a9e306c624e1ed5d2ed4d3d7b262e56" name="a6a9e306c624e1ed5d2ed4d3d7b262e56"></a>
+&#160;</td><td class="memItemRight"><b>QtExecutor</b> (QtExecutor &amp;&amp;)=delete</td></tr>
+<tr class="memitem:ac070fe347f658aa216815655490b5cf4" id="r_ac070fe347f658aa216815655490b5cf4"><td class="memItemLeft"><a id="ac070fe347f658aa216815655490b5cf4" name="ac070fe347f658aa216815655490b5cf4"></a>
+<a class="el" href="#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> &amp;&#160;</td><td class="memItemRight"><b>operator=</b> (<a class="el" href="#a4f32eb604dfa5c0ea08bc945e4a2391b">QtExecutor</a> &amp;&amp;)=delete</td></tr>
+<tr class="memitem:a134e15e6a49cdb6c4474eb45cb951766" id="r_a134e15e6a49cdb6c4474eb45cb951766"><td class="memItemLeft"><a id="a134e15e6a49cdb6c4474eb45cb951766" name="a134e15e6a49cdb6c4474eb45cb951766"></a>
+&#160;</td><td class="memItemRight"><b>~QtExecutor</b> () override=default</td></tr>
+<tr class="memdesc:a134e15e6a49cdb6c4474eb45cb951766"><td class="mdescLeft">&#160;</td><td class="mdescRight">Destroys the lifetime token, so any still-queued task becomes a no-op. <br /></td></tr>
 <tr class="memitem:a2d369ad4c6f855ff345339374b451b1f" id="r_a2d369ad4c6f855ff345339374b451b1f"><td class="memItemLeft">void&#160;</td><td class="memItemRight"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f">post</a> (std::function&lt; void()&gt; fn) override</td></tr>
 <tr class="memdesc:a2d369ad4c6f855ff345339374b451b1f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Posts <code class="param">fn</code> to the Qt event loop for execution on the context's thread.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p><span class="tt">IExecutor</span> implementation that posts tasks to a Qt event loop. </p>
 <p>Uses <span class="tt">QMetaObject::invokeMethod</span> with <span class="tt">Qt::QueuedConnection</span> so the callable always runs on the thread that owns the configured context object — by default <span class="tt">QCoreApplication::instance()</span>, i.e. the GUI thread.</p>
-<p>Thread-safe: <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> may be called from any thread. No <span class="tt">QObject</span> subclass is required by the caller. </p>
+<p>Thread-safe: <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> may be called from any thread. No <span class="tt">QObject</span> subclass is required by the caller.</p>
+<p><b>A task still queued when this executor is destroyed is dropped, not run.</b> <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> enqueues and returns; it does not run the callable, and the queued Qt event outlives the <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> call that created it. Joining the worker pool that made the call proves the <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> <em>happened</em> — never that the event was <em>delivered</em>. Without a guard, an event still on the Qt queue at teardown is delivered against a freed executor and reads <span class="tt">_context</span> off freed memory.</p>
+<p>That is not hypothetical. <span class="tt">Bridge::executeVia</span> chains three <span class="tt">Completion</span> objects per dispatched action, each settled from inside the previous one's delivered callback, so a caller waiting only on its own top-level completion can observe "done" while an intermediate post is still queued. When that stale event is finally pumped, its body calls <span class="tt"><a class="el" href="#a2d369ad4c6f855ff345339374b451b1f" title="Posts fn to the Qt event loop for execution on the context&#39;s thread.">post()</a></span> for the next link in the chain — against an executor that no longer exists. It segfaults on an ordinary uninstrumented build, not only under a sanitizer.</p>
+<p>Each queued task therefore carries a weak observer of this executor's lifetime and does nothing if the executor is already gone. Dropping is the correct outcome rather than a lesser evil: a chain being torn down has nobody left to observe its result, and <span class="tt">Completion</span>'s orphan logging already covers a completion that never resolves.</p>
+<p><b>Boundary of the guarantee.</b> The check assumes this executor is destroyed on the same thread that runs its context's event loop, which holds for every owner in this repository. Destroying one from another thread while its loop is mid-delivery still needs external synchronisation: this closes the "torn
+down with events still queued" hole, not a genuine cross-thread race. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00019">19</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00048">48</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 </div><a name="doc-constructors" id="doc-constructors"></a><h2 id="header-doc-constructors" class="groupheader">Constructor &amp; Destructor Documentation</h2>
 <a id="a4f32eb604dfa5c0ea08bc945e4a2391b" name="a4f32eb604dfa5c0ea08bc945e4a2391b"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a4f32eb604dfa5c0ea08bc945e4a2391b">&#9670;&#160;</a></span>QtExecutor()</h2>
@@ -180,7 +196,7 @@ Public Member Functions</h2></td></tr>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00031">31</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00060">60</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 
 </div>
 </div>
@@ -210,6 +226,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Posts <code class="param">fn</code> to the Qt event loop for execution on the context's thread. </p>
 <p>Returns immediately. <code class="param">fn</code> is invoked asynchronously once the event loop processes the queued event.</p>
+<p>Runs only if this executor is still alive when the event is delivered; see the class docstring.</p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">fn</td><td>Callable to execute on the context object's thread. </td></tr>
@@ -219,7 +236,7 @@ Public Member Functions</h2></td></tr>
 
 <p>Implements <a class="el" href="../../d4/d49/structmorph_1_1exec_1_1IExecutor.html#aba07ebeefeb8222821085e766887f4a5">morph::exec::IExecutor</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00039">39</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html#l00080">80</a> of file <a class="el" href="../../d2/d3b/qt__executor_8hpp_source.html">qt_executor.hpp</a>.</p>
 
 </div>
 </div>

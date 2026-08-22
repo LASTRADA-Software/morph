@@ -1,5 +1,6 @@
 var NAVTREEINDEX2 =
 {
+"d8/dc3/qt__websocket__backend_8hpp_source.html":[3,0,0,6,3],
 "d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html":[1,0,1,1],
 "d8/dd5/structmorph_1_1session_1_1SessionToken.html":[2,0,0,17,5],
 "d8/dd5/structmorph_1_1session_1_1SessionToken.html#a35047bcbf2deef7e0d6295268d09a9b7":[2,0,0,17,5,0],
@@ -248,6 +249,5 @@ var NAVTREEINDEX2 =
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[2,0,0,9,4,0],
 "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html":[2,0,0,17,0,0],
 "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#a189724b1bcf426227de6c8894cd41073":[2,0,0,17,0,0,0],
-"de/d45/conceptmorph_1_1model_1_1ModelKey.html":[1,0,1,0],
-"de/d49/views_8hpp.html":[3,0,0,2,6]
+"de/d45/conceptmorph_1_1model_1_1ModelKey.html":[1,0,1,0]
 };
