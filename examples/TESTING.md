@@ -289,6 +289,51 @@ strand interleaver** — without it, strand-ordering bugs (kanban's
 `MoveTaskPosition` centerpiece) remain probabilistic stress runs rather
 than reproducible interleavings.
 
+## End-to-end user journeys
+
+Every layer above verifies a slice and assumes the surrounding *sequence*
+away. Authentication is the clearest case: rigs arrive already
+authenticated, so a sign-in that fails and is then retried — close to the
+most common real interaction there is — appears in no other test.
+
+The stress harness is worth distinguishing explicitly, because it looks
+like it covers this and does not. `SeededScript` picks actions by weight
+from a seeded RNG to shake out races. That is adversarial fuzzing; it is
+deliberately *not* plausible user behaviour, and it asserts structural
+invariants rather than whether a workflow produced the outcome a user
+would expect.
+
+`testkit/journey.hpp` adds the missing layer: a named, ordered sequence of
+user intents with assertions between the steps, run over the whole
+`Local`/`LocalSingleThread`/`Socket` matrix and required to produce the
+same outcome in each. Server and payloads only — no QML engine.
+
+```cpp
+Journey{"sign-in"}
+    .step("acting before signing in is rejected, not silently allowed", [&] { ... })
+    .step("signing in with a malformed username is rejected", [&] { ... })
+    .step("the rejected sign-in left nothing behind", [&] { ... })
+    .step("signing out ends the session", [&] { ... })
+    .run();
+```
+
+A failing step reports *which* step and the trail that reached it, rather
+than a bare assertion far into a long body; a step that throws is reported
+as that step's failure rather than escaping as an unhandled exception
+naming only the test case.
+
+What only a sequence catches: state leaking between steps, a failed step
+corrupting what follows, an error path that leaves the client wedged, a
+session that outlives sign-out. Running the same journey across modes also
+surfaces divergence the per-mode tests cannot see — kanban's own sign-in
+journey found that an unauthenticated call is refused by the *model* under
+`Local` ("no authenticated principal") but by the server's authorizer under
+`Socket` ("unauthorized"), same outcome, different wording.
+
+Journeys live in `examples/<rung>/tests/journeys/` and carry a `journey`
+ctest label (from the test name's `Journey: ` prefix), so they can be
+selected with `ctest -L journey` or excluded the way `stress` is.
+
 ## WASM reality
 
 Honest position: **WASM GUIs cannot be unit-tested in CI today.** The
