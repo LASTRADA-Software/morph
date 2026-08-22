@@ -611,10 +611,13 @@ private:
     /// @return `-1`, `0` or `1`.
     [[nodiscard]] constexpr int compareForSaturation(const Rational& rhs, bool addition) const noexcept {
         const auto ordering = addition ? (*this <=> -rhs) : (*this <=> rhs);
-        if (ordering < 0) {
+        // std::is_lt/is_gt, not `ordering < 0`: comparing an ordering against
+        // the literal 0 trips -Wzero-as-null-pointer-constant under
+        // -Weverything, which this repository builds with.
+        if (std::is_lt(ordering)) {
             return -1;
         }
-        return ordering > 0 ? 1 : 0;
+        return std::is_gt(ordering) ? 1 : 0;
     }
 
     /// @brief Clamps this value to the largest representable magnitude with
