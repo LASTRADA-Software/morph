@@ -1,0 +1,110 @@
+// SPDX-License-Identifier: Apache-2.0
+#include "lims/db/database.hpp"
+
+#include <Lightweight/Lightweight.hpp>
+#include <Lightweight/SqlMigration.hpp>
+
+namespace lims::db {
+
+void configure(const std::string& connectionString) {
+    Lightweight::SqlConnection::SetDefaultConnectionString(Lightweight::SqlConnectionString{connectionString});
+}
+
+void applyMigrations() {
+    auto& migrations = Lightweight::SqlMigration::MigrationManager::GetInstance();
+    migrations.CreateMigrationHistory();
+    migrations.ApplyPendingMigrations();
+}
+
+void setup(const std::string& connectionString) {
+    configure(connectionString);
+    applyMigrations();
+}
+
+}  // namespace lims::db
+
+using namespace Lightweight::SqlColumnTypeDefinitions;
+using Lightweight::SqlForeignKeyReferenceDefinition;
+
+namespace {
+constexpr auto limsClientsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "lims_clients", .columnName = "id"};
+}
+constexpr auto limsAnalysesRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "lims_analyses", .columnName = "id"};
+}
+constexpr auto limsAnalysisVersionsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "lims_analysis_versions", .columnName = "id"};
+}
+constexpr auto limsSamplesRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "lims_samples", .columnName = "id"};
+}
+constexpr auto limsResultsRef() {
+    return SqlForeignKeyReferenceDefinition{.tableName = "lims_results", .columnName = "id"};
+}
+}  // namespace
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000001, "Create lims_clients table") {
+    plan.CreateTableIfNotExists("lims_clients")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("name", Varchar(128));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000002, "Create lims_analyses table") {
+    plan.CreateTableIfNotExists("lims_analyses")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("name", Varchar(128));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000003, "Create lims_analysis_versions table") {
+    // Rows here are append-only: editing an analysis inserts version N+1
+    // rather than updating N, which is what keeps an old result bound to the
+    // exact definition it was captured under.
+    plan.CreateTableIfNotExists("lims_analysis_versions")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("analysis_id", Bigint(), limsAnalysesRef())
+        .RequiredColumn("version", Integer())
+        .RequiredColumn("canonical_unit", Varchar(32))
+        .RequiredColumn("decimal_places", Integer())
+        .Column("spec_low_num", Bigint())    // nullable: not every analysis has a
+        .Column("spec_low_den", Bigint())    // specification range
+        .Column("spec_high_num", Bigint())
+        .Column("spec_high_den", Bigint())
+        .Column("lod_num", Bigint())         // nullable: nor a detection limit
+        .Column("lod_den", Bigint())
+        .Column("udl_num", Bigint())
+        .Column("udl_den", Bigint())
+        .RequiredColumn("created_at", Bigint());
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000004, "Create lims_samples table") {
+    plan.CreateTableIfNotExists("lims_samples")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("client_id", Bigint(), limsClientsRef())
+        .RequiredColumn("reference", Varchar(64))
+        .RequiredColumn("state", Integer())
+        .RequiredColumn("version", Integer())
+        .RequiredColumn("registered_at", Bigint());
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000005, "Create lims_results table") {
+    plan.CreateTableIfNotExists("lims_results")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("sample_id", Bigint(), limsSamplesRef())
+        // The *version*, never the analysis identity.
+        .RequiredForeignKey("analysis_version_id", Bigint(), limsAnalysisVersionsRef())
+        .RequiredColumn("qualifier", Integer())
+        .Column("value_num", Bigint())  // nullable: null for every qualifier
+        .Column("value_den", Bigint())  // except Measured
+        .RequiredColumn("value_dp", Integer())
+        .RequiredColumn("captured_by", Varchar(64))
+        .RequiredColumn("captured_at", Bigint());
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000006, "Create lims_verifications table") {
+    plan.CreateTableIfNotExists("lims_verifications")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("result_id", Bigint(), limsResultsRef())
+        .RequiredColumn("verified_by", Varchar(64))
+        .RequiredColumn("verified_at", Bigint());
+}
