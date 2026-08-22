@@ -89,9 +89,9 @@ class HasLifetime {
 /// @brief A receiver that can be passed to `Completion::then`/`onError` --
 ///        satisfied by any type deriving from `HasLifetime`.
 ///
-/// No `@tparam` here on purpose: clang's `-Wdocumentation` does not treat a
-/// concept as a template declaration, and the repository builds with
-/// `-Werror`.
+/// Its template parameter is deliberately left undocumented: clang's
+/// `-Wdocumentation` does not treat a concept as a template declaration, so a
+/// per-parameter doc command here is itself a `-Werror` diagnostic.
 template <typename Owner>
 concept LifetimeBound = std::derived_from<Owner, HasLifetime>;
 
