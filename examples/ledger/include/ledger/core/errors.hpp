@@ -52,6 +52,25 @@ class VersionConflict : public LedgerError {
         : LedgerError{"update rejected: the record changed since it was read"} {}
 };
 
+/// @brief Thrown when `UndoTransaction` names a journal that some other
+///        journal already reverses.
+///
+///        A compensating entry is itself zero-sum, so applying one twice
+///        leaves the ledger's per-currency sum at zero while moving real
+///        money into the accounts -- reverse a -50.00/+50.00 shop twice and
+///        Checking ends at +50.00, which the user never had. The zero-sum
+///        invariant cannot see this; only this check can.
+///
+///        Two devices queueing a reversal of the same transaction while
+///        offline is the ordinary way to hit it. Consistent with
+///        `VersionConflict` and design spec §10, the second one is rejected
+///        outright rather than silently applied.
+class AlreadyReversed : public LedgerError {
+  public:
+    AlreadyReversed()
+        : LedgerError{"undo rejected: this transaction has already been reversed"} {}
+};
+
 /// @brief Thrown when a mutating action dispatches with an empty principal
 ///        (design spec §11) — never silently proceeds.
 class EmptyPrincipalError : public LedgerError {

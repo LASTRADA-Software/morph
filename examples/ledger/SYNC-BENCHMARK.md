@@ -51,11 +51,32 @@ user did, recorded in the journal with its own identity, and its failure is
 *visible*. A field-level merge produces a transaction that no user ever
 authored — correct-looking, and traceable to nobody.
 
-**Not yet reproducible.** This rung ships no transaction-edit action, no base
-version on `transaction_journals`, and no offline-queue wiring, so there is
-nothing to make two clients disagree *about* a transaction. Tracked in
-morph#144. Stated here rather than demonstrated with a test that would pass
-under the scenario's name without exercising it.
+**Not reproducible as written — and deliberately so.** This rung ships no
+transaction-edit action, and that is a design decision rather than an
+unfinished one: design spec §6 makes a posted journal entry an audit record,
+corrected by a *new* compensating entry rather than edited in place ("undo
+must itself be a new, visible entry, not an erasure of the original one").
+There is no `UpdateTransaction` to race. Adding one to satisfy this scenario
+would contradict the invariant the rung is built on, so the scenario is
+recorded here as inapplicable rather than implemented.
+
+**What the rung answers instead.** The same collision, in the vocabulary this
+rung actually has: two clients both reverse the same transaction while
+offline, and both queued `UndoTransaction`s arrive. The first applies; the
+second is rejected with `AlreadyReversed` — the same "rejected outright,
+never merged, never silently applied" answer Scenario B gives. A compensating
+entry names the entry it reverses (`transaction_journals.causal_parent_id`),
+so this is a query against the audit trail, not mutable state on the
+original, which stays immutable.
+
+This one was worth running rather than asserting. Before the check existed,
+the second reversal applied: a reversed -50.00/+50.00 shop left Checking at
+**+50.00**, money the user never had. The ledger's headline per-currency
+zero-sum invariant does not catch it — a compensating entry is itself
+zero-sum, so the total stays 0.00 while the individual balances go wrong.
+Only the per-account balances show it. See
+`tests/test_sync_benchmark.cpp`'s "Scenario A, in the form this rung can
+express"; morph#144 carries the finding.
 
 ## Scenario B — a stale base version is rejected, never merged
 

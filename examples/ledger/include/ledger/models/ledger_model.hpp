@@ -272,12 +272,19 @@ class LedgerModel {
     /// @param legAccounts Each leg's own account row, positionally aligned
     ///        with @p legs (one lookup per leg's account, same shape as
     ///        `execute(StoreTransaction)`'s own `legAccounts`).
+    /// @param causalParentId What this journal exists because of, in the same
+    ///        `"transactionJournal:<id>"` shape `logAction` already uses, or
+    ///        `std::nullopt` (the default) for an ordinary journal that
+    ///        stands on its own. `execute(UndoTransaction)` is the one caller
+    ///        that passes it, naming the entry being reversed -- which is
+    ///        what makes a second reversal of that entry detectable.
     /// @return The full rebuilt ledger state, per the ladder-wide
     ///         full-rebuilt-state convention.
     [[nodiscard]] GetLedgerResult storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
                                                      const std::string& description, const morph::time::Timestamp& date,
                                                      const std::vector<TransactionLeg>& legs,
-                                                     const std::vector<db::AccountRecord>& legAccounts);
+                                                     const std::vector<db::AccountRecord>& legAccounts,
+                                                     std::optional<std::string> causalParentId = std::nullopt);
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;

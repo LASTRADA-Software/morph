@@ -734,6 +734,26 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
         throw NotFound{"UndoTransaction: journal does not belong to this ledger"};
     }
 
+    // A compensating entry names the entry it reverses, so "has this already
+    // been reversed?" is a query rather than mutable state on the original --
+    // which keeps the original journal row immutable, as design spec §6
+    // requires of an audit record.
+    //
+    // Without this check two devices that both queued a reversal of the same
+    // transaction while offline each post one, and the second silently pays
+    // the money back a second time. The ledger's per-currency zero-sum
+    // invariant does not catch that: a reversal is itself zero-sum, so the
+    // sum stays zero while the individual account balances go wrong.
+    const auto reversalCausalParentId = "transactionJournal:" + std::to_string(originalJournalRow.id.Value());
+    const auto existingReversals =
+        mapper.Query<db::TransactionJournalRecord>()
+            .Where(::Lightweight::FieldNameOf<&db::TransactionJournalRecord::causalParentId>, "=",
+                   reversalCausalParentId)
+            .All();
+    if (!existingReversals.empty()) {
+        throw AlreadyReversed{};
+    }
+
     auto originalLegRows = mapper.Query<db::TransactionLegRecord>()
                                 .Where(::Lightweight::FieldNameOf<&db::TransactionLegRecord::journal>, "=",
                                        originalJournalRow.id.Value())
@@ -771,9 +791,10 @@ GetLedgerResult LedgerModel::execute(const UndoTransaction& action) {
     // being reversed, not the reversal itself.
     auto result = storeJournalImpl(mapper, action.ledgerId,
                                     "Reversal of: " + std::string{originalJournalRow.description.Value().ToStringView()},
-                                    morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts);
+                                    morph::time::Timestamp::now(), reversalLegs, reversalLegAccounts,
+                                    reversalCausalParentId);
 
-    logAction(action, result, "transactionJournal:" + std::to_string(originalJournalRow.id.Value()));
+    logAction(action, result, reversalCausalParentId);
     return result;
 }
 
@@ -1108,10 +1129,13 @@ void LedgerModel::setCategoryImpl(Lightweight::DataMapper& mapper, const SetCate
 GetLedgerResult LedgerModel::storeJournalImpl(Lightweight::DataMapper& mapper, const LedgerId& ledgerId,
                                                 const std::string& description, const morph::time::Timestamp& date,
                                                 const std::vector<TransactionLeg>& legs,
-                                                const std::vector<db::AccountRecord>& legAccounts) {
+                                                const std::vector<db::AccountRecord>& legAccounts,
+                                                std::optional<std::string> causalParentId) {
     Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
     db::TransactionJournalRecord journalRow;
     journalRow.description = description;
+    journalRow.causalParentId =
+        causalParentId ? std::optional{Lightweight::SqlAnsiString<64>{*causalParentId}} : std::nullopt;
     journalRow.date = date.value.has_value() ? (*date.value).value.time_since_epoch().count() : 0;
     auto ledgerRows =
         mapper.Query<db::LedgerRecord>().Where(::Lightweight::FieldNameOf<&db::LedgerRecord::id>, "=", *ledgerId).All();
