@@ -90,7 +90,16 @@ TEST_CASE("checkedSub mirrors checkedAdd", "[rational][checked]") {
     REQUIRE(ok.has_value());
     CHECK(*ok == whole(2));
 
-    const auto bad = checkedSub(whole(kMin), whole(1));
+    // kMin + 1 (== -INT64_MAX), not kMin: constructing a Rational whose
+    // numerator is INT64_MIN is itself undefined behaviour -- canonicalise()
+    // negates the numerator unguarded, and -INT64_MIN is not representable.
+    // setWire guards that case on the wire path; the public constructor does
+    // not. Tracked separately; this test stays inside the representable range
+    // so it measures checkedSub rather than that.
+    //
+    // -INT64_MAX - 2 is the first difference that genuinely does not fit
+    // (-INT64_MAX - 1 is exactly INT64_MIN, which still does).
+    const auto bad = checkedSub(whole(kMin + 1), whole(2));
     REQUIRE_FALSE(bad.has_value());
     CHECK(bad.error() == RationalError::Overflow);
 }
