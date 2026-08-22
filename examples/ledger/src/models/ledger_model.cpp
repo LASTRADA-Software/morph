@@ -23,6 +23,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -87,18 +88,58 @@ namespace {
     auto rows = mapper.Query<db::AccountRecord>()
                     .Where(::Lightweight::FieldNameOf<&db::AccountRecord::ledger>, "=", *ledgerId)
                     .All();
+
     GetLedgerResult result;
     result.accounts.reserve(rows.size());
+    std::vector<std::uint64_t> accountIds;
+    accountIds.reserve(rows.size());
+    std::unordered_map<std::uint64_t, std::size_t> slotOf;
+    slotOf.reserve(rows.size());
     for (const auto& row : rows) {
         const auto currency = codeToCurrency(row.currencyCode.Value().ToStringView());
         const auto decimalPlaces = morph::math::DecimalPlaces{UnitTraits<Currency>::meta(currency).defaultDecimals};
+        slotOf.emplace(row.id.Value(), result.accounts.size());
+        accountIds.push_back(row.id.Value());
         result.accounts.push_back(AccountInfo{
             .id = AccountId{static_cast<std::int64_t>(row.id.Value())},
             .name = std::string{row.name.Value().ToStringView()},
             .kind = static_cast<AccountKind>(row.kind.Value()),
             .currency = currency,
-            .balance = sumAccountLegs(mapper, row.id.Value(), decimalPlaces),
+            .balance = morph::math::Rational::zero(decimalPlaces),
         });
+    }
+
+    // Every leg of every account in one query, rather than `sumAccountLegs`
+    // once per account.
+    //
+    // The point is atomicity, not the saved round trips. A per-account query
+    // runs in its own implicit transaction, so a two-leg journal committed by
+    // another client between the Checking query and the Groceries query is
+    // seen on one account and not the other -- and the ledger's headline
+    // invariant, that every currency sums to zero, appears violated by
+    // exactly one leg. That is a torn read, not a broken invariant: the write
+    // side is already atomic (`storeJournalImpl` holds a `SqlTransaction`),
+    // and it is the read that was not. A single SELECT is one statement, so
+    // it lands wholly before or wholly after any concurrent commit.
+    //
+    // Client-visible, not just a test artefact: a GUI polling `GetLedger`
+    // while another client posts would render a double-entry ledger that does
+    // not balance.
+    if (!accountIds.empty()) {
+        auto legRows = mapper.Query<db::TransactionLegRecord>()
+                            .WhereIn(::Lightweight::FieldNameOf<&db::TransactionLegRecord::account>, accountIds)
+                            .All();
+        for (const auto& legRow : legRows) {
+            const auto slot = slotOf.find(legRow.account.Value());
+            if (slot == slotOf.end()) {
+                continue;
+            }
+            auto& balance = result.accounts[slot->second].balance;
+            balance = balance + morph::math::Rational{morph::math::Numerator{legRow.amountNum.Value()},
+                                                       morph::math::Denominator{legRow.amountDen.Value()},
+                                                       morph::math::DecimalPlaces{static_cast<std::uint32_t>(
+                                                           legRow.amountDp.Value())}};
+        }
     }
     return result;
 }
