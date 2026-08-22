@@ -15,6 +15,7 @@ add_executable(morph_tests
     test_strand_race.cpp
     test_completion.cpp
     test_completion_extra.cpp
+    test_completion_lifetime.cpp
     test_completion_multi_handler.cpp
     test_completion_promise.cpp
     test_model.cpp

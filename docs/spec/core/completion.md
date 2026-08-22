@@ -192,6 +192,56 @@ constructor is private, reachable only via the `friend`ed `makeSettleable()` —
 so a caller can settle a `Completion<T>` on demand without the `detail::`
 namespace ever appearing in their code.
 
+## Receiver lifetime — `HasLifetime` and the bound overloads
+
+A `Completion` always resolves **through an executor**; even a local
+backend's immediate resolution is posted rather than delivered inline
+(`CompletionState<T>::attachThen`). The object that registered a callback can
+therefore always be destroyed before that callback runs, and the natural
+spelling is silently wrong:
+
+```cpp
+completion.then([this](GetBoardResult r) { /* `this` may be long gone */ });
+```
+
+`morph::async::HasLifetime` (`include/morph/core/lifetime.hpp`) is an opt-in
+base carrying a lifetime token, and `Completion<T>` gains overloads that take
+the receiver:
+
+```cpp
+completion.then(this, [this](GetBoardResult r) { ... });    // runs only while `this` lives
+completion.onError(this, [this](std::exception_ptr e) { ... });
+completion.thenDetached([](GetBoardResult r) { ... });      // deliberately unguarded
+```
+
+`then(Owner*, Handler)` is constrained on `LifetimeBound`, so passing a
+receiver that does not derive from `HasLifetime` is a compile error rather
+than a silent fallback to the unguarded overload.
+
+**Guarantee and its boundary.** The token is released when the receiver is
+destroyed, so a callback observing it as live is running while the receiver is
+still valid *provided* the callback and the destructor do not run
+concurrently. That holds for the intended use — a receiver destroyed on the
+same executor its callbacks land on. A receiver destroyed on a different
+thread from its callback executor still needs external synchronisation: this
+closes the ordinary "destroyed before the reply arrived" hole, not a genuine
+data race.
+
+**Why a base class.** `enable_shared_from_this` would force heap allocation
+and shared ownership on every receiver, which stack-allocated presenters and
+QML-owned bridges cannot satisfy. `QPointer` would force Qt into morph core,
+and `Bridge`/`EventPoller` are not `QObject`s. A cancellation handle returned
+from `then()` would have to be stored and reset by the caller — the same
+"remember to do it" failure mode the guard exists to remove.
+
+**Token identity.** Copying or moving a `HasLifetime` gives the new object its
+own token rather than sharing one: a token is an identity, not a value, and
+sharing would let a copy's destruction silence the original's callbacks.
+
+`thenDetached`/`onErrorDetached` are exact aliases of the unguarded overloads.
+They exist so a genuinely detached callback says so at the call site and the
+unguarded spelling stays greppable in review.
+
 ## Thread safety
 
 - `then()` and `onError()` may be called from any thread — the mutex guards

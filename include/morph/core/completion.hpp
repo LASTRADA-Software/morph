@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "executor.hpp"
+#include "lifetime.hpp"
 #include "logger.hpp"
 
 namespace morph::async {
@@ -241,6 +242,75 @@ public:
             _state->attachOnError(std::move(handler));
         }
         return *this;
+    }
+
+    /// @brief Registers a success callback bound to @p owner's lifetime.
+    ///
+    /// The natural spelling `completion.then([this](T v) { ... })` is silently
+    /// wrong whenever `this` can be destroyed before the reply arrives — which
+    /// is always, because a `Completion` resolves through an executor even in
+    /// local mode. This overload makes the guarded form the short one: if
+    /// @p owner is gone when the reply lands, @p handler simply does not run.
+    ///
+    /// @p owner must derive from `HasLifetime`; passing anything else is a
+    /// compile error rather than a silent fallback to the unguarded overload.
+    ///
+    /// @tparam Owner   Receiver type, deriving from `HasLifetime`.
+    /// @tparam Handler Callable taking the result by value.
+    /// @param owner    The receiver whose lifetime gates @p handler. Must not be null.
+    /// @param handler  Callable receiving the result by value.
+    /// @return `*this` for chaining.
+    template <LifetimeBound Owner, typename Handler>
+    Completion& then(Owner* owner, Handler handler) {
+        auto token = owner->lifetimeToken();
+        return then([token = std::move(token), handler = std::move(handler)](T value) mutable {
+            if (token.expired()) {
+                return;
+            }
+            handler(std::move(value));
+        });
+    }
+
+    /// @brief Registers an error callback bound to @p owner's lifetime.
+    ///
+    /// The `onError` counterpart of `then(Owner*, Handler)`; see that overload
+    /// for why the guard exists.
+    ///
+    /// @tparam Owner   Receiver type, deriving from `HasLifetime`.
+    /// @tparam Handler Callable taking a `std::exception_ptr`.
+    /// @param owner    The receiver whose lifetime gates @p handler. Must not be null.
+    /// @param handler  Callable receiving the exception pointer.
+    /// @return `*this` for chaining.
+    template <LifetimeBound Owner, typename Handler>
+    Completion& onError(Owner* owner, Handler handler) {
+        auto token = owner->lifetimeToken();
+        return onError([token = std::move(token), handler = std::move(handler)](std::exception_ptr exc) mutable {
+            if (token.expired()) {
+                return;
+            }
+            handler(std::move(exc));
+        });
+    }
+
+    /// @brief Registers a success callback that is deliberately not bound to
+    ///        any receiver's lifetime.
+    ///
+    /// Identical to `then(std::function<void(T)>)`. It exists so that a
+    /// genuinely detached callback — one capturing nothing that can dangle —
+    /// says so at the call site, and so that the unguarded spelling is
+    /// greppable in review. Prefer `then(this, ...)` whenever the callback
+    /// touches a receiver.
+    ///
+    /// @param handler Callable receiving the result by value.
+    /// @return `*this` for chaining.
+    Completion& thenDetached(std::function<void(T)> handler) { return then(std::move(handler)); }
+
+    /// @brief Registers an error callback that is deliberately not bound to
+    ///        any receiver's lifetime. See `thenDetached`.
+    /// @param handler Callable receiving the exception pointer.
+    /// @return `*this` for chaining.
+    Completion& onErrorDetached(std::function<void(std::exception_ptr)> handler) {
+        return onError(std::move(handler));
     }
 
     /// @brief Returns the underlying shared state (for advanced / internal use).
