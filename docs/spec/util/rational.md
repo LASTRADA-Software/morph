@@ -183,6 +183,40 @@ Only the wire codec (`setWire`) defends against this: it maps an `INT64_MIN`
 negates the trap value. In-code call sites get no such guard — keep operands
 well inside the envelope above.
 
+### Checked arithmetic
+
+`operator+`/`operator-`/`operator*` are fixed-width `std::int64_t` arithmetic:
+they neither saturate nor report failure, and signed overflow is undefined
+behaviour rather than a wrong-but-detectable answer. At ledger-realistic
+magnitudes this is reachable — summing dp=2 legs of 10^9 minor units overflows
+at exactly `INT64_MAX / 10^9 + 1` rows.
+
+`checkedAdd`, `checkedSub` and `checkedMul` return
+`std::expected<Rational, RationalError>`, yielding `RationalError::Overflow`
+rather than committing the operation. They check every intermediate the
+operation would form **before** forming any of it — detecting signed overflow
+by performing it and inspecting the result is itself undefined, so the question
+has to be answered from the operands alone.
+
+**The intermediate cross-terms are the binding constraint, not the result.**
+`checkedAdd` rejects operand pairs whose *final* value would have been
+perfectly representable but which cannot be reached without an intermediate
+that overflows — for instance `1/INT64_MAX + 1/(INT64_MAX-1)`, a tiny value
+with an unrepresentable common denominator. This is precisely the case a caller
+cannot detect by inspecting the answer, because under the unchecked operators
+there is no valid answer to inspect.
+
+`checkedMul` checks the *cross-cancelled* factors `operator*` actually
+multiplies, not the raw operands: cross-cancelling is what keeps most products
+in range, so checking beforehand would reject pairs that multiply perfectly
+well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
+
+The unchecked operators are unchanged and remain the default. They are correct
+for any application whose magnitudes stay well inside the envelope described
+under [Overflow & value-range envelope](#overflow--value-range-envelope); the
+checked forms exist for applications that cannot make that guarantee and need
+to detect the boundary rather than assume it.
+
 ## Mixed-type expressions (expected propagation)
 
 Whenever an arithmetic expression contains an
@@ -298,6 +332,9 @@ through `setWire`.
 
 | Member | Signature |
 |---|---|
+| `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
+| `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
+| `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
 | `setWire(Wire)` | `void noexcept` — rebuilds through canonicalising constructor, clamping hostile input. |
 | `getWire()` | `Wire noexcept` — canonical members ready for JSON encoding. |
 | `struct Wire` | `{ int64_t num; int64_t den; uint32_t dp; }` — flat JSON representation. |

@@ -160,7 +160,8 @@ inline constexpr std::uint32_t kMaxDecimalPlaces = 18;
 enum class RationalError : std::uint8_t {
     DivisionByZero,  ///< Divisor numerator is zero (operator/, reciprocal, From).
     NotFinite,       ///< Floating-point input was NaN or +/-Inf (fromFloat only).
-    Overflow,        ///< Scaled magnitude exceeds int64_t range (fromFloat only).
+    Overflow,        ///< Result or an intermediate term exceeds int64_t range
+                     ///< (`fromFloat`, and the `checked*` arithmetic helpers).
 };
 
 namespace detail {
@@ -184,6 +185,63 @@ namespace detail {
 [[nodiscard]] constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
     assert(rawDecimalPlaces <= kMaxDecimalPlaces);
     return clampWireDecimalPlaces(rawDecimalPlaces);
+}
+
+/// @brief Whether `lhs + rhs` would overflow `std::int64_t`.
+///
+/// Asks *before* performing the addition. Detecting overflow by doing it and
+/// inspecting the result is undefined behaviour for signed types, so the
+/// question has to be answered from the operands alone.
+/// @param lhs Left addend.
+/// @param rhs Right addend.
+/// @return `true` if the sum is not representable.
+[[nodiscard]] constexpr bool addOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (rhs > 0 && lhs > maxValue - rhs) {
+        return true;
+    }
+    return rhs < 0 && lhs < minValue - rhs;
+}
+
+/// @brief Whether `lhs - rhs` would overflow `std::int64_t`.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return `true` if the difference is not representable.
+[[nodiscard]] constexpr bool subOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (rhs < 0 && lhs > maxValue + rhs) {
+        return true;
+    }
+    return rhs > 0 && lhs < minValue + rhs;
+}
+
+/// @brief Whether `lhs * rhs` would overflow `std::int64_t`.
+///
+/// Division-based rather than a wide-product comparison so it stays valid in a
+/// constant expression on every supported compiler (MSVC has no `__int128`).
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return `true` if the product is not representable.
+[[nodiscard]] constexpr bool mulOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (lhs == 0 || rhs == 0) {
+        return false;
+    }
+    // -1 is the one factor whose product can overflow without either operand
+    // being large: -1 * INT64_MIN has no positive counterpart.
+    if (lhs == -1) {
+        return rhs == minValue;
+    }
+    if (rhs == -1) {
+        return lhs == minValue;
+    }
+    if (lhs > 0) {
+        return rhs > 0 ? lhs > maxValue / rhs : rhs < minValue / lhs;
+    }
+    return rhs > 0 ? lhs < minValue / rhs : lhs < maxValue / rhs;
 }
 
 /// @brief A 64x64 -> 128-bit unsigned product, comparable high-word-first.
@@ -605,6 +663,98 @@ static_assert(std::is_standard_layout_v<Rational>);
 [[nodiscard]] constexpr std::expected<Rational, RationalError> operator/(const Rational& lhs,
                                                                          const Rational& rhs) noexcept {
     return lhs.dividedBy(rhs);
+}
+
+/// @brief Adds two Rationals, reporting overflow instead of committing it.
+///
+/// `operator+` is fixed-width `std::int64_t` arithmetic and neither saturates
+/// nor reports failure: at ledger-realistic magnitudes, summing enough rows
+/// genuinely overflows, and signed overflow is undefined behaviour rather than
+/// a wrong-but-detectable answer. A fuzz test measured the boundary for dp=2
+/// legs of 10^9 minor units at exactly 9,223,372,037 rows.
+///
+/// This checks every intermediate the addition would form — both cross-terms
+/// and their sum — *before* forming any of them, then delegates to `operator+`
+/// once they are known to fit. Note the cross-terms are the tighter bound: they
+/// can overflow while the final result would have been perfectly
+/// representable, which is exactly the case a caller cannot detect by
+/// inspecting the answer.
+///
+/// @param lhs Left addend.
+/// @param rhs Right addend.
+/// @return The exact sum, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedAdd(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    auto const denominatorGcd = std::gcd(lhs.denominator, rhs.denominator);
+    auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
+    auto const leftDenominatorScaled = lhs.denominator / denominatorGcd;
+
+    if (detail::mulOverflows(lhs.numerator, rightDenominatorScaled)
+        || detail::mulOverflows(rhs.numerator, leftDenominatorScaled)
+        || detail::mulOverflows(lhs.denominator, rightDenominatorScaled)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    if (detail::addOverflows(lhs.numerator * rightDenominatorScaled, rhs.numerator * leftDenominatorScaled)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    return lhs + rhs;
+}
+
+/// @brief Subtracts two Rationals, reporting overflow instead of committing it.
+///
+/// The `checkedAdd` counterpart; see that function for why the intermediate
+/// cross-terms rather than the final result are the binding constraint.
+///
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return The exact difference, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedSub(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    auto const denominatorGcd = std::gcd(lhs.denominator, rhs.denominator);
+    auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
+    auto const leftDenominatorScaled = lhs.denominator / denominatorGcd;
+
+    if (detail::mulOverflows(lhs.numerator, rightDenominatorScaled)
+        || detail::mulOverflows(rhs.numerator, leftDenominatorScaled)
+        || detail::mulOverflows(lhs.denominator, rightDenominatorScaled)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    if (detail::subOverflows(lhs.numerator * rightDenominatorScaled, rhs.numerator * leftDenominatorScaled)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    return lhs - rhs;
+}
+
+/// @brief Multiplies two Rationals, reporting overflow instead of committing it.
+///
+/// Checks the cross-cancelled factors `operator*` actually multiplies, not the
+/// raw operands: cross-cancelling is what keeps most products in range, so
+/// checking before it would reject pairs that multiply perfectly well.
+///
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return The exact product, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedMul(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    auto const absoluteLeftNumerator = lhs.numerator < 0 ? -lhs.numerator : lhs.numerator;
+    auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
+    auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
+    auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, lhs.denominator);
+    if (crossDivisorOne == 0 || crossDivisorTwo == 0) {
+        // A zero cross-divisor means a zero numerator on that side, so the
+        // product is zero and cannot overflow.
+        return lhs * rhs;
+    }
+    auto const reducedLeftNumerator = lhs.numerator / crossDivisorOne;
+    auto const reducedRightNumerator = rhs.numerator / crossDivisorTwo;
+    auto const reducedLeftDenominator = lhs.denominator / crossDivisorTwo;
+    auto const reducedRightDenominator = rhs.denominator / crossDivisorOne;
+
+    if (detail::mulOverflows(reducedLeftNumerator, reducedRightNumerator)
+        || detail::mulOverflows(reducedLeftDenominator, reducedRightDenominator)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    return lhs * rhs;
 }
 
 // ---------------------------------------------------------------------------
