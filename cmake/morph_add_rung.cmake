@@ -513,8 +513,12 @@ endforeach()
     endif()
 
     # ── ladder_<rung>_headless: QProcess test-client binary (rung 4+) ────
+    # Native only, like ladder_<rung>_server above: this binary exists to be
+    # spawned as a separate OS process by testkit/process_pool.hpp, which has
+    # no meaning under Emscripten -- and QtWebSocketBackend's constructor
+    # differs there, so it would not compile anyway.
     file(GLOB_RECURSE _headless_sources CONFIGURE_DEPENDS "${_dir}/src/headless/*.cpp")
-    if(_headless_sources AND TARGET ladder_${_rung}_gui_lib)
+    if(NOT EMSCRIPTEN AND _headless_sources AND TARGET ladder_${_rung}_gui_lib)
         add_executable(ladder_${_rung}_headless ${_headless_sources})
         target_link_libraries(ladder_${_rung}_headless PRIVATE morph::ladder_${_rung}_gui_lib morph::ladder_app)
         target_compile_features(ladder_${_rung}_headless PRIVATE cxx_std_23)

@@ -17,6 +17,12 @@
 // RemoteServer::health() directly rather than inventing an IPC channel to ask
 // a server binary what it thinks its own state is.
 
+// Compiled only where a headless client binary exists to spawn.
+// morph_add_rung.cmake defines MORPH_LADDER_HEADLESS_BIN alongside the
+// ladder_<rung>_headless target, which is native-only -- process separation
+// has no meaning under Emscripten.
+#ifdef MORPH_LADDER_HEADLESS_BIN
+
 #include "kanban/app/app.hpp"
 
 #include "kanban/dto/board_dto.hpp"
@@ -215,3 +221,5 @@ TEST_CASE("Process separation: a killed client's models are reclaimed", "[kanban
         board.execute(kanban::OpenBoard{.projectId = fixture.projectId}));
     CHECK(state.name == "Process Separation Board");
 }
+
+#endif  // MORPH_LADDER_HEADLESS_BIN
