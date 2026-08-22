@@ -524,6 +524,20 @@ endforeach()
         target_compile_features(ladder_${_rung}_headless PRIVATE cxx_std_23)
         set_target_properties(ladder_${_rung}_headless PROPERTIES AUTOMOC ON)
         apply_bigobj(ladder_${_rung}_headless)
+        if(AF_COVERAGE)
+            apply_coverage(ladder_${_rung}_headless)
+        endif()
+        # Same AF_SANITIZER block every other ladder target carries, and not
+        # optional here: this executable links ladder_<rung>_gui_lib, which
+        # *is* instrumented under a sanitizer preset, so without it the link
+        # fails outright on undefined __ubsan_*/__asan_* references. It also
+        # keeps the spawned client instrumented, which is the whole point of
+        # running the process-separation tests under ASan -- an uninstrumented
+        # client would be exactly the kind of sanitizer job that passes while
+        # checking nothing.
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(ladder_${_rung}_headless ${AF_SANITIZER})
+        endif()
         # Hand the binary's path to the rung's own test suite, so a
         # process-separation test can spawn it through
         # testkit/process_pool.hpp. Same mechanism tests/qt/CMakeLists.txt
