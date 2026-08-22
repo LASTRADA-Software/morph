@@ -185,15 +185,38 @@ well inside the envelope above.
 
 ### Checked arithmetic
 
-`operator+`/`operator-`/`operator*` are fixed-width `std::int64_t` arithmetic:
-they neither saturate nor report failure, and signed overflow is undefined
-behaviour rather than a wrong-but-detectable answer. At ledger-realistic
-magnitudes this is reachable — summing dp=2 legs of 10^9 minor units overflows
-at exactly `INT64_MAX / 10^9 + 1` rows.
+`operator+`/`operator-`/`operator*` are fixed-width `std::int64_t` arithmetic,
+and at ledger-realistic magnitudes overflow is reachable — summing dp=2 legs of
+10^9 minor units overflows at exactly `INT64_MAX / 10^9 + 1` rows.
+
+**The operators saturate; they never overflow.** When the exact result — or any
+intermediate cross-term needed to reach it — does not fit, the operator logs at
+`error` and clamps to the largest representable magnitude *of the correct
+sign*, rather than committing signed-overflow undefined behaviour. The sign
+comes from exact comparison (`a + b` compares `a` against `-b`), not from the
+operands' magnitudes, so a mixed-sign case whose cross-terms overflow still
+saturates in the mathematically correct direction.
+
+Saturation rather than an exception because these operators are used inside
+strand-bound model code and in `constexpr` expressions: throwing would change
+their contract for every existing caller, while leaving the overflow undefined
+is what this exists to stop. A clamped value is wrong, but it is *defined*
+wrong, and it is logged.
+
+`canonicalise` is total for the same reason. It previously negated the
+numerator unguarded, so a component of `INT64_MIN` was undefined behaviour —
+reachable both by constructing such a value directly and by *ordinary
+arithmetic landing on it exactly* (`-INT64_MAX - 1` is a legal subtraction
+whose result is `INT64_MIN`). Such a component is now clamped to `-INT64_MAX`
+and logged, matching what `setWire` already did for the same values arriving
+off the wire.
 
 `checkedAdd`, `checkedSub` and `checkedMul` return
 `std::expected<Rational, RationalError>`, yielding `RationalError::Overflow`
-rather than committing the operation. They check every intermediate the
+rather than saturating. That is the division of labour: the operators stay
+usable and defined for code that can absorb a clamped value, while the checked
+forms stay exact-or-nothing for code that must not — a ledger totalling rows
+needs to *stop*, not carry on with a clamped balance. They check every intermediate the
 operation would form **before** forming any of it — detecting signed overflow
 by performing it and inspecting the result is itself undefined, so the question
 has to be answered from the operands alone.
@@ -211,11 +234,9 @@ multiplies, not the raw operands: cross-cancelling is what keeps most products
 in range, so checking beforehand would reject pairs that multiply perfectly
 well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
 
-The unchecked operators are unchanged and remain the default. They are correct
-for any application whose magnitudes stay well inside the envelope described
-under [Overflow & value-range envelope](#overflow--value-range-envelope); the
-checked forms exist for applications that cannot make that guarantee and need
-to detect the boundary rather than assume it.
+Both share one set of predicates (`addWouldOverflow`, `subWouldOverflow`,
+`mulWouldOverflow`), so the operators and the checked forms cannot disagree
+about what overflows.
 
 ## Mixed-type expressions (expected propagation)
 

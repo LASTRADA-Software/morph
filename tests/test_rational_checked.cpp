@@ -7,6 +7,11 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <limits>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <morph/core/logger.hpp>
 
 using morph::math::checkedAdd;
 using morph::math::checkedMul;
@@ -141,4 +146,98 @@ TEST_CASE("Summing at ledger magnitudes reports the boundary rather than crossin
     const auto overflows = checkedAdd(running, whole(1));
     REQUIRE_FALSE(overflows.has_value());
     CHECK(overflows.error() == RationalError::Overflow);
+}
+
+// ---------------------------------------------------------------------------
+// The saturating operators. Before these, every case below was undefined
+// behaviour rather than a wrong-but-defined answer.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("operator+ saturates and logs instead of overflowing", "[rational][checked][saturate]") {
+    std::vector<std::string> logged;
+    const morph::log::ScopedLoggerOverride capture{
+        [&logged](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::error};
+
+    const auto sum = whole(kMax) + whole(1);
+
+    CHECK(sum.numerator == kMax);
+    CHECK(sum.denominator == 1);
+    REQUIRE_FALSE(logged.empty());
+    CHECK(logged.front().find("operator+=") != std::string::npos);
+}
+
+TEST_CASE("Saturation carries the sign of the true result", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                  morph::log::LogLevel::error};
+
+    CHECK((whole(kMax) + whole(1)).numerator == kMax);
+    CHECK((whole(kMin + 1) - whole(2)).numerator == -kMax);
+    CHECK((whole(kMax) * whole(3)).numerator == kMax);
+    // A negative product must not saturate positive.
+    CHECK((whole(kMax) * whole(-3)).numerator == -kMax);
+    CHECK((whole(-kMax) * whole(3)).numerator == -kMax);
+}
+
+TEST_CASE("An intermediate-only overflow saturates toward the true sign", "[rational][checked][saturate]") {
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                  morph::log::LogLevel::error};
+
+    // 1/kMax + 1/(kMax-1): a tiny *positive* value whose common denominator is
+    // unrepresentable. The cross-terms overflow while the result would not,
+    // so the saturation direction cannot come from the operands' magnitudes --
+    // it comes from exact comparison.
+    const Rational lhs{Numerator{1}, Denominator{kMax}, DecimalPlaces{2}};
+    const Rational rhs{Numerator{1}, Denominator{kMax - 1}, DecimalPlaces{2}};
+
+    const auto sum = lhs + rhs;
+    CHECK(sum.numerator == kMax);  // positive, as the true value is
+
+    const Rational negLhs{Numerator{-1}, Denominator{kMax}, DecimalPlaces{2}};
+    const Rational negRhs{Numerator{-1}, Denominator{kMax - 1}, DecimalPlaces{2}};
+    CHECK((negLhs + negRhs).numerator == -kMax);
+}
+
+TEST_CASE("A numerator of INT64_MIN is clamped, not undefined", "[rational][checked][saturate]") {
+    std::vector<std::string> logged;
+    const morph::log::ScopedLoggerOverride capture{
+        [&logged](morph::log::LogLevel, std::string_view msg) { logged.emplace_back(msg); },
+        morph::log::LogLevel::error};
+
+    // Constructing this was undefined behaviour before: canonicalise() negated
+    // the numerator, and -INT64_MIN is not representable.
+    const Rational direct{Numerator{kMin}, Denominator{1}, DecimalPlaces{2}};
+    CHECK(direct.numerator == -kMax);
+
+    // And arithmetic can land on it exactly, without anyone naming it:
+    // -INT64_MAX - 1 is a legal subtraction whose result is INT64_MIN.
+    const auto landedOn = whole(-kMax) - whole(1);
+    CHECK(landedOn.numerator == -kMax);
+
+    REQUIRE_FALSE(logged.empty());
+}
+
+TEST_CASE("Saturating operators do not disturb ordinary arithmetic", "[rational][checked][saturate]") {
+    CHECK((whole(2) + whole(3)) == whole(5));
+    CHECK((whole(5) - whole(3)) == whole(2));
+    CHECK((whole(6) * whole(7)) == whole(42));
+
+    const Rational third{Numerator{1}, Denominator{3}, DecimalPlaces{2}};
+    const Rational sixth{Numerator{1}, Denominator{6}, DecimalPlaces{2}};
+    const auto half = third + sixth;
+    CHECK(half.numerator == 1);
+    CHECK(half.denominator == 2);
+}
+
+TEST_CASE("checked* still report rather than saturate, for callers that must not absorb it",
+          "[rational][checked][saturate]") {
+    // The division of labour: operators stay usable and defined, checked*
+    // stays exact-or-nothing.
+    const auto reported = checkedAdd(whole(kMax), whole(1));
+    REQUIRE_FALSE(reported.has_value());
+    CHECK(reported.error() == RationalError::Overflow);
+
+    const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
+                                                  morph::log::LogLevel::error};
+    CHECK((whole(kMax) + whole(1)).numerator == kMax);
 }
