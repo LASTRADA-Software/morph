@@ -141,7 +141,7 @@ Public Attributes</h2></td></tr>
 <p>Enabling the option is glaze's documented remedy for exactly this (see its README, "escape control characters"); it is off by default there only because embedded nulls are hazardous for C APIs, which does not apply to a <span class="tt">std::string</span> wire field. Escaping is lossless in both directions, so any such byte round-trips unchanged rather than being replaced.</p>
 <p>Applies to writing only. <span class="tt">decode</span> needs no counterpart: glaze's reader already accepts <span class="tt">\\uXXXX</span> and turns it back into the original byte. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00317">317</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00318">318</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a1a6dcefb059cb3a297fd5fd916521691" name="a1a6dcefb059cb3a297fd5fd916521691"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a1a6dcefb059cb3a297fd5fd916521691">&#9670;&#160;</a></span>escape_control_characters</h2>
@@ -157,7 +157,7 @@ Public Attributes</h2></td></tr>
 
 <p>Emit control bytes as <span class="tt">\\uXXXX</span> rather than raw. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00320">320</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00321">321</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>

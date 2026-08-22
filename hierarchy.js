@@ -139,6 +139,7 @@ var hierarchy =
     [ "morph::wire::detail::EscapingWriteOpts", "de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html", null ],
     [ "morph::wire::Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", null ],
     [ "morph::wire::ProtocolRange", "da/d37/structmorph_1_1wire_1_1ProtocolRange.html", null ],
+    [ "morph::wire::WireCodecOps", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html", null ],
     [ "std::exception", null, [
       [ "std::runtime_error", null, [
         [ "morph::backend::BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", null ],

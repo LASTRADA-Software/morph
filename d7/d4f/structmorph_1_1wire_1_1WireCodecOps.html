@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::wire::ProtocolRange Struct Reference</title>
+<title>morph: morph::wire::WireCodecOps Struct Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d37/structmorph_1_1wire_1_1ProtocolRange.html','../../','d2/d02/structmorph_1_1wire_1_1ProtocolRange-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html','../../','de/dee/structmorph_1_1wire_1_1WireCodecOps-members'); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,61 +117,48 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/d37/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::wire::ProtocolRange Struct Reference</div></div>
+  <div class="headertitle"><div class="title">morph::wire::WireCodecOps Struct Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Inclusive protocol-version range a server advertises in reply to <span class="tt">"hello"</span>.  
+<p>The serialisation primitive <span class="tt">encode</span> calls, as an injectable strategy.  
  <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>&gt;</code></p>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
-<tr class="memitem:adfa4a6388f9041899122c1ee4dae90f6" id="r_adfa4a6388f9041899122c1ee4dae90f6"><td class="memItemLeft">std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#adfa4a6388f9041899122c1ee4dae90f6">min</a> = kProtocolVersion</td></tr>
-<tr class="memdesc:adfa4a6388f9041899122c1ee4dae90f6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Oldest protocol version the server accepts.  <br /></td></tr>
-<tr class="memitem:a6190fe5bcb853346f49dc971ad241e25" id="r_a6190fe5bcb853346f49dc971ad241e25"><td class="memItemLeft">std::uint32_t&#160;</td><td class="memItemRight"><a class="el" href="#a6190fe5bcb853346f49dc971ad241e25">max</a> = kProtocolVersion</td></tr>
-<tr class="memdesc:a6190fe5bcb853346f49dc971ad241e25"><td class="mdescLeft">&#160;</td><td class="mdescRight">Newest protocol version the server accepts.  <br /></td></tr>
+<tr class="memitem:aefb0097d261175dbb3107c9df35c3482" id="r_aefb0097d261175dbb3107c9df35c3482"><td class="memItemLeft">std::function&lt; glz::error_ctx(const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">Envelope</a> &amp;env, std::string &amp;out)&gt;&#160;</td><td class="memItemRight"><a class="el" href="#aefb0097d261175dbb3107c9df35c3482">writeEnvelope</a></td></tr>
+<tr class="memdesc:aefb0097d261175dbb3107c9df35c3482"><td class="mdescLeft">&#160;</td><td class="mdescRight">Serialises <code class="param">env</code> into <code class="param">out</code>. Mirrors the <span class="tt">glz::write</span> call <span class="tt">encode</span> would otherwise make directly.  <br /></td></tr>
 </table>
 <a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Inclusive protocol-version range a server advertises in reply to <span class="tt">"hello"</span>. </p>
-<p>Serialized as the <span class="tt">"ok"</span> reply's <span class="tt">body</span> (JSON) when a server accepts a <span class="tt">"hello"</span> — see <span class="tt">RemoteServer::setSupportedVersionRange</span>. </p>
+<div class="textblock"><p>The serialisation primitive <span class="tt">encode</span> calls, as an injectable strategy. </p>
+<p>Same shape and rationale as <span class="tt"><a class="el" href="../../db/d00/structmorph_1_1core_1_1FileIoOps.html" title="The raw file-I/O primitives morph::journal::FileActionLog and morph::offline::FileOfflineQueue both c...">morph::core::FileIoOps</a></span>: the member defaults to the real call it stands in for, so a default-constructed <span class="tt"><a class="el" href="../../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html" title="The serialisation primitive encode calls, as an injectable strategy.">WireCodecOps</a></span> is byte-for-byte what <span class="tt">encode</span> did before this seam existed.</p>
+<dl class="section user"><dt>Why this exists</dt><dd><span class="tt">encode</span>'s write-failure arm is unreachable through any <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">Envelope</a></span> value. Glaze only sets a write-time error for <span class="tt">invalid_partial_key</span>/<span class="tt">unknown_key</span> (its partial-write-by-key-list feature, which <span class="tt">encode</span> does not use) or <span class="tt">invalid_variant_object</span> (a <span class="tt">std::variant</span> member, which <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">Envelope</a></span> does not have). Confirmed by experiment as well as by reading glaze: five flavours of invalid UTF-8, an embedded NUL, a raw control byte and an 8 MiB payload all encode successfully.</dd></dl>
+<p>That left a permanently uncovered branch guarding a real invariant. Rather than reshape <span class="tt"><a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html" title="JSON wire envelope used between any client and RemoteServer.">Envelope</a></span> to make a test possible, or wait on a fault-injection hook in glaze (LASTRADA-Software/morph#96 asked for one), this puts the seam on morph's side of the boundary — where the repository already puts it for the identical problem with file I/O. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00141">141</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00425">425</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 </div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
-<a id="adfa4a6388f9041899122c1ee4dae90f6" name="adfa4a6388f9041899122c1ee4dae90f6"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#adfa4a6388f9041899122c1ee4dae90f6">&#9670;&#160;</a></span>min</h2>
+<a id="aefb0097d261175dbb3107c9df35c3482" name="aefb0097d261175dbb3107c9df35c3482"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#aefb0097d261175dbb3107c9df35c3482">&#9670;&#160;</a></span>writeEnvelope</h2>
 
 <div class="memitem">
 <div class="memproto">
       <table class="memname">
         <tr>
-          <td class="memname">std::uint32_t morph::wire::ProtocolRange::min = kProtocolVersion</td>
+          <td class="memname">std::function&lt;glz::error_ctx(const <a class="el" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">Envelope</a>&amp; env, std::string&amp; out)&gt; morph::wire::WireCodecOps::writeEnvelope</td>
         </tr>
       </table>
 </div><div class="memdoc">
+<b>Initial value:</b><div class="fragment"><div class="line">                        =</div>
+<div class="line">[](<span class="keyword">const</span> <a class="code hl_struct" href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">Envelope</a>&amp; env, std::string&amp; out) { <span class="keywordflow">return</span> glz::write&lt;<a class="code hl_struct" href="../../de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html">detail::EscapingWriteOpts</a>{}&gt;(env, out); }</div>
+<div class="ttc" id="astructmorph_1_1wire_1_1Envelope_html"><div class="ttname"><a href="../../d5/d77/structmorph_1_1wire_1_1Envelope.html">morph::wire::Envelope</a></div><div class="ttdoc">JSON wire envelope used between any client and RemoteServer.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00065">wire.hpp:65</a></div></div>
+<div class="ttc" id="astructmorph_1_1wire_1_1detail_1_1EscapingWriteOpts_html"><div class="ttname"><a href="../../de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html">morph::wire::detail::EscapingWriteOpts</a></div><div class="ttdoc">Write options that escape ASCII control bytes as \\uXXXX sequences.</div><div class="ttdef"><b>Definition</b> <a href="../../dc/de4/wire_8hpp_source.html#l00318">wire.hpp:318</a></div></div>
+</div><!-- fragment -->
+<p>Serialises <code class="param">env</code> into <code class="param">out</code>. Mirrors the <span class="tt">glz::write</span> call <span class="tt">encode</span> would otherwise make directly. </p>
+<dl class="section return"><dt>Returns</dt><dd>Glaze's error context; falsy on success. </dd></dl>
 
-<p>Oldest protocol version the server accepts. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00143">143</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
-
-</div>
-</div>
-<a id="a6190fe5bcb853346f49dc971ad241e25" name="a6190fe5bcb853346f49dc971ad241e25"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a6190fe5bcb853346f49dc971ad241e25">&#9670;&#160;</a></span>max</h2>
-
-<div class="memitem">
-<div class="memproto">
-      <table class="memname">
-        <tr>
-          <td class="memname">std::uint32_t morph::wire::ProtocolRange::max = kProtocolVersion</td>
-        </tr>
-      </table>
-</div><div class="memdoc">
-
-<p>Newest protocol version the server accepts. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00146">146</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../dc/de4/wire_8hpp_source.html#l00429">429</a> of file <a class="el" href="../../dc/de4/wire_8hpp_source.html">wire.hpp</a>.</p>
 
 </div>
 </div>
@@ -191,7 +178,7 @@ Public Attributes</h2></td></tr>
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>wire</b></li><li class="navelem"><a href="../../da/d37/structmorph_1_1wire_1_1ProtocolRange.html">ProtocolRange</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>wire</b></li><li class="navelem"><a href="../../d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html">WireCodecOps</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

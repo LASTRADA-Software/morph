@@ -192,6 +192,8 @@ var NAVTREEINDEX1 =
 "d7/d45/structmorph_1_1math_1_1Numerator.html#af7443e22fd7401a18fc49cbaac1c4ed7":[2,0,0,11,1,0],
 "d7/d4a/datetime_8hpp.html":[3,0,0,9,0],
 "d7/d4a/datetime_8hpp_source.html":[3,0,0,9,0],
+"d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html":[2,0,0,22,3],
+"d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html#aefb0097d261175dbb3107c9df35c3482":[2,0,0,22,3,0],
 "d7/d54/structmorph_1_1util_1_1detail_1_1IsTagged.html":[2,0,0,20,0,0],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html":[2,0,0,8,19],
 "d7/d6d/structmorph_1_1forms_1_1Ranged.html#a607e1d136db6d51bc20fd60259179ada":[2,0,0,8,19,4],
@@ -247,7 +249,5 @@ var NAVTREEINDEX1 =
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a203bee57f41561c4ff8881cd64fda9f0":[2,0,0,19,0,2],
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f":[2,0,0,19,0,1],
 "d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0":[2,0,0,19,0,0],
-"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html":[2,0,0,14,2],
-"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d":[2,0,0,14,2,1],
-"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#aeb75413a91143b4543503d59adb8553d":[2,0,0,14,2,0]
+"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html":[2,0,0,14,2]
 };

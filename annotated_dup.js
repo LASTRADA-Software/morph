@@ -198,7 +198,8 @@ var annotated_dup =
           [ "EscapingWriteOpts", "de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts.html", "de/d8d/structmorph_1_1wire_1_1detail_1_1EscapingWriteOpts" ]
         ] ],
         [ "Envelope", "d5/d77/structmorph_1_1wire_1_1Envelope.html", "d5/d77/structmorph_1_1wire_1_1Envelope" ],
-        [ "ProtocolRange", "da/d37/structmorph_1_1wire_1_1ProtocolRange.html", "da/d37/structmorph_1_1wire_1_1ProtocolRange" ]
+        [ "ProtocolRange", "da/d37/structmorph_1_1wire_1_1ProtocolRange.html", "da/d37/structmorph_1_1wire_1_1ProtocolRange" ],
+        [ "WireCodecOps", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps" ]
       ] ]
     ] ]
 ];
