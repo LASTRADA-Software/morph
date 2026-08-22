@@ -9,9 +9,12 @@ The framework is header-only (C++23, namespace `morph`), depends on Glaze for JS
 > **Design specs.** This document is the cross-cutting map. The authoritative,
 > per-subsystem reference lives in `docs/spec/` — one file per public type or
 > subsystem, capturing invariants, API surface, and the reasoning behind each
-> design. **[`docs/spec/README.md`](spec/README.md) indexes all of them**, and
-> is the quickest way to find the one you need: it groups every spec by the
-> question it answers and traces one action end to end.
+> design. **`docs/spec/README.md` indexes all of them**, and is the quickest
+> way to find the one you need: it groups every spec by the question it
+> answers and traces one action end to end. (Named, not linked: Doxygen reads
+> this file but not `docs/spec/`, and `WARN_AS_ERROR` turns a link it cannot
+> resolve into a failed docs build — which is why every spec reference below
+> is backticked too.)
 > Consult the matching spec before changing a public type: e.g.
 > `docs/spec/security.md` (authenticated sessions and the trust model),
 > `docs/spec/VERSIONING.md` (the semantic-versioning / deprecation-window
