@@ -502,7 +502,15 @@ function(morph_add_rung)
                 OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_rung_label.cmake"
                 CONTENT "foreach(_ladder_test IN LISTS ladder_${_rung}_tests_TESTS)
     if(NOT _ladder_test MATCHES \"\\\"class-name\\\"\")
-        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder;ladder-${_rung}\")
+        # End-to-end user journeys carry an extra `journey` label so they can
+        # be selected (ctest -L journey) or excluded the way `stress` is.
+        # Keyed off the test name's own \"Journey: \" prefix rather than a
+        # separate source-file list, so adding a journey needs no CMake edit.
+        if(_ladder_test MATCHES \"Journey: \")
+            set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder;ladder-${_rung};journey\")
+        else()
+            set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder;ladder-${_rung}\")
+        endif()
     endif()
 endforeach()
 "
