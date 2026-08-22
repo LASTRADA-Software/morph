@@ -263,7 +263,14 @@ DoD):
 - `process_pool.hpp` — QProcess clients for rung-8 scale **and for
   client-crash tests**: kill a client process mid-execute / mid-attach and
   assert connection-scope reclamation under abnormal teardown (distinct
-  from graceful disconnect).
+  from graceful disconnect). First consumer:
+  `kanban/tests/test_kanban_process_separation.cpp`, which hosts the server
+  in the test process (so assertions read `RemoteServer::health()` directly
+  rather than over IPC) and spawns `ladder_kanban_headless` as its clients.
+  Note `ProcessPool::allExited()` is a predicate for `pumpUntil`, not a
+  blocking wait: blocking in `QProcess::waitForFinished` with an in-process
+  server stops the loop that server needs to answer the very clients being
+  waited on.
 
 Per-rung test naming: `test_model_<entity>.cpp` (full mode matrix),
 `test_gui_<screen>.cpp` (presenter tests, full matrix),

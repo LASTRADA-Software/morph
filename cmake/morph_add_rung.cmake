@@ -521,12 +521,45 @@ endforeach()
     endif()
 
     # ── ladder_<rung>_headless: QProcess test-client binary (rung 4+) ────
+    # Native only, like ladder_<rung>_server above: this binary exists to be
+    # spawned as a separate OS process by testkit/process_pool.hpp, which has
+    # no meaning under Emscripten -- and QtWebSocketBackend's constructor
+    # differs there, so it would not compile anyway.
     file(GLOB_RECURSE _headless_sources CONFIGURE_DEPENDS "${_dir}/src/headless/*.cpp")
-    if(_headless_sources AND TARGET ladder_${_rung}_gui_lib)
+    if(NOT EMSCRIPTEN AND _headless_sources AND TARGET ladder_${_rung}_gui_lib)
         add_executable(ladder_${_rung}_headless ${_headless_sources})
         target_link_libraries(ladder_${_rung}_headless PRIVATE morph::ladder_${_rung}_gui_lib morph::ladder_app)
         target_compile_features(ladder_${_rung}_headless PRIVATE cxx_std_23)
+        set_target_properties(ladder_${_rung}_headless PROPERTIES AUTOMOC ON)
         apply_bigobj(ladder_${_rung}_headless)
+        if(AF_COVERAGE)
+            apply_coverage(ladder_${_rung}_headless)
+        endif()
+        # Same AF_SANITIZER block every other ladder target carries, and not
+        # optional here: this executable links ladder_<rung>_gui_lib, which
+        # *is* instrumented under a sanitizer preset, so without it the link
+        # fails outright on undefined __ubsan_*/__asan_* references. It also
+        # keeps the spawned client instrumented, which is the whole point of
+        # running the process-separation tests under ASan -- an uninstrumented
+        # client would be exactly the kind of sanitizer job that passes while
+        # checking nothing.
+        if(DEFINED AF_SANITIZER)
+            apply_sanitizers(ladder_${_rung}_headless ${AF_SANITIZER})
+        endif()
+        # Hand the binary's path to the rung's own test suite, so a
+        # process-separation test can spawn it through
+        # testkit/process_pool.hpp. Same mechanism tests/qt/CMakeLists.txt
+        # uses for QT_TEST_CLIENT_BIN; a generator expression rather than a
+        # guessed path, because the location differs per generator and config.
+        #
+        # The dependency is what stops the test from failing on a clean build:
+        # nothing the test *links* pulls this executable in, so without it the
+        # spawn would race the build that produces the thing being spawned.
+        if(TARGET ladder_${_rung}_tests)
+            target_compile_definitions(ladder_${_rung}_tests PRIVATE
+                MORPH_LADDER_HEADLESS_BIN="$<TARGET_FILE:ladder_${_rung}_headless>")
+            add_dependencies(ladder_${_rung}_tests ladder_${_rung}_headless)
+        endif()
     endif()
 
     message(STATUS "morph_add_rung: registered rung '${_rung}'")
