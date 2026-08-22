@@ -138,6 +138,32 @@ client's *synchronous-reply discriminator*, so such a reply resumes whatever
 `register`/`deregister` happens to be parked and hands it another call's
 result, while the execute it was meant for never resolves at all.
 
+### The write-failure arm, and how it is covered
+
+`encode` throws if `glz::write` reports an error. **No `Envelope` value can
+reach that arm.** Glaze only sets a write-time error for
+`invalid_partial_key`/`unknown_key` (its partial-write-by-key-list feature,
+which `encode` does not use) or `invalid_variant_object` (a `std::variant`
+member, which `Envelope` does not have). Confirmed by experiment as well as by
+reading glaze: five flavours of invalid UTF-8, an embedded NUL, a raw control
+byte and an 8 MiB payload all encode successfully.
+
+That left a branch guarding a real invariant permanently uncovered.
+`WireCodecOps` closes it the way this repository already closes the identical
+problem for file I/O (`morph::core::FileIoOps`, added for
+LASTRADA-Software/morph#97): an injectable strategy whose single member
+defaults to the real call, so a default-constructed `WireCodecOps` is
+byte-for-byte the previous behaviour, and a test injects a failing one.
+
+`defaultWireCodecOps()` is a function-local static rather than a
+default-constructed temporary in the signature: `encode` runs on every outbound
+message, and a fresh `std::function` per call would put an allocation on that
+path purely to support a test seam.
+
+`tests/test_wire_encode_fault.cpp` also pins the premise itself — that the
+hostile inputs above still encode cleanly — so the rationale is checked rather
+than asserted in a comment.
+
 ## Parsing guarantees and hardening
 
 `decode` is the wire's untrusted-input boundary. Its guarantees — and, as
