@@ -115,6 +115,67 @@ the lock with the same `try`/catch `std::exception` logging), so the exception
 handling and locking discipline described above apply identically to
 `runOnce()` and `drain()`.
 
+## Background tasks from inside a model
+
+`morph/core/background.hpp` is the seam a model's own `execute()` reaches for
+when it needs submit-now/compute-later work — report generation, batch export,
+long aggregation.
+
+Before it, there was none. Every "background job" in the ladder lived at the
+App/Bridge/`RemoteServer` layer and re-entered the model as a fresh, fully
+authorised client dispatch; a plain model instance with no App around it — the
+ordinary case for a keyed model on a `RemoteServer` — had nothing to reach for
+and had to invent a private executor member.
+
+| Symbol | Purpose |
+|---|---|
+| `setBackgroundExecutor` / `backgroundExecutor` | Install and read the process-wide executor. Mirrors `journal::setActionLog`'s pattern, for the same reason: a model must reach it without the App layer handing it one. |
+| `postBackground(task, propagation)` | Post work off the caller's strand. Returns `false` when no executor is installed. |
+| `ScopedBackgroundExecutor` | RAII install/restore, for tests and for an App that owns its pool. |
+| `ManualExecutor` | Worker-side test double: queues tasks, runs them on demand. |
+
+**No executor installed is a visible failure, not a silent drop.** A model
+posting background work in a deployment that never installed an executor has a
+configuration error; it must not look like the work was scheduled.
+
+### Session propagation
+
+`SessionPropagation::None` is the default: **a background task runs with no
+session context.** A background task is not the caller's request, it is work
+the model decided to do. Running it with the caller's authority by default
+would mean a long-running job keeps acting as a principal after that
+principal's request finished — and, since the task outlives the dispatch,
+potentially after their session should have ended. A task that needs authority
+mints its own service-principal token, as `bookmarks`' metadata fetcher does.
+
+`SessionPropagation::Inherit` runs the task under a **copy** of the posting
+dispatch's session, for work that genuinely is the caller's request continued
+on another thread. The copy is load-bearing rather than incidental:
+`session::ScopedContext` holds a *reference* to the `Context` it installs, and
+the caller's own context is long gone by the time the task runs. Capturing a
+pointer instead reproduces as a `stack-use-after-scope` under
+AddressSanitizer.
+
+**The task must not capture the model.** It runs off the model's strand, so
+everything it touches must be owned by the task — copy the values it needs in,
+and persist results through the task's own data mapper.
+
+### Testing async jobs deterministically
+
+`ManualExecutor` is the worker-side double the ladder lacked.
+`DeterministicExecutor` and `StepExecutor` control the *delivery order of
+continuations*; nothing substituted for the *worker* side of an async job, so
+every async-job test spun a real thread pool and polled against a wall-clock
+deadline.
+
+With it, a submit-then-poll job is a sequence of exact states — submit, assert
+"pending", `runOne()`, assert "complete" — with no sleeps, no retry loop, and
+no flakiness budget. `runAll()` also picks up tasks posted *by* a task, so a
+chained job runs to completion instead of stranding its own continuation.
+
+`ManualExecutor` is deliberately not thread-safe: a test reasoning about exact
+task ordering drives it from one thread.
+
 ## `QtExecutor`
 
 An `IExecutor` implementation that marshals tasks onto a Qt event loop. Lives

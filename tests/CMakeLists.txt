@@ -13,6 +13,7 @@ add_executable(morph_tests
     test_strand.cpp
     test_strand_extra.cpp
     test_strand_race.cpp
+    test_background_tasks.cpp
     test_completion.cpp
     test_completion_extra.cpp
     test_completion_multi_handler.cpp

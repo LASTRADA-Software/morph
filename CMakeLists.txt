@@ -185,6 +185,7 @@ target_sources(morph
         include/morph/version.hpp
         include/morph/core/logger.hpp
         include/morph/core/observability.hpp
+        include/morph/core/background.hpp
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
