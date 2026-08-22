@@ -203,6 +203,14 @@ their contract for every existing caller, while leaving the overflow undefined
 is what this exists to stop. A clamped value is wrong, but it is *defined*
 wrong, and it is logged.
 
+**The operators keep `noexcept`,** including when the overflow path logs. That
+needs a local `try`/`catch` around the log call, because `morph::log` offers no
+`noexcept` guarantee — a user-installed sink may throw, and `detail::log`'s own
+`scoped_lock` may throw `std::system_error` — and an arithmetic operator must
+not begin failing because logging failed. `CompletionState`'s destructor
+carries the identical workaround for the identical reason; both can go once
+morph#158 makes the logging layer non-throwing.
+
 `canonicalise` is total for the same reason. It previously negated the
 numerator unguarded, so a component of `INT64_MIN` was undefined behaviour —
 reachable both by constructing such a value directly and by *ordinary

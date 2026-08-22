@@ -7,6 +7,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <limits>
+#include <stdexcept>
+#include <utility>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -239,5 +241,31 @@ TEST_CASE("checked* still report rather than saturate, for callers that must not
 
     const morph::log::ScopedLoggerOverride quiet{[](morph::log::LogLevel, std::string_view) {},
                                                   morph::log::LogLevel::error};
+    CHECK((whole(kMax) + whole(1)).numerator == kMax);
+}
+
+TEST_CASE("Saturating arithmetic is noexcept even when the log sink throws",
+          "[rational][checked][saturate]") {
+    // morph::log offers no noexcept guarantee (morph#158): a user-installed
+    // sink may throw, and detail::log's own scoped_lock may throw
+    // std::system_error. An arithmetic operator must not start failing because
+    // logging failed, so the reporters swallow. Without that, these operators
+    // could not carry noexcept -- and a throw from one would terminate.
+    static_assert(noexcept(std::declval<Rational&>() += std::declval<const Rational&>()));
+    static_assert(noexcept(std::declval<Rational&>() -= std::declval<const Rational&>()));
+    static_assert(noexcept(std::declval<Rational&>() *= std::declval<const Rational&>()));
+
+    const morph::log::ScopedLoggerOverride hostile{
+        [](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"sink failed"}; },
+        morph::log::LogLevel::error};
+
+    // Each of these overflows, so each reaches the (throwing) sink.
+    CHECK_NOTHROW([] { return whole(kMax) + whole(1); }());
+    CHECK_NOTHROW([] { return whole(kMin + 1) - whole(2); }());
+    CHECK_NOTHROW([] { return whole(kMax) * whole(3); }());
+    // And the INT64_MIN clamp path in canonicalise().
+    CHECK_NOTHROW([] { return Rational{Numerator{kMin}, Denominator{1}, DecimalPlaces{2}}; }());
+
+    // Still saturated correctly despite the sink failing.
     CHECK((whole(kMax) + whole(1)).numerator == kMax);
 }

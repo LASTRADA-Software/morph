@@ -469,7 +469,7 @@ struct Rational {
     /// `saturateToward` for why a defined wrong answer beats UB here.
     /// @param rhs Value to add.
     /// @return `*this`.
-    constexpr Rational& operator+=(const Rational& rhs) {
+    constexpr Rational& operator+=(const Rational& rhs) noexcept {
         if (addWouldOverflow(rhs)) {
             reportOverflow("operator+=");
             saturateToward(compareForSaturation(rhs, true), rhs.decimalPlaces);
@@ -484,7 +484,7 @@ struct Rational {
     /// Saturates rather than overflowing; see `operator+=`.
     /// @param rhs Value to subtract.
     /// @return `*this`.
-    constexpr Rational& operator-=(const Rational& rhs) {
+    constexpr Rational& operator-=(const Rational& rhs) noexcept {
         if (subWouldOverflow(rhs)) {
             reportOverflow("operator-=");
             saturateToward(compareForSaturation(rhs, false), rhs.decimalPlaces);
@@ -500,7 +500,7 @@ struct Rational {
     /// @return `*this`.
     ///
     /// Saturates rather than overflowing; see `operator+=`.
-    constexpr Rational& operator*=(const Rational& rhs) {
+    constexpr Rational& operator*=(const Rational& rhs) noexcept {
         if (mulWouldOverflow(rhs)) {
             reportOverflow("operator*=");
             // Sign of a product is the product of the signs; zero operands
@@ -559,22 +559,43 @@ private:
     ///
     /// Skipped during constant evaluation: `log` is not `constexpr`, and a
     /// `constexpr` arithmetic expression that saturates should still compile.
+    ///
+    /// The `try`/`catch` is not defensive padding. `morph::log` offers no
+    /// `noexcept` guarantee -- a user-installed sink may throw, and
+    /// `detail::log`'s own `scoped_lock` may throw `std::system_error` -- and
+    /// an arithmetic operator must not start failing because logging failed.
+    /// `CompletionState`'s destructor carries the identical workaround for the
+    /// identical reason. Both can go once morph#158 makes the logging layer
+    /// non-throwing.
     /// @param where Which operator saturated.
-    static constexpr void reportOverflow(std::string_view where) {
+    static constexpr void reportOverflow(std::string_view where) noexcept {
         if (!std::is_constant_evaluated()) {
-            ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
-                                   "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
-                                   where);
+            // NOLINTBEGIN(bugprone-empty-catch) -- see above: logging must not
+            // turn a defined-but-clamped result into a thrown exception.
+            try {
+                ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
+                                       "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
+                                       where);
+            } catch (...) {
+            }
+            // NOLINTEND(bugprone-empty-catch)
         }
     }
 
     /// @brief Logs an `INT64_MIN` component clamped by `canonicalise`.
     ///
-    /// Skipped during constant evaluation, like `reportOverflow`.
-    static constexpr void reportClamp() {
+    /// Skipped during constant evaluation, and non-throwing, like
+    /// `reportOverflow` -- see that function for why the `catch` is there.
+    static constexpr void reportClamp() noexcept {
         if (!std::is_constant_evaluated()) {
-            ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; canonicalising "
-                                   "it would require negating a value with no positive counterpart.");
+            // NOLINTBEGIN(bugprone-empty-catch)
+            try {
+                ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
+                                       "canonicalising it would require negating a value with no positive "
+                                       "counterpart.");
+            } catch (...) {
+            }
+            // NOLINTEND(bugprone-empty-catch)
         }
     }
 
