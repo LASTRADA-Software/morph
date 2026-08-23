@@ -27,7 +27,7 @@ add_subdirectory(common)
 # No rung exists yet at rung 0, so this loop currently has nothing to do; it
 # is real, working selection logic (not a placeholder) that the first rung's
 # CMakeLists.txt addition activates without needing to touch this file again.
-set(_morph_known_rungs pastebin bookmarks polls kanban ledger)
+set(_morph_known_rungs pastebin bookmarks polls kanban ledger lims)
 foreach(_rung ${_morph_known_rungs})
     if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${_rung}/CMakeLists.txt")
         continue()

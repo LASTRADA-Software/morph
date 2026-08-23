@@ -448,6 +448,22 @@ function(morph_add_rung)
             if(TARGET ladder_${_rung}_gui_lib)
                 target_link_libraries(ladder_${_rung}_tests PRIVATE morph::ladder_${_rung}_gui_lib)
             endif()
+            # The durable SQLite-backed IOfflineQueue, when the top-level
+            # MORPH_BUILD_OFFLINE_SQLITE option built it (off by default -- see
+            # the option's own comment in the root CMakeLists.txt: SQLite3 is a
+            # system dev package the standard build tree does not require).
+            #
+            # A rung that exercises the offline queue must therefore compile
+            # and pass *both* ways: against morph::offline::InMemoryOfflineQueue
+            # always, and additionally against SqliteOfflineQueue when this
+            # macro is defined. Gating on the macro rather than on the header's
+            # presence is deliberate -- the header exists in every checkout, but
+            # including it without SQLite3 on the link line fails at link time,
+            # not at compile time, which is the harder failure to read.
+            if(TARGET morph::offline_sqlite)
+                target_link_libraries(ladder_${_rung}_tests PRIVATE morph::offline_sqlite)
+                target_compile_definitions(ladder_${_rung}_tests PRIVATE MORPH_LADDER_HAVE_OFFLINE_SQLITE=1)
+            endif()
             # The rung's QML module, so its offscreen engine-load smoke test
             # (examples/TESTING.md, presenter rule 6) can load the *same*
             # Main.qml the desktop client ships — not a copy.

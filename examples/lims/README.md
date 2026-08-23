@@ -48,7 +48,9 @@ Three anchors, each for a different layer:
 
 Models: `SampleModel` keyed by sample id (shared instance — bench and office
 clients attach to the same sample), `AnalysisCatalogModel` (analysis
-definitions = form schemas, versioned), `WorksheetModel`.
+definitions = form schemas, versioned). ~~`WorksheetModel`~~ — **struck
+after the rest of the rung was built; see resolved decision 19 for the
+reasoning.**
 
 Entities: client/project, sample, analysis definition (name, unit, entry
 units, decimal places, specification range, LOD/UDL), analysis result,
@@ -83,14 +85,19 @@ Build order:
    render-v1/validate-v2 skew test (review D4) is mandatory and needs no
    socket.
 5. Conditional form logic: fields required/visible depending on other
-   fields (e.g. dilution factor only when diluted). The boundary is now
-   known (round 5): `requiredWhen`/`visibleWhen`/`readonlyWhen` with
-   single-node conditions exist and are enforced client- and server-side;
-   there are **no `and`/`or`/`not` combinators** (closed vocabulary), a
-   hidden field's draft value still travels (decide clear-on-hide), and
-   comparison rules are vacuously true on unengaged operands while `equals`
-   is false — test the parity suite on *served* schema data including a
-   fail-closed unknown rule kind (review D8).
+   fields (e.g. dilution factor only when diluted).
+   `requiredWhen`/`visibleWhen`/`readonlyWhen` with single-node conditions
+   exist and are enforced client- and server-side. **Correction (rung 6,
+   verified against the shipped headers):** round 5's "there are no
+   `and`/`or`/`not` combinators" is **out of date** — `andOf`/`orOf`/`notOf`
+   landed in commit 332f82c ("forms+qml: and/or/not rule conditions", #78),
+   are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
+   are usable both nested in a `when` clause and directly as a top-level
+   rule. What remains true: the vocabulary is still closed (no application
+   lambdas), a hidden field's draft value still travels (decide
+   clear-on-hide), and comparison rules are vacuously true on unengaged
+   operands while `equals` is false — test the parity suite on *served*
+   schema data including a fail-closed unknown rule kind (review D8).
 6. Verification + audit: four-eyes verify step gated by `IAuthorizer` role;
    the full audit trail rendered from the journal (SENAITE's immutable
    snapshot requirement).
@@ -172,3 +179,578 @@ transitions; journal as regulatory audit.
   in is reconstructible from the journal alone — **under the payload
   evolution scheme this rung defines**, verified by replaying a journal
   recorded before a schema migration.
+
+## Resolved design decisions
+
+Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
+rule. §1–§3 are built; §4–§7 are not yet.
+
+### 1. Analysis identity and analysis version are separate tables (§1)
+
+`lims_analyses` holds the identity; `lims_analysis_versions` holds
+everything a revision can change (unit, precision, spec range, LOD/UDL).
+Version rows are **append-only**: `ReviseAnalysis` inserts N+1 and never
+updates N. A result names a *version*, never an analysis. This is what makes
+"an old result stays bound to the definition it was captured under" a
+property of the data rather than a convention the code has to keep
+remembering.
+
+### 2. `UnitTraits::relations` spells out ng/L → mg/L directly (§1)
+
+`Quantity`'s `convert` composes a path through the relation graph (BFS,
+`detail::conversionRatio`), but `unitAlternatives()` — the source of the
+schema's `x-unitAlternatives` — reports **direct neighbours only**. Leaving
+the ng/L → mg/L edge to compose out of ng/L → µg/L → mg/L would keep the C++
+conversion working while the generated form silently stopped offering ng/L
+as an entry unit. The redundant-looking edge is load-bearing, and
+`test_result_entry.cpp` guards it.
+
+### 3. Every lifecycle edge is its own action type (§2)
+
+Not a single `TransitionSample{target}`. A journal entry that cannot name
+the operation is not an audit record. The guard itself is a free
+`constexpr` function, `isLegalTransition(from, to)`, so the whole 6×6 matrix
+is exhaustively testable with no database in the picture.
+
+Self-edges are **illegal**: absorbing a repeated `ReceiveSample` as a no-op
+would journal a transition that did not happen. `Published` and `Rejected`
+are terminal. `ToBeVerified` goes forward to `Published` or back to
+`InProgress` — a worked sample has results, and rejecting it outright would
+discard them silently.
+
+### 4. Refused transitions are journaled; unauthenticated ones are not (§2)
+
+"Who tried to publish an unverified sample" is precisely the question a
+21 CFR Part 11-style trail exists to answer, so a rejection appends an entry
+with `Outcome::Failed` and the exception text. The single exception is
+`EmptyPrincipalError`, checked *before* the recording block: an attempt with
+no authenticated principal must produce no entry at all, because an audit
+entry naming nobody is the failure mode this README's own "Expected strain
+points" calls disqualifying. Both halves are tested and both fail if the
+ordering is swapped.
+
+### 5. The base version moves with **every** content change (§2, §3)
+
+`lims_samples.version` is bumped by each transition *and* by each captured
+result, inside the same transaction as the change itself. It is the value
+§7's offline updates will target; a reader that could observe a new state at
+an old version would have lost the property conflict detection depends on
+before that code is written.
+
+### 6. `ResultValue` is `exactlyOneOf(value, qualifier)` (§3)
+
+The forms palette has no sum types (closed by design). The encoding is two
+fields and one rule:
+
+```
+exactlyOneOf(&CaptureConcentration::value, &CaptureConcentration::qualifier)
+```
+
+A reading engages `value` and leaves `qualifier` empty; a non-reading does
+the reverse, with `qualifier` carrying `notMeasured` / `belowLOD` /
+`aboveUDL`. `exactlyOneOf` makes "0.5 mg/L, and also below the detection
+limit" unrepresentable rather than merely discouraged, and one declaration
+drives both sides: the renderer reads it from `x-rules`, the server re-runs
+the same compiled rule list because `validate()` calls `allRulesSatisfied`.
+
+The three "no number" meanings are three distinct strings in one `Choice`,
+not one "empty" flag, which is what makes the required distinguishability
+mechanical. `test_result_entry.cpp` proves it pairwise-distinct through the
+wire codec, through a `LogEntry` line round trip, and through an offline
+queue payload.
+
+Decoding a qualifier code is **fail-closed**: an unknown code is rejected,
+never resolved to `notMeasured`. Defaulting would turn "this client speaks a
+dialect we do not know" into the lab asserting it never looked — a
+fabricated claim rather than a parse failure.
+
+### 7. Over-precise readings are rejected, not retagged (§3, review D1)
+
+`x-decimalPlaces` "enforcement" retags a value's precision tag without
+changing the value (upstream issue #159), so a hand-built payload of
+`1.23456` against a 3-dp analysis would be *stored* as `1.23456` while every
+display of it read `1.235`. Storage disagreeing with display is
+disqualifying in a LIMS, so this rung takes the third option: reject the
+payload. The check is exact and overflow-free — `Rational` keeps
+`gcd(num, den) == 1`, so a value is representable at `d` decimals exactly
+when `den` divides `10^d`.
+
+### 8. The action's unit is compile-time, so the definition's unit is checked (§3)
+
+`CaptureConcentration::value` is a `Quantity<LimsUnit::mg_per_L, 3>`; the
+only way it can be wrong about its unit is if the analysis version it names
+is denominated in something else. The model checks
+`version.canonicalUnit == Concentration::unitMeta().id` and refuses
+otherwise — storing an amps reading in the mg/L column would be undetectable
+afterwards.
+
+### 9. Re-capturing one analysis version replaces its answer (§3)
+
+A result is the lab's current answer for one analysis on one sample; two
+live rows would make "the sample's results" ambiguous. The superseded value
+is not lost — the journal holds every capture, which is exactly where a
+21 CFR-style trail expects to find it.
+
+### 10. Rendering is version-bound; validation is not (§4, review D4)
+
+`GetAnalysisSchema{versionId}` serves the result-entry form for one version:
+the compiled `CaptureConcentration` schema with that version's own
+precision, spec range and detection limits merged into the `value` property
+as `x-versionDecimalPlaces` / `x-specLow` / `x-specHigh` /
+`x-limitOfDetection` / `x-upperDetectionLimit`. Revising an analysis leaves
+the old version's served form byte-identical, which is the ODK property the
+README asks for.
+
+Everything `morph::forms` itself derives is compiled and therefore identical
+for every version: the `required` array, the `x-rules` list, and
+`x-decimalPlaces` (from `Quantity<mg_per_L, 3>`'s template parameter). The
+per-version precision is served *beside* `x-decimalPlaces` rather than
+overwriting it — `x-decimalPlaces` is a contract the framework enforces on
+dispatch, so rewriting it would advertise a promise no code keeps. The
+disagreement is visible instead of hidden, and every version-specific rule
+this rung actually enforces is a hand-written model check reading the
+version row.
+
+`GetAnalysisSchema` **refuses** a version whose canonical unit has no
+compiled result-entry action, rather than serving the mg/L form for an amps
+analysis.
+
+### 11. Replay is a dispatched action; neither half of the round trip uses a framework seam (§7)
+
+**Corrected after the backend-mode matrix was written.** The classification
+logic — base-version comparison, conflict flagging, at-most-once — lives in
+`SampleModel::execute(QueuedCapture)`, a registered action. The *supported*
+replay path is therefore a **re-dispatch**: a reconnecting client drains its
+own queue and sends each item as an ordinary action through its authenticated
+`Bridge`. `test_backend_matrix.cpp` runs that across all three deployment
+modes.
+
+`SampleModel::onBackendChanged()` is also implemented, and it is what
+`docs/spec/offline/offline.md` names as the seam for exactly this. It cannot
+be the primary path here: `switchBackend` *posts* the call onto the model's
+own strand, where `session::current()` is null, so every queued item is
+refused for want of a principal. A lab reading replayed with no identified
+author is what this README calls disqualifying, so failing closed is right —
+but it does mean the framework's own replay seam cannot carry an
+authenticated replay. That is morph#201, and it was found only by
+driving replay through `switchBackend` instead of calling the hook directly;
+the §7 suite's own helper calls it from a thread that has a session
+installed, which the framework never does.
+
+The write half could not use a framework seam either: there is no
+enqueue-on-failure hook, and the machine that must make the decision (a
+disconnected field client) has no model on it at all.
+`include/lims/offline/field_outbox.hpp` is the app-layer answer, and
+morph#197 is the finding.
+
+So neither end of the offline round trip goes through a framework seam. That
+is the honest summary of §7's framework story.
+
+### 12. A conflict is a returned outcome, not a thrown error (§7)
+
+`execute(QueuedCapture)` returns `ReplayOutcome::Conflicted` rather than
+throwing. Throwing would abort the replay of every later item in the queue
+and lose the very flag the run exists to raise. `IMPLEMENTATION.md`'s "never
+encode failure as a magic value in a result DTO" is about *failures*; a
+stale-base update is a legitimate business outcome that a human must see, and
+the two-enumerator result enum is the same shape as `polls::Restored`.
+
+Genuine errors still throw: an envelope that does not validate, an author who
+is not the authenticated principal, a sample or analysis version that does not
+exist.
+
+### 13. Replay runs as the operator who captured the reading (§7)
+
+`QueuedCapture::capturedBy` must equal the authenticated principal, or replay
+refuses with `Forbidden`. A queued reading is replayed *as* the operator who
+took it and nobody else — in a 21 CFR Part 11-style trail the author of a
+reading is not a field a client may assert freely. `ApplyAnyway` resolution
+keeps that attribution: the stored result names the field operator, the
+conflict row names the resolver, and the journal has both.
+
+### 14. Conflict reasons are ordered most-specific-first (§7)
+
+A sample that has left `InProgress` has also moved on in version, so both
+`LifecycleClosed` and `StaleBase` are true. The flag says `LifecycleClosed`,
+because "somebody submitted this for verification while you were away" is a
+more actionable thing to tell a human than "your base was stale".
+
+### 15. At-most-once is enforced by the consumer, in a durable table (§7)
+
+`lims_replayed_ops` records every operation key this server has *decided* —
+applied **or** flagged — so a redelivery is skipped rather than acted on
+twice. Without it, a second delivery would bump the version again and then
+start flagging the client's own later updates as stale.
+
+This is where `docs/spec/offline/offline.md` puts the enforcement ("the queue
+… never interprets, requires, or enforces uniqueness on it — enforcement is
+the replay consumer's job"), and it is also the only way to be correct on all
+three shipped queues, which disagree about whether they dedup at enqueue time
+(morph#175).
+
+The operation key is a minted random 128-bit id, per the spec's own
+recommendation. A counter was tried first and was wrong: `FieldOutbox` holds
+it in memory, so a device switched off at the end of a shift restarts the
+count at zero and mints keys colliding with genuinely different earlier
+edits — replay would then silently *skip* a real reading. The rung's own
+self-conflict test caught it.
+
+### 16. Four eyes is two rules, enforced in two places (§6)
+
+The verifier must **hold the role** and must **not be the analyst who
+captured the reading**. Only the first is a type-level fact, so only the first
+can be checked before dispatch: `lims::auth::LimsAuthorizer` does it at the
+`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path,
+because no authorizer runs in `Local` mode at all. The second is a row-level
+fact `IAuthorizer` structurally cannot express — it is handed the model and
+action type ids and the caller's session, never the result — so it lives only
+in the model. Neither check stands in for the other, and both are tested.
+
+Roles are **not hierarchical**: a supervisor who must also verify is granted
+`Verifier` explicitly. An implicit hierarchy is how somebody ends up being the
+second pair of eyes on their own work without anyone deciding they should be.
+
+`LimsAuthorizer` derives from `SigningAuthorizer` rather than
+`AllowAllAuthorizer` (polls' choice) because a role gate needs an
+authenticated principal: a non-authenticating authorizer makes `RemoteServer`
+*clear* `Context::principal` before dispatch, leaving nothing to key on. Roles
+come from the `lims_operators` table, not the token's `roles` claim — a token
+lives for its expiry, so a role revoked mid-shift would keep working until it
+aged out.
+
+**The bootstrap carve-out.** A lab with no supervisor cannot appoint its
+first one, so the first `GrantRole` is allowed whoever makes it. The exception
+closes the instant any supervisor exists and the grant is journaled like every
+other, so it is visible in the trail rather than a back door.
+`LimsAuthorizer` deliberately does *not* mirror the carve-out — duplicating a
+security exception is how the two copies drift — which means the very first
+grant must be made locally, never remotely against an empty lab.
+
+**Publishing requires verification.** A four-eyes control nothing depends on
+is theatre, so `PublishSample` refuses while any captured result is
+unverified.
+
+### 17. The audit trail is reconstructed from the journal, and only the journal (§6)
+
+`execute(GetAuditTrail)` reads the attached action log and opens no
+`DataMapper` at all. That is what makes the definition of done — "every state
+a sample was ever in is reconstructible from the journal alone" — a claim the
+method can support rather than assert, and the test asserts it the only honest
+way: it deletes every row the sample has and reconstructs anyway.
+
+An entry this build cannot interpret becomes an `AuditStepKind::Unreadable`
+step, **never a skipped one**. Skipping is the tempting implementation and the
+wrong one: a trail that quietly omits what it could not read looks complete,
+so nobody discovers the omission.
+
+**What that does not cover, stated plainly.** `Unreadable` catches an unknown
+action id and a result that does not parse. It cannot catch a payload that
+parses into something *else* — a renamed field decodes to a default, silently,
+so a trail reconstructed across a rename is confidently wrong rather than
+visibly incomplete. That is morph#174, and this rung does **not**
+close it: the README names this rung the owner of the ladder's payload-evolution
+answer, and shipping a half-considered scheme that rungs 5 and 7 must then
+live with would be worse than filing the diagnosis with the options laid out.
+
+### 18. Conditional logic is declared once and evaluated twice, and this rung proves it (§5)
+
+`CaptureConcentration` gains the README's own example: a dilution factor
+required, and shown, only when the preparation says the aliquot was diluted.
+Both rules are declared — `requiredWhen` **and** `visibleWhen`, over the same
+`equals(dilution, "diluted")` condition — because neither implies the other,
+which is the framework's stated contract rather than an oversight.
+
+**Clear-on-hide: decided as "do not".** A hidden field's draft value still
+travels; the framework says so and this rung does not fight it. Instead the
+*server* ignores a dilution factor whose preparation says `neat`, so an
+operator who selects `diluted`, types a factor, then switches back to `neat`
+gets 2.4 mg/L rather than 24 — and gets it whether or not their renderer
+bothered to clear the field. Clearing client-side would have made the outcome
+depend on renderer behaviour the server cannot verify.
+
+**The factor is load-bearing.** The model multiplies the reading by it,
+exactly (`Rational`, never a `double`), so a mis-declared dilution changes the
+reported concentration. A conditional field nothing depends on would test the
+rule vocabulary and nothing else.
+
+`requiredWhen` can insist a field is filled in; it cannot insist the number
+means anything, so the model separately refuses a factor of zero or less, and
+fail-closes on an unknown preparation code exactly as it does for an unknown
+qualifier code.
+
+**The parity suite.** `test_conditional_logic.cpp` evaluates the *served*
+`x-rules` JSON with a generic, data-driven evaluator — the one a non-QML client
+has to write — and asserts it agrees with the compiled `allRulesSatisfied`
+across all 24 points of the rule state space, with the matrix asserted to
+contain both verdicts so a client that always says yes could not pass. It also
+pins the two behaviours D8 names: `equals` is **not** vacuous on an unengaged
+field (unlike the comparison kinds), and an unrecognised rule kind **fails
+closed on evaluation** while **deferring on enforcement** — the client does not
+claim the rule holds, but still submits, because a client that blocked on an
+unknown rule could not talk to a newer server at all.
+
+That evaluator is the third implementation of one closed vocabulary the
+framework owns, which is morph#176.
+
+### 19. `WorksheetModel` is not built, and the model list is corrected (§ model list)
+
+A worksheet, in SENAITE's sense, groups analyses drawn from *several* samples
+so one analyst can run them together — twenty nitrate determinations from
+twenty samples on one plate. It is a work-organisation unit, not a data one.
+
+It is not built, and the "What to implement" list above is corrected rather
+than left carrying an unfulfilled promise. The reasoning, so a later reader
+can disagree with it on the merits:
+
+**Nothing in the rung's definition of done needs it.** The three DoD items are
+the InvenTree unit flow, the offline conflict demo, and the audit trail; a
+worksheet appears in none of them.
+
+**It would exercise no morph surface this rung has not already stressed.**
+Every subsystem the README's own "morph subsystems exercised" list names —
+unit algebra, schema-driven forms at depth, shared sample instances, the
+offline queue's conflict semantics, role-gated transitions, the journal as
+audit — is covered without it.
+
+**Its one genuinely interesting property is neutralised by a decision this
+rung already took.** A worksheet writes results for samples whose own
+`SampleModel` instances may be live, which is exactly where the
+cross-*instance* staleness hazard `examples/bank`'s README documents ("The
+honest edge") lives. It does not arise here: this rung's models cache nothing
+but the id they are attached to and re-read the store on every call, so a
+second writer is visible immediately. Building a worksheet to demonstrate a
+hazard the design already forecloses would demonstrate nothing.
+
+**The one gap it would re-hit is already filed.** A batch assignment
+(`vector<SampleAnalysis>`) is an array-of-objects field, which `DynamicForm`'s
+array control does not render — a gap `examples/polls` hit and recorded first.
+Re-confirming it costs a model and a table and produces no new finding.
+
+**What would change the answer.** A worksheet becomes worth building the day
+this rung needs an operation that is *atomic across several samples* — one
+transaction covering rows owned by several keyed instances. That is a real
+framework question (morph serialises per instance, not across instances) and
+none of §2–§7 raised it. If a rung 7 or 8 needs cross-instance atomicity, the
+worksheet is the natural place to put it, and this decision should be
+revisited then rather than treated as settled.
+
+## The client
+
+Two surfaces, one shell (`gui/qml/Main.qml`): the sample lifecycle and result
+entry, side by side as tabs rather than stacked, because both act on the
+*same* attached sample at once — a bench operator captures a reading while the
+office watches the state move. Attaching the lifecycle surface points the
+result surface at the same sample, and both handlers are `AllowShared` over a
+keyed model, so they land on one instance. That is the shared-instance design
+made visible rather than asserted.
+
+`gui_lib/` holds two presenter/QML-bridge pairs (`SamplePresenter`/
+`SampleBridge`, `ResultPresenter`/`ResultBridge`) plus one shared conversion
+header. Presenters link `Qt6::Core` only and instantiate under a plain
+`QCoreApplication` (presenter rule 1); they track completions through the
+common `Presenter` base so tests wait on `busy()` rather than sleeping (rule
+3); QML is bindings-only (rule 6); and the offscreen engine-load smoke test
+is registered in ctest.
+
+### Every typed field is schema-driven; nothing is hand-built
+
+`examples/IMPLEMENTATION.md` rule 2 permits no hand-built input widgets, and
+this rung has none. The rule that decides which actions get a form:
+
+> **A field a person types is rendered from the served schema. A value the
+> model already supplied is a typed call.**
+
+So `RegisterClient`, `RegisterSample`, `RejectSample`, `ReturnForRework`,
+`CaptureConcentration` and `ResolveConflict` are all rendered through the
+shipped `DynamicForm` from `gui_lib/lims_schemas.hpp`'s document. The
+zero-field transitions (`ReceiveSample`, `StartWork`,
+`SubmitForVerification`, `PublishSample`) are plain buttons, because an
+action with no fields has no form to generate. `VerifyResult` and
+`OpenSample` are typed calls: their one field is an id the table or spinbox
+already holds, and asking somebody to retype an id they are looking at would
+be worse, not more conformant.
+
+The capture form is the one that earns its keep. Rendering
+`schemaJson<CaptureConcentration>()` through the shipped renderer is what puts
+this rung's own cross-field rules in front of the **framework's** evaluator
+rather than only the one `test_conditional_logic.cpp` writes:
+`exactlyOneOf(value, qualifier)` becomes the submit gate that makes "a number
+*and* a below-LOD flag" unsubmittable; the `requiredWhen`/`visibleWhen` pair
+makes the dilution factor appear and become required exactly when the
+preparation says diluted; and `x-decimalPlaces`/`x-unitAlternatives` drive the
+entry-unit machinery. None of that is written in QML.
+
+Every `DynamicForm` here is left **unbound** (`controller: null`) and
+submitted by an explicit button, following bookmarks' and pastebin's
+precedent: a bound form auto-submits the moment its required fields are
+engaged, which for a lab reading would file a result mid-keystroke.
+
+### Two handlers on the lifecycle surface, and why
+
+`SampleModel` is keyed, so the handler every attached action runs on is
+`AllowShared`. But an `AllowShared` handler is **not bound until it attaches
+to a key**, and `RegisterClient`/`RegisterSample` carry none — dispatching
+either on it fails with "handler not bound". This was confirmed empirically
+here before `SamplePresenter` grew a second, plain handler for exactly those
+two actions; `polls::gui::PollPresenter` reached the same conclusion for
+`CreatePoll`. `registerSample` therefore does two dispatches: create on the
+plain handler, then attach the shared one to the id that came back. `busy()`
+never dips between them.
+
+### What the smoke test does not prove, and what covers it instead
+
+The offscreen engine-load test proves every QML file parses and every type it
+names resolves. It cannot prove a `Connections` handler is bound to a signal
+that exists, or that a delegate reads a key the model supplies — both are
+resolved dynamically against objects that test never supplies.
+`test_lims_qml_bridges.cpp` covers that from the other side: it asserts
+against the real bridges' metaobjects that every signal the QML connects to
+exists, and against their real property bags that every key a delegate reads
+is present.
+
+### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
+
+`codecov.yml` gains a `lims` component scoped to `examples/lims/src/models/**`
+and `examples/lims/include/lims/models/**` — the paths
+`examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
+a margin below the measured 855/864 = 98.96% ceiling.
+
+The remaining nine lines are three defensive guards, each unreachable through
+the model's own API rather than merely untested: `alreadyDecided`'s empty-key
+guard (validation refuses an empty operation key first), `renderSchemaFor`'s
+malformed-JSON arm (its input is `schemaJson<A>()`), and
+`GetAnalysisVersion`'s dangling-version arm (a declared foreign key forbids
+the row). Each turns an impossible state into a typed error instead of a
+dereference, so each is kept.
+
+Measuring rather than assuming was worth it twice. The first measurement came
+in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`
+had no caller at all, so the catalogue's entire journaling path was
+unverified — and the audit trail's `VerifyResult` branch was **dead**, because
+verifications were journaled under an *empty* entity key. That was a real
+defect rather than a coverage artifact: a sample's audit trail silently
+omitted the second pair of eyes, which is the one thing a four-eyes record
+exists to show. Fixed by rekeying the journal to the result's own sample
+(same for conflict resolutions), and pinned by its own test.
+
+Neither this component nor rung 5's could have scored anything before this,
+because `scripts/coverage.sh`'s rung list had drifted from CMake's and named
+only rungs 1–4 — so ledger's carefully-measured 87% gate was matching a set of
+files no uploaded report contained. Fixed here.
+
+## Findings raised by this rung
+
+- **[morph#163](https://github.com/LASTRADA-Software/morph/issues/163)
+  — `ModelKey` rejects strong id types.** `BRIDGE_MODEL_KEY` routes the key
+  through `keyToString`, whose concept admits only `std::integral` or
+  `std::string`, while `IMPLEMENTATION.md` rule 3 mandates a strong id
+  struct for entity identity. ledger and kanban already carry the identical
+  hand-written workaround; lims is the third, which is the rule-of-three
+  trigger.
+- **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
+  order §5 above, corrected in place). They landed in commit 332f82c (#78)
+  and are specified in `docs/spec/forms/forms.md`.
+- **[morph#164](https://github.com/LASTRADA-Software/morph/issues/164)
+  — a forms schema is a pure function of the compiled action type.**
+  Per-instance data cannot reach the keys the framework enforces: two
+  analysis versions declaring 3 and 1 decimal places both serve
+  `"x-decimalPlaces":3`, and a value outside a served spec range passes
+  `validate()` and is stored unflagged, because the rule vocabulary cannot
+  name a bound that lives in a database row. Bridges directly into rung 7's
+  runtime custom fields, which are planned on the opposite assumption.
+- **[morph#174](https://github.com/LASTRADA-Software/morph/issues/174)
+  — a journal entry from an older build decodes leniently to defaults, with no
+  signal.** `ActionTraits::fromJson` reads with `error_on_unknown_keys = false`,
+  so a renamed field is dropped and the new one takes its default; `LogEntry::v`
+  versions the *line format*, not the application payload. An audit trail
+  reconstructed across such a rename reports the wrong state with full
+  confidence. **This rung was named the owner of the ladder's answer and has
+  not closed it** — the finding carries the diagnosis, a measured repro, and
+  three options with the trade-off that decides between them.
+- **A schema's `required` array can silently contradict its own `x-rules`.**
+  `schemaJson`'s required-by-default rule put both `value` and `qualifier`
+  in `required` while the `exactlyOneOf` entry beside them said at most one
+  may be engaged — an unsatisfiable form, and nothing in `morph::forms`
+  detects it. The sanctioned escape (`optionalFields`) works and is used
+  here, but it is opt-in and invisible: the contradiction compiles, renders,
+  and only shows up as "the client's payload is rejected by the server".
+  `mergeSchemaExtras` already walks `formRules` when it emits `x-rules`, so
+  it has everything it needs either to drop a field named in an
+  `exactlyOneOf`/`mutuallyExclusive`/`atLeastOneOf` rule from `required`, or
+  to fail loudly. `docs/spec/forms/forms.md` documents the two features in
+  separate sections and never mentions their interaction. Guarded here by a
+  test asserting `required` is exactly `["analysisVersionId"]`.
+- **[morph#175](https://github.com/LASTRADA-Software/morph/issues/175)
+  — the three shipped `IOfflineQueue`s disagree about repeated idempotency
+  keys.** `InMemoryOfflineQueue` admits the duplicate; `FileOfflineQueue` and
+  `SqliteOfflineQueue` dedup; the interface contract says none of them should,
+  and the spec's `SqliteOfflineQueue` section claims a parity with
+  `InMemoryOfflineQueue` that does not exist. Three-implementation repro in the
+  finding.
+- **[morph#197](https://github.com/LASTRADA-Software/morph/issues/197)
+  — the offline write path has no model-side seam.** Rule 1 says all domain
+  logic lives in models; the offline spec says enqueue-on-failure is the
+  application's job at the dispatch site; and a disconnected field client has
+  no model to put it in anyway. `FieldOutbox` is this rung's app-layer answer,
+  and it carries a real invariant (a client's own successive offline edits must
+  chain), not glue.
+- **[morph#172](https://github.com/LASTRADA-Software/morph/issues/172)
+  — `MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
+  clang.** `FindSQLite3` resolves the SDK's whole `/usr/include`, which is then
+  injected as `-isystem` ahead of libc++'s own headers. The repo's own
+  `morph_offline_sqlite_tests` target fails identically, which is why the
+  durable queue had never been built here before.
+- **[morph#176](https://github.com/LASTRADA-Software/morph/issues/176)
+  — `x-rules` has one client-side evaluator and no shared corpus.** The spec
+  makes client/server parity the reason the vocabulary is closed, but the only
+  client-side implementation is JavaScript inside `DynamicForm.qml`, each side
+  is tested against its own expectations, and the renderer conformance kit's
+  scope note does not list `x-rules` at all. A non-QML client — which is what
+  this rung's field devices are — must reimplement the whole vocabulary,
+  vacuity asymmetry and fail-closed rule included.
+- **[morph#173](https://github.com/LASTRADA-Software/morph/issues/173)
+  — a ladder test whose name contains a semicolon never gets its
+  `ladder-<rung>` label.** `morph_add_rung`'s re-labelling step iterates
+  `IN LISTS`, which splits the name, so `set_tests_properties` applies to
+  nothing and nothing warns. Found here the hard way: `ctest -L ladder-lims`
+  reported 85 cases while the binary reported 87. Two lims cases were renamed;
+  12 pre-existing ones repo-wide are still affected.
+- **[morph#199](https://github.com/LASTRADA-Software/morph/issues/199)
+  — a `Quantity`'s exact decimal can only be rendered with its unit appended.**
+  `morph::units::toString` always concatenates the unit; the decimal-only
+  formatter is in `morph::units::detail`, and `std::format("{}", rational)`
+  prints the *fraction* (`"12/5"`), not the decimal. A table that places the
+  number and the unit separately has to take the suffix back off a string that
+  just had it put on.
+- **[morph#201](https://github.com/LASTRADA-Software/morph/issues/201)
+  — `Model::onBackendChanged()` runs with no session.** The offline spec names
+  it as *the* seam for rich replay outcomes, but `switchBackend` posts it onto
+  the model's strand where `session::current()` is null, so a replay that must
+  know who is replaying cannot use it. Found by driving replay through
+  `switchBackend` rather than calling the hook directly — the §7 suite's own
+  helper had been supplying a session the framework never does.
+- **`scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
+  lims were both missing, so neither reached any uploaded report — and rung
+  5's codecov component, with a target derived from a genuinely careful
+  measurement, was scoring files the report did not contain. A component that
+  matches nothing does not fail; it reports nothing. Fixed here.
+- **Models cannot self-journal without the registry/dispatcher path.**
+  `IModelHolder::recordIfAttached` fires only for holder-constructed models,
+  so a plain-constructed one — the only kind a unit test has, and what
+  `IMPLEMENTATION.md` rule 5 requires the audit trail to be tested through —
+  records nothing. `ledger` (three models), `kanban`, and this rung's
+  catalogue each hand-rolled the same `attachActionLog`/`logAction` pair;
+  this rung shares one copy between its two models
+  (`include/lims/core/self_journal.hpp`) rather than adding a sixth. Not
+  filed as a separate finding pending a decision on whether "models do not
+  journal, dispatchers do" is the intended contract — but if it is, the
+  contract makes the "reconstructible from the journal alone" DoD untestable
+  at the model level, which is worth stating in
+  `docs/spec/journal/journal.md` either way.
+- **One compiled action type per unit family, not per analysis.**
+  `Quantity`'s unit and precision are template parameters, so a catalogue
+  whose analyses are *data* cannot produce a result-entry action per
+  analysis. `CaptureConcentration` covers every mg/L-denominated analysis
+  and a second family (amps, temperature, pH) needs a second action type.
+  This is the concrete shape of the README's "schemas become data" strain
+  point and it bounds §4 as well.
