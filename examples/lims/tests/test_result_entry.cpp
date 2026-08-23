@@ -151,9 +151,11 @@ TEST_CASE("The served schema carries the encoding, the precision and the entry u
     // `required` must NOT list value/qualifier. Required-by-default would put
     // both there, where they contradict the `x-rules` entry beside them: a
     // renderer honouring `required` would demand both fields, and a payload
-    // satisfying that demand then fails `exactlyOneOf` on the server. Nothing
-    // in morph::forms detects the contradiction, so the encoding opts out via
-    // `optionalFields` — and this assertion is what keeps it opted out.
+    // satisfying that demand then fails `exactlyOneOf` on the server. The
+    // encoding opts out via `optionalFields`; since morph#165,
+    // `schemaJson<CaptureConcentration>()` would *throw*
+    // `UnsatisfiableFormError` if it did not, so this assertion now pins the
+    // shape of the opt-out rather than its existence.
     CHECK(schema.find("\"required\":[\"analysisVersionId\"]") != std::string::npos);
 
     // The reading's declared precision and its entry-unit alternatives.

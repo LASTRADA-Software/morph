@@ -214,8 +214,11 @@ struct CaptureConcentration {
     /// and `qualifier` in the schema's `required` array, where they directly
     /// contradict the `x-rules` entry beside them: a renderer honouring
     /// `required` would demand both fields, and a payload satisfying it would
-    /// then fail `exactlyOneOf` on the server. Nothing in `morph::forms`
-    /// detects that contradiction, so the encoding has to opt out by hand.
+    /// then fail `exactlyOneOf` on the server. The opt-out below is what makes
+    /// the rule the only gate on the pair; since morph#165 `schemaJson` also
+    /// *rejects* the contradiction (`UnsatisfiableFormError`) instead of
+    /// serving a form nobody can submit, so omitting it is now a loud error
+    /// rather than a silent one.
     static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"},
                                                std::string_view{"dilution"}, std::string_view{"dilutionFactor"}};
 

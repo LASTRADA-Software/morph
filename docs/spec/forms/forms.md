@@ -233,7 +233,11 @@ inside `schemaJson<A>()`. On internal failure (malformed intermediate JSON,
 etc.) the unmerged glaze schema is returned — or an empty string when even
 glaze's own `write_json_schema<A>()` failed, since `schemaJson` feeds
 `mergeSchemaExtras` with `write_json_schema<A>().value_or(std::string{})`.
-Schema generation never throws.
+
+Schema generation throws in exactly **one** case, and never for malformed
+input: an `A::formRules` declaration that contradicts `A`'s own derived
+`required` array so completely that no submission could satisfy both — see
+[Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules).
 
 ### Required-ness rule
 
@@ -247,6 +251,11 @@ to mark a field optional loses data rather than silently accepting a gap (see
 3. It is the destination of an `A::computedFields` entry — a derived,
    read-only field is never something the user must fill in; see
    [Computed fields](#computed-fields).
+
+Required-ness is derived here, and `x-rules` is derived from `A::formRules`,
+**independently**. They can therefore disagree; the one disagreement that makes
+the form unsubmittable is rejected at generation, see
+[Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules).
 
 ```cpp
 struct RecordMeasurement {
@@ -1204,6 +1213,87 @@ the probe's members by address. An action with no `formRules` emits no
 `x-rules` key at all — byte-identical to a version of the schema generated
 before this feature existed.
 
+### Unsatisfiable declarations — `required` contradicting `x-rules`
+
+`required` is derived from field required-ness ([Required-ness rule](#required-ness-rule));
+`x-rules` is derived from `A::formRules`. Nothing links the two derivations, so
+an action can declare both halves sensibly on their own and still describe a
+form **no submission can satisfy**:
+
+```cpp
+struct CaptureConcentration {
+    Concentration value;        // EmptyCapableField -> required by default
+    QualifierChoice qualifier;  // EmptyCapableField -> required by default
+
+    // `required` demands both. `exactlyOneOf` permits exactly one.
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&CaptureConcentration::value,
+                                   &CaptureConcentration::qualifier));
+};
+```
+
+A renderer honouring `required` demands both fields; a payload meeting that
+demand then fails `exactlyOneOf` on the server. The form is dead on arrival,
+and both halves of the served schema look entirely reasonable in isolation.
+
+`schemaJson<A>()` **rejects this at generation** by throwing
+`morph::forms::UnsatisfiableFormError`. The check lives in
+`detail::rejectUnsatisfiableRules`, called from `mergeSchemaExtras` — the one
+place both halves are in hand — and reads the *emitted* rule nodes against the
+*emitted* `required` array, so it matches on the same wire names a renderer
+would.
+
+**What counts as a contradiction.** A rule kind that **caps** how many of the
+fields it ranges over may be engaged at once, ranging over **two or more**
+fields that are also in `required`:
+
+| Rule kind | Caps engagement? | Why |
+|---|---|---|
+| `exactlyOneOf` | yes — ceiling of one | Two required fields cannot both be engaged and still be "exactly one". |
+| `mutuallyExclusive` | yes — ceiling of one | Same ceiling; "at most one" and "both required" cannot hold together. |
+| `atLeastOneOf` | **no** — it is a *floor* | Satisfied by engaging every field it names, so it can never contradict `required`. Rejecting it would be a false positive. |
+| `requiredWhen` | **no** | Only ever *adds* required-ness; it cannot cap anything. |
+| everything else | no | Comparison, presentation, and compound kinds impose no engagement ceiling. |
+
+`detail::capsEngagedCount(kind)` is the single place the capping kinds are
+named. A future rule kind carrying a ceiling ("at most two of these") joins
+that list and is covered with no other change.
+
+**Boundaries that deliberately do *not* throw:**
+
+- **Exactly one required field inside a capping rule.** Satisfiable: engage
+  that field, leave the rest empty. Only two or more conflict.
+- **`std::optional` members.** `detail::isStdOptional` keeps them out of
+  `required` on sight, so a rule over `std::optional` fields can never reach
+  the contradiction — with or without this check. The reachable case is an
+  `EmptyCapableField` (a `Quantity`, a `Choice`, a strong id): required by
+  default, and rangeable by a membership rule.
+- **Required fields the rule does not name.** Only the intersection of the
+  rule's `fields` and `required` is counted.
+
+**How an author fixes it.** Name the rule's fields in `A::optionalFields`. The
+rule then becomes the *only* gate on them, which is what the multi-field
+sum-type encoding ([Sum types not in the forms palette](#sum-types-not-in-the-forms-palette--multi-field-encoding-by-design))
+actually means. Alternatively, drop the rule.
+
+**Why this one exception to permissive generation.** Everywhere else, schema
+generation tolerates an author's declaration mistake silently: a `formLayout`
+entry naming a field the action does not have is ignored, a field claimed by
+two groups keeps the first. That is right, because a tolerated mistake still
+yields a **working form** — the author loses a layout hint, not the form. This
+case is different in kind: the result is a form **nobody can submit**, on any
+client, with no error naming the reason. The failure is already certain at
+generation time and belongs to the author's own build, so it is raised there
+rather than left to surface as a user who cannot press Save. A `static_assert`
+would be better still, but `detail::resolveFieldName` is not `constexpr` (it
+matches member addresses against a runtime probe instance), so a
+generation-time throw is the achievable form today.
+
+**Interaction with the schema cache.** `schemaJson<A>()` memoises into a
+function-local `static const std::string`. A throw during that static's
+initialisation leaves it uninitialised, so a later call re-runs the check and
+throws again, rather than serving a half-built or empty schema.
+
 ### Server-side: the same list, evaluated in the dispatcher
 
 The server never trusts the client's evaluation of `x-rules`; it re-runs
@@ -1350,7 +1440,7 @@ validator check on every dispatch path.
 
 | Signature | Returns |
 |---|---|
-| `template <typename A> std::string schemaJson()` | The merged schema JSON. Cached per type. Never throws. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed. |
+| `template <typename A> std::string schemaJson()` | The merged schema JSON. Cached per type. On internal failure returns the raw glaze schema, or an empty string if glaze's own schema generation failed — it never throws over malformed *input*. Throws `UnsatisfiableFormError` for a self-contradicting *declaration* ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)). |
 
 ### `allRequiredEngaged<A>()`
 
@@ -1393,6 +1483,9 @@ for the exhaustive tables and design rationale.
 | `HasFormRules<A>` | concept | `true` when `A` declares a `static constexpr formRules` member. |
 | `allRulesSatisfied<A>(action)` | function template | `true` when every **validation** rule in `A::formRules` holds (or there are none); skips presentation rules. `noexcept`. |
 | `engaged`/`notEngaged`/`equals`/`greater`/`greaterOrEqual`/`less`/`lessOrEqual`/`requiredWhen`/`exactlyOneOf`/`atLeastOneOf`/`mutuallyExclusive`/`visibleWhen`/`readonlyWhen`/`andOf`/`orOf`/`notOf` | function templates | Factories building one typed rule/condition node each; see the kind table above. |
+| `UnsatisfiableFormError` | struct (`std::logic_error`) | Thrown by `schemaJson<A>()` when a capping rule ranges over two or more fields `A` also makes `required`. Its `what()` names the action type, the rule kind, and the offending fields. |
+| `detail::capsEngagedCount(kind)` | function | `true` for the emitted rule kinds that impose a ceiling on how many of their fields may be engaged (`"exactlyOneOf"`, `"mutuallyExclusive"`). The single place those kinds are named. |
+| `detail::rejectUnsatisfiableRules<A>(xRules, requiredNames)` | function template | Throws `UnsatisfiableFormError` when a capping rule node names two or more fields present in `requiredNames`. Called from `mergeSchemaExtras`. |
 | `detail::ConditionActionType<Cond>` | alias template | The action type `A` a condition/rule node's `test(const A&) const noexcept` ranges over, deduced from `&Cond::test`'s member-function-pointer type. Used internally by `andOf`/`orOf`/`notOf` to recover `A` without every leaf node separately naming it. |
 
 ### `computed<Dst, Inputs...>()` / `computeList()` / `recomputeAll<A>()`
@@ -1411,6 +1504,7 @@ for the exhaustive tables and design rationale.
 | Optional mechanism | **Two orthogonal opt-outs** | `std::optional<T>` handles library types (glaze already knows how to serialise them); `optionalFields` handles custom types like `Quantity` whose emptiness is not expressed through `optional`. |
 | Schema caching | **`static const std::string` inside the template** | Same schema for the same type in every translation unit. No synchronisation needed — schema generation does not mutate anything. |
 | Failure mode | **Returns raw glaze schema (or empty) rather than throwing** | Schema generation is a description facility; crashing a server over a malformed schema would be wrong. |
+| Unsatisfiable declaration | **Rejected at generation with `UnsatisfiableFormError`, the one exception to the row above** | A capping rule (`exactlyOneOf`/`mutuallyExclusive`) over two or more `required` fields yields a form *nobody can submit*, not a form missing a hint — the failure is certain at generation time and belongs to the author's build, not to a user who cannot press Save. See [Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules). |
 | `Choice` metadata | **In the type, not the payload** | The set of options for a field is a compile-time property of the action, not a runtime property of each submission. The generated schema communicates it to the client; payloads carry only the selected value. |
 | Wire serialisation | **Glaze `meta` reflects `value` directly** | `Choice<T, ...>` serialises as `T \| null` — the options metadata never travels. |
 | Options action | **A registered action type id** | The same action dispatch mechanism handles queries for picklist data, so no separate protocol or endpoint is needed. |
@@ -1523,8 +1617,10 @@ an empty JSON object `{}`. Renderers must treat an empty string as "schema
 unavailable" and refuse to build a form from it. Because the fallback path
 carries no diagnostic, an empty result is **indistinguishable** from any other
 failure mode (there is no error code, message, or partial schema to inspect).
-Schema generation never throws, so the empty string is the only failure signal a
-caller receives.
+The empty string is the only failure signal a caller receives on this path; the
+one case in which schema generation throws instead is a self-contradicting
+declaration ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)),
+which is an author error in the action type, not a failure of the input schema.
 
 ## Limitations
 
@@ -1618,6 +1714,8 @@ directly carries whatever value the caller gave it, unchecked at this seam.
 ### Sum types not in the forms palette — multi-field encoding by design
 
 The forms vocabulary provides no native sum-type (tagged union, discriminated union) support. When an action field must express *one of several alternatives* (e.g. a measurement that is "a quantity, or below limit-of-detection, or above upper detection limit"), encode it as a **multi-field structure glued by cross-field rules**: one field for the quantity, one boolean or enum for the state (measured/below/above), and a `RequiredWhen`/`VisibleWhen` rule that gates each based on the others. This is by design: sum types are rare in domain models that already use `hasValue()` optionality and `Choice` enums, and the rule-based multi-field encoding is expressive enough for the rungs' needs while keeping the schema and validation machinery focused.
+
+The encoding carries one obligation: every field the capping rule ranges over must be named in `A::optionalFields`, so the rule is the *only* gate on them. Omitting that leaves `required` demanding every alternative at once, which contradicts the rule — `schemaJson<A>()` rejects it rather than serving an unsubmittable form ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)).
 
 ### One cached schema per type — no localisation
 
