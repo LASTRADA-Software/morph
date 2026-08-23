@@ -127,14 +127,15 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('de/d45/concept
 <p><code>#include &lt;<a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>&gt;</code></p>
 <h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
 <div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> K&gt;</div>
-<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html">ModelKey</a> =</div>
-<div class="line">    (std::integral&lt;K&gt; &amp;&amp; !std::same_as&lt;std::remove_cv_t&lt;K&gt;, <span class="keywordtype">bool</span>&gt;) || std::same_as&lt;std::remove_cv_t&lt;K&gt;, std::string&gt;</div>
-<div class="ttc" id="aconceptmorph_1_1model_1_1ModelKey_html"><div class="ttname"><a href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html">morph::model::ModelKey</a></div><div class="ttdoc">Key types a model may declare as its PrimaryKey.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00040">model_key.hpp:40</a></div></div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html">ModelKey</a> = <a class="code hl_concept" href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">RawModelKey&lt;K&gt;</a> || <a class="code hl_concept" href="../../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html">WrappedModelKey&lt;K&gt;</a></div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1ModelKey_html"><div class="ttname"><a href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html">morph::model::ModelKey</a></div><div class="ttdoc">Key types a model may declare as its PrimaryKey.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00074">model_key.hpp:74</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1RawModelKey_html"><div class="ttname"><a href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">morph::model::RawModelKey</a></div><div class="ttdoc">Key types that are themselves a wire-encodable scalar.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00041">model_key.hpp:41</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1WrappedModelKey_html"><div class="ttname"><a href="../../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html">morph::model::WrappedModelKey</a></div><div class="ttdoc">Key types that wrap a RawModelKey — the ladder&#39;s strong ids.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00062">model_key.hpp:62</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>Key types a model may declare as its <span class="tt">PrimaryKey</span>. </p>
-<p>Restricted to integral types and <span class="tt">std::string</span> because a key must round-trip losslessly through the wire's string encoding and be usable as a map key. <span class="tt">bool</span> is excluded: it carries one bit of identity, which is never a meaningful primary key and is far more likely to be a mistake. </p>
+<p>Either a wire-encodable scalar (<span class="tt">RawModelKey</span>) or a strong id wrapping one (<span class="tt">WrappedModelKey</span>). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00040">40</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00074">74</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->

@@ -53,8 +53,9 @@ var NAVTREEINDEX =
 [
 "annotated.html",
 "d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad1a2a95d9fa055d297e3176ab981348b",
-"d8/d94/structmorph_1_1flows_1_1WizardStep.html",
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3e73309d5145498bd68fed82167c3771"
+"d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html",
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48",
+"index.html#wire-protocol"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

@@ -2,6 +2,8 @@ var model__key_8hpp =
 [
     [ "morph::model::ModelKeyTraits&lt; Model &gt;", "d2/ded/structmorph_1_1model_1_1ModelKeyTraits.html", null ],
     [ "morph::model::ActionKeyTraits&lt; Action &gt;", "d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html", null ],
+    [ "morph::model::RawModelKey", "dc/d43/conceptmorph_1_1model_1_1RawModelKey.html", null ],
+    [ "morph::model::WrappedModelKey", "d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html", null ],
     [ "morph::model::ModelKey", "de/d45/conceptmorph_1_1model_1_1ModelKey.html", null ],
     [ "morph::model::KeyedModel", "d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html", null ],
     [ "BRIDGE_MODEL_KEY", "d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3", null ],

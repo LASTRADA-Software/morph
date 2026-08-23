@@ -8,6 +8,8 @@ var concepts =
         [ "HasFormRules", "d5/d32/conceptmorph_1_1forms_1_1HasFormRules.html", null ]
       ] ],
       [ "model", null, [
+        [ "RawModelKey", "dc/d43/conceptmorph_1_1model_1_1RawModelKey.html", null ],
+        [ "WrappedModelKey", "d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html", null ],
         [ "ModelKey", "de/d45/conceptmorph_1_1model_1_1ModelKey.html", null ],
         [ "KeyedModel", "d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html", null ]
       ] ],

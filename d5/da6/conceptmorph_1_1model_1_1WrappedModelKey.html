@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::model::KeyedModel Concept Reference</title>
+<title>morph: morph::model::WrappedModelKey Concept Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,30 +117,37 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dcb/concept
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::model::KeyedModel Concept Reference</div></div>
+  <div class="headertitle"><div class="title">morph::model::WrappedModelKey Concept Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Satisfied by model types that have a primary key, however it was named.  
+<p>Key types that <em>wrap</em> a <span class="tt">RawModelKey</span> — the ladder's strong ids.  
 <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>&gt;</code></p>
 <h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
-<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> M&gt;</div>
-<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">KeyedModel</a> = detail::SelfDeclaredKey&lt;M&gt; || detail::DeducedKey&lt;M&gt;</div>
-<div class="ttc" id="aconceptmorph_1_1model_1_1KeyedModel_html"><div class="ttname"><a href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">morph::model::KeyedModel</a></div><div class="ttdoc">Satisfied by model types that have a primary key, however it was named.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00118">model_key.hpp:118</a></div></div>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> K&gt;</div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html">WrappedModelKey</a> = !<a class="code hl_concept" href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">RawModelKey&lt;K&gt;</a> &amp;&amp; <span class="keyword">requires</span>(<span class="keyword">const</span> K&amp; key) {</div>
+<div class="line">    { key.hasValue() } -&gt; std::convertible_to&lt;bool&gt;;</div>
+<div class="line">    { *key };</div>
+<div class="line">    <span class="keyword">requires</span> RawModelKey&lt;std::remove_cvref_t&lt;<span class="keyword">decltype</span>(*key)&gt;&gt;;</div>
+<div class="line">    <span class="keyword">requires</span> <span class="keyword">requires</span>(std::remove_cvref_t&lt;<span class="keyword">decltype</span>(*key)&gt; raw) { K{std::move(raw)}; };</div>
+<div class="line">}</div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1RawModelKey_html"><div class="ttname"><a href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">morph::model::RawModelKey</a></div><div class="ttdoc">Key types that are themselves a wire-encodable scalar.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00041">model_key.hpp:41</a></div></div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1WrappedModelKey_html"><div class="ttname"><a href="../../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html">morph::model::WrappedModelKey</a></div><div class="ttdoc">Key types that wrap a RawModelKey — the ladder&#39;s strong ids.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00062">model_key.hpp:62</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Satisfied by model types that have a primary key, however it was named. </p>
-<p>Two ways in, and neither requires touching the model's own class body beyond the first: a nested <span class="tt">PrimaryKey</span> alias, or a <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf" title="Declares that action A also carries its model&#39;s primary key in MEMBER.">BRIDGE_KEY_FROM</a></span> declaration that deduces the type from the action field carrying it. Following <span class="tt">morph::forms</span>' standing rule — <em>infer by default, declare to override</em> — a nested alias wins when both are present, which is what lets a model whose key type differs from the field's type (an <span class="tt">int</span> column keyed as a <span class="tt">std::string</span>, say) state that explicitly. </p>
+<div class="textblock"><p>Key types that <em>wrap</em> a <span class="tt">RawModelKey</span> — the ladder's strong ids. </p>
+<p><span class="tt">examples/IMPLEMENTATION.md</span> rule 3 requires entity identity to be a per-entity strong id type (<span class="tt">struct PasteId</span>, <span class="tt">struct OptionId</span>) exposing <span class="tt">hasValue()</span>, so that it joins the forms palette as an empty-capable field. Such a type is not integral and is not <span class="tt">std::string</span>, so before this it satisfied no arm of <span class="tt">ModelKey</span> at all — and a rung obeying rule 3 could not use <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3" title="Declares that action A is the one that defines model M&#39;s primary key.">BRIDGE_MODEL_KEY</a></span>/<span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf" title="Declares that action A also carries its model&#39;s primary key in MEMBER.">BRIDGE_KEY_FROM</a></span>, the very macros the framework provides for keying. Three rungs hand-wrote the traits instead, each re-stating the <span class="tt">*id</span> unwrapping convention the macro exists to hide.</p>
+<p>The shape is deduced structurally rather than declared, matching how a keyed model is detected: any type with <span class="tt">hasValue()</span> and an <span class="tt">operator*</span> yielding a <span class="tt">RawModelKey</span>, and constructible back from that raw value so the key round-trips from the wire. Both ladder spellings qualify — an <span class="tt">std::optional</span>-backed id whose <span class="tt">operator*</span> returns a reference, and a sentinel-backed one (<span class="tt">0</span> means empty) whose <span class="tt">operator*</span> returns by value. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00062">62</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">KeyedModel</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../d5/da6/conceptmorph_1_1model_1_1WrappedModelKey.html">WrappedModelKey</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

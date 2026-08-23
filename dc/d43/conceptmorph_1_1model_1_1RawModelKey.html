@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::model::KeyedModel Concept Reference</title>
+<title>morph: morph::model::RawModelKey Concept Reference</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html','../../',''); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/d43/conceptmorph_1_1model_1_1RawModelKey.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,30 +117,31 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d8/dcb/concept
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::model::KeyedModel Concept Reference</div></div>
+  <div class="headertitle"><div class="title">morph::model::RawModelKey Concept Reference</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Satisfied by model types that have a primary key, however it was named.  
+<p>Key types that are themselves a wire-encodable scalar.  
 <a href="#details">More...</a></p>
 
 <p><code>#include &lt;<a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>&gt;</code></p>
 <h2 id="header-conceptdef" class="groupheader">Concept definition</h2>
-<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> M&gt;</div>
-<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">KeyedModel</a> = detail::SelfDeclaredKey&lt;M&gt; || detail::DeducedKey&lt;M&gt;</div>
-<div class="ttc" id="aconceptmorph_1_1model_1_1KeyedModel_html"><div class="ttname"><a href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">morph::model::KeyedModel</a></div><div class="ttdoc">Satisfied by model types that have a primary key, however it was named.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00118">model_key.hpp:118</a></div></div>
+<div class="fragment"><div class="line"><span class="keyword">template</span>&lt;<span class="keyword">typename</span> K&gt;</div>
+<div class="line"><span class="keyword">concept </span><a class="code hl_concept" href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">RawModelKey</a> =</div>
+<div class="line">    (std::integral&lt;K&gt; &amp;&amp; !std::same_as&lt;std::remove_cv_t&lt;K&gt;, <span class="keywordtype">bool</span>&gt;) || std::same_as&lt;std::remove_cv_t&lt;K&gt;, std::string&gt;</div>
+<div class="ttc" id="aconceptmorph_1_1model_1_1RawModelKey_html"><div class="ttname"><a href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">morph::model::RawModelKey</a></div><div class="ttdoc">Key types that are themselves a wire-encodable scalar.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00041">model_key.hpp:41</a></div></div>
 </div><!-- fragment --><a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><p>Satisfied by model types that have a primary key, however it was named. </p>
-<p>Two ways in, and neither requires touching the model's own class body beyond the first: a nested <span class="tt">PrimaryKey</span> alias, or a <span class="tt"><a class="el" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf" title="Declares that action A also carries its model&#39;s primary key in MEMBER.">BRIDGE_KEY_FROM</a></span> declaration that deduces the type from the action field carrying it. Following <span class="tt">morph::forms</span>' standing rule — <em>infer by default, declare to override</em> — a nested alias wins when both are present, which is what lets a model whose key type differs from the field's type (an <span class="tt">int</span> column keyed as a <span class="tt">std::string</span>, say) state that explicitly. </p>
+<div class="textblock"><p>Key types that are themselves a wire-encodable scalar. </p>
+<p>Restricted to integral types and <span class="tt">std::string</span> because a key must round-trip losslessly through the wire's string encoding and be usable as a map key. <span class="tt">bool</span> is excluded: it carries one bit of identity, which is never a meaningful primary key and is far more likely to be a mistake. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00118">118</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00041">41</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 </div></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">KeyedModel</a></li>
+    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">RawModelKey</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

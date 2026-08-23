@@ -1,5 +1,7 @@
 var NAVTREEINDEX3 =
 {
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a253bed67a42a440ad432356b338f5b48":[2,0,0,9,4,2],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3391f30563d9f938b266527937c8c4ed":[2,0,0,9,4,4],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3e73309d5145498bd68fed82167c3771":[2,0,0,9,4,1],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3f6645af9ccf2dd75508e1771ef1e1e5":[2,0,0,9,4,12],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24":[2,0,0,9,4,10],
@@ -12,7 +14,7 @@ var NAVTREEINDEX3 =
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[2,0,0,9,4,0],
 "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html":[2,0,0,17,0,0],
 "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#a189724b1bcf426227de6c8894cd41073":[2,0,0,17,0,0,0],
-"de/d45/conceptmorph_1_1model_1_1ModelKey.html":[1,0,1,0],
+"de/d45/conceptmorph_1_1model_1_1ModelKey.html":[1,0,1,2],
 "de/d49/views_8hpp.html":[3,0,0,2,6],
 "de/d49/views_8hpp.html#a2e896543269b1bf59c3686bf34ee1307":[3,0,0,2,6,6],
 "de/d49/views_8hpp_source.html":[3,0,0,2,6],
@@ -247,7 +249,5 @@ var NAVTREEINDEX3 =
 "index.html#syncworker":[0,5,10],
 "index.html#thread-safety":[0,6],
 "index.html#util--exact-values-units-time":[0,12,0,5],
-"index.html#versioning--compatibility":[0,14],
-"index.html#wire-protocol":[0,4],
-"pages.html":[]
+"index.html#versioning--compatibility":[0,14]
 };

@@ -234,188 +234,226 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/da3/logger_
 <div class="line"><a id="l00112" name="l00112"></a><span class="lineno">  112</span>    <span class="comment">// can reject a suppressed message without touching `mtx` or formatting it.</span></div>
 <div class="line"><a id="l00113" name="l00113"></a><span class="lineno">  113</span>    std::atomic&lt;LogLevel&gt; minLevel{LogLevel::debug};</div>
 <div class="line"><a id="l00114" name="l00114"></a><span class="lineno">  114</span>    std::mutex mtx;  <span class="comment">// guards `sink` (and serialises sink invocation)</span></div>
-<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>};</div>
-<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span> </div>
-<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span><span class="keyword">inline</span> LogState&amp; logState() {</div>
-<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    <span class="keyword">static</span> LogState state;</div>
-<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>    <span class="keywordflow">return</span> state;</div>
-<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span>}</div>
-<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="comment"></span> </div>
-<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span><span class="comment">/// @brief Internal emit entry point used by the public level helpers.</span></div>
-<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span><span class="comment">///</span></div>
-<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span><span class="comment">/// The sink is invoked while `mtx` is held, so sink calls are serialised. A sink</span></div>
-<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment">/// must therefore not call back into `morph::log` (log, `setLogger`, or</span></div>
-<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// construct a `ScopedLoggerOverride`) — `std::mutex` is non-recursive and that</span></div>
-<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">/// would self-deadlock — and should not block for long.</span></div>
-<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="keyword">inline</span> <span class="keywordtype">void</span> log(LogLevel level, std::string_view msg) {</div>
-<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span>    <span class="keyword">auto</span>&amp; state = logState();</div>
-<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span>    <span class="keywordflow">if</span> (level &lt; state.minLevel.load(std::memory_order_relaxed)) {</div>
-<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span>        <span class="keywordflow">return</span>;  <span class="comment">// lock-free reject of suppressed messages</span></div>
-<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span>    }</div>
-<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>    std::scoped_lock <span class="keyword">const</span> lock{state.mtx};</div>
-<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    <span class="keywordflow">if</span> (state.sink) {</div>
-<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>        state.sink(level, msg);</div>
+<div class="line"><a id="l00115" name="l00115"></a><span class="lineno">  115</span>    <span class="comment">// Records discarded because the sink, the lock, or formatting threw. The</span></div>
+<div class="line"><a id="l00116" name="l00116"></a><span class="lineno">  116</span>    <span class="comment">// logging layer is noexcept, so a failure cannot be reported by</span></div>
+<div class="line"><a id="l00117" name="l00117"></a><span class="lineno">  117</span>    <span class="comment">// propagating; this counter is what keeps it from being silent.</span></div>
+<div class="line"><a id="l00118" name="l00118"></a><span class="lineno">  118</span>    std::atomic&lt;std::uint64_t&gt; dropped{0};</div>
+<div class="line"><a id="l00119" name="l00119"></a><span class="lineno">  119</span>};</div>
+<div class="line"><a id="l00120" name="l00120"></a><span class="lineno">  120</span> </div>
+<div class="line"><a id="l00121" name="l00121"></a><span class="lineno">  121</span><span class="keyword">inline</span> LogState&amp; logState() {</div>
+<div class="line"><a id="l00122" name="l00122"></a><span class="lineno">  122</span>    <span class="keyword">static</span> LogState state;</div>
+<div class="line"><a id="l00123" name="l00123"></a><span class="lineno">  123</span>    <span class="keywordflow">return</span> state;</div>
+<div class="line"><a id="l00124" name="l00124"></a><span class="lineno">  124</span>}</div>
+<div class="line"><a id="l00125" name="l00125"></a><span class="lineno">  125</span><span class="comment"></span> </div>
+<div class="line"><a id="l00126" name="l00126"></a><span class="lineno">  126</span><span class="comment">/// @brief Internal emit entry point used by the public level helpers.</span></div>
+<div class="line"><a id="l00127" name="l00127"></a><span class="lineno">  127</span><span class="comment">///</span></div>
+<div class="line"><a id="l00128" name="l00128"></a><span class="lineno">  128</span><span class="comment">/// The sink is invoked while `mtx` is held, so sink calls are serialised. A sink</span></div>
+<div class="line"><a id="l00129" name="l00129"></a><span class="lineno">  129</span><span class="comment">/// must therefore not call back into `morph::log` (log, `setLogger`, or</span></div>
+<div class="line"><a id="l00130" name="l00130"></a><span class="lineno">  130</span><span class="comment">/// construct a `ScopedLoggerOverride`) — `std::mutex` is non-recursive and that</span></div>
+<div class="line"><a id="l00131" name="l00131"></a><span class="lineno">  131</span><span class="comment">/// would self-deadlock — and should not block for long.</span></div>
+<div class="line"><a id="l00132" name="l00132"></a><span class="lineno">  132</span><span class="keyword">inline</span> <span class="keywordtype">void</span> log(LogLevel level, std::string_view msg) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00133" name="l00133"></a><span class="lineno">  133</span>    <span class="keyword">auto</span>&amp; state = logState();</div>
+<div class="line"><a id="l00134" name="l00134"></a><span class="lineno">  134</span>    <span class="keywordflow">if</span> (level &lt; state.minLevel.load(std::memory_order_relaxed)) {</div>
+<div class="line"><a id="l00135" name="l00135"></a><span class="lineno">  135</span>        <span class="keywordflow">return</span>;  <span class="comment">// lock-free reject of suppressed messages</span></div>
 <div class="line"><a id="l00136" name="l00136"></a><span class="lineno">  136</span>    }</div>
-<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>}</div>
-<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span> </div>
-<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>}  <span class="comment">// namespace detail</span></div>
-<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span> </div>
-<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span><span class="comment">// ── Configuration ─────────────────────────────────────────────────────────────</span></div>
-<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span><span class="comment"></span> </div>
-<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span><span class="comment">/// @brief Replaces the global log sink.</span></div>
-<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span><span class="comment">///</span></div>
-<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span><span class="comment">/// Thread-safe. The new sink is called for every message whose level meets the</span></div>
-<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span><span class="comment">/// current minimum. Pass a no-op lambda to silence all output.</span></div>
-<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span><span class="comment">/// @param logger New sink function.</span></div>
-<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span><span class="keyword">inline</span> <span class="keywordtype">void</span> setLogger(std::function&lt;<span class="keywordtype">void</span>(LogLevel, std::string_view)&gt; logger) {</div>
-<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>    std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
-<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>    detail::logState().sink = std::move(logger);</div>
+<div class="line"><a id="l00137" name="l00137"></a><span class="lineno">  137</span>    <span class="comment">// Nothing here may escape. Emitting a log record must never be able to</span></div>
+<div class="line"><a id="l00138" name="l00138"></a><span class="lineno">  138</span>    <span class="comment">// disrupt the code that asked for it -- least of all a destructor, where</span></div>
+<div class="line"><a id="l00139" name="l00139"></a><span class="lineno">  139</span>    <span class="comment">// an escaping exception is `std::terminate`. Three things inside can</span></div>
+<div class="line"><a id="l00140" name="l00140"></a><span class="lineno">  140</span>    <span class="comment">// throw: `std::mutex::lock` (`std::system_error`), the sink itself, and</span></div>
+<div class="line"><a id="l00141" name="l00141"></a><span class="lineno">  141</span>    <span class="comment">// any allocation the sink performs (the default one builds a sanitised</span></div>
+<div class="line"><a id="l00142" name="l00142"></a><span class="lineno">  142</span>    <span class="comment">// copy). All three are the logging layer&#39;s problem, not the caller&#39;s.</span></div>
+<div class="line"><a id="l00143" name="l00143"></a><span class="lineno">  143</span>    <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00144" name="l00144"></a><span class="lineno">  144</span>        std::scoped_lock <span class="keyword">const</span> lock{state.mtx};</div>
+<div class="line"><a id="l00145" name="l00145"></a><span class="lineno">  145</span>        <span class="keywordflow">if</span> (state.sink) {</div>
+<div class="line"><a id="l00146" name="l00146"></a><span class="lineno">  146</span>            state.sink(level, msg);</div>
+<div class="line"><a id="l00147" name="l00147"></a><span class="lineno">  147</span>        }</div>
+<div class="line"><a id="l00148" name="l00148"></a><span class="lineno">  148</span>    } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00149" name="l00149"></a><span class="lineno">  149</span>        state.dropped.fetch_add(1, std::memory_order_relaxed);</div>
+<div class="line"><a id="l00150" name="l00150"></a><span class="lineno">  150</span>    }</div>
 <div class="line"><a id="l00151" name="l00151"></a><span class="lineno">  151</span>}</div>
-<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span><span class="comment"></span> </div>
-<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span><span class="comment">/// @brief Sets the minimum log level.</span></div>
-<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span><span class="comment">///</span></div>
-<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">/// Messages below this level are silently dropped. Thread-safe.</span></div>
-<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment">/// @param level Minimum level to emit.</span></div>
-<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="keyword">inline</span> <span class="keywordtype">void</span> setLogLevel(LogLevel level) {</div>
-<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span>    detail::logState().minLevel.store(level, std::memory_order_relaxed);</div>
-<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span>}</div>
-<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment"></span> </div>
-<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">/// @brief Returns the current minimum log level. Thread-safe.</span></div>
-<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="comment">/// @return The active minimum level.</span></div>
-<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span><span class="keyword">inline</span> LogLevel getLogLevel() {</div>
-<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    <span class="keywordflow">return</span> detail::logState().minLevel.load(std::memory_order_relaxed);</div>
+<div class="line"><a id="l00152" name="l00152"></a><span class="lineno">  152</span> </div>
+<div class="line"><a id="l00153" name="l00153"></a><span class="lineno">  153</span>}  <span class="comment">// namespace detail</span></div>
+<div class="line"><a id="l00154" name="l00154"></a><span class="lineno">  154</span> </div>
+<div class="line"><a id="l00155" name="l00155"></a><span class="lineno">  155</span><span class="comment">// ── Configuration ─────────────────────────────────────────────────────────────</span></div>
+<div class="line"><a id="l00156" name="l00156"></a><span class="lineno">  156</span><span class="comment"></span> </div>
+<div class="line"><a id="l00157" name="l00157"></a><span class="lineno">  157</span><span class="comment">/// @brief Replaces the global log sink.</span></div>
+<div class="line"><a id="l00158" name="l00158"></a><span class="lineno">  158</span><span class="comment">///</span></div>
+<div class="line"><a id="l00159" name="l00159"></a><span class="lineno">  159</span><span class="comment">/// Thread-safe. The new sink is called for every message whose level meets the</span></div>
+<div class="line"><a id="l00160" name="l00160"></a><span class="lineno">  160</span><span class="comment">/// current minimum. Pass a no-op lambda to silence all output.</span></div>
+<div class="line"><a id="l00161" name="l00161"></a><span class="lineno">  161</span><span class="comment">/// @param logger New sink function.</span></div>
+<div class="line"><a id="l00162" name="l00162"></a><span class="lineno">  162</span><span class="keyword">inline</span> <span class="keywordtype">void</span> setLogger(std::function&lt;<span class="keywordtype">void</span>(LogLevel, std::string_view)&gt; logger) {</div>
+<div class="line"><a id="l00163" name="l00163"></a><span class="lineno">  163</span>    std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
+<div class="line"><a id="l00164" name="l00164"></a><span class="lineno">  164</span>    detail::logState().sink = std::move(logger);</div>
 <div class="line"><a id="l00165" name="l00165"></a><span class="lineno">  165</span>}</div>
-<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span> </div>
-<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">// ── Level helpers ─────────────────────────────────────────────────────────────</span></div>
-<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span> </div>
-<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="keyword">namespace </span>detail {</div>
-<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment"></span> </div>
-<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="comment">/// @brief Formats @p fmt with @p args and forwards to `log()`.</span></div>
-<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span><span class="comment">///</span></div>
-<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span><span class="comment">/// The level is checked *before* formatting, so a suppressed call pays no</span></div>
-<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment">/// `std::format` / allocation cost.</span></div>
-<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="keywordtype">void</span> logFormat(LogLevel level, std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) {</div>
-<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span>    <span class="keywordflow">if</span> (level &lt; logState().minLevel.load(std::memory_order_relaxed)) {</div>
-<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>        <span class="keywordflow">return</span>;</div>
-<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>    }</div>
-<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span>    log(level, std::format(fmt, std::forward&lt;Args&gt;(args)...));</div>
-<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span>}</div>
-<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span> </div>
-<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span>}  <span class="comment">// namespace detail</span></div>
-<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment"></span> </div>
-<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">/// @brief Logs @p msg at `LogLevel::debug`.</span></div>
-<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logDebug(std::string_view msg) { detail::log(LogLevel::debug, msg); }<span class="comment"></span></div>
-<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">/// @brief Logs @p msg at `LogLevel::info`.</span></div>
-<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logInfo(std::string_view msg) { detail::log(LogLevel::info, msg); }<span class="comment"></span></div>
-<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">/// @brief Logs @p msg at `LogLevel::warn`.</span></div>
-<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logWarn(std::string_view msg) { detail::log(LogLevel::warn, msg); }<span class="comment"></span></div>
-<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">/// @brief Logs @p msg at `LogLevel::error`.</span></div>
-<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logError(std::string_view msg) { detail::log(LogLevel::error, msg); }</div>
-<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment"></span> </div>
-<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::debug`.</span></div>
-<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span><span class="keywordtype">void</span> logDebug(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) {</div>
-<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span>    detail::logFormat(LogLevel::debug, fmt, std::forward&lt;Args&gt;(args)...);</div>
-<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span>}<span class="comment"></span></div>
-<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::info`.</span></div>
-<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="keywordtype">void</span> logInfo(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) {</div>
-<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span>    detail::logFormat(LogLevel::info, fmt, std::forward&lt;Args&gt;(args)...);</div>
-<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span>}<span class="comment"></span></div>
-<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::warn`.</span></div>
-<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="keywordtype">void</span> logWarn(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) {</div>
-<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span>    detail::logFormat(LogLevel::warn, fmt, std::forward&lt;Args&gt;(args)...);</div>
-<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>}<span class="comment"></span></div>
-<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::error`.</span></div>
-<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
-<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span><span class="keywordtype">void</span> logError(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) {</div>
-<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>    detail::logFormat(LogLevel::error, fmt, std::forward&lt;Args&gt;(args)...);</div>
-<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>}</div>
-<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span> </div>
-<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span><span class="comment">// ── Scoped override (test fixture) ────────────────────────────────────────────</span></div>
-<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span><span class="comment"></span> </div>
-<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span><span class="comment">/// @brief RAII helper that swaps the global logger and level for the lifetime</span></div>
-<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span><span class="comment">///        of the object, and restores them in the destructor.</span></div>
-<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span><span class="comment">///</span></div>
-<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span><span class="comment">/// Designed for tests that want to capture log output without leaking the</span></div>
-<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span><span class="comment">/// custom sink into other tests. Thread-safe construction and destruction —</span></div>
-<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment">/// the global mutex is acquired briefly during each.</span></div>
-<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">///</span></div>
-<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="comment">/// @code</span></div>
-<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">/// {</span></div>
-<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="comment">///     std::vector&lt;std::string&gt; captured;</span></div>
-<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">///     morph::log::ScopedLoggerOverride guard{</span></div>
-<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="comment">///         [&amp;](morph::log::LogLevel, std::string_view msg) { captured.emplace_back(msg); },</span></div>
-<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">///         morph::log::LogLevel::debug,</span></div>
-<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="comment">///     };</span></div>
-<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment">///     // ... run code that logs ...</span></div>
-<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">/// }  // previous sink + level restored here</span></div>
-<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="comment">/// @endcode</span></div>
-<div class="foldopen" id="foldopen00234" data-start="{" data-end="};">
-<div class="line"><a id="l00234" name="l00234"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">  234</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a> {</div>
-<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span><span class="keyword">public</span>:<span class="comment"></span></div>
-<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span><span class="comment">    /// @brief Snapshots the current sink + level so they can be restored.</span></div>
-<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="comment">    /// Use this when test code will install its own sink mid-test via</span></div>
-<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="comment">    /// `setLogger()` / `setLogLevel()` and just wants automatic restoration.</span></div>
-<div class="foldopen" id="foldopen00240" data-start="{" data-end="}">
-<div class="line"><a id="l00240" name="l00240"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">  240</a></span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>() {</div>
-<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>        <span class="comment">// NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — these must be</span></div>
-<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span>        <span class="comment">// read while holding the lock; a member-initializer list would read the</span></div>
-<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span>        <span class="comment">// global state before the mutex is acquired (a data race).</span></div>
-<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
-<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>        _savedSink = detail::logState().sink;</div>
-<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>        _savedLevel = detail::logState().minLevel;</div>
-<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span>        <span class="comment">// NOLINTEND(cppcoreguidelines-prefer-member-initializer)</span></div>
-<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span>    }</div>
+<div class="line"><a id="l00166" name="l00166"></a><span class="lineno">  166</span><span class="comment"></span> </div>
+<div class="line"><a id="l00167" name="l00167"></a><span class="lineno">  167</span><span class="comment">/// @brief Sets the minimum log level.</span></div>
+<div class="line"><a id="l00168" name="l00168"></a><span class="lineno">  168</span><span class="comment">///</span></div>
+<div class="line"><a id="l00169" name="l00169"></a><span class="lineno">  169</span><span class="comment">/// Messages below this level are silently dropped. Thread-safe.</span></div>
+<div class="line"><a id="l00170" name="l00170"></a><span class="lineno">  170</span><span class="comment">/// @param level Minimum level to emit.</span></div>
+<div class="line"><a id="l00171" name="l00171"></a><span class="lineno">  171</span><span class="keyword">inline</span> <span class="keywordtype">void</span> setLogLevel(LogLevel level) {</div>
+<div class="line"><a id="l00172" name="l00172"></a><span class="lineno">  172</span>    detail::logState().minLevel.store(level, std::memory_order_relaxed);</div>
+<div class="line"><a id="l00173" name="l00173"></a><span class="lineno">  173</span>}</div>
+<div class="line"><a id="l00174" name="l00174"></a><span class="lineno">  174</span><span class="comment"></span> </div>
+<div class="line"><a id="l00175" name="l00175"></a><span class="lineno">  175</span><span class="comment">/// @brief Returns the current minimum log level. Thread-safe.</span></div>
+<div class="line"><a id="l00176" name="l00176"></a><span class="lineno">  176</span><span class="comment">/// @return The active minimum level.</span></div>
+<div class="line"><a id="l00177" name="l00177"></a><span class="lineno">  177</span><span class="keyword">inline</span> LogLevel getLogLevel() {</div>
+<div class="line"><a id="l00178" name="l00178"></a><span class="lineno">  178</span>    <span class="keywordflow">return</span> detail::logState().minLevel.load(std::memory_order_relaxed);</div>
+<div class="line"><a id="l00179" name="l00179"></a><span class="lineno">  179</span>}</div>
+<div class="line"><a id="l00180" name="l00180"></a><span class="lineno">  180</span><span class="comment"></span> </div>
+<div class="line"><a id="l00181" name="l00181"></a><span class="lineno">  181</span><span class="comment">/// @brief Number of log records discarded because emitting them threw.</span></div>
+<div class="line"><a id="l00182" name="l00182"></a><span class="lineno">  182</span><span class="comment">///</span></div>
+<div class="line"><a id="l00183" name="l00183"></a><span class="lineno">  183</span><span class="comment">/// The logging helpers are `noexcept`, so a sink that throws, a lock</span></div>
+<div class="line"><a id="l00184" name="l00184"></a><span class="lineno">  184</span><span class="comment">/// acquisition that fails, or a formatting error cannot be reported by</span></div>
+<div class="line"><a id="l00185" name="l00185"></a><span class="lineno">  185</span><span class="comment">/// propagating to the caller. Each such record increments this counter</span></div>
+<div class="line"><a id="l00186" name="l00186"></a><span class="lineno">  186</span><span class="comment">/// instead, so the failure is observable rather than silent. It counts</span></div>
+<div class="line"><a id="l00187" name="l00187"></a><span class="lineno">  187</span><span class="comment">/// *failures*, not level-suppressed messages: a message below the minimum</span></div>
+<div class="line"><a id="l00188" name="l00188"></a><span class="lineno">  188</span><span class="comment">/// level is not a dropped record.</span></div>
+<div class="line"><a id="l00189" name="l00189"></a><span class="lineno">  189</span><span class="comment">///</span></div>
+<div class="line"><a id="l00190" name="l00190"></a><span class="lineno">  190</span><span class="comment">/// Monotonic for the life of the process, and never reset. Compare two reads</span></div>
+<div class="line"><a id="l00191" name="l00191"></a><span class="lineno">  191</span><span class="comment">/// to attribute drops to a region of code. Thread-safe.</span></div>
+<div class="line"><a id="l00192" name="l00192"></a><span class="lineno">  192</span><span class="comment">///</span></div>
+<div class="line"><a id="l00193" name="l00193"></a><span class="lineno">  193</span><span class="comment">/// @return The total number of records dropped since process start.</span></div>
+<div class="line"><a id="l00194" name="l00194"></a><span class="lineno">  194</span>[[nodiscard]] <span class="keyword">inline</span> std::uint64_t droppedLogRecords() noexcept {</div>
+<div class="line"><a id="l00195" name="l00195"></a><span class="lineno">  195</span>    <span class="keywordflow">return</span> detail::logState().dropped.load(std::memory_order_relaxed);</div>
+<div class="line"><a id="l00196" name="l00196"></a><span class="lineno">  196</span>}</div>
+<div class="line"><a id="l00197" name="l00197"></a><span class="lineno">  197</span> </div>
+<div class="line"><a id="l00198" name="l00198"></a><span class="lineno">  198</span><span class="comment">// ── Level helpers ─────────────────────────────────────────────────────────────</span></div>
+<div class="line"><a id="l00199" name="l00199"></a><span class="lineno">  199</span> </div>
+<div class="line"><a id="l00200" name="l00200"></a><span class="lineno">  200</span><span class="keyword">namespace </span>detail {</div>
+<div class="line"><a id="l00201" name="l00201"></a><span class="lineno">  201</span><span class="comment"></span> </div>
+<div class="line"><a id="l00202" name="l00202"></a><span class="lineno">  202</span><span class="comment">/// @brief Formats @p fmt with @p args and forwards to `log()`.</span></div>
+<div class="line"><a id="l00203" name="l00203"></a><span class="lineno">  203</span><span class="comment">///</span></div>
+<div class="line"><a id="l00204" name="l00204"></a><span class="lineno">  204</span><span class="comment">/// The level is checked *before* formatting, so a suppressed call pays no</span></div>
+<div class="line"><a id="l00205" name="l00205"></a><span class="lineno">  205</span><span class="comment">/// `std::format` / allocation cost.</span></div>
+<div class="line"><a id="l00206" name="l00206"></a><span class="lineno">  206</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00207" name="l00207"></a><span class="lineno">  207</span><span class="keywordtype">void</span> logFormat(LogLevel level, std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00208" name="l00208"></a><span class="lineno">  208</span>    <span class="keywordflow">if</span> (level &lt; logState().minLevel.load(std::memory_order_relaxed)) {</div>
+<div class="line"><a id="l00209" name="l00209"></a><span class="lineno">  209</span>        <span class="keywordflow">return</span>;</div>
+<div class="line"><a id="l00210" name="l00210"></a><span class="lineno">  210</span>    }</div>
+<div class="line"><a id="l00211" name="l00211"></a><span class="lineno">  211</span>    <span class="comment">// `std::format` allocates, so it can throw `std::bad_alloc`, and a user</span></div>
+<div class="line"><a id="l00212" name="l00212"></a><span class="lineno">  212</span>    <span class="comment">// type&#39;s `formatter` may throw anything at all. `log()` guards its own</span></div>
+<div class="line"><a id="l00213" name="l00213"></a><span class="lineno">  213</span>    <span class="comment">// body but cannot guard its argument, so the call is wrapped here.</span></div>
+<div class="line"><a id="l00214" name="l00214"></a><span class="lineno">  214</span>    <span class="keywordflow">try</span> {</div>
+<div class="line"><a id="l00215" name="l00215"></a><span class="lineno">  215</span>        log(level, std::format(fmt, std::forward&lt;Args&gt;(args)...));</div>
+<div class="line"><a id="l00216" name="l00216"></a><span class="lineno">  216</span>    } <span class="keywordflow">catch</span> (...) {</div>
+<div class="line"><a id="l00217" name="l00217"></a><span class="lineno">  217</span>        logState().dropped.fetch_add(1, std::memory_order_relaxed);</div>
+<div class="line"><a id="l00218" name="l00218"></a><span class="lineno">  218</span>    }</div>
+<div class="line"><a id="l00219" name="l00219"></a><span class="lineno">  219</span>}</div>
+<div class="line"><a id="l00220" name="l00220"></a><span class="lineno">  220</span> </div>
+<div class="line"><a id="l00221" name="l00221"></a><span class="lineno">  221</span>}  <span class="comment">// namespace detail</span></div>
+<div class="line"><a id="l00222" name="l00222"></a><span class="lineno">  222</span><span class="comment"></span> </div>
+<div class="line"><a id="l00223" name="l00223"></a><span class="lineno">  223</span><span class="comment">/// @brief Logs @p msg at `LogLevel::debug`.</span></div>
+<div class="line"><a id="l00224" name="l00224"></a><span class="lineno">  224</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logDebug(std::string_view msg) <span class="keyword">noexcept</span> { detail::log(LogLevel::debug, msg); }<span class="comment"></span></div>
+<div class="line"><a id="l00225" name="l00225"></a><span class="lineno">  225</span><span class="comment">/// @brief Logs @p msg at `LogLevel::info`.</span></div>
+<div class="line"><a id="l00226" name="l00226"></a><span class="lineno">  226</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logInfo(std::string_view msg) <span class="keyword">noexcept</span> { detail::log(LogLevel::info, msg); }<span class="comment"></span></div>
+<div class="line"><a id="l00227" name="l00227"></a><span class="lineno">  227</span><span class="comment">/// @brief Logs @p msg at `LogLevel::warn`.</span></div>
+<div class="line"><a id="l00228" name="l00228"></a><span class="lineno">  228</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logWarn(std::string_view msg) <span class="keyword">noexcept</span> { detail::log(LogLevel::warn, msg); }<span class="comment"></span></div>
+<div class="line"><a id="l00229" name="l00229"></a><span class="lineno">  229</span><span class="comment">/// @brief Logs @p msg at `LogLevel::error`.</span></div>
+<div class="line"><a id="l00230" name="l00230"></a><span class="lineno">  230</span><span class="keyword">inline</span> <span class="keywordtype">void</span> logError(std::string_view msg) <span class="keyword">noexcept</span> { detail::log(LogLevel::error, msg); }</div>
+<div class="line"><a id="l00231" name="l00231"></a><span class="lineno">  231</span><span class="comment"></span> </div>
+<div class="line"><a id="l00232" name="l00232"></a><span class="lineno">  232</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::debug`.</span></div>
+<div class="line"><a id="l00233" name="l00233"></a><span class="lineno">  233</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00234" name="l00234"></a><span class="lineno">  234</span><span class="keywordtype">void</span> logDebug(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00235" name="l00235"></a><span class="lineno">  235</span>    detail::logFormat(LogLevel::debug, fmt, std::forward&lt;Args&gt;(args)...);</div>
+<div class="line"><a id="l00236" name="l00236"></a><span class="lineno">  236</span>}<span class="comment"></span></div>
+<div class="line"><a id="l00237" name="l00237"></a><span class="lineno">  237</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::info`.</span></div>
+<div class="line"><a id="l00238" name="l00238"></a><span class="lineno">  238</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00239" name="l00239"></a><span class="lineno">  239</span><span class="keywordtype">void</span> logInfo(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00240" name="l00240"></a><span class="lineno">  240</span>    detail::logFormat(LogLevel::info, fmt, std::forward&lt;Args&gt;(args)...);</div>
+<div class="line"><a id="l00241" name="l00241"></a><span class="lineno">  241</span>}<span class="comment"></span></div>
+<div class="line"><a id="l00242" name="l00242"></a><span class="lineno">  242</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::warn`.</span></div>
+<div class="line"><a id="l00243" name="l00243"></a><span class="lineno">  243</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00244" name="l00244"></a><span class="lineno">  244</span><span class="keywordtype">void</span> logWarn(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00245" name="l00245"></a><span class="lineno">  245</span>    detail::logFormat(LogLevel::warn, fmt, std::forward&lt;Args&gt;(args)...);</div>
+<div class="line"><a id="l00246" name="l00246"></a><span class="lineno">  246</span>}<span class="comment"></span></div>
+<div class="line"><a id="l00247" name="l00247"></a><span class="lineno">  247</span><span class="comment">/// @brief Logs a formatted message at `LogLevel::error`.</span></div>
+<div class="line"><a id="l00248" name="l00248"></a><span class="lineno">  248</span><span class="keyword">template</span> &lt;<span class="keyword">typename</span>... Args&gt;</div>
+<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span><span class="keywordtype">void</span> logError(std::format_string&lt;Args...&gt; fmt, Args&amp;&amp;... args) <span class="keyword">noexcept</span> {</div>
+<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span>    detail::logFormat(LogLevel::error, fmt, std::forward&lt;Args&gt;(args)...);</div>
+<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span>}</div>
+<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span> </div>
+<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">// ── Scoped override (test fixture) ────────────────────────────────────────────</span></div>
+<div class="line"><a id="l00254" name="l00254"></a><span class="lineno">  254</span><span class="comment"></span> </div>
+<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span><span class="comment">/// @brief RAII helper that swaps the global logger and level for the lifetime</span></div>
+<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span><span class="comment">///        of the object, and restores them in the destructor.</span></div>
+<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span><span class="comment">///</span></div>
+<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span><span class="comment">/// Designed for tests that want to capture log output without leaking the</span></div>
+<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span><span class="comment">/// custom sink into other tests. Thread-safe construction and destruction —</span></div>
+<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span><span class="comment">/// the global mutex is acquired briefly during each.</span></div>
+<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span><span class="comment">///</span></div>
+<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span><span class="comment">/// @code</span></div>
+<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span><span class="comment">/// {</span></div>
+<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span><span class="comment">///     std::vector&lt;std::string&gt; captured;</span></div>
+<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span><span class="comment">///     morph::log::ScopedLoggerOverride guard{</span></div>
+<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="comment">///         [&amp;](morph::log::LogLevel, std::string_view msg) { captured.emplace_back(msg); },</span></div>
+<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">///         morph::log::LogLevel::debug,</span></div>
+<div class="line"><a id="l00268" name="l00268"></a><span class="lineno">  268</span><span class="comment">///     };</span></div>
+<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span><span class="comment">///     // ... run code that logs ...</span></div>
+<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span><span class="comment">/// }  // previous sink + level restored here</span></div>
+<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span><span class="comment">/// @endcode</span></div>
+<div class="foldopen" id="foldopen00272" data-start="{" data-end="};">
+<div class="line"><a id="l00272" name="l00272"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">  272</a></span><span class="keyword">class </span><a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a> {</div>
+<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span><span class="keyword">public</span>:<span class="comment"></span></div>
+<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span><span class="comment">    /// @brief Snapshots the current sink + level so they can be restored.</span></div>
+<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span><span class="comment">    /// Use this when test code will install its own sink mid-test via</span></div>
+<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span><span class="comment">    /// `setLogger()` / `setLogLevel()` and just wants automatic restoration.</span></div>
+<div class="foldopen" id="foldopen00278" data-start="{" data-end="}">
+<div class="line"><a id="l00278" name="l00278"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">  278</a></span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>() {</div>
+<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span>        <span class="comment">// NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — these must be</span></div>
+<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>        <span class="comment">// read while holding the lock; a member-initializer list would read the</span></div>
+<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>        <span class="comment">// global state before the mutex is acquired (a data race).</span></div>
+<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span>        _savedSink = detail::logState().sink;</div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>        _savedLevel = detail::logState().minLevel;</div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span>        <span class="comment">// NOLINTEND(cppcoreguidelines-prefer-member-initializer)</span></div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span>    }</div>
 </div>
-<div class="line"><a id="l00249" name="l00249"></a><span class="lineno">  249</span><span class="comment"></span> </div>
-<div class="line"><a id="l00250" name="l00250"></a><span class="lineno">  250</span><span class="comment">    /// @brief Installs @p sink and @p level; saves whatever was there before.</span></div>
-<div class="line"><a id="l00251" name="l00251"></a><span class="lineno">  251</span><span class="comment">    ///</span></div>
-<div class="line"><a id="l00252" name="l00252"></a><span class="lineno">  252</span><span class="comment">    /// @param sink  New logger sink. Pass a no-op lambda to suppress output entirely.</span></div>
-<div class="line"><a id="l00253" name="l00253"></a><span class="lineno">  253</span><span class="comment">    /// @param level New minimum level. Defaults to `debug` so every message reaches @p sink.</span></div>
-<div class="foldopen" id="foldopen00254" data-start="{" data-end="}">
-<div class="line"><a id="l00254" name="l00254"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">  254</a></span>    <span class="keyword">explicit</span> <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">ScopedLoggerOverride</a>(std::function&lt;<span class="keywordtype">void</span>(LogLevel, std::string_view)&gt; sink,</div>
-<div class="line"><a id="l00255" name="l00255"></a><span class="lineno">  255</span>                                  LogLevel level = LogLevel::debug) {</div>
-<div class="line"><a id="l00256" name="l00256"></a><span class="lineno">  256</span>        <span class="comment">// NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — snapshot and</span></div>
-<div class="line"><a id="l00257" name="l00257"></a><span class="lineno">  257</span>        <span class="comment">// install happen under one lock; a member-initializer list would read the</span></div>
-<div class="line"><a id="l00258" name="l00258"></a><span class="lineno">  258</span>        <span class="comment">// previous state outside the mutex, racing a concurrent setLogger.</span></div>
-<div class="line"><a id="l00259" name="l00259"></a><span class="lineno">  259</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
-<div class="line"><a id="l00260" name="l00260"></a><span class="lineno">  260</span>        _savedSink = std::move(detail::logState().sink);</div>
-<div class="line"><a id="l00261" name="l00261"></a><span class="lineno">  261</span>        _savedLevel = detail::logState().minLevel;</div>
-<div class="line"><a id="l00262" name="l00262"></a><span class="lineno">  262</span>        detail::logState().sink = std::move(sink);</div>
-<div class="line"><a id="l00263" name="l00263"></a><span class="lineno">  263</span>        detail::logState().minLevel = level;</div>
-<div class="line"><a id="l00264" name="l00264"></a><span class="lineno">  264</span>        <span class="comment">// NOLINTEND(cppcoreguidelines-prefer-member-initializer)</span></div>
-<div class="line"><a id="l00265" name="l00265"></a><span class="lineno">  265</span>    }</div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment"></span> </div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">    /// @brief Installs @p sink and @p level; saves whatever was there before.</span></div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">    ///</span></div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="comment">    /// @param sink  New logger sink. Pass a no-op lambda to suppress output entirely.</span></div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span><span class="comment">    /// @param level New minimum level. Defaults to `debug` so every message reaches @p sink.</span></div>
+<div class="foldopen" id="foldopen00292" data-start="{" data-end="}">
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">  292</a></span>    <span class="keyword">explicit</span> <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">ScopedLoggerOverride</a>(std::function&lt;<span class="keywordtype">void</span>(LogLevel, std::string_view)&gt; sink,</div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span>                                  LogLevel level = LogLevel::debug) {</div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span>        <span class="comment">// NOLINTBEGIN(cppcoreguidelines-prefer-member-initializer) — snapshot and</span></div>
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span>        <span class="comment">// install happen under one lock; a member-initializer list would read the</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span>        <span class="comment">// previous state outside the mutex, racing a concurrent setLogger.</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span>        _savedSink = std::move(detail::logState().sink);</div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span>        _savedLevel = detail::logState().minLevel;</div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span>        detail::logState().sink = std::move(sink);</div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span>        detail::logState().minLevel = level;</div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span>        <span class="comment">// NOLINTEND(cppcoreguidelines-prefer-member-initializer)</span></div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span>    }</div>
 </div>
-<div class="line"><a id="l00266" name="l00266"></a><span class="lineno">  266</span><span class="comment"></span> </div>
-<div class="line"><a id="l00267" name="l00267"></a><span class="lineno">  267</span><span class="comment">    /// @brief Restores the saved sink and level.</span></div>
-<div class="foldopen" id="foldopen00268" data-start="{" data-end="}">
-<div class="line"><a id="l00268" name="l00268"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">  268</a></span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">~ScopedLoggerOverride</a>() {</div>
-<div class="line"><a id="l00269" name="l00269"></a><span class="lineno">  269</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
-<div class="line"><a id="l00270" name="l00270"></a><span class="lineno">  270</span>        detail::logState().sink = std::move(_savedSink);</div>
-<div class="line"><a id="l00271" name="l00271"></a><span class="lineno">  271</span>        detail::logState().minLevel = _savedLevel;</div>
-<div class="line"><a id="l00272" name="l00272"></a><span class="lineno">  272</span>    }</div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span><span class="comment"></span> </div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span><span class="comment">    /// @brief Restores the saved sink and level.</span></div>
+<div class="foldopen" id="foldopen00306" data-start="{" data-end="}">
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno"><a class="line" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">  306</a></span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">~ScopedLoggerOverride</a>() {</div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span>        std::scoped_lock <span class="keyword">const</span> lock{detail::logState().mtx};</div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span>        detail::logState().sink = std::move(_savedSink);</div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span>        detail::logState().minLevel = _savedLevel;</div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span>    }</div>
 </div>
-<div class="line"><a id="l00273" name="l00273"></a><span class="lineno">  273</span> </div>
-<div class="line"><a id="l00274" name="l00274"></a><span class="lineno">  274</span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00275" name="l00275"></a><span class="lineno">  275</span>    <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00276" name="l00276"></a><span class="lineno">  276</span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>(<a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00277" name="l00277"></a><span class="lineno">  277</span>    <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp; operator=(<a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
-<div class="line"><a id="l00278" name="l00278"></a><span class="lineno">  278</span> </div>
-<div class="line"><a id="l00279" name="l00279"></a><span class="lineno">  279</span><span class="keyword">private</span>:</div>
-<div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span>    std::function&lt;void(LogLevel, std::string_view)&gt; _savedSink;</div>
-<div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span>    LogLevel _savedLevel{LogLevel::debug};</div>
-<div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span>};</div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span> </div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>(<span class="keyword">const</span> <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span>    <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp; operator=(<span class="keyword">const</span> <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span>    <a class="code hl_function" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">ScopedLoggerOverride</a>(<a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span>    <a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp; operator=(<a class="code hl_class" href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">ScopedLoggerOverride</a>&amp;&amp;) = <span class="keyword">delete</span>;</div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span> </div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="keyword">private</span>:</div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span>    std::function&lt;void(LogLevel, std::string_view)&gt; _savedSink;</div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span>    LogLevel _savedLevel{LogLevel::debug};</div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span>};</div>
 </div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span> </div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span>}  <span class="comment">// namespace morph::log</span></div>
-<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">morph::log::ScopedLoggerOverride</a></div><div class="ttdoc">RAII helper that swaps the global logger and level for the lifetime of the object,...</div><div class="ttdef"><b>Definition</b> <a href="#l00234">logger.hpp:234</a></div></div>
-<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_a2251227a51aefcd83d06158e16228a2d"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">morph::log::ScopedLoggerOverride::ScopedLoggerOverride</a></div><div class="ttdeci">ScopedLoggerOverride(std::function&lt; void(LogLevel, std::string_view)&gt; sink, LogLevel level=LogLevel::debug)</div><div class="ttdoc">Installs sink and level; saves whatever was there before.</div><div class="ttdef"><b>Definition</b> <a href="#l00254">logger.hpp:254</a></div></div>
-<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_aaf6dffd81b17b5696527dd4ee7497ddf"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">morph::log::ScopedLoggerOverride::~ScopedLoggerOverride</a></div><div class="ttdeci">~ScopedLoggerOverride()</div><div class="ttdoc">Restores the saved sink and level.</div><div class="ttdef"><b>Definition</b> <a href="#l00268">logger.hpp:268</a></div></div>
-<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_ac263043b44405ccee942013e8d244a81"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">morph::log::ScopedLoggerOverride::ScopedLoggerOverride</a></div><div class="ttdeci">ScopedLoggerOverride()</div><div class="ttdoc">Snapshots the current sink + level so they can be restored.</div><div class="ttdef"><b>Definition</b> <a href="#l00240">logger.hpp:240</a></div></div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span> </div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span>}  <span class="comment">// namespace morph::log</span></div>
+<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html">morph::log::ScopedLoggerOverride</a></div><div class="ttdoc">RAII helper that swaps the global logger and level for the lifetime of the object,...</div><div class="ttdef"><b>Definition</b> <a href="#l00272">logger.hpp:272</a></div></div>
+<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_a2251227a51aefcd83d06158e16228a2d"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#a2251227a51aefcd83d06158e16228a2d">morph::log::ScopedLoggerOverride::ScopedLoggerOverride</a></div><div class="ttdeci">ScopedLoggerOverride(std::function&lt; void(LogLevel, std::string_view)&gt; sink, LogLevel level=LogLevel::debug)</div><div class="ttdoc">Installs sink and level; saves whatever was there before.</div><div class="ttdef"><b>Definition</b> <a href="#l00292">logger.hpp:292</a></div></div>
+<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_aaf6dffd81b17b5696527dd4ee7497ddf"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#aaf6dffd81b17b5696527dd4ee7497ddf">morph::log::ScopedLoggerOverride::~ScopedLoggerOverride</a></div><div class="ttdeci">~ScopedLoggerOverride()</div><div class="ttdoc">Restores the saved sink and level.</div><div class="ttdef"><b>Definition</b> <a href="#l00306">logger.hpp:306</a></div></div>
+<div class="ttc" id="aclassmorph_1_1log_1_1ScopedLoggerOverride_html_ac263043b44405ccee942013e8d244a81"><div class="ttname"><a href="../../d2/da9/classmorph_1_1log_1_1ScopedLoggerOverride.html#ac263043b44405ccee942013e8d244a81">morph::log::ScopedLoggerOverride::ScopedLoggerOverride</a></div><div class="ttdeci">ScopedLoggerOverride()</div><div class="ttdoc">Snapshots the current sink + level so they can be restored.</div><div class="ttdef"><b>Definition</b> <a href="#l00278">logger.hpp:278</a></div></div>
 </div><!-- fragment --></div><!-- contents -->
 </div><!-- doc-content -->
 </div><!-- container -->
