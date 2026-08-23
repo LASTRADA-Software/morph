@@ -83,14 +83,19 @@ Build order:
    render-v1/validate-v2 skew test (review D4) is mandatory and needs no
    socket.
 5. Conditional form logic: fields required/visible depending on other
-   fields (e.g. dilution factor only when diluted). The boundary is now
-   known (round 5): `requiredWhen`/`visibleWhen`/`readonlyWhen` with
-   single-node conditions exist and are enforced client- and server-side;
-   there are **no `and`/`or`/`not` combinators** (closed vocabulary), a
-   hidden field's draft value still travels (decide clear-on-hide), and
-   comparison rules are vacuously true on unengaged operands while `equals`
-   is false — test the parity suite on *served* schema data including a
-   fail-closed unknown rule kind (review D8).
+   fields (e.g. dilution factor only when diluted).
+   `requiredWhen`/`visibleWhen`/`readonlyWhen` with single-node conditions
+   exist and are enforced client- and server-side. **Correction (rung 6,
+   verified against the shipped headers):** round 5's "there are no
+   `and`/`or`/`not` combinators" is **out of date** — `andOf`/`orOf`/`notOf`
+   landed in commit 332f82c ("forms+qml: and/or/not rule conditions", #78),
+   are documented in `docs/spec/forms/forms.md` ("Compound conditions"), and
+   are usable both nested in a `when` clause and directly as a top-level
+   rule. What remains true: the vocabulary is still closed (no application
+   lambdas), a hidden field's draft value still travels (decide
+   clear-on-hide), and comparison rules are vacuously true on unengaged
+   operands while `equals` is false — test the parity suite on *served*
+   schema data including a fail-closed unknown rule kind (review D8).
 6. Verification + audit: four-eyes verify step gated by `IAuthorizer` role;
    the full audit trail rendered from the journal (SENAITE's immutable
    snapshot requirement).
@@ -172,3 +177,147 @@ transitions; journal as regulatory audit.
   in is reconstructible from the journal alone — **under the payload
   evolution scheme this rung defines**, verified by replaying a journal
   recorded before a schema migration.
+
+## Resolved design decisions
+
+Recorded as they are taken, per the [`LADDER.md`](../LADDER.md) discipline
+rule. §1–§3 are built; §4–§7 are not yet.
+
+### 1. Analysis identity and analysis version are separate tables (§1)
+
+`lims_analyses` holds the identity; `lims_analysis_versions` holds
+everything a revision can change (unit, precision, spec range, LOD/UDL).
+Version rows are **append-only**: `ReviseAnalysis` inserts N+1 and never
+updates N. A result names a *version*, never an analysis. This is what makes
+"an old result stays bound to the definition it was captured under" a
+property of the data rather than a convention the code has to keep
+remembering.
+
+### 2. `UnitTraits::relations` spells out ng/L → mg/L directly (§1)
+
+`Quantity`'s `convert` composes a path through the relation graph (BFS,
+`detail::conversionRatio`), but `unitAlternatives()` — the source of the
+schema's `x-unitAlternatives` — reports **direct neighbours only**. Leaving
+the ng/L → mg/L edge to compose out of ng/L → µg/L → mg/L would keep the C++
+conversion working while the generated form silently stopped offering ng/L
+as an entry unit. The redundant-looking edge is load-bearing, and
+`test_result_entry.cpp` guards it.
+
+### 3. Every lifecycle edge is its own action type (§2)
+
+Not a single `TransitionSample{target}`. A journal entry that cannot name
+the operation is not an audit record. The guard itself is a free
+`constexpr` function, `isLegalTransition(from, to)`, so the whole 6×6 matrix
+is exhaustively testable with no database in the picture.
+
+Self-edges are **illegal**: absorbing a repeated `ReceiveSample` as a no-op
+would journal a transition that did not happen. `Published` and `Rejected`
+are terminal. `ToBeVerified` goes forward to `Published` or back to
+`InProgress` — a worked sample has results, and rejecting it outright would
+discard them silently.
+
+### 4. Refused transitions are journaled; unauthenticated ones are not (§2)
+
+"Who tried to publish an unverified sample" is precisely the question a
+21 CFR Part 11-style trail exists to answer, so a rejection appends an entry
+with `Outcome::Failed` and the exception text. The single exception is
+`EmptyPrincipalError`, checked *before* the recording block: an attempt with
+no authenticated principal must produce no entry at all, because an audit
+entry naming nobody is the failure mode this README's own "Expected strain
+points" calls disqualifying. Both halves are tested and both fail if the
+ordering is swapped.
+
+### 5. The base version moves with **every** content change (§2, §3)
+
+`lims_samples.version` is bumped by each transition *and* by each captured
+result, inside the same transaction as the change itself. It is the value
+§7's offline updates will target; a reader that could observe a new state at
+an old version would have lost the property conflict detection depends on
+before that code is written.
+
+### 6. `ResultValue` is `exactlyOneOf(value, qualifier)` (§3)
+
+The forms palette has no sum types (closed by design). The encoding is two
+fields and one rule:
+
+```
+exactlyOneOf(&CaptureConcentration::value, &CaptureConcentration::qualifier)
+```
+
+A reading engages `value` and leaves `qualifier` empty; a non-reading does
+the reverse, with `qualifier` carrying `notMeasured` / `belowLOD` /
+`aboveUDL`. `exactlyOneOf` makes "0.5 mg/L, and also below the detection
+limit" unrepresentable rather than merely discouraged, and one declaration
+drives both sides: the renderer reads it from `x-rules`, the server re-runs
+the same compiled rule list because `validate()` calls `allRulesSatisfied`.
+
+The three "no number" meanings are three distinct strings in one `Choice`,
+not one "empty" flag, which is what makes the required distinguishability
+mechanical. `test_result_entry.cpp` proves it pairwise-distinct through the
+wire codec, through a `LogEntry` line round trip, and through an offline
+queue payload.
+
+Decoding a qualifier code is **fail-closed**: an unknown code is rejected,
+never resolved to `notMeasured`. Defaulting would turn "this client speaks a
+dialect we do not know" into the lab asserting it never looked — a
+fabricated claim rather than a parse failure.
+
+### 7. Over-precise readings are rejected, not retagged (§3, review D1)
+
+`x-decimalPlaces` "enforcement" retags a value's precision tag without
+changing the value (upstream issue #159), so a hand-built payload of
+`1.23456` against a 3-dp analysis would be *stored* as `1.23456` while every
+display of it read `1.235`. Storage disagreeing with display is
+disqualifying in a LIMS, so this rung takes the third option: reject the
+payload. The check is exact and overflow-free — `Rational` keeps
+`gcd(num, den) == 1`, so a value is representable at `d` decimals exactly
+when `den` divides `10^d`.
+
+### 8. The action's unit is compile-time, so the definition's unit is checked (§3)
+
+`CaptureConcentration::value` is a `Quantity<LimsUnit::mg_per_L, 3>`; the
+only way it can be wrong about its unit is if the analysis version it names
+is denominated in something else. The model checks
+`version.canonicalUnit == Concentration::unitMeta().id` and refuses
+otherwise — storing an amps reading in the mg/L column would be undetectable
+afterwards.
+
+### 9. Re-capturing one analysis version replaces its answer (§3)
+
+A result is the lab's current answer for one analysis on one sample; two
+live rows would make "the sample's results" ambiguous. The superseded value
+is not lost — the journal holds every capture, which is exactly where a
+21 CFR-style trail expects to find it.
+
+## Findings raised by this rung
+
+- **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
+  — `ModelKey` rejects strong id types.** `BRIDGE_MODEL_KEY` routes the key
+  through `keyToString`, whose concept admits only `std::integral` or
+  `std::string`, while `IMPLEMENTATION.md` rule 3 mandates a strong id
+  struct for entity identity. ledger and kanban already carry the identical
+  hand-written workaround; lims is the third, which is the rule-of-three
+  trigger.
+- **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
+  order §5 above, corrected in place). They landed in commit 332f82c (#78)
+  and are specified in `docs/spec/forms/forms.md`.
+- **Models cannot self-journal without the registry/dispatcher path.**
+  `IModelHolder::recordIfAttached` fires only for holder-constructed models,
+  so a plain-constructed one — the only kind a unit test has, and what
+  `IMPLEMENTATION.md` rule 5 requires the audit trail to be tested through —
+  records nothing. `ledger` (three models), `kanban`, and this rung's
+  catalogue each hand-rolled the same `attachActionLog`/`logAction` pair;
+  this rung shares one copy between its two models
+  (`include/lims/core/self_journal.hpp`) rather than adding a sixth. Not
+  filed as a separate finding pending a decision on whether "models do not
+  journal, dispatchers do" is the intended contract — but if it is, the
+  contract makes the "reconstructible from the journal alone" DoD untestable
+  at the model level, which is worth stating in
+  `docs/spec/journal/journal.md` either way.
+- **One compiled action type per unit family, not per analysis.**
+  `Quantity`'s unit and precision are template parameters, so a catalogue
+  whose analyses are *data* cannot produce a result-entry action per
+  analysis. `CaptureConcentration` covers every mg/L-denominated analysis
+  and a second family (amps, temperature, pH) needs a second action type.
+  This is the concrete shape of the README's "schemas become data" strain
+  point and it bounds §4 as well.

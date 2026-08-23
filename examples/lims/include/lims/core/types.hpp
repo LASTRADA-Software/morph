@@ -162,3 +162,31 @@ struct morph::units::UnitTraits<lims::LimsUnit> {
                                morph::math::DecimalPlaces{3}}},
     }};
 };
+
+namespace lims {
+
+/// @brief A concentration reading, in the canonical mg/L at 3 decimal places.
+///
+/// One compiled alias per *unit family*, not per analysis: `Quantity`'s unit
+/// and declared precision are template parameters, so a result-entry action
+/// can only ever name a unit the C++ type already knows. A catalogue whose
+/// analyses are data therefore cannot grow an action type per analysis — see
+/// the rung README's findings section. mg/L is the family's canonical unit;
+/// µg/L and ng/L reach it through `UnitTraits::relations`.
+using Concentration = ::morph::units::Quantity<LimsUnit::mg_per_L, 3>;
+
+/// @brief A concentration entered in µg/L, for conversion to `Concentration`.
+using ConcentrationMicro = ::morph::units::Quantity<LimsUnit::ug_per_L, 3>;
+
+/// @brief A concentration entered in ng/L. Its mg/L ratio is 10^-6 — the
+///        fine-ratio range the README flags as a strain point.
+using ConcentrationNano = ::morph::units::Quantity<LimsUnit::ng_per_L, 3>;
+
+/// @brief A current reading, in the canonical amps at 3 decimal places —
+///        the InvenTree "1500 mA against a template in A" flow.
+using Current = ::morph::units::Quantity<LimsUnit::A, 3>;
+
+/// @brief A current entered in milliamps, as instruments report it.
+using CurrentMilli = ::morph::units::Quantity<LimsUnit::mA, 1>;
+
+}  // namespace lims

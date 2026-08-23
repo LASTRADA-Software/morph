@@ -11,6 +11,7 @@
 #include <string>
 
 #include "lims/core/self_journal.hpp"
+#include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 
 /// @file
@@ -108,6 +109,38 @@ public:
     /// @throws EmptyPrincipalError if no principal is authenticated.
     SampleView execute(const RejectSample& action);
 
+    /// @brief Captures a concentration result against the attached sample.
+    ///
+    /// The submitted value is in the analysis version's canonical unit; the
+    /// entry-unit conversion is the renderer's job, driven by the
+    /// `x-unitAlternatives` this rung's `UnitTraits::relations` generate.
+    ///
+    /// Re-capturing the same analysis version replaces the previous result
+    /// rather than appending a second row: a result is the lab's current
+    /// answer for one analysis on one sample, and two live answers would make
+    /// "the sample's results" ambiguous. The superseded value is not lost —
+    /// the journal holds every capture.
+    /// @param action The version, and exactly one of value/qualifier.
+    /// @return The stored result.
+    /// @throws ValidationError if the encoding is violated, the qualifier code
+    ///         is unknown, the version's canonical unit is not mg/L, or the
+    ///         value carries more precision than the version declares.
+    /// @throws NotFound if the analysis version does not exist.
+    /// @throws IllegalTransition if the sample is not `InProgress`.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ResultView execute(const CaptureConcentration& action);
+
+    /// @brief Lists the attached sample's results, oldest first.
+    /// @param action Carries no fields of its own.
+    /// @return Every result captured against the sample.
+    /// @throws NotFound if this handler is not attached to a sample.
+    ListResultsResult execute(const ListResults& action);
+
+    /// @brief Serves the qualifier picklist a `QualifierChoice` renders from.
+    /// @param action Carries no fields of its own.
+    /// @return The three "no number" codes, with display text.
+    ListResultQualifiersResult execute(const ListResultQualifiers& action);
+
     /// @brief Attaches a durable action log, so every mutating `execute()`
     ///        records a `LogEntry`.
     ///
@@ -163,6 +196,10 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::SubmitForVerification, "SubmitFo
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ReturnForRework, "ReturnForRework")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::PublishSample, "PublishSample")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::RejectSample, "RejectSample")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::CaptureConcentration, "CaptureConcentration")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResults, "ListResults", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResultQualifiers",
+                       ::morph::model::Loggable::No)
 
 // Hand-written ModelKeyTraits/ActionKeyTraits rather than
 // BRIDGE_MODEL_KEY/BRIDGE_KEY_FROM: those macros deduce the model's
