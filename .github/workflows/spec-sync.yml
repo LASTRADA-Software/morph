@@ -30,14 +30,41 @@ jobs:
           fetch-depth: 0
 
       - name: Enforce header ↔ spec synchronization
-        env:
-          BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
 
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
-          base="$(git merge-base HEAD "origin/$BASE_REF")"
-          echo "Comparing against merge-base $base (origin/$BASE_REF)"
+          # The base commit, without asking git to compute one.
+          #
+          # `pull_request` checks out `refs/pull/N/merge` -- a merge commit whose
+          # first parent *is* the base branch commit the PR was merged against.
+          # So HEAD^1 is the base by construction, needs no network, and cannot
+          # go stale while the job runs.
+          #
+          # It replaces `git fetch --no-tags --depth=1 origin "$BASE_REF"`
+          # followed by `git merge-base HEAD "origin/$BASE_REF"`, which failed
+          # roughly one run in twenty for a reason unrelated to specs
+          # (morph#186). Two things were wrong with it. The re-fetch was a
+          # no-op: actions/checkout above already runs with `fetch-depth: 0`, so
+          # `origin/$BASE_REF` is present, complete and current, and the fetch
+          # updated no ref -- its only observable effect was writing
+          # `.git/shallow`, grafting history at the fetched tip. And once the
+          # repository was shallow, `git merge-base` could no longer see the
+          # merge base whenever master had advanced between the PR event and
+          # this job starting, so it exited 1 with no output at all and
+          # `set -e` aborted the step before a single path was examined.
+          #
+          # The gate then reported "Header ↔ spec sync: failure" on pull
+          # requests that touched no header whatsoever, which is worse than
+          # useless -- it teaches reviewers to merge past it. Note it was never
+          # re-runnable green either: `github.sha` stays pinned to the event
+          # while `origin/$BASE_REF` only moves further ahead.
+          if ! base="$(git rev-parse --verify HEAD^1 2>/dev/null)"; then
+              echo "::error::Could not determine the base commit (HEAD has no first parent)."
+              echo "This gate compares against HEAD^1, the base side of the pull_request merge ref."
+              echo "If this workflow is ever run outside a pull_request event, that assumption does not hold."
+              exit 1
+          fi
+          echo "Comparing against base $base (HEAD^1, the base side of the merge ref)"
 
           changed="$(git diff --name-only "$base" HEAD)"
           echo "── Changed files ──"
