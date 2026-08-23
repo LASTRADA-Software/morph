@@ -73,8 +73,27 @@ class LimsAuthorizer : public ::morph::session::SigningAuthorizer {
 public:
     /// @param secret Shared secret tokens are signed with.
     /// @param roles How to look up a principal's current roles.
+    ///
+    /// Names the MAC primitive explicitly rather than taking
+    /// `SigningAuthorizer`'s default. Under `-DMORPH_REQUIRE_VETTED_HMAC` that
+    /// default does not exist -- the option's whole purpose is to make an
+    /// application call site state its choice instead of inheriting one -- and
+    /// this class is exactly such a call site, so relying on the default made
+    /// the rung unbuildable under that option. Passing `hmacSha256` here
+    /// compiles either way and says which primitive the rung uses.
+    ///
+    /// A real deployment injects a vetted implementation through the overload
+    /// below; see `docs/spec/security.md`, "MAC-primitive recommended wiring".
     LimsAuthorizer(std::string secret, RoleLookup roles)
-        : ::morph::session::SigningAuthorizer{std::move(secret)}, _roles{std::move(roles)} {}
+        : ::morph::session::SigningAuthorizer{std::move(secret), ::morph::session::hmacSha256},
+          _roles{std::move(roles)} {}
+
+    /// @brief As above, with an injected MAC primitive.
+    /// @param secret Shared secret tokens are signed with.
+    /// @param mac    MAC primitive to sign and verify with.
+    /// @param roles  How to look up a principal's current roles.
+    LimsAuthorizer(std::string secret, ::morph::session::MacFunction mac, RoleLookup roles)
+        : ::morph::session::SigningAuthorizer{std::move(secret), std::move(mac)}, _roles{std::move(roles)} {}
 
     /// @brief Allows the call iff the token verifies **and** the caller holds
     ///        whatever role the action requires.
