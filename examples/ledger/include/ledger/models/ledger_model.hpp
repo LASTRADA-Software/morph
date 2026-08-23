@@ -65,6 +65,34 @@ namespace ledger {
 ///        explicitly.
 class LedgerModel {
   public:
+    /// @brief The ordinary shape: owns a one-thread `ThreadPoolExecutor` for
+    ///        `execute(SubmitReport)`'s worker, per `_reportExecutor`'s own
+    ///        default. This is the constructor the bridge registry uses --
+    ///        every non-test caller reaches the model this way.
+    LedgerModel() = default;
+
+    /// @brief Substitutes a caller-supplied executor for the default worker
+    ///        pool. `_reportExecutor`'s comment has always claimed a caller
+    ///        could do this "without this class changing shape"; until this
+    ///        constructor existed there was in fact no way to, which is why
+    ///        `test_ledger_reports.cpp` had to poll a real pool with sleeps
+    ///        (morph#161).
+    ///
+    ///        Nothing else changes: `execute(SubmitReport)` still posts the
+    ///        same task, capturing the same plain values. Passing
+    ///        `morph::ladder::testkit::StepExecutor` makes the worker run
+    ///        exactly when the test says `runOne()`, so "submitted, still
+    ///        Pending, the worker has not run yet" becomes an assertion
+    ///        rather than a sample.
+    /// @param reportExecutor Where `execute(SubmitReport)` posts the report
+    ///        aggregation.
+    /// @throws std::invalid_argument if @p reportExecutor is null -- checked
+    ///         here rather than left to a null dereference inside
+    ///         `execute(SubmitReport)`, which would fire on whichever call
+    ///         first submits a report, arbitrarily far from the construction
+    ///         that caused it.
+    explicit LedgerModel(std::shared_ptr<::morph::exec::IExecutor> reportExecutor);
+
     /// @brief Creates an account in the ledger named by `action.ledgerId`.
     ///        The model's first keyed action -- see the hand-written
     ///        `ModelKeyTraits`/`ActionKeyTraits` specialisations below this
@@ -309,7 +337,10 @@ class LedgerModel {
     ///        A `shared_ptr<IExecutor>` rather than a `ThreadPoolExecutor`
     ///        by value so a caller can substitute a different executor
     ///        (a `MainThreadExecutor`, a deterministic double) without this
-    ///        class changing shape.
+    ///        class changing shape -- reachable through the
+    ///        `explicit LedgerModel(std::shared_ptr<IExecutor>)` constructor
+    ///        above, which is what `test_ledger_reports.cpp` uses to drive
+    ///        the worker deterministically.
     std::shared_ptr<::morph::exec::IExecutor> _reportExecutor =
         std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
 };
