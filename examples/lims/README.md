@@ -543,6 +543,13 @@ framework owns, which is `docs/findings/011`.
   scope note does not list `x-rules` at all. A non-QML client — which is what
   this rung's field devices are — must reimplement the whole vocabulary,
   vacuity asymmetry and fail-closed rule included.
+- **[`docs/findings/012`](../../docs/findings/012-ladder-rung-label-lost-for-test-names-containing-semicolons.md)
+  — a ladder test whose name contains a semicolon never gets its
+  `ladder-<rung>` label.** `morph_add_rung`'s re-labelling step iterates
+  `IN LISTS`, which splits the name, so `set_tests_properties` applies to
+  nothing and nothing warns. Found here the hard way: `ctest -L ladder-lims`
+  reported 85 cases while the binary reported 87. Two lims cases were renamed;
+  12 pre-existing ones repo-wide are still affected.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

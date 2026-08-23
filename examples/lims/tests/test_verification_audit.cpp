@@ -85,7 +85,7 @@ struct ReadyToVerify {
 
 // ── Roles ──────────────────────────────────────────────────────────────────
 
-TEST_CASE("The first grant bootstraps a lab with no supervisor; later ones need one", "[lims][audit][roles]") {
+TEST_CASE("The first grant bootstraps a lab with no supervisor -- later ones need one", "[lims][audit][roles]") {
     DbFixture fixture;
     lims::SampleModel model;
 

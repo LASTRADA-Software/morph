@@ -146,7 +146,7 @@ TEST_CASE("Revising an analysis does not change the form its old version serves"
     CHECK(schemaV2.schemaJson != schemaBefore.schemaJson);
 }
 
-TEST_CASE("Only the version's *data* varies; the framework-enforced parts are identical",
+TEST_CASE("Only the version's own data varies -- the framework-enforced parts are identical",
           "[lims][schema][versioning][finding]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
