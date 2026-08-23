@@ -249,34 +249,21 @@ catch_discover_tests(ladder_common_tests
     # by one. That is what this call used to do: `ladder-0` became a property
     # *name* whose value was `TIMEOUT`, and neither the second label nor the
     # timeout was ever applied (`ctest --show-only=json-v1` shows it).
-    PROPERTIES LABELS ladder TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
+    #
+    # Hence one label, and the *rung* one. Nothing is lost by dropping the
+    # generic `ladder`: ctest's `-L` is a regex, not an exact match, so CI's
+    # `ctest -L ladder -LE stress` still matches `ladder-0` by prefix.
+    PROPERTIES LABELS ladder-0 TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
 )
 
-# The per-rung label (`ladder-0` here) has to be applied outside
-# catch_discover_tests for the reason above. Tests only exist once ctest reads
-# the generated file, so this runs as a second TEST_INCLUDE_FILES entry —
-# appended after catch_discover_tests' own, hence processed after it. Three
-# details are forced by ctest's script mode rather than chosen:
-#   * it iterates `<target>_TESTS`, the variable the discovery file leaves
-#     behind — the DIRECTORY `TESTS` property is a configure-time property and
-#     reads back empty here;
-#   * that list interleaves per-test JSON metadata with the names, and
-#     `if(TEST ...)` always answers false in script mode, so the JSON entries
-#     are filtered by pattern instead;
-#   * it uses `set_tests_properties`, not `set_property(TEST ... APPEND ...)`,
-#     which errors with "TEST names that do not exist" here. That call
-#     *replaces* LABELS, so it restates `ladder` alongside `ladder-0`. The
-#     `LABELS ladder` above stays as the floor: CI filters on it, and it keeps
-#     working even if this post-pass is ever dropped.
-file(GENERATE
-    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ladder_common_tests_rung_label.cmake"
-    CONTENT [[
-foreach(_ladder_test IN LISTS ladder_common_tests_TESTS)
-    if(NOT _ladder_test MATCHES "\"class-name\"")
-        set_tests_properties("${_ladder_test}" PROPERTIES LABELS "ladder;ladder-0")
-    endif()
-endforeach()
-]]
-)
-set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/ladder_common_tests_rung_label.cmake")
+# There is deliberately no post-discovery re-labelling pass here any more, and
+# a new one must not be added. The obvious shape — iterate `<target>_TESTS` and
+# set_tests_properties each name — cannot be made correct: Catch2's discovery
+# script appends the *plain* test name to that list
+# (`list(APPEND tests "${prefix}${plain_name}${suffix}")`), so a TEST_CASE
+# whose name contains a `;` is flattened into two fragments that name no test,
+# and set_tests_properties silently applies to nothing. The case then keeps
+# whatever label discovery gave it and never gains the one the pass exists to
+# add. That was morph#173, found because `ctest -L ladder-<rung>` counted fewer
+# tests than the binary reported. Applying the label at discovery, above,
+# removes the mechanism rather than hardening it.
