@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "report_presenter.hpp"
+#include "gui/error_text.hpp"
 
 #include <glaze/glaze.hpp>
 
@@ -14,11 +15,7 @@ ReportPresenter::ReportPresenter(::morph::bridge::Bridge& bridge, ::morph::exec:
 }
 
 void ReportPresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
+    emit failed(::morph::ladder::gui::errorText(err));
 }
 
 void ReportPresenter::submitMonthlyStatement(LedgerId ledgerId, int year, unsigned month,

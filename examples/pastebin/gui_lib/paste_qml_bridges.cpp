@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "paste_qml_bridges.hpp"
+#include "gui/error_text.hpp"
 
 #include "paste_schemas.hpp"
 
@@ -82,11 +83,7 @@ void FormsBridge::submitIfValid(const QString& actionType, const QString& bodyJs
             emit replyReceived(actionType, true, QString::fromStdString(resultJson));
         },
         [this, actionType](const std::exception_ptr& err) {
-            try {
-                std::rethrow_exception(err);
-            } catch (const std::exception& e) {
-                emit replyReceived(actionType, false, QString::fromUtf8(e.what()));
-            }
+            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
         });
 }
 

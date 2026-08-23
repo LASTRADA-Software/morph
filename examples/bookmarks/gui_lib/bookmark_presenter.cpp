@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmark_presenter.hpp"
+#include "gui/error_text.hpp"
 
 namespace bookmarks::gui {
 
@@ -10,11 +11,7 @@ BookmarkPresenter::BookmarkPresenter(::morph::bridge::Bridge& bridge, ::morph::e
 }
 
 void BookmarkPresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
+    emit failed(::morph::ladder::gui::errorText(err));
 }
 
 void BookmarkPresenter::create(CreateBookmark action) {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "shared_feed_presenter.hpp"
+#include "gui/error_text.hpp"
 
 namespace bookmarks::gui {
 
@@ -10,11 +11,7 @@ SharedFeedPresenter::SharedFeedPresenter(::morph::bridge::Bridge& bridge, ::morp
 }
 
 void SharedFeedPresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
+    emit failed(::morph::ladder::gui::errorText(err));
 }
 
 void SharedFeedPresenter::list(ListSharedFeed action) {
