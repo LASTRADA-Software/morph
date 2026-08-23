@@ -313,19 +313,36 @@ version row.
 compiled result-entry action, rather than serving the mg/L form for an amps
 analysis.
 
-### 11. Offline replay is the model's job; the write path could not be (§7)
+### 11. Replay is a dispatched action; neither half of the round trip uses a framework seam (§7)
 
-The read half uses the seam the framework provides:
-`SampleModel::onBackendChanged()` drains the attached `IOfflineQueue`,
-classifies each item, and applies or flags it — all inside the model, exactly
-as `docs/spec/offline/offline.md`'s "Model `onBackendChanged()` path"
-prescribes. Every drained item is `markDone()`d whatever the outcome, because
-that path has no retry budget.
+**Corrected after the backend-mode matrix was written.** The classification
+logic — base-version comparison, conflict flagging, at-most-once — lives in
+`SampleModel::execute(QueuedCapture)`, a registered action. The *supported*
+replay path is therefore a **re-dispatch**: a reconnecting client drains its
+own queue and sends each item as an ordinary action through its authenticated
+`Bridge`. `test_backend_matrix.cpp` runs that across all three deployment
+modes.
 
-The write half could not be: the framework supplies no enqueue-on-failure
-seam, and the machine that must make the decision (a disconnected field
-client) has no model on it at all. `include/lims/offline/field_outbox.hpp` is
-the app-layer answer, and `docs/findings/008` is the finding.
+`SampleModel::onBackendChanged()` is also implemented, and it is what
+`docs/spec/offline/offline.md` names as the seam for exactly this. It cannot
+be the primary path here: `switchBackend` *posts* the call onto the model's
+own strand, where `session::current()` is null, so every queued item is
+refused for want of a principal. A lab reading replayed with no identified
+author is what this README calls disqualifying, so failing closed is right —
+but it does mean the framework's own replay seam cannot carry an
+authenticated replay. That is `docs/findings/014`, and it was found only by
+driving replay through `switchBackend` instead of calling the hook directly;
+the §7 suite's own helper calls it from a thread that has a session
+installed, which the framework never does.
+
+The write half could not use a framework seam either: there is no
+enqueue-on-failure hook, and the machine that must make the decision (a
+disconnected field client) has no model on it at all.
+`include/lims/offline/field_outbox.hpp` is the app-layer answer, and
+`docs/findings/008` is the finding.
+
+So neither end of the offline round trip goes through a framework seam. That
+is the honest summary of §7's framework story.
 
 ### 12. A conflict is a returned outcome, not a thrown error (§7)
 
@@ -631,6 +648,13 @@ is present.
   prints the *fraction* (`"12/5"`), not the decimal. A table that places the
   number and the unit separately has to take the suffix back off a string that
   just had it put on.
+- **[`docs/findings/014`](../../docs/findings/014-onbackendchanged-replay-has-no-session.md)
+  — `Model::onBackendChanged()` runs with no session.** The offline spec names
+  it as *the* seam for rich replay outcomes, but `switchBackend` posts it onto
+  the model's strand where `session::current()` is null, so a replay that must
+  know who is replaying cannot use it. Found by driving replay through
+  `switchBackend` rather than calling the hook directly — the §7 suite's own
+  helper had been supplying a session the framework never does.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

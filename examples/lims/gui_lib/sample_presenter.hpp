@@ -39,21 +39,20 @@ namespace lims::gui {
 /// rung's shared-instance design exists for.
 ///
 /// But an `AllowShared` handler is **not bound until it attaches to a key**,
-/// and `RegisterClient`/`RegisterSample` carry no key — dispatching either on
-/// it fails with "handler not bound" (confirmed empirically here before this
-/// class settled on two handlers, and the same conclusion
-/// `polls::gui::PollPresenter` reached for `CreatePoll`). So the two
-/// key-less actions run on a plain `NoSharing` handler, which registers a
-/// fresh instance on construction and is bound immediately.
+/// and `RegisterClient` carries no key at all — dispatching it there fails
+/// with "handler not bound" (confirmed empirically here, and the same
+/// conclusion `polls::gui::PollPresenter` reached for `CreatePoll`). So that
+/// one action runs on a plain `NoSharing` handler, which registers a fresh
+/// instance on construction and is bound immediately.
 ///
-/// `registerSample` therefore does two dispatches, not one: it creates the
-/// sample on the plain handler and then attaches the shared handler to the
-/// id that came back. That chaining is wiring rather than a decision — the
-/// model's own `execute(RegisterSample)` attaches *its* instance to the new
-/// sample, and without the second dispatch this presenter's shared handler
-/// would still be pointing at nothing while the view believed a sample was
-/// open. `busy()` never dips to false between the two: the second `track()`
-/// starts inside the first's continuation, before its counter decrements.
+/// `RegisterSample` needs no such help even though it too arrives before any
+/// key exists: it is **result-keyed**, so `BridgeHandler::execute`'s
+/// `ResultKeyed` branch runs it on an anonymous instance and promotes that
+/// instance to the id the result names, before the completion resolves. An
+/// earlier draft of this class dispatched it on the plain handler and then
+/// re-attached the shared one by hand — a reimplementation of that branch,
+/// removed once `test_backend_matrix.cpp` proved the framework's own path
+/// works in all three deployment modes.
 class SamplePresenter : public ::morph::ladder::gui::Presenter {
     Q_OBJECT
   public:

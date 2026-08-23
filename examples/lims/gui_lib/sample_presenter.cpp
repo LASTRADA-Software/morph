@@ -75,14 +75,15 @@ void SamplePresenter::registerClient(const QString& name) {
 }
 
 void SamplePresenter::registerSample(ClientId clientId, const QString& reference) {
-    // Create on the plain handler, then attach the shared one to the id that
-    // came back — see the class doc comment for why this is two dispatches.
-    // Only the attach's own result is announced, so the view sees one
-    // `sampleChanged` describing a sample that is genuinely attached.
-    track<SampleView>(
-        _creator.execute(RegisterSample{.clientId = clientId, .reference = reference.toStdString()}),
-        [this](SampleView created) { openSample(created.id); },
-        [this](const std::exception_ptr& err) { reportError(err); });
+    // On the *shared* handler, and one dispatch, not two: `RegisterSample` is
+    // result-keyed, so the framework runs it on an anonymous instance and
+    // promotes that instance to the id the result names before the completion
+    // resolves (`BridgeHandler::execute`'s `ResultKeyed` branch). The handler
+    // is therefore attached to the new sample by the time this returns, with
+    // no chaining of our own — an earlier draft here dispatched
+    // `RegisterSample` on the plain handler and then re-attached the shared
+    // one by hand, which was a reimplementation of exactly that branch.
+    dispatchTransition(RegisterSample{.clientId = clientId, .reference = reference.toStdString()});
 }
 
 void SamplePresenter::openSample(SampleId sampleId) {

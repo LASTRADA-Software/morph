@@ -86,6 +86,17 @@ struct Lab {
 /// model on the new backend and fires `onBackendChanged()` on *that* instance
 /// (docs/spec/core/bridge.md), so a replay that only worked on the instance
 /// that happened to be attached already would be testing the wrong thing.
+///
+/// @warning This calls `onBackendChanged()` **directly**, from a thread that
+/// has a session installed. `switchBackend` does not: it posts the call onto
+/// the model's own strand, where `session::current()` is null, and every item
+/// is then refused for want of a principal. That is pinned separately, in
+/// `test_backend_matrix.cpp`'s "onBackendChanged fires on switchBackend, and
+/// fails closed with no session", and filed as `docs/findings/014`. What this
+/// helper exercises is the *classification* logic — base-version comparison,
+/// conflict flagging, at-most-once — which is the same code the supported
+/// re-dispatch path runs, and which `test_backend_matrix.cpp` also drives
+/// through a real `Bridge` in all three deployment modes.
 /// @param queue The queue to drain.
 /// @param principal The reconnecting operator.
 /// @param log Optional journal to attach before replaying.
