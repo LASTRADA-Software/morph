@@ -1,0 +1,60 @@
+# bookmarks (rung 2) — a sign-in that fails, is retried, and then authorizes
+# work; and the same work refused when the session is wrong.
+#
+#   BOOKMARKS_TOKEN_SECRET=... BOOKMARKS_PORT=0 ladder_bookmarks_server
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/bookmarks_login.scenario
+#
+# A failed sign-in followed by a retry is close to the most common real
+# interaction there is, and examples/TESTING.md notes it appears in no
+# in-process rig, because rigs arrive already authenticated.
+
+client auth model=AuthModel
+
+# Rejected: not a valid principal. Nothing is minted.
+do Login username="not a valid principal!"
+expect err message == "action failed validation: AuthModel/Login"
+
+# The retry succeeds and hands back a signed bearer token.
+do Login username=alice
+expect ok capture token=$.token capture who=$.principal
+expect ok field principal == alice
+
+# ── The token is what authorizes work ───────────────────────────────────────
+client store model=BookmarkModel
+
+# Same call, no session: refused by the server's authorizer.
+do CreateBookmark url="https://example.com/one" title="One"
+expect err message == "unauthorized"
+
+# A token that was not minted by this server does not become one by being
+# shaped like it.
+session principal=alice token="eyJwcmluY2lwYWwiOiJhbGljZSJ9.not-a-real-signature"
+do CreateBookmark url="https://example.com/one" title="One"
+expect err message == "unauthorized"
+
+# The real one, from the retry above.
+session principal=$who token=$token
+do CreateBookmark url="https://example.com/one" title="One" tags=["reading"]
+expect ok capture id=$.id
+
+do GetBookmark id=$id
+expect ok field url == "https://example.com/one"
+expect ok field title == One
+expect ok field tags[0] == reading
+expect ok field visibility == Private
+
+# ── Another principal's token does not reach alice's bookmark ───────────────
+client mallory model=AuthModel
+do Login username=mallory
+expect ok capture mallorytoken=$.token
+
+use store
+session principal=mallory token=$mallorytoken
+do GetBookmark id=$id
+expect err message == "bookmark belongs to a different principal"
+
+# And alice still has it.
+session principal=$who token=$token
+do GetBookmark id=$id
+expect ok field url == "https://example.com/one"

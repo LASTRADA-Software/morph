@@ -1,0 +1,70 @@
+# pastebin (rung 1) — create a paste, read it back, and the ways a read fails.
+#
+#   ladder_pastebin_server                 # note the port it prints
+#   scripts/scenario/morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/pastebin.scenario
+#
+# Re-runnable against the same database: nothing here depends on the database
+# being empty, and no assertion depends on wall-clock time.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="hello from a scenario file" syntax=plaintext
+expect ok capture id=$.id
+
+# The read is what proves the create actually landed — not the create's own ok.
+do GetPaste id=$id
+expect ok field id == $id
+expect ok field content == "hello from a scenario file"
+expect ok field syntax == plaintext
+expect ok field visibility == Public
+expect ok field editability == Immutable
+
+# GetPaste is a mutation: it counts the read. This is the first read.
+expect ok field readCount.num == 1
+
+# Two ways a paste read fails, each asserted on the server's own message.
+do GetPaste id=no-such-paste
+expect err message == "GetPaste: no such paste"
+
+do CreatePaste content="" syntax=""
+expect err message == "action failed validation: PasteModel/CreatePaste"
+
+# ── A second client, its own connection and its own model instance ──────────
+# Same durable state seen from a different socket: the deployment seam these
+# files exist to exercise, and not something an in-process test can show.
+client bob
+
+do GetPaste id=$id
+expect ok field content == "hello from a scenario file"
+expect ok field readCount.num == 2
+
+# ── A private paste is invisible to a listing ───────────────────────────────
+use alice
+do CreatePaste content="this one is private" syntax=plaintext visibility=Private
+expect ok capture secret=$.id
+
+use bob
+do ListPastes
+# Both halves matter: the second alone would also pass if ListPastes returned
+# nothing at all.
+expect ok field pastes ~ $id
+expect ok field pastes !~ $secret
+
+# ── Protocol-level hostility ────────────────────────────────────────────────
+# `send` builds the envelope by hand, so a client can say things morph's own
+# typed C++ client cannot express.
+send nonsense
+expect err message == "unknown envelope kind: nonsense"
+
+send hello protocolVersion=99
+expect err message == "protocol version unsupported"
+
+send execute modelId=1 modelType=PasteModel actionType=GetPaste body="{\"id\":\"anything\"}"
+expect err message == "model not found"
+
+use alice
+deregister
+expect ok
