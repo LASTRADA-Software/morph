@@ -54,7 +54,7 @@ prerequisites, the two most likely failure modes and their owning findings:
   aborts, that is a new, more severe finding (the plain path was supposed to
   already be WASM-safe per `[issue26]`'s native tests) — file it as the next
   available id in `docs/findings/` (017 as of this writing; check the
-  highest-numbered file currently present, per `CLAUDE.md`'s numbering rule)
+  highest-numbered file currently present)
   with a name like `NNN-plain-async-registration-aborts-wasm.md`,
   `severity: blocker`, and this rung's exit criteria (per
   `examples/FINDINGS.md`) are **not met** until it is at least triaged.

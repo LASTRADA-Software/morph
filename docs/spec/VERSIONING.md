@@ -16,7 +16,7 @@ wire's own versioning and deprecation-window discipline — the independent
 axis described below), `docs/spec/pinned_facts.toml` and
 [CONTRIBUTING.md](../../CONTRIBUTING.md#quality-gates) (the pinned-facts
 drift guard this policy's still-manual public-surface check could grow into
-once it gains a symbol roster — see "Known limitation" below), `CLAUDE.md`
+once it gains a symbol roster — see "Known limitation" below), `AGENTS.md`
 (the "specs are the authoritative contract" rule this policy's major/minor/
 patch classification relies on).
 
@@ -81,7 +81,7 @@ same:
   removing or renaming a public symbol, an incompatible signature change, or a
   behavior change that breaks a contract documented in `docs/spec/`. A change
   is classified against the stable surface **and** its documented
-  `docs/spec/` behavior together: per `CLAUDE.md`, the spec is the contract,
+  `docs/spec/` behavior together: per `AGENTS.md`, the spec is the contract,
   so a behavior change that contradicts a spec is a major even when the C++
   signature is unchanged.
 - **Minor (`x`.Y.0):** additive and source-compatible — a new public symbol, a
@@ -149,7 +149,7 @@ The C++ API version (this document) and the **wire protocol version**
   against `include/morph`, failing the build if any `[[deprecated("...")]]`
   message does not name both a target removal version and a replacement in
   the shape given above.
-- **Every public symbol is documented.** The existing Doxygen job (`CLAUDE.md`,
+- **Every public symbol is documented.** The existing Doxygen job (`AGENTS.md`,
   `.github/workflows/docs.yml`) already runs with `WARN_AS_ERROR =
   FAIL_ON_WARNINGS`, failing the build if any public symbol — including every
   symbol on the stable surface — lacks complete `@param`/`@tparam`/`@return`
