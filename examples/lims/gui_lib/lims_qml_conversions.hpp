@@ -74,16 +74,17 @@ template <typename Q>
 /// @brief A quantity's exact decimal text **without** its unit, or an empty
 ///        string when the quantity is empty.
 ///
-/// `morph::units::toString` is the only public renderer of a `Quantity`'s
-/// exact decimal, and it always appends the unit (`"2.4mg/L"`) — the
-/// decimal-only formatter behind it lives in `morph::units::detail`. The two
-/// are separate keys here so a view can place them independently — a column
-/// header, a right-aligned suffix, or nothing at all for a single-unit
-/// table — rather than being handed one pre-joined string. That split is
-/// exact rather than a guess: `toString` is
-/// literally `formatRationalDecimal(value) + display` (quantity.hpp), so
-/// chopping `display.size()` characters can only ever remove the unit. See
-/// morph#199.
+/// `morph::units::toDecimalString` renders the exact decimal with no unit
+/// suffix; `unitText<Q>()` renders the unit. The two are separate keys here so
+/// a view can place them independently — a column header, a right-aligned
+/// suffix, or nothing at all for a single-unit table — rather than being handed
+/// one pre-joined string.
+///
+/// The blank for an empty quantity is this layer's choice, not the value
+/// type's: `toDecimalString` reports an absent value as `"N/A"` — so that
+/// `toString == toDecimalString + display` holds for every value — and a QML
+/// view showing an unfilled measurement wants an empty cell, not the letters
+/// `N/A` baked into its text. See morph#199.
 /// @tparam Q The `Quantity` specialisation.
 /// @param quantity The value to render.
 /// @return Its shortest exact decimal at its own precision, or `""`.
@@ -92,8 +93,7 @@ template <typename Q>
     if (!quantity.hasValue()) {
         return QString{};
     }
-    auto text = QString::fromStdString(::morph::units::toString(quantity));
-    return text.chopped(unitText<Q>().size());
+    return QString::fromStdString(::morph::units::toDecimalString(quantity));
 }
 
 /// @brief One `SampleView` as the property bag both surfaces bind against.

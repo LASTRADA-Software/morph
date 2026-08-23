@@ -321,6 +321,16 @@ Free functions in `morph::math`, found by ADL:
 Implemented as a `std::formatter<Rational>` specialisation with a
 `delegateToDouble` flag set during `parse`.
 
+**Neither spec is the exact decimal.** The empty spec prints the fraction, and
+the non-empty spec leaves the exact domain — `std::format("{:.0f}", …)` on
+`9007199254740993/1` prints `9007199254740992`, since `toDouble()` cannot
+represent `2^53 + 1`. Code holding a `Quantity` that wants the exact decimal as
+text calls `morph::units::toDecimalString(quantity)` (see
+`quantity_type.md`, *How a value prints*), which is an integer long division and
+never forms a `double`. A bare `Rational` has no public decimal renderer of its
+own: `detail::formatRationalDecimal` lives in `morph::units::detail` and is
+excluded from the published reference.
+
 ## Wire and schema
 
 Over the morph JSON wire a `Rational` travels as the object

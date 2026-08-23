@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using morph::math::DecimalPlaces;
@@ -359,6 +360,77 @@ TEST_CASE("formatRationalDecimal - exact decimal rendering (no double path)", "[
 
     // Rounding can carry into a larger integer part.
     CHECK(formatRationalDecimal(Rational{Numerator{9999}, Denominator{10000}, DecimalPlaces{3}}) == "1");
+}
+
+TEST_CASE("toDecimalString - the exact decimal without the unit", "[quantity][format]") {
+    using morph::units::toDecimalString;
+    using morph::units::toString;
+
+    using Scalar = Quantity<qt::U::scalar>;  // empty display text
+
+    SECTION("engaged: the decimal alone, no unit suffix") {
+        // The same trimmed exact decimal the formatter prints, minus the unit.
+        CHECK(toDecimalString(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}}) == "5.2");
+        CHECK(toDecimalString(KilowattHour{Rational{Numerator{6}, Denominator{1}, DecimalPlaces{3}}}) == "6");
+        CHECK(toDecimalString(Euro{Rational{Numerator{136}, Denominator{100}, DecimalPlaces{2}}}) == "1.36");
+        CHECK(toDecimalString(Celsius{Rational{Numerator{-42}, Denominator{10}, DecimalPlaces{3}}}) == "-4.2");
+
+        // The unit is genuinely absent, not merely invisible at the end.
+        CHECK(toDecimalString(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}})
+                  .find("kW") == std::string::npos);
+    }
+
+    SECTION("empty renders \"N/A\", not an empty string") {
+        // The deliberate choice: "N/A" is what keeps the toString identity
+        // below total for the empty case too.
+        CHECK(toDecimalString(Kilowatt{}) == "N/A");
+        CHECK(toDecimalString(Yen{}) == "N/A");
+        CHECK(toDecimalString(Scalar{}) == "N/A");
+        CHECK_FALSE(toDecimalString(Kilowatt{}).empty());
+
+        // A view wanting a blank cell supplies that policy itself -- this is
+        // the whole of what `examples/lims`' `valueText<Q>` does.
+        Kilowatt const absent{};
+        CHECK((absent.hasValue() ? toDecimalString(absent) : std::string{}).empty());
+    }
+
+    SECTION("identity: toString == toDecimalString + unitMeta().display") {
+        auto const holds = [](const auto& quantity) {
+            using Q = std::remove_cvref_t<decltype(quantity)>;
+            CHECK(toString(quantity) == toDecimalString(quantity) + std::string{Q::unitMeta().display});
+            // ... and the formatter is that same text again (one print path).
+            CHECK(std::format("{}", quantity) ==
+                  toDecimalString(quantity) + std::string{Q::unitMeta().display});
+        };
+
+        holds(Kilowatt{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}});
+        holds(Kilowatt{});                                                        // empty, non-empty display
+        holds(Yen{Rational{Numerator{1200}, Denominator{1}, DecimalPlaces{0}}});  // multi-char display
+        holds(Yen{});
+        holds(Scalar{Rational{Numerator{3}, Denominator{10}, DecimalPlaces{1}}});  // empty display
+        holds(Scalar{});                                                           // empty + empty display
+
+        // The identity above is satisfied vacuously by any pair of renderers
+        // that agree, so pin the literal texts on both sides of it as well.
+        Kilowatt const power{Rational{Numerator{52}, Denominator{10}, DecimalPlaces{1}}};
+        CHECK(toDecimalString(power) == "5.2");
+        CHECK(toString(power) == "5.2kW");
+        CHECK(toDecimalString(Kilowatt{}) == "N/A");
+        CHECK(toString(Kilowatt{}) == "N/AkW");
+    }
+
+    SECTION("stays exact -- not either std::format-on-payload path") {
+        // 2^53 + 1: the classic value a double cannot represent.
+        Euro const big{Rational{Numerator{9007199254740993}, Denominator{1}, DecimalPlaces{2}}};
+        CHECK(toDecimalString(big) == "9007199254740993");
+        // Rational's own non-empty spec goes through toDouble() and loses it.
+        CHECK(std::format("{:.0f}", *big.value()) == "9007199254740992");
+
+        // ... and its empty spec prints the fraction, not a decimal.
+        Euro const fraction{Rational{Numerator{12}, Denominator{5}, DecimalPlaces{3}}};
+        CHECK(std::format("{}", *fraction.value()) == "12/5");
+        CHECK(toDecimalString(fraction) == "2.4");
+    }
 }
 
 TEST_CASE("Quantity::conversion - ratio, chaining, reverse", "[quantity]") {

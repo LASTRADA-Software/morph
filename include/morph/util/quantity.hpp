@@ -176,7 +176,10 @@ namespace detail {
     return text;
 }
 
-/// @brief Formats an optional payload as `equation()` / the formatter print it.
+/// @brief Formats an optional payload as `equation()` and the formatter print
+///        it. The shared implementation behind `units::toDecimalString` (and so
+///        behind `toString` and `std::formatter<Quantity>`), which is why the
+///        empty case is the `"N/A"` literal rather than an empty string.
 /// @param value The optional payload.
 /// @return The decimal string, or `"N/A"` when empty.
 [[nodiscard]] inline std::string formatOptionalDecimal(const std::optional<morph::math::Rational>& value) {
@@ -1030,6 +1033,41 @@ struct NamedQuantity : Quantity<U> {
     [[nodiscard]] static NamedQuantity fromDouble(double raw) { return NamedQuantity{Base::fromDouble(raw)}; }
 };
 
+/// @brief Renders @p quantity's exact decimal **alone**, with no unit suffix
+///        (`"5.2"`, `"6"`, `"N/A"`).
+///
+/// The numeric half of `toString`, and the only public way to obtain it. A view
+/// that places the number and the unit separately — a table with the unit in
+/// its column header, a right-aligned suffix, an editable field whose adjacent
+/// label carries the unit — asks for the two halves independently instead of
+/// concatenating them and then chopping the suffix back off. The unit half is
+/// `Quantity::unitMeta().display`.
+///
+/// This is the same exact-decimal path `std::format("{}", quantity)` takes: an
+/// integer long division of the canonical `Rational` at its **runtime**
+/// `DecimalPlaces`, trailing zeros trimmed. It is deliberately **not**
+/// `std::format("{}", *quantity.value())` (which prints a `num/den` fraction)
+/// nor `std::format("{:.Nf}", *quantity.value())` (which delegates to
+/// `std::formatter<double>` via `toDouble()` and so leaves the exact domain —
+/// `9007199254740993` renders as `…992` there and as itself here).
+///
+/// **An empty quantity renders as the fixed literal `"N/A"`, not as an empty
+/// string.** That keeps the identity `toString(q) == toDecimalString(q) +
+/// unitMeta().display` true for every value, engaged or not, so `toString` can
+/// be — and is — implemented in terms of this function rather than growing a
+/// second rendering path that can drift from it. Rendering an absent value as
+/// blank is a presentation policy and belongs to the layer that has a layout to
+/// decide it for; the value type only reports the fact that nothing is there.
+/// A caller that wants a blank writes `q.hasValue() ? toDecimalString(q) : ""`.
+/// @tparam U   Unit enumerator.
+/// @tparam Dec Declared decimals.
+/// @param quantity The value to render.
+/// @return The exact decimal text, or `"N/A"` when the quantity is empty.
+template <auto U, std::uint32_t Dec>
+[[nodiscard]] inline std::string toDecimalString(const Quantity<U, Dec>& quantity) {
+    return detail::formatOptionalDecimal(quantity.value());
+}
+
 /// @brief Renders @p quantity as value + unit (`5.2kW`, `N/A%`) — the same
 ///        text `std::format("{}", quantity)` produces via the `std::formatter`
 ///        specialization just below, exposed as a plain function so a caller
@@ -1047,6 +1085,11 @@ struct NamedQuantity : Quantity<U> {
 /// targets. `toString()` bypasses that check entirely: it calls the same
 /// underlying logic directly instead of through `std::format`'s trait
 /// machinery, so it works identically everywhere, WASM included.
+///
+/// Defined as `toDecimalString(quantity) + unitMeta().display` — the number and
+/// the unit are one concatenation with a single implementation of each half, so
+/// a caller that needs them apart calls `toDecimalString` rather than undoing
+/// the join.
 /// @tparam U   Unit enumerator.
 /// @tparam Dec Declared decimals.
 /// @param quantity The value to render.
@@ -1054,10 +1097,7 @@ struct NamedQuantity : Quantity<U> {
 template <auto U, std::uint32_t Dec>
 [[nodiscard]] inline std::string toString(const Quantity<U, Dec>& quantity) {
     constexpr auto display = UnitTraits<decltype(U)>::meta(U).display;
-    if (quantity.value()) {
-        return detail::formatRationalDecimal(*quantity.value()) + std::string{display};
-    }
-    return "N/A" + std::string{display};
+    return toDecimalString(quantity) + std::string{display};
 }
 
 }  // namespace morph::units

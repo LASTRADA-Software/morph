@@ -311,10 +311,19 @@ public:
         if (!action.validate()) {
             throw std::invalid_argument{"RecordMeasurement: sampleId, measuredAt and density are required"};
         }
-        auto summary = std::format("sample {} at {}: density {:.1f} {}", *action.sampleId, *action.measuredAt,
-                                   *action.density, Density::unitMeta().display);
+        // This line places the number and its unit separately (with a space
+        // between them, unlike `Quantity`'s own concatenated rendering), so the
+        // numeric half comes from `toDecimalString` rather than from `{:.1f}`
+        // on the dereferenced `Rational`: that spec delegates to
+        // `std::formatter<double>` through `toDouble()` and so leaves the exact
+        // domain the type exists to stay inside. The decimals shown are now the
+        // value's own runtime `DecimalPlaces`, trimmed, instead of a hard-coded
+        // one. See morph#199.
+        auto summary = std::format("sample {} at {}: density {} {}", *action.sampleId, *action.measuredAt,
+                                   morph::units::toDecimalString(action.density), Density::unitMeta().display);
         if (action.moisture.hasValue()) {
-            summary += std::format(", moisture {:.1f} %", *action.moisture);
+            summary += std::format(", moisture {} {}", morph::units::toDecimalString(action.moisture),
+                                   Percent::unitMeta().display);
         }
         if (action.note && !action.note->empty()) {
             summary += std::format(" ({})", *action.note);
