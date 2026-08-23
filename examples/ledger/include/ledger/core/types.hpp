@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <glaze/glaze.hpp>
 #include <optional>
+#include <string_view>
 
 namespace ledger {
 
@@ -43,6 +44,28 @@ enum class RuleTrigger : std::uint8_t { DescriptionContains };
 enum class RuleAction : std::uint8_t { SetCategory };
 enum class ReportKind : std::uint8_t { MonthlyStatement, BudgetReport };
 enum class ReportStatus : std::uint8_t { Pending, Done, Failed };
+
+/// @brief The service principal `ledger::app::App`'s report runner dispatches
+///        `RunReportJob` under, and the only principal
+///        `LedgerModel::execute(const RunReportJob&)` accepts.
+///
+///        Declared here, in the rung's shared core header, rather than in
+///        either place that uses it: the model must be able to check the name
+///        without including an `app/` header (models know nothing about the
+///        App layer), and the App must be able to name it without reaching
+///        into the model's implementation file. The reserved `system:` prefix
+///        mirrors `bookmarks::auth::kMetadataFetcherPrincipal` -- a namespace
+///        no human login occupies, so a user principal cannot collide with it
+///        by accident.
+///
+/// @warning This rung installs no authorizer, so nothing verifies a claimed
+///          principal. The gate on `RunReportJob` is therefore a *layering*
+///          check -- it keeps a user-issued action from silently completing a
+///          job the runner owns -- not an authorization boundary. It becomes
+///          one the moment this rung grows a signing authorizer, exactly as
+///          bookmarks' did, and not before. See
+///          `examples/ledger/include/ledger/app/app.hpp`.
+inline constexpr std::string_view kReportRunnerPrincipal = "system:report-runner";
 
 }  // namespace ledger
 

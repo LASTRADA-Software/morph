@@ -175,6 +175,22 @@ struct ReportJobRecord {
     Light::Field<std::optional<Light::SqlMaxDynamicAnsiString>, Light::SqlRealName{"result_json"}>
         resultJson;  // 5 -- nullable, unbounded (NVarchar(0) at the DDL layer); absent until the job completes
     Light::Field<std::int64_t, Light::SqlRealName{"created_at_ms"}> createdAtMs{0};  // 6
+    // `SubmitReport::params` verbatim, so the job row records what it was
+    // asked to compute and not merely that it was asked. Load-bearing since
+    // the aggregation moved out of SubmitReport's own call frame and into
+    // RunReportJob (morph#160): the runner that eventually settles this job
+    // may be in a different process from the one that accepted it, and has
+    // nothing but this row to reconstruct the request from.
+    //
+    // Nullable, unlike the other required columns, purely because it was
+    // added by ALTER TABLE to a table that may already hold rows (schema.cpp's
+    // 20260819000014) -- SQLite cannot add a NOT NULL column without a
+    // default. Every row this rung writes populates it, including with the
+    // empty-params "{}" an all-time report submits; std::nullopt means only
+    // "written before this column existed", which decodeMonthlyParams already
+    // handles as the all-time fallback.
+    Light::Field<std::optional<Light::SqlMaxDynamicAnsiString>, Light::SqlRealName{"params_json"}>
+        paramsJson;  // 7 -- nullable, unbounded
 };
 
 }  // namespace ledger::db

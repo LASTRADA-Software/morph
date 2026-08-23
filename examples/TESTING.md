@@ -273,8 +273,17 @@ has its own answer, and it is not a wait at all:
 A test that keeps a real `ThreadPoolExecutor` under an async job — because it
 is covering the production wiring, or the fact that the worker runs on a
 genuinely different thread with no session context — says so at the test case
-and pays the retry loop knowingly. `examples/ledger/tests/test_ledger_reports.cpp`
-keeps exactly one such case and converts the rest.
+and pays the retry loop knowingly.
+
+The better answer, where the design allows it, is to have no background
+worker under the test at all. `examples/ledger/tests/test_ledger_reports.cpp`
+takes that route: since morph#160 the report aggregation is an ordinary
+`RunReportJob` action rather than a task posted to an executor the model
+owns, so the file needs neither a retry loop nor a `StepExecutor` — "the
+report has been computed" is what the dispatch returning means, and "nothing
+has run it yet" is what a job row still `Pending` means. `StepExecutor`
+remains the answer for a job that genuinely is posted to an executor;
+`examples/common/testkit/test_step_executor.cpp` covers it directly.
 
 ## Multi-client stress harness
 

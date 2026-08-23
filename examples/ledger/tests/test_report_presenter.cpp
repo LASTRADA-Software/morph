@@ -5,10 +5,20 @@
 // test_report_job_poller.cpp; this file proves the whole path works against a
 // real model, and -- crucially -- that Task 17's local-month boundary is
 // still visible by the time a report body reaches QML.
+//
+// It is also the only test in this rung that runs a client and a
+// `ledger::app::App` together, which is what the shipped deployment actually
+// is. That became load-bearing rather than incidental when the report job
+// moved out of the model (morph#160): `SubmitReport` now only writes a
+// Pending row, so without an App ticking somewhere in the process the
+// client's poller would poll a job that nothing will ever settle. Everything
+// below is unchanged from when the model computed the report inside its own
+// `execute()` -- the client cannot tell the difference, which is the point.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
+#include <ledger/app/app.hpp>
 #include <ledger/db/ledger_entity.hpp>
 #include <ledger/models/ledger_model.hpp>
 #include <memory>
@@ -106,6 +116,12 @@ TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines
                          .amount = morph::math::Rational{Numerator{5000}, Denominator{1}, DecimalPlaces{2}}}}});
     }
 
+    // The runner, ticking fast enough that the client's own 2s poll interval
+    // is what dominates. Constructed before the bridge and torn down after
+    // it (see the end of this case): its dispatches complete against objects
+    // it owns, so it must not be destroyed with one outstanding.
+    ledger::app::App app{20ms};
+
     auto rig = makeAuthedRig("alice");
     ledger::gui::ReportQmlBridge bridge{rig->bridge(0), rig->executor()};
     bridge.openLedger(QString::number(*ledgerId));
@@ -135,4 +151,10 @@ TEST_CASE("ReportQmlBridge drives submit->poll to done and publishes exact lines
         },
         15s));
     CHECK(bridge.lines().front().toMap().value("transactionCount").toLongLong() == 0);
+
+    // The teardown order `App::reportsInFlight()` documents: stop the timer
+    // first (this pumping loop is exactly what would otherwise let it start
+    // another pass), then drain, then let it go.
+    app.stopBackgroundJobs();
+    REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
 }

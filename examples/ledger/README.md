@@ -99,10 +99,39 @@ Build order (status as of rung 5's implementation, see
    pattern**, this rung's framework-level deliverable: `SubmitReport` →
    job id → `GetReportStatus` polling → fetch result; the submit→poll idiom
    for long-running work that `Completion<T>`'s one-shot callbacks can't
-   express directly. **Snapshot semantics must be specified**: the job runs
-   off the strand and can otherwise see mid-action state across
-   `LedgerModel`/`BudgetModel` — use a SQLite WAL read transaction; the
-   byte-identical DoD is only meaningful against that snapshot.
+   express directly. **Snapshot semantics must be specified**: the job can
+   otherwise see mid-action state across `LedgerModel`/`BudgetModel` — use a
+   SQLite WAL read transaction; the byte-identical DoD is only meaningful
+   against that snapshot.
+
+   **Who runs the job (morph#160).** `SubmitReport` writes a `Pending` row
+   and returns; it schedules nothing and starts no thread. `ledger::app::App`
+   — this rung's App layer — sweeps for `Pending` rows on a timer and
+   dispatches `RunReportJob` back at `LedgerModel`, where the aggregation
+   itself lives. That split is `IMPLEMENTATION.md` rule 1 applied literally:
+   the monthly-statement aggregation is business logic and stays in a model;
+   only the decision of *when* it runs is orchestration, and orchestration
+   belongs to the App. It is also the shape `bookmarks::app::App`'s metadata
+   worker already had. `LedgerModel` owned a `ThreadPoolExecutor` before
+   this, and was the one ladder model that included
+   `<morph/core/executor.hpp>`.
+
+   Two consequences worth naming. The run now happens on the strand for its
+   own ledger, so a report and a concurrent `StoreTransaction` against the
+   same book serialise instead of racing — the WAL read snapshot is still
+   needed, because `BudgetModel` writes from a strand of its own. And a job
+   outlives the process that accepted it: it is a row, so a runner that
+   starts later — after a crash, after a restart — picks it up. The previous
+   design's queued lambda died with its process.
+
+   **The App does not own a `RemoteServer`, and this rung ships no server
+   binary.** `RemoteServer` clears the session principal for any authorizer
+   that does not authenticate (`docs/spec/security.md`), and this rung
+   installs no authorizer at all, so every mutating action reaching a model
+   over a remote backend arrives with an empty principal and is refused. The
+   runner therefore dispatches over a `LocalBackend` — the same backend the
+   shipped client uses. Rung 5's missing login/authorizer story is tracked in
+   morph#242; it is not a report-runner problem.
 8. **Sync benchmark** (written deliverable, not code): reproduce one
    concurrent-edit scenario from Actual (two offline clients edit the same
    transaction's different fields) and one from ODK-style base-version

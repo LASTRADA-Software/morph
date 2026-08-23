@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <memory>
 #include <morph/core/bridge.hpp>
-#include <morph/core/executor.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
@@ -83,34 +82,6 @@ public:
     ///        the strong-id unwrapping is `morph::model::keyToString`'s and
     ///        not restated per action.
     using PrimaryKey = std::int64_t;
-
-    /// @brief The ordinary shape: owns a one-thread `ThreadPoolExecutor` for
-    ///        `execute(SubmitReport)`'s worker, per `_reportExecutor`'s own
-    ///        default. This is the constructor the bridge registry uses --
-    ///        every non-test caller reaches the model this way.
-    LedgerModel() = default;
-
-    /// @brief Substitutes a caller-supplied executor for the default worker
-    ///        pool. `_reportExecutor`'s comment has always claimed a caller
-    ///        could do this "without this class changing shape"; until this
-    ///        constructor existed there was in fact no way to, which is why
-    ///        `test_ledger_reports.cpp` had to poll a real pool with sleeps
-    ///        (morph#161).
-    ///
-    ///        Nothing else changes: `execute(SubmitReport)` still posts the
-    ///        same task, capturing the same plain values. Passing
-    ///        `morph::ladder::testkit::StepExecutor` makes the worker run
-    ///        exactly when the test says `runOne()`, so "submitted, still
-    ///        Pending, the worker has not run yet" becomes an assertion
-    ///        rather than a sample.
-    /// @param reportExecutor Where `execute(SubmitReport)` posts the report
-    ///        aggregation.
-    /// @throws std::invalid_argument if @p reportExecutor is null -- checked
-    ///         here rather than left to a null dereference inside
-    ///         `execute(SubmitReport)`, which would fire on whichever call
-    ///         first submits a report, arbitrarily far from the construction
-    ///         that caused it.
-    explicit LedgerModel(std::shared_ptr<::morph::exec::IExecutor> reportExecutor);
 
     /// @brief Creates an account in the ledger named by `action.ledgerId`.
     ///        The model's first keyed action -- see the `BRIDGE_KEY_FROM`
@@ -201,21 +172,52 @@ public:
 
     /// @brief Enqueues a report computation for `action.ledgerId` and returns
     ///        its job id immediately (design spec §9's submit->poll pair).
-    ///        Creates one `db::ReportJobRecord` in `ReportStatus::Pending`,
-    ///        then posts the actual aggregation to `_reportExecutor` -- see
-    ///        that member's own comment for why this model owns an executor
-    ///        at all, and `docs/findings/003-no-model-level-background-job-seam.md`
-    ///        for the missing framework seam this works around.
     ///
-    ///        The posted worker acquires its OWN pooled `DataMapper` and
-    ///        captures only plain values: nothing from this call's stack
-    ///        frame (its `mapper`, its `morph::session::Context*`) survives
-    ///        into the worker, since `execute()` returns long before the
-    ///        worker runs.
+    ///        Writes one `db::ReportJobRecord` in `ReportStatus::Pending`,
+    ///        carrying `action.kind` and `action.params` verbatim, and that
+    ///        is the whole of it: nothing is scheduled, no thread is started,
+    ///        and this model owns no executor. Draining that row is
+    ///        `ledger::app::App`'s report runner's job, which dispatches
+    ///        `RunReportJob` back at this model as an ordinary client action
+    ///        (morph#160) -- the same shape bookmarks' metadata worker uses,
+    ///        and the reason this header no longer includes
+    ///        `<morph/core/executor.hpp>` at all.
     /// @param action The ledger id, report kind, and JSON-encoded params.
     /// @return The freshly created job's id, immediately -- long before the
     ///         report itself is computed.
     ReportJobId execute(const SubmitReport& action);
+
+    /// @brief Computes the job named by `action.jobId` and settles its row.
+    ///
+    ///        The business half of the report job, and the reason the
+    ///        aggregation did not move out of this class along with the
+    ///        scheduling: a monthly statement is domain logic, and domain
+    ///        logic lives in a model (`examples/IMPLEMENTATION.md` rule 1).
+    ///        Only *when* it runs moved out.
+    ///
+    ///        Runs on the strand for `action.ledgerId` -- the same strand
+    ///        every other action against that ledger runs on -- so the
+    ///        aggregation can no longer interleave with a concurrent
+    ///        `StoreTransaction` against the same book, which the previous
+    ///        off-strand worker could. The `BEGIN DEFERRED` read snapshot is
+    ///        kept regardless: `BudgetModel` writes to the same database from
+    ///        a strand of its own, and that one the ledger's strand says
+    ///        nothing about.
+    ///
+    ///        Idempotent: a job already in a terminal status is left
+    ///        untouched and its status returned. A failing aggregation is
+    ///        recorded as `ReportStatus::Failed` rather than thrown, so a
+    ///        poller never spins against `Pending` forever; the dispatch
+    ///        itself only throws for the cases that are the *caller's* fault
+    ///        (bad principal, unengaged ids, no such job).
+    /// @param action The job to run, plus the ledger whose strand to run it
+    ///        on.
+    /// @return The job's terminal status -- never `ReportStatus::Pending`.
+    /// @throws Forbidden if the dispatching principal is not
+    ///         `kReportRunnerPrincipal`.
+    /// @throws ValidationError if either id is unengaged.
+    /// @throws NotFound if no job row has that id.
+    RunReportJobResult execute(const RunReportJob& action);
 
     /// @brief Reads the current state of the job named by `action.jobId`.
     ///        A pure read with no session-scoped side effect, so (like
@@ -335,32 +337,6 @@ private:
 
     std::optional<std::string> _entityKeyStr;
     std::shared_ptr<::morph::journal::IActionLog> _log;
-
-    /// @brief Where `execute(SubmitReport)` posts the actual report
-    ///        computation. Infrastructure, not model state -- it holds no
-    ///        per-ledger data and does not violate this class's own "the key
-    ///        lives in each action, not the instance" rule; every posted task
-    ///        carries the ids it needs by value.
-    ///
-    ///        A member at all because no framework-level seam exists for a
-    ///        model's own `execute()` to post background work: every other
-    ///        "background job" in this codebase (bookmarks' metadata fetch)
-    ///        lives at the App/Bridge/RemoteServer layer and re-enters its
-    ///        model as an ordinary client dispatch, a layer this rung simply
-    ///        does not have. Filed as
-    ///        `docs/findings/003-no-model-level-background-job-seam.md`.
-    ///
-    ///        Declared LAST among the data members so it is destroyed FIRST:
-    ///        `~ThreadPoolExecutor()` joins its workers, so by the time any
-    ///        other member is torn down no posted task can still be running.
-    ///        A `shared_ptr<IExecutor>` rather than a `ThreadPoolExecutor`
-    ///        by value so a caller can substitute a different executor
-    ///        (a `MainThreadExecutor`, a deterministic double) without this
-    ///        class changing shape -- reachable through the
-    ///        `explicit LedgerModel(std::shared_ptr<IExecutor>)` constructor
-    ///        above, which is what `test_ledger_reports.cpp` uses to drive
-    ///        the worker deterministically.
-    std::shared_ptr<::morph::exec::IExecutor> _reportExecutor = std::make_shared<::morph::exec::ThreadPoolExecutor>(1);
 };
 
 }  // namespace ledger
@@ -414,9 +390,22 @@ BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ImportLedgerChunk, "ImportLe
 BRIDGE_KEY_FROM(ledger::ImportLedgerChunk, &ledger::ImportLedgerChunk::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SubmitReport, "SubmitReport")
+BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::RunReportJob, "RunReportJob")
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetReportStatus, "GetReportStatus", ::morph::model::Loggable::No)
 
 BRIDGE_KEY_FROM(ledger::SubmitReport, &ledger::SubmitReport::ledgerId);
+
+// RunReportJob keys on its `ledgerId`, not its `jobId`, and the difference
+// matters: keying on the ledger puts the aggregation on the *same* strand as
+// every other action against that book, which is what makes a report and a
+// concurrent StoreTransaction against one ledger serialise instead of race.
+// Keying on jobId would give every job a strand of its own -- more
+// parallelism, and exactly the interleaving with mid-action ledger state the
+// off-strand worker this action replaced was criticised for. It is also why
+// the action carries a `ledgerId` at all rather than looking the job's own
+// ledger up here (see `BRIDGE_KEY_FROM(ledger::GetReportStatus, ...)` below on
+// why key() does not touch the database).
+BRIDGE_KEY_FROM(ledger::RunReportJob, &ledger::RunReportJob::ledgerId);
 
 // GetReportStatus carries no ledgerId, only jobId -- resolving its key by
 // looking up the job row's own ledger_id would repeat Task 14's already-
