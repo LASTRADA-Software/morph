@@ -655,11 +655,11 @@ jobs:
           cache: true
 
       - name: Restore sccache
+        if: steps.filter.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-ladder-${{ github.sha }}
-          restore-keys: sccache-ladder-
           restore-keys: sccache-ladder-
 
       - name: Install sccache
@@ -728,7 +728,7 @@ jobs:
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
       - name: sccache stats
-        if: always()
+        if: always() && steps.filter.outputs.run == 'true'
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -740,7 +740,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -809,11 +809,11 @@ jobs:
           cache: true
 
       - name: Restore sccache
+        if: steps.filter.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-ladder-asan-${{ github.sha }}
-          restore-keys: sccache-ladder-asan-
           restore-keys: sccache-ladder-asan-
 
       - name: Install sccache
@@ -899,7 +899,7 @@ jobs:
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
       - name: sccache stats
-        if: always()
+        if: always() && steps.filter.outputs.run == 'true'
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -911,7 +911,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
