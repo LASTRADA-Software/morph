@@ -22,7 +22,6 @@
 /// dispatch path: no new wire format, no new execution mode. See
 /// docs/spec/forms/workflows_navigation.md.
 
-#include <atomic>
 #include <cstddef>
 #include <exception>
 #include <functional>
@@ -39,6 +38,7 @@
 #include <utility>
 
 #include "../core/bridge.hpp"
+#include "../core/callback_scope.hpp"
 #include "../core/logger.hpp"
 #include "forms.hpp"
 
@@ -211,17 +211,24 @@ public:
         beginStep();
     }
 
-    /// @brief Flags this session as gone, then unsubscribes the current step.
+    /// @brief Refuses every callback this session installed.
     ///
-    /// `unsubscribe()` only removes the sink from the handler's map; it does
-    /// not guarantee a callback already copied out of that map (in flight on
-    /// another thread when this runs) won't still execute afterward. `_alive`
-    /// is a separate, independently-lifetimed flag the installed callbacks
-    /// check *before* touching `this`, so a callback that is still in flight
-    /// when this destructor runs sees it cleared and returns instead of
-    /// touching a partially- or fully-destroyed object.
+    /// Dropping the handler's subscription would not be enough on its own:
+    /// `unsubscribe()` only removes the sink from the handler's map, and says
+    /// nothing about a callback already copied out of that map and in flight on
+    /// another thread. `_callbacks` gates every installed callback on a token
+    /// the callback checks *before* touching `this`, so a callback still in
+    /// flight when this destructor runs is refused instead of touching a
+    /// partially- or fully-destroyed object.
+    ///
+    /// `requestStop()` is called explicitly rather than left to the member's own
+    /// destruction, even though `_callbacks` is declared last: members are
+    /// destroyed only *after* the destructor body, so anything this body does
+    /// that can pump an event loop (a `sendSync`-style blocking call) would
+    /// otherwise deliver into a half-dead session. This is the "teardown that
+    /// pumps" escape hatch docs/spec/core/callback_scope.md documents.
     ~FlowSession() {
-        _alive->store(false, std::memory_order_release);
+        _callbacks.requestStop();
     }
 
     FlowSession(const FlowSession&) = delete;
@@ -390,26 +397,20 @@ private:
 
     /// @brief Dispatches step @p A's completed draft and routes its outcome.
     ///
-    /// Both closures capture `_alive` (a copy of the `shared_ptr`, so it
-    /// outlives `this` if the two race) and check it before touching anything on
-    /// `this` — a completion can still resolve after the flow is destroyed.
+    /// Both closures are gated on `_callbacks`, so neither touches anything on
+    /// `this` once the flow has been stopped or destroyed — a completion can
+    /// still resolve after the flow is gone.
     /// @tparam A Step action type.
     /// @param draft     The completed action to execute.
     /// @param stepIndex Index of the step this dispatch belongs to.
     template <typename A>
     void fireStep(A draft, std::size_t stepIndex) {
-        auto alive = _alive;
         _handler.execute(std::move(draft))
-            .then([this, alive, stepIndex](::morph::model::ActionTraits<A>::Result result) {
-                if (!alive->load(std::memory_order_acquire)) {
-                    return;
-                }
-                this->template captureResult<A>(result, stepIndex);
-            })
-            .onError([this, alive, stepIndex](const std::exception_ptr& err) {
-                if (!alive->load(std::memory_order_acquire)) {
-                    return;
-                }
+            .then(_callbacks,
+                  [this, stepIndex](::morph::model::ActionTraits<A>::Result result) {
+                      this->template captureResult<A>(result, stepIndex);
+                  })
+            .onError(_callbacks, [this, stepIndex](const std::exception_ptr& err) {
                 {
                     // Only clear readiness while this really is the current
                     // step. A late failure from a step already left behind used
@@ -468,10 +469,10 @@ private:
     std::size_t _activeStep{0};
     bool _currentReady{false};
     std::unordered_map<std::string, std::string> _resolvedValues;
-    // Outlives `this`: a late callback (see installSubscription) checks this
-    // before touching anything else, so it survives even if `this` is
-    // already gone by the time it runs.
-    std::shared_ptr<std::atomic<bool>> _alive = std::make_shared<std::atomic<bool>>(true);
+    // Declared last, so it is the first member destroyed: every gated callback
+    // is refused before the fields it would have touched are torn down. See
+    // docs/spec/core/callback_scope.md.
+    ::morph::async::CallbackScope _callbacks;
 };
 
 }  // namespace morph::flows

@@ -23,6 +23,7 @@
 #include "../forms/forms.hpp"
 #include "../session/session.hpp"
 #include "backend.hpp"
+#include "callback_scope.hpp"
 #include "completion.hpp"
 #include "model_key.hpp"
 #include "registry.hpp"
@@ -351,7 +352,7 @@ public:
     /// `Bridge` could otherwise fire it after destruction and dereference freed
     /// memory. Clearing it here (outside `_mtx` — `setReconnectHandler` only stores
     /// a callback and never re-enters the bridge) closes the common case; the
-    /// handler additionally guards on `_liveness` so a reconnect already in flight
+    /// handler additionally guards on `_callbacks` so a reconnect already in flight
     /// on the transport thread becomes a no-op too. See docs/spec/concurrency_and_lifetimes.md.
     ~Bridge() {
         if (auto active = loadBackend()) {
@@ -519,7 +520,7 @@ public:
         auto backend = loadBackend();
         auto primaryCopy = primary;
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        std::weak_ptr<const void> const weakLiveness{_liveness};
+        auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
         bool started = false;
@@ -532,8 +533,7 @@ public:
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
-                    auto aliveToken = weakLiveness.lock();
-                    if (!aliveToken) {
+                    if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
                     auto strongBinding = weakBinding.lock();
@@ -671,7 +671,7 @@ public:
         }
         auto backend = loadBackend();
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        std::weak_ptr<const void> const weakLiveness{_liveness};
+        auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         auto handoff = std::make_shared<detail::AsyncDispatchHandoff>();
         bool started = false;
@@ -683,8 +683,7 @@ public:
                     if (detail::parkIfInFrame(*handoff, true, newId, nullptr)) {
                         return;  // Completed inline: the dispatching frame will finish this.
                     }
-                    auto aliveToken = weakLiveness.lock();
-                    if (!aliveToken) {
+                    if (!weakLiveness.active()) {
                         return;  // The Bridge is gone; publishing this id would be pointless.
                     }
                     auto strongBinding = weakBinding.lock();
@@ -814,14 +813,13 @@ public:
             }
             backend = loadBackend();
         }
-        std::weak_ptr<const void> const weakLiveness{_liveness};
+        auto const weakLiveness = _callbacks.token();
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         bool const started = backend->assignPrimaryAsync(
             ::morph::exec::detail::ModelId{raw}, binding->typeId, primary,
             [this, weakLiveness, weakBackend, weakBinding, primary](::morph::exec::detail::ModelId) {
-                auto aliveToken = weakLiveness.lock();
-                if (!aliveToken) {
+                if (!weakLiveness.active()) {
                     return;  // The Bridge is gone; do not touch `this`.
                 }
                 auto strongBinding = weakBinding.lock();
@@ -1384,7 +1382,7 @@ public:
         // regardless of whether ~Bridge() has run or is running concurrently
         // on another thread. `_executeDeadlineMtx` alone does not establish
         // that: ~Bridge()'s own body never acquires it, so a plain
-        // `!alive.expired()` check followed by `_timeoutScheduler->cancel()`
+        // `!alive.active()` check followed by `_timeoutScheduler->cancel()`
         // a few instructions later is a check-then-use race against
         // ~Bridge()'s implicit member destruction (which joins
         // TimeoutScheduler's thread). Holding a shared_ptr for the
@@ -1556,7 +1554,7 @@ public:
                 // once the bridge might be gone. The typed result is still
                 // delivered to the caller's own Completion either way -- only
                 // the bridge-touching side effects are skipped.
-                bool const bridgeAlive = !alive.expired();
+                bool const bridgeAlive = alive.active();
                 if (bridgeAlive) {
                     // One of the two mutually-exclusive resolution continuations
                     // for this dispatched call (the other is the .onError
@@ -1607,7 +1605,7 @@ public:
                 // The other of the two mutually-exclusive resolution paths --
                 // see the .then continuation above. Same liveness guard: this
                 // touches `this` and must not run once the Bridge might be gone.
-                if (!alive.expired()) {
+                if (alive.active()) {
                     this->_pendingCalls.fetch_sub(1, std::memory_order_relaxed);
                 }
                 typedState->setException(err);
@@ -1621,12 +1619,17 @@ private:
 
     /// @brief Weak observer of this bridge's lifetime, handed to each handler.
     ///
-    /// A `BridgeHandler` checks this in its destructor: if the token has expired
-    /// the `Bridge` is already gone, so it skips deregistration instead of
+    /// A `BridgeHandler` checks this in its destructor: if the token is no longer
+    /// active the `Bridge` is already gone, so it skips deregistration instead of
     /// dereferencing a dangling `Bridge&`. The bridge must still outlive its
     /// handlers for normal `execute`/`set` calls; this only makes the *teardown*
     /// order-independent so a mis-ordered destruction is defined behaviour.
-    [[nodiscard]] std::weak_ptr<const void> liveness() const { return _liveness; }
+    ///
+    /// The bridge is the framework's own first consumer of the primitive every
+    /// caller now gets (docs/spec/core/callback_scope.md). It uses only the
+    /// liveness half: `_callbacks` is never stopped explicitly, so its tokens go
+    /// inactive exactly when the `Bridge` is destroyed.
+    [[nodiscard]] ::morph::async::CallbackToken liveness() const { return _callbacks.token(); }
 
     std::shared_ptr<::morph::backend::detail::IBackend> loadBackend() const {
         std::scoped_lock const lock{_backendMtx};
@@ -1668,15 +1671,15 @@ private:
         }
 
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        std::weak_ptr<const void> const weakLiveness{_liveness};
+        auto const weakLiveness = _callbacks.token();
         std::weak_ptr<detail::HandlerBinding> const weakBinding{binding};
         bool const started = backend->registerModelAsync(
             binding->typeId, binding->modelFactory, binding->contextKey,
             [this, weakBackend, weakLiveness, weakBinding](::morph::exec::detail::ModelId newId) {
                 auto strongBinding = weakBinding.lock();
-                auto aliveToken = weakLiveness.lock();
+                bool const bridgeAlive = weakLiveness.active();
                 bool applied = false;
-                if (aliveToken && strongBinding) {
+                if (bridgeAlive && strongBinding) {
                     std::scoped_lock const lock{_mtx};
                     auto pinned = weakBackend.lock();
                     if (pinned && pinned == loadBackend()) {
@@ -1767,16 +1770,15 @@ private:
         }
         // The handler is invoked on the backend's transport thread. We keep a
         // weak_ptr to the same shared backend so a stale callback fired after a
-        // switchBackend is a no-op, and a weak_ptr to the bridge's liveness token
+        // switchBackend is a no-op, and a `CallbackToken` for the bridge
         // so a callback fired after the Bridge is destroyed (a co-owned backend
         // outliving its bridge) is also a no-op instead of a use-after-free on
         // `this`. `~Bridge` additionally clears the handler; this guard covers a
         // reconnect that is already in flight when the Bridge is torn down.
         std::weak_ptr<::morph::backend::detail::IBackend> const weakBackend{backend};
-        std::weak_ptr<const void> const weakLiveness{_liveness};
+        auto const weakLiveness = _callbacks.token();
         backend->setReconnectHandler([this, weakBackend, weakLiveness] {
-            auto aliveToken = weakLiveness.lock();
-            if (!aliveToken) {
+            if (!weakLiveness.active()) {
                 return;  // The Bridge is gone; do not touch `this`.
             }
             auto pinned = weakBackend.lock();
@@ -1826,9 +1828,9 @@ private:
     // and the lazily-created scheduler live under one mutex, so a concurrent
     // setExecuteDeadline() can never let executeVia() observe a non-zero
     // deadline before the scheduler backing it exists. Declared ahead of
-    // `_liveness` (the last member, and therefore the first destroyed) so the
-    // liveness token an in-flight completion callback checks before touching
-    // these has already expired by the time they are torn down.
+    // `_callbacks` (the last member, and therefore the first destroyed) so the
+    // token an in-flight completion callback checks before touching these has
+    // already gone inactive by the time they are torn down.
     mutable std::mutex _executeDeadlineMtx;
     std::chrono::milliseconds _executeDeadline{0};
     std::shared_ptr<::morph::async::detail::TimeoutScheduler> _timeoutScheduler;
@@ -1852,8 +1854,9 @@ private:
     // exactly once by whichever of the two mutually-exclusive resolution
     // continuations (success or error) actually fires.
     std::atomic<std::size_t> _pendingCalls{0};
-    // Destroyed with the Bridge; handlers hold weak_ptrs to it (see liveness()).
-    std::shared_ptr<const void> _liveness{std::make_shared<char>()};
+    // Destroyed with the Bridge; handlers and in-flight continuations hold weak
+    // `CallbackToken`s issued from it (see liveness()).
+    ::morph::async::CallbackScope _callbacks;
 };
 
 /// @brief `BridgeHandler` sharing policy: private, one instance per handler.
@@ -1927,13 +1930,13 @@ public:
 
     /// @brief Deregisters the binding from the bridge.
     ///
-    /// If the `Bridge` has already been destroyed (liveness token expired), this
-    /// is a no-op: there is nothing to deregister from and dereferencing the
-    /// dangling `Bridge&` would be undefined behaviour. Destroying the bridge
-    /// before its handlers is still discouraged, but is now safe rather than a
-    /// use-after-free.
+    /// If the `Bridge` has already been destroyed (its `CallbackToken` is no
+    /// longer active), this is a no-op: there is nothing to deregister from and
+    /// dereferencing the dangling `Bridge&` would be undefined behaviour.
+    /// Destroying the bridge before its handlers is still discouraged, but is
+    /// now safe rather than a use-after-free.
     ~BridgeHandler() {
-        if (auto alive = _bridgeAlive.lock()) {
+        if (_bridgeAlive.active()) {
             _bridge.deregisterHandler(_binding);
         }
     }
@@ -2207,6 +2210,41 @@ public:
             [cb = std::move(cb)](const std::any& boxed) { cb(std::any_cast<const R&>(boxed)); }, _guiExec);
     }
 
+    /// @brief Subscribes to results of type @p R, gated on @p scope.
+    ///
+    /// Same subscription as `subscribe<R>(cb)` — one callback per `(handler,
+    /// R)`, delivered on this handler's executor — except that @p cb runs only
+    /// while @p scope is alive and un-stopped. Subscription sinks are the
+    /// longest-lived callbacks in the system (they fire repeatedly, for as long
+    /// as the handler exists), so they are the attachments most likely to
+    /// outlive the screen that installed them.
+    ///
+    /// The sink itself is *not* pruned when the scope goes inactive: delivery is
+    /// refused, the subscription entry stays until `unsubscribe<R>()` or handler
+    /// destruction removes it.
+    ///
+    /// @tparam R Result/state type to observe.
+    /// @param scope Receiver-owned gate; observed weakly, and only its current
+    ///              generation is captured (a later `reset()` retires this sink).
+    /// @param cb    Callable receiving the value by value on the GUI executor.
+    template <typename R>
+    void subscribe(const ::morph::async::CallbackScope& scope, std::function<void(R)> cb) {
+        subscribe<R>(scope.token(), std::move(cb));
+    }
+
+    /// @brief Subscribes to results of type @p R, gated on an already-issued @p token.
+    ///
+    /// The token-taking form of `subscribe<R>(const CallbackScope&, cb)`.
+    ///
+    /// @tparam R Result/state type to observe.
+    /// @param token Gate observing some receiver's `CallbackScope`. A
+    ///              default-constructed token suppresses every delivery.
+    /// @param cb    Callable receiving the value by value on the GUI executor.
+    template <typename R>
+    void subscribe(::morph::async::CallbackToken token, std::function<void(R)> cb) {
+        subscribe<R>(std::function<void(R)>{token.guard(std::move(cb))});
+    }
+
     /// @brief Removes this handler\'s subscription for @p R.
     /// @tparam R Result/state type to stop hearing about.
     template <typename R>
@@ -2222,7 +2260,7 @@ public:
 
 private:
     Bridge& _bridge;
-    std::weak_ptr<const void> _bridgeAlive;  // expires when _bridge is destroyed
+    ::morph::async::CallbackToken _bridgeAlive;  // goes inactive when _bridge is destroyed
     ::morph::exec::IExecutor* _guiExec;
     std::shared_ptr<detail::HandlerBinding> _binding;
 };

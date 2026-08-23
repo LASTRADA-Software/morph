@@ -219,6 +219,16 @@ public:
   cancelled by `Bridge::switchBackend` surfaces `BackendChangedError` on
   `FlowSession`'s `onError` callback exactly as bridge.md documents for any
   other caller. The draft survives the switch because `FlowSession` owns it.
+- **A late step callback cannot touch a destroyed session.** Every step's
+  `.then` / `.onError` is attached through a `morph::async::CallbackScope`
+  member ([callback_scope.md](../core/callback_scope.md)) declared last, so a
+  completion resolving after the session is gone is refused rather than
+  dereferencing freed memory. `~FlowSession` calls `requestStop()` as its first
+  statement rather than relying on member destruction alone: members are
+  destroyed only *after* the destructor body, and that body unsubscribes — a
+  path that can pump an event loop and deliver into a half-dead session. This is
+  the "teardown that pumps" escape hatch callback_scope.md documents, and
+  `FlowSession` is its worked example.
 
 ## The Qt/QML reference renderer
 
@@ -377,6 +387,9 @@ the typed template API (see [Design decisions](#design-decisions)).
 - [../core/bridge.md](../core/bridge.md) — `BridgeHandler::execute`,
   `ActionValidator::ready`, and `BackendChangedError` — the mechanism
   `FlowSession` extends to span a sequence without adding a new dispatch path.
+- [../core/callback_scope.md](../core/callback_scope.md) —
+  `morph::async::CallbackScope`, the gate `FlowSession` uses so a step
+  completion resolving after the session is destroyed is refused.
 - [../core/registry.md](../core/registry.md) — `ActionTraits::typeId()` and the
   `BRIDGE_REGISTER_ACTION` pattern `BRIDGE_REGISTER_WIZARD`/`BRIDGE_REGISTER_APP`
   mirror (metadata-only, no dispatch registration).

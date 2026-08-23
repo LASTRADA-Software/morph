@@ -19,6 +19,7 @@ than vanishing (see [Failure modes](#failure-modes)).
 - [Thread safety](#thread-safety)
 - [Failure modes](#failure-modes)
 - [Client-side execute deadline](#client-side-execute-deadline)
+- [Lifetime and stop gating](#lifetime-and-stop-gating)
 - [Empty state](#empty-state)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -348,6 +349,45 @@ A deadline bounds the *caller's wait*, never the work. It does not cancel the
 request — see [Limitations](#limitations), "No cancellation". The server-side
 counterpart is documented in [`backend.md`](backend.md) under `LimitPolicy`.
 
+## Lifetime and stop gating
+
+Because every callback is delivered through an executor, the receiver can be
+destroyed — or simply lose interest — between attaching a handler and the
+handler running. `Completion<T>` therefore accepts a
+[`morph::async::CallbackScope`](callback_scope.md) (or one of its
+`CallbackToken`s) as an optional first argument:
+
+```cpp
+completion.then(_callbacks, [this](Result r) { render(r); })
+          .onError(_callbacks, [this](std::exception_ptr e) { showError(e); });
+```
+
+The gated handler runs only if, at delivery time, the scope is **both alive and
+not stopped**. The full semantics — the `requestStop()` / `reset()` /
+destruction verbs, the `Active` / `Stopped` / `Expired` states, and the
+executor-affine-versus-advisory thread-safety boundary — live in
+[callback_scope.md](callback_scope.md). What matters here is how the gate
+interacts with this file's own machinery:
+
+- **Nothing in `CompletionState<T>` changes.** The gate is wrapped around the
+  handler at attach time, so it composes with handler fan-out, with the
+  attach-after-ready fire-now path and with `cbExec` marshalling exactly as the
+  ungated form does.
+- **A suppressed error still counts as handled.** `onError(scope, fn)` sets
+  `onErrAttached` exactly as `onError(fn)` does, so an error whose delivery the
+  scope then refuses does **not** re-arm the destructor's orphan logging
+  ([Orphan detection](#orphan-detection)). Suppression is a deliberate act by
+  the receiver, not a silently dropped error.
+- **A refused handler is destroyed, not leaked.** The wrapper and its captures
+  are released with the posted closure, on the delivery executor.
+- **The ungated spellings are unchanged and undeprecated.** `then(fn)` /
+  `onError(fn)` behave exactly as before; `thenDetached(fn)` /
+  `onErrorDetached(fn)` are the same attachments under a name that says the
+  omission was deliberate and keeps it greppable in review.
+
+This gates **delivery**, never the work. See
+[Limitations](#limitations) for why that distinction is kept sharp.
+
 ## Empty state
 
 A default-constructed `Completion` has a null `_state` pointer. `then()` and
@@ -368,7 +408,13 @@ that will never signal.
 | copy ctor | `Completion(Completion const&) = delete` | Move-only handle. |
 | copy assign | `Completion& operator=(Completion const&) = delete` | Move-only handle. |
 | `then(handler)` | `Completion& then(std::function<void(T)>)` | Registers success callback; returns `*this` for chaining. |
+| `then(scope, handler)` | `Completion& then(CallbackScope const&, std::function<void(T)>)` | As above, gated on the scope's liveness and stop state (see [Lifetime and stop gating](#lifetime-and-stop-gating)). |
+| `then(token, handler)` | `Completion& then(CallbackToken, std::function<void(T)>)` | Token-taking form of the above; a default-constructed token suppresses unconditionally. |
+| `thenDetached(handler)` | `Completion& thenDetached(std::function<void(T)>)` | Exactly `then(handler)`, spelled so a deliberately ungated callback is greppable. |
 | `onError(handler)` | `Completion& onError(std::function<void(std::exception_ptr)>)` | Registers error callback; returns `*this` for chaining. |
+| `onError(scope, handler)` | `Completion& onError(CallbackScope const&, std::function<void(std::exception_ptr)>)` | As above, gated on the scope. Still suppresses orphan logging: a scope-refused error counts as handled. |
+| `onError(token, handler)` | `Completion& onError(CallbackToken, std::function<void(std::exception_ptr)>)` | Token-taking form of the above. |
+| `onErrorDetached(handler)` | `Completion& onErrorDetached(std::function<void(std::exception_ptr)>)` | Exactly `onError(handler)`, under the deliberate-omission spelling. |
 | `state()` | `shared_ptr<CompletionState<T>> state() const` | Returns the underlying shared state (advanced / internal use). |
 | `makeSettleable(execPtr)` | `static std::pair<Completion<T>, Promise> makeSettleable(IExecutor*)` | Public settleable-promise factory (see [Settleable promise seam](#settleable-promise-seam--completiontpromise)). |
 
@@ -422,12 +468,16 @@ future/promise or a monadic async type. Its scope is narrow by design:
   handler.
 - **No `co_await`.** `Completion<T>` is not an awaitable; it has no coroutine
   promise/awaiter machinery. Consumption is callback-only.
-- **No cancellation.** There is no handle to cancel an outstanding operation;
-  once started, it runs to completion (or is abandoned).
+- **No *work* cancellation.** There is no handle to cancel an outstanding
+  operation; once started, it runs to completion (or is abandoned).
   `Bridge::setExecuteDeadline` (see
   [Client-side execute deadline](#client-side-execute-deadline)) is not an
   exception to this: it bounds how long the *caller* waits by resolving the
   state early, and does nothing to the work still in flight underneath.
+  **Delivery**, by contrast, *can* be stopped — see
+  [Lifetime and stop gating](#lifetime-and-stop-gating). The distinction is
+  sharp and deliberate: a `CallbackScope` says "do not hand me this result",
+  never "stop producing it". Work-side cancellation is issue #116.
 - **Single consumer handle, but multiple handlers per outcome.** The
   `Completion<T>` handle itself is move-only — only one owner at a time — but
   each state's `onOk`/`onErr` are vectors, so repeated `then()`/`onError()`
@@ -448,7 +498,9 @@ state; the log is emitted only when the state itself is finally destroyed with a
 
 ## Out of scope
 
-- Cancellation — there is no mechanism to cancel an outstanding operation.
+- Work cancellation — there is no mechanism to cancel an outstanding
+  *operation*. Stopping *delivery* of its result is
+  [`CallbackScope`](callback_scope.md); the two are different things.
 - Multiple values — `Completion<T>` is a single-result primitive.
 - Synchronous blocking — there is no `wait()` or `get()`; the API is
   callback-only.
@@ -470,6 +522,9 @@ state; the log is emitted only when the state itself is finally destroyed with a
   alongside the executor and backend error paths.
 - [`bridge.md`](bridge.md) — `BridgeHandler<M>` produces `Completion<T>` from
   `execute()` and posts callbacks on the GUI executor.
+- [`callback_scope.md`](callback_scope.md) — `CallbackScope`/`CallbackToken`,
+  the gate behind the `then(scope, fn)` / `onError(scope, fn)` overloads and the
+  `thenDetached` / `onErrorDetached` spellings.
 - [Settleable promise seam](#settleable-promise-seam--completiontpromise) —
   `Completion<T>::makeSettleable()`, the public seam test code uses in place of
   a `Bridge`/`IBackend` round trip.

@@ -99,6 +99,7 @@ add_executable(morph_tests
     test_graceful_shutdown.cpp
     test_pinned_facts.cpp
     test_version.cpp
+    test_callback_scope.cpp
 )
 
 target_link_libraries(morph_tests
