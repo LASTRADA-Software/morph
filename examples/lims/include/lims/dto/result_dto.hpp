@@ -137,6 +137,18 @@ struct CaptureConcentration {
     /// @brief Which non-reading this is. Empty for a reading.
     QualifierChoice qualifier;
 
+    /// @brief Neither half of the sum is *unconditionally* required — the
+    ///        `exactlyOneOf` rule below is the only gate on them.
+    ///
+    /// Without this, `schemaJson`'s required-ness rule (required by default
+    /// for any non-`std::optional` empty-capable member) puts both `value`
+    /// and `qualifier` in the schema's `required` array, where they directly
+    /// contradict the `x-rules` entry beside them: a renderer honouring
+    /// `required` would demand both fields, and a payload satisfying it would
+    /// then fail `exactlyOneOf` on the server. Nothing in `morph::forms`
+    /// detects that contradiction, so the encoding has to opt out by hand.
+    static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
+
     /// @brief The sum-type encoding, as a cross-field rule the client and the
     ///        server both evaluate from one declaration.
     static constexpr auto formRules = ::morph::forms::ruleList(

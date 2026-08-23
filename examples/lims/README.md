@@ -301,6 +301,19 @@ is not lost — the journal holds every capture, which is exactly where a
 - **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
   order §5 above, corrected in place). They landed in commit 332f82c (#78)
   and are specified in `docs/spec/forms/forms.md`.
+- **A schema's `required` array can silently contradict its own `x-rules`.**
+  `schemaJson`'s required-by-default rule put both `value` and `qualifier`
+  in `required` while the `exactlyOneOf` entry beside them said at most one
+  may be engaged — an unsatisfiable form, and nothing in `morph::forms`
+  detects it. The sanctioned escape (`optionalFields`) works and is used
+  here, but it is opt-in and invisible: the contradiction compiles, renders,
+  and only shows up as "the client's payload is rejected by the server".
+  `mergeSchemaExtras` already walks `formRules` when it emits `x-rules`, so
+  it has everything it needs either to drop a field named in an
+  `exactlyOneOf`/`mutuallyExclusive`/`atLeastOneOf` rule from `required`, or
+  to fail loudly. `docs/spec/forms/forms.md` documents the two features in
+  separate sections and never mentions their interaction. Guarded here by a
+  test asserting `required` is exactly `["analysisVersionId"]`.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

@@ -146,6 +146,14 @@ TEST_CASE("The served schema carries the encoding, the precision and the entry u
     // The qualifier picklist is discovered, not hardcoded client-side.
     CHECK(schema.find("\"x-optionsAction\":\"ListResultQualifiers\"") != std::string::npos);
 
+    // `required` must NOT list value/qualifier. Required-by-default would put
+    // both there, where they contradict the `x-rules` entry beside them: a
+    // renderer honouring `required` would demand both fields, and a payload
+    // satisfying that demand then fails `exactlyOneOf` on the server. Nothing
+    // in morph::forms detects the contradiction, so the encoding opts out via
+    // `optionalFields` — and this assertion is what keeps it opted out.
+    CHECK(schema.find("\"required\":[\"analysisVersionId\"]") != std::string::npos);
+
     // The reading's declared precision and its entry-unit alternatives.
     CHECK(schema.find("\"x-decimalPlaces\":3") != std::string::npos);
     CHECK(schema.find("\"x-unitAlternatives\"") != std::string::npos);
