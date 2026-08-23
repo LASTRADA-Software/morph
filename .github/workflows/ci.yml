@@ -11,15 +11,19 @@ permissions:
 env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
-  # Caps each leg's on-disk sccache blob so ~11 legs stay well under GitHub's
-  # 10 GB per-repo actions-cache budget. Every leg's cache step below uses a
-  # per-commit key (a `-${{ github.sha }}` suffix) with a `restore-keys:`
-  # prefix fallback: `actions/cache@v4`'s single-step save then always writes
-  # a *new* key (it never overwrites one), so no delete/evict step is needed
-  # and no branch can ever remove another branch's cache entry.
-  # `restore-keys:`'s prefix match still finds the most recent generation
-  # regardless of which commit wrote it, so each leg still gets its usual
-  # cross-run reuse via `actions/cache`'s normal per-scope size/LRU eviction.
+  # Caps each leg's on-disk sccache blob. Note the budget arithmetic: there
+  # are **16** cache-writing legs once the matrices expand (4 linux-compilers
+  # + 4 linux-sanitizers + 2 linux-all-features + kanban-tsan + linux-qt +
+  # ladder-tests + ladder-sanitizers + valgrind + clang-tidy), not the ~11 an
+  # earlier revision of this comment assumed. At 1 GB apiece a *single*
+  # generation is 16 GB against GitHub's 10 GB per-repo actions-cache budget,
+  # so legs evict one another and entries often do not survive to be reused.
+  #
+  # The write side is what fixes that (see each leg's "Save sccache" step):
+  # only a push to master writes, so generations stop multiplying. Whether
+  # 1 GB is then the right cap is a question for the `sccache --show-stats`
+  # output those steps now emit -- it is deliberately left unchanged here so
+  # the effect of the write-side change can be read on its own.
   SCCACHE_CACHE_SIZE: "1G"
   CLANG_VERSION: "22"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
@@ -98,8 +102,8 @@ jobs:
           sudo apt-get install -y ninja-build catch2
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
@@ -134,6 +138,30 @@ jobs:
         run: ctest --preset ${{ matrix.preset }}
 
   # ── Linux: sanitizers + coverage (all clang) ─────────────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
+
   linux-sanitizers:
     name: Linux / ${{ matrix.preset }}
     runs-on: ubuntu-24.04
@@ -200,8 +228,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
@@ -322,6 +350,30 @@ jobs:
   # or false positives from outside a TSan-instrumented Qt build. Rewriting
   # the test to never construct a QtExecutor at all sidesteps the ambiguity
   # entirely rather than resolving it.)
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
+
   kanban-tsan:
     name: Kanban / ThreadSanitizer
     runs-on: ubuntu-24.04
@@ -369,8 +421,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-kanban-tsan-${{ github.sha }}
@@ -423,6 +475,30 @@ jobs:
         run: ctest --preset clang-tsan -L ladder-kanban -R ThreadSanitizer --output-on-failure
 
   # ── Linux: Qt WebSocket backend build + tests ─────────────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-kanban-tsan-${{ github.sha }}
+
   linux-qt:
     name: Linux / Qt6 WebSockets
     runs-on: ubuntu-24.04
@@ -447,8 +523,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-qt-${{ github.sha }}
@@ -475,6 +551,30 @@ jobs:
         run: ctest --preset gcc-debug
 
   # ── Linux: application ladder testkit (path-filtered) ─────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-qt-${{ github.sha }}
+
   ladder-tests:
     name: Application ladder
     runs-on: ubuntu-24.04
@@ -554,12 +654,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-ladder-${{ github.sha }}
+          restore-keys: sccache-ladder-
           restore-keys: sccache-ladder-
 
       - name: Install sccache
@@ -622,6 +722,30 @@ jobs:
   #
   # -LE stress mirrors ladder-tests: the stress cases are long-running by
   # design and ASan's shadow-memory overhead compounds that.
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-ladder-${{ github.sha }}
+
   ladder-sanitizers:
     name: Application ladder / ASan+UBSan
     runs-on: ubuntu-24.04
@@ -684,12 +808,12 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        if: steps.filter.outputs.run == 'true'
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-ladder-asan-${{ github.sha }}
+          restore-keys: sccache-ladder-asan-
           restore-keys: sccache-ladder-asan-
 
       - name: Install sccache
@@ -769,6 +893,30 @@ jobs:
   # (MORPH_REQUIRE_VETTED_HMAC) and a replay test matching the wrong file
   # extension both reached master green. Enabling them together also proves
   # they compose, which building each alone would not.
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-ladder-asan-${{ github.sha }}
+
   linux-all-features:
     name: Linux / all optional features (${{ matrix.compiler }})
     runs-on: ubuntu-24.04
@@ -834,8 +982,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
@@ -921,6 +1069,30 @@ jobs:
           exit "$status"
 
   # ── Valgrind (memcheck) ───────────────────────────────────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
+
   valgrind:
     name: Valgrind memcheck
     runs-on: ubuntu-24.04
@@ -944,8 +1116,8 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-valgrind-${{ github.sha }}
@@ -1005,6 +1177,30 @@ jobs:
           exit "$status"
 
   # ── clang-tidy-diff (changed lines only) ──────────────────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-valgrind-${{ github.sha }}
+
   clang-tidy:
     name: clang-tidy-diff
     runs-on: ubuntu-24.04
@@ -1038,8 +1234,8 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Cache sccache
-        uses: actions/cache@v4
+      - name: Restore sccache
+        uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
           key: sccache-clang-tidy-${{ github.sha }}
@@ -1108,6 +1304,30 @@ jobs:
           path: clang-tidy-report.txt
 
   # ── Deprecation-marker format lint ────────────────────────────────────
+
+      # Cumulative hit/miss for this leg. Without it the cache is
+      # unfalsifiable: a thrashing cache and a working one look identical
+      # from the outside, and only the build-step duration hints at which
+      # one you have. `|| true` so a stats failure never fails the job.
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
+
+      # Save only on a push to master. Every run used to write a new
+      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
+      # generation already exceeds GitHub's 10 GB per-repo budget -- so
+      # legs evicted each other and entries rarely survived to be reused.
+      # Restricting writes to master keeps morph#109's property (only one
+      # branch ever writes, so no branch can delete another's entry) while
+      # collapsing the generations that actually blow the budget. Pull
+      # requests still restore, read-only, and get the full benefit.
+      - name: Save sccache
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        uses: actions/cache/save@v4
+        with:
+          path: /home/runner/.cache/sccache
+          key: sccache-clang-tidy-${{ github.sha }}
+
   deprecation-lint:
     name: Deprecation marker format
     runs-on: ubuntu-24.04
