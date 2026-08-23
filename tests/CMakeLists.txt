@@ -35,6 +35,7 @@ add_executable(morph_tests
     test_remote_step_interleaving.cpp
     test_remote_execute_ordering.cpp
     test_action_validation.cpp
+    test_action_wire_rejection.cpp
     test_security_fixes.cpp
     test_bridge_lifetime.cpp
     test_client_execute_deadline.cpp
@@ -69,6 +70,7 @@ add_executable(morph_tests
     test_journal_format_versioning.cpp
     test_outbox.cpp
     test_rational_checked.cpp
+    test_rational_wire_policy.cpp
     test_rational.cpp
     test_ledger_rational_fuzz.cpp
     test_quantity.cpp

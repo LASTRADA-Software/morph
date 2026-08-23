@@ -77,9 +77,10 @@ floating-point input, overflow during decimal scaling) return
 | `one(p)` | `static constexpr Rational one(DecimalPlaces) noexcept` | `1/1` at the given precision. |
 
 **Wire path.** The Glaze deserialisation path (`setWire`) rebuilds through the
-canonicalising constructor, silently clamping hostile input (`den == 0`,
-out-of-range `dp`, `INT64_MIN` components whose negation would overflow) instead
-of asserting.
+canonicalising constructor, silently clamping what it cannot represent
+(`den == 0`, out-of-range `dp`, a component whose magnitude does not fit)
+instead of asserting, and counting the clamp for the decoding layer to act on.
+See [Decoding cannot fail](#decoding-cannot-fail-so-the-clamp-is-reported-instead).
 
 ## Arithmetic
 
@@ -331,6 +332,31 @@ route serialisation through the `Wire` struct. A `to_json_schema<Rational>`
 specialisation preserves schema shape by delegating to `Wire`'s schema. The
 `glz::meta` also fixes the schema type name to `"Rational"`.
 
+### Decoding cannot fail, so the clamp is reported instead
+
+`setWire` rebuilds through the canonicalising constructor, which clamps rather
+than rejects. `{"num":5,"den":0,"dp":2}` therefore decodes to a plausible
+`5/1`, and nothing downstream can tell the value was altered.
+
+`Rational` reports the fact and stops there. `Wire::validate()` is the
+predicate — non-canonical but representable input (`4/8`, a negative `den`) is
+**valid**, since reducing and sign-normalising round-trip the same value — and
+`WireClampScope` counts clamps across a decode:
+
+```cpp
+morph::math::WireClampScope clamps;
+if (auto err = glz::read<opts>(action, json)) { ... }
+if (clamps.clamped() != 0) { /* reject the payload */ }
+```
+
+Deciding what a clamp *means* is not this type's call. The same clamp is a
+protocol violation when the bytes came off a socket and a harmless
+normalisation when a local caller wrote them, and only the decoding layer
+knows which. `ActionTraits<A>::fromJson` is that layer for action payloads —
+`morph::wire` carries an execute envelope's `body` as an opaque string and
+never parses it, so `fromJson` is the first and only place a `Rational` inside
+it is decoded — and it rejects a clamped payload with `ParseError`.
+
 **Absent fields fall back to `Wire`'s member defaults.** A payload missing a
 key decodes to that field's default — `num = 0`, `den = 1`, `dp = 1` — so `"{}"`
 reads as canonical zero at precision 1 (`Rational::zero(dp1)`), overwriting
@@ -364,7 +390,9 @@ through `setWire`.
 | `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
 | `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
 | `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
-| `setWire(Wire)` | `void noexcept` — rebuilds through canonicalising constructor, clamping hostile input. |
+| `setWire(Wire)` | `void noexcept` — rebuilds through the canonicalising constructor, clamping what it cannot represent and counting the clamp. |
+| `Wire::validate()` | `constexpr bool noexcept` — whether these raw values decode without being clamped. |
+| `WireClampScope` | Scoped observer: how many `Rational` values were clamped while decoding. |
 | `getWire()` | `Wire noexcept` — canonical members ready for JSON encoding. |
 | `struct Wire` | `{ int64_t num; int64_t den; uint32_t dp; }` — flat JSON representation. |
 
