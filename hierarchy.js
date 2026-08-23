@@ -75,6 +75,7 @@ var hierarchy =
     [ "morph::math::Numerator", "d7/d45/structmorph_1_1math_1_1Numerator.html", null ],
     [ "morph::math::Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", null ],
     [ "morph::math::Rational::Wire", "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html", null ],
+    [ "morph::math::WireClampScope", "d3/d68/classmorph_1_1math_1_1WireClampScope.html", null ],
     [ "morph::model::ActionKeyTraits&lt; Action &gt;", "d5/d19/structmorph_1_1model_1_1ActionKeyTraits.html", null ],
     [ "morph::model::ActionLogPolicy&lt; Action &gt;", "da/dba/structmorph_1_1model_1_1ActionLogPolicy.html", null ],
     [ "morph::model::ActionTraits&lt; Action &gt;", "d5/d09/structmorph_1_1model_1_1ActionTraits.html", null ],

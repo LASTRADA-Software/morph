@@ -101,6 +101,7 @@ var annotated_dup =
         [ "DecimalPlaces", "da/d03/structmorph_1_1math_1_1DecimalPlaces.html", "da/d03/structmorph_1_1math_1_1DecimalPlaces" ],
         [ "Numerator", "d7/d45/structmorph_1_1math_1_1Numerator.html", "d7/d45/structmorph_1_1math_1_1Numerator" ],
         [ "Denominator", "de/d17/structmorph_1_1math_1_1Denominator.html", "de/d17/structmorph_1_1math_1_1Denominator" ],
+        [ "WireClampScope", "d3/d68/classmorph_1_1math_1_1WireClampScope.html", "d3/d68/classmorph_1_1math_1_1WireClampScope" ],
         [ "Rational", "d2/d5c/structmorph_1_1math_1_1Rational.html", "d2/d5c/structmorph_1_1math_1_1Rational" ]
       ] ],
       [ "model", null, [

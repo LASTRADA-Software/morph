@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/de8/rationa
 <a href="#details">More...</a></p>
 <div class="textblock"><code>#include &lt;morph/core/logger.hpp&gt;</code><br />
 <code>#include &lt;glaze/glaze.hpp&gt;</code><br />
+<code>#include &lt;atomic&gt;</code><br />
 <code>#include &lt;cassert&gt;</code><br />
 <code>#include &lt;cmath&gt;</code><br />
 <code>#include &lt;compare&gt;</code><br />
@@ -134,8 +135,10 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/de8/rationa
 <code>#include &lt;format&gt;</code><br />
 <code>#include &lt;limits&gt;</code><br />
 <code>#include &lt;numeric&gt;</code><br />
+<code>#include &lt;stdexcept&gt;</code><br />
 <code>#include &lt;string&gt;</code><br />
 <code>#include &lt;type_traits&gt;</code><br />
+<code>#include &lt;utility&gt;</code><br />
 </div>
 <p><a href="../../d1/de8/rational_8hpp_source.html">Go to the source code of this file.</a></p>
 <table class="memberdecls">
@@ -147,6 +150,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Strong type for a <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html" title="Exact rational number with a runtime decimal-precision tag.">Rational</a> numerator.  <a href="../../d7/d45/structmorph_1_1math_1_1Numerator.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Amath_3A_3ADenominator" id="r_morph_3A_3Amath_3A_3ADenominator"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../de/d17/structmorph_1_1math_1_1Denominator.html">morph::math::Denominator</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Strong type for a <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html" title="Exact rational number with a runtime decimal-precision tag.">Rational</a> denominator.  <a href="../../de/d17/structmorph_1_1math_1_1Denominator.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Amath_3A_3AWireClampScope" id="r_morph_3A_3Amath_3A_3AWireClampScope"><td class="memItemLeft">class &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Observes whether any <span class="tt"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html" title="Exact rational number with a runtime decimal-precision tag.">Rational</a></span> had to be clamped while decoding inside this scope.  <a href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Amath_3A_3ARational" id="r_morph_3A_3Amath_3A_3ARational"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">morph::math::Rational</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Exact rational number with a runtime decimal-precision tag.  <a href="../../d2/d5c/structmorph_1_1math_1_1Rational.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Amath_3A_3ARational_3A_3AWire" id="r_morph_3A_3Amath_3A_3ARational_3A_3AWire"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html">morph::math::Rational::Wire</a></td></tr>
@@ -233,8 +238,8 @@ Variables</h2></td></tr>
 <div class="line"><span class="keyword">auto</span> <span class="keyword">const</span> c = Rational{1, 2, DecimalPlaces{9}};</div>
 <div class="line"><span class="keyword">auto</span> result = a / b + c * 3.5;</div>
 <div class="line"><span class="comment">// decltype(result) == std::expected&lt;Rational, RationalError&gt;</span></div>
-<div class="ttc" id="astructmorph_1_1math_1_1DecimalPlaces_html"><div class="ttname"><a href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">morph::math::DecimalPlaces</a></div><div class="ttdoc">Strong type for a decimal-precision count.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/de8/rational_8hpp_source.html#l00113">rational.hpp:113</a></div></div>
-<div class="ttc" id="astructmorph_1_1math_1_1Rational_html"><div class="ttname"><a href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">morph::math::Rational</a></div><div class="ttdoc">Exact rational number with a runtime decimal-precision tag.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/de8/rational_8hpp_source.html#l00293">rational.hpp:293</a></div></div>
+<div class="ttc" id="astructmorph_1_1math_1_1DecimalPlaces_html"><div class="ttname"><a href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">morph::math::DecimalPlaces</a></div><div class="ttdoc">Strong type for a decimal-precision count.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/de8/rational_8hpp_source.html#l00116">rational.hpp:116</a></div></div>
+<div class="ttc" id="astructmorph_1_1math_1_1Rational_html"><div class="ttname"><a href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">morph::math::Rational</a></div><div class="ttdoc">Exact rational number with a runtime decimal-precision tag.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/de8/rational_8hpp_source.html#l00353">rational.hpp:353</a></div></div>
 </div><!-- fragment --><dl class="section user"><dt>Formatting</dt><dd><span class="tt">std::format</span> support is split by the supplied spec:<ul>
 <li>empty spec <span class="tt">"{}"</span> -&gt; exact rational form (<span class="tt">"n/d"</span>, or <span class="tt">"n"</span> when integer)</li>
 <li>non-empty spec <span class="tt">"{:.3f}"</span> -&gt; delegated to <span class="tt">std::formatter&lt;double&gt;</span> on <span class="tt">toDouble()</span></li>
@@ -277,7 +282,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00165">165</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -314,7 +319,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The non-negative value with the same magnitude. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00810">810</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00904">904</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -350,7 +355,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The smallest integer <span class="tt">&gt;= value</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00818">818</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00912">912</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -386,7 +391,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The largest integer <span class="tt">&lt;= value</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00830">830</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00924">924</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -422,7 +427,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The integer part of the value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00842">842</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00936">936</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -463,7 +468,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00854">854</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00948">948</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -504,7 +509,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00864">864</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00958">958</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -545,7 +550,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00874">874</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00968">968</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -586,7 +591,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">lhs / rhs</span>, or <span class="tt">unexpected(DivisionByZero)</span> if <code class="param">rhs</code> is zero. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00884">884</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00978">978</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -629,7 +634,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum, or <span class="tt">unexpected(RationalError::Overflow)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00905">905</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00999">999</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -670,7 +675,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference, or <span class="tt">unexpected(RationalError::Overflow)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00921">921</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01015">1015</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -711,7 +716,7 @@ Comparison is exact over the full int64 range (128-bit cross products). Arithmet
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product, or <span class="tt">unexpected(RationalError::Overflow)</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00938">938</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01032">1032</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -756,7 +761,7 @@ requires (detail::RationalLike&lt;Left&gt; || detail::RationalLike&lt;Right&gt;)
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum, or the first error encountered left to right. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01024">1024</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01118">1118</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -801,7 +806,7 @@ requires (detail::RationalLike&lt;Left&gt; || detail::RationalLike&lt;Right&gt;)
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference, or the first error encountered left to right. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01045">1045</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01139">1139</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -846,7 +851,7 @@ requires (detail::RationalLike&lt;Left&gt; || detail::RationalLike&lt;Right&gt;)
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product, or the first error encountered left to right. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01066">1066</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01160">1160</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -891,7 +896,7 @@ requires (detail::RationalLike&lt;Left&gt; || detail::RationalLike&lt;Right&gt;)
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact quotient, or the first error encountered left to right. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01087">1087</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l01181">1181</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -918,7 +923,7 @@ requires (detail::RationalLike&lt;Left&gt; || detail::RationalLike&lt;Right&gt;)
 
 <p>Largest decimal precision the type supports: <span class="tt">10^18</span> is the greatest power of ten that fits in <span class="tt">std::int64_t</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00159">159</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00162">162</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>

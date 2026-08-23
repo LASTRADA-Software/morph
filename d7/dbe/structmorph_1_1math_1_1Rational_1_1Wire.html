@@ -126,6 +126,11 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d7/dbe/structm
 
 <p><code>#include &lt;<a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>&gt;</code></p>
 <table class="memberdecls">
+<tr class="heading"><td colspan="2"><h2 id="header-pub-methods" class="groupheader"><a id="pub-methods" name="pub-methods"></a>
+Public Member Functions</h2></td></tr>
+<tr class="memitem:a0327fd527eda13c6fb49a67985adc34f" id="r_a0327fd527eda13c6fb49a67985adc34f"><td class="memItemLeft">constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a0327fd527eda13c6fb49a67985adc34f">validate</a> () const noexcept</td></tr>
+<tr class="memdesc:a0327fd527eda13c6fb49a67985adc34f"><td class="mdescLeft">&#160;</td><td class="mdescRight">Whether these raw values decode without being clamped.  <br /></td></tr>
+</table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 id="header-pub-attribs" class="groupheader"><a id="pub-attribs" name="pub-attribs"></a>
 Public Attributes</h2></td></tr>
 <tr class="memitem:a97edbe8a574d7eb2c5e077cac6d75f36" id="r_a97edbe8a574d7eb2c5e077cac6d75f36"><td class="memItemLeft">std::int64_t&#160;</td><td class="memItemRight"><a class="el" href="#a97edbe8a574d7eb2c5e077cac6d75f36">num</a> {0}</td></tr>
@@ -139,8 +144,41 @@ Public Attributes</h2></td></tr>
 <div class="textblock"><p>Flat JSON representation used by the Glaze codec below. </p>
 <p>Field names are the wire contract: <span class="tt">{"<a class="el" href="#a97edbe8a574d7eb2c5e077cac6d75f36" title="Signed numerator as sent/received.">num</a>":..,"<a class="el" href="#a0c94599c99335c3379941683babb03e9" title="Denominator as sent/received; may be non-canonical.">den</a>":..,"<a class="el" href="#a78d32fb54074ac3bbec65a64bdfdbdd8" title="Decimal-precision tag as sent/received.">dp</a>":..}</span>. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00533">533</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
-</div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00593">593</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+</div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
+<a id="a0327fd527eda13c6fb49a67985adc34f" name="a0327fd527eda13c6fb49a67985adc34f"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a0327fd527eda13c6fb49a67985adc34f">&#9670;&#160;</a></span>validate()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">bool morph::math::Rational::Wire::validate </td>
+          <td>(</td>
+          <td class="paramname"><span class="paramname"><em></em></span></td><td>)</td>
+          <td> const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span><span class="mlabel constexpr">constexpr</span><span class="mlabel noexcept">noexcept</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Whether these raw values decode without being clamped. </p>
+<p>Names the three clamps <span class="tt"><a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html#accfa4dfaaa11bd421cc62f0941d71d31" title="Wire-codec entry (Glaze read side): rebuilds through the canonicalising constructor,...">setWire</a></span> would otherwise apply silently, so "was this value altered on the way in?" is answerable <em>before</em> the canonicalising constructor has already hidden the answer. A caller that has its own decoded <span class="tt"><a class="el" href="../../d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html" title="Flat JSON representation used by the Glaze codec below.">Wire</a></span> can ask directly; the wire codec asks on its behalf, and a <span class="tt"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html" title="Observes whether any Rational had to be clamped while decoding inside this scope.">WireClampScope</a></span> around the decode acts on it.</p>
+<p>Note that a non-canonical but representable denominator (<span class="tt">4/8</span>, or a negative <span class="tt"><a class="el" href="#a0c94599c99335c3379941683babb03e9" title="Denominator as sent/received; may be non-canonical.">den</a></span>) is <em>valid</em>: reducing and sign-normalising it is canonicalisation, not clamping, and round-trips the same value.</p>
+<dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> if the values survive decoding unaltered in magnitude. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00611">611</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+
+</div>
+</div>
+<a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
 <a id="a97edbe8a574d7eb2c5e077cac6d75f36" name="a97edbe8a574d7eb2c5e077cac6d75f36"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a97edbe8a574d7eb2c5e077cac6d75f36">&#9670;&#160;</a></span>num</h2>
 
@@ -155,7 +193,7 @@ Public Attributes</h2></td></tr>
 
 <p>Signed numerator as sent/received. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00534">534</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00594">594</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -173,7 +211,7 @@ Public Attributes</h2></td></tr>
 
 <p><a class="el" href="../../de/d17/structmorph_1_1math_1_1Denominator.html" title="Strong type for a Rational denominator.">Denominator</a> as sent/received; may be non-canonical. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00535">535</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00595">595</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>
@@ -191,7 +229,7 @@ Public Attributes</h2></td></tr>
 
 <p>Decimal-precision tag as sent/received. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00536">536</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/de8/rational_8hpp_source.html#l00596">596</a> of file <a class="el" href="../../d1/de8/rational_8hpp_source.html">rational.hpp</a>.</p>
 
 </div>
 </div>

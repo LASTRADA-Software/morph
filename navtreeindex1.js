@@ -1,5 +1,9 @@
 var NAVTREEINDEX1 =
 {
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad1a2a95d9fa055d297e3176ab981348b":[2,0,0,16,2,6],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#ad3e402f437433e89a65dbe1ef056da84":[2,0,0,16,2,4],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#aef864a89d6a0a2e492fd4bb901fa8f48":[2,0,0,16,2,12],
+"d4/d0b/classmorph_1_1qt_1_1QtWebSocketBackend.html#af7db92dbacfb0b4f1ce047f0930b3c73":[2,0,0,16,2,9],
 "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html":[2,0,0,2,8],
 "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a058e080534112e88525e4245dc89137a":[2,0,0,2,8,1],
 "d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a06e3f39db0975c6baf3a7b433f01a0ec":[2,0,0,2,8,11],
@@ -220,10 +224,11 @@ var NAVTREEINDEX1 =
 "d7/da9/file__action__log_8hpp_source.html":[3,0,0,3,1],
 "d7/dad/version_8hpp_source.html":[3,0,0,10],
 "d7/db5/conceptmorph_1_1forms_1_1EngageableField.html":[1,0,0,1],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html":[2,0,0,11,3,0],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9":[2,0,0,11,3,0,1],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8":[2,0,0,11,3,0,2],
-"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36":[2,0,0,11,3,0,0],
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html":[2,0,0,11,4,0],
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0327fd527eda13c6fb49a67985adc34f":[2,0,0,11,4,0,0],
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a0c94599c99335c3379941683babb03e9":[2,0,0,11,4,0,2],
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a78d32fb54074ac3bbec65a64bdfdbdd8":[2,0,0,11,4,0,3],
+"d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36":[2,0,0,11,4,0,1],
 "d7/dd6/structmorph_1_1views_1_1MasterDetailView.html":[2,0,0,21,4],
 "d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html":[2,0,0,15,6],
 "d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a3760c09e60ede47950926f204599a968":[2,0,0,15,6,0],
@@ -244,10 +249,5 @@ var NAVTREEINDEX1 =
 "d8/d38/structmorph_1_1bridge_1_1NoSharing.html":[2,0,0,3,2],
 "d8/d3a/locale__format_8hpp.html":[3,0,0,7,1],
 "d8/d3a/locale__format_8hpp_source.html":[3,0,0,7,1],
-"d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html":[1,0,2,1],
-"d8/d94/structmorph_1_1flows_1_1WizardStep.html":[2,0,0,7,2],
-"d8/d94/structmorph_1_1flows_1_1WizardStep.html#a98d4a48c599245638cb6886b2033f800":[2,0,0,7,2,1],
-"d8/d94/structmorph_1_1flows_1_1WizardStep.html#aa0e8b6fc036635f8539d8ca8e3c2f314":[2,0,0,7,2,0],
-"d8/d9a/conceptmorph_1_1units_1_1HasUnitBounds.html":[1,0,2,2],
-"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html":[2,0,0,9,7]
+"d8/d4a/conceptmorph_1_1units_1_1HasUnitRelations.html":[1,0,2,1]
 };

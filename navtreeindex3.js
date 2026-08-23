@@ -1,5 +1,10 @@
 var NAVTREEINDEX3 =
 {
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3e73309d5145498bd68fed82167c3771":[2,0,0,9,4,1],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3f6645af9ccf2dd75508e1771ef1e1e5":[2,0,0,9,4,12],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24":[2,0,0,9,4,10],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8":[2,0,0,9,4,7],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae":[2,0,0,9,4,3],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353":[2,0,0,9,4,6],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a9ca4bf6f47ab3438eebbabde2fb9807a":[2,0,0,9,4,11],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07":[2,0,0,9,4,9],

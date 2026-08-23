@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=11"/>
 <meta name="generator" content="Doxygen 1.17.0"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>morph: morph::model::ActionLogPolicy&lt; Action &gt; Struct Template Reference</title>
+<title>morph: Member List</title>
 <link href="../../tabs.css" rel="stylesheet" type="text/css"/>
 <script type="text/javascript" src="../../codefolding.js"></script>
 <script type="text/javascript" src="../../clipboard.js"></script>
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   </div>
 </div>
 <script type="text/javascript">
-document.addEventListener('DOMContentLoaded',() => { initNavTree('da/dba/structmorph_1_1model_1_1ActionLogPolicy.html','../../','da/d07/structmorph_1_1model_1_1ActionLogPolicy-members'); });
+document.addEventListener('DOMContentLoaded',() => { initNavTree('d3/d68/classmorph_1_1math_1_1WireClampScope.html','../../',''); });
 </script>
 <div id="container">
 <div id="doc-content">
@@ -117,77 +117,25 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('da/dba/structm
 </div>
 
 <div class="header">
-  <div class="headertitle"><div class="title">morph::model::ActionLogPolicy&lt; Action &gt; Struct Template Reference</div></div>
+  <div class="headertitle"><div class="title">morph::math::WireClampScope Member List</div></div>
 </div><!--header-->
 <div class="contents">
 
-<p>Per-action policy deciding how repeated executions are checkpointed into a durable action log.  
- <a href="#details">More...</a></p>
-
-<p><code>#include &lt;<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>&gt;</code></p>
-<table class="memberdecls">
-<tr class="heading"><td colspan="2"><h2 id="header-pub-static-attribs" class="groupheader"><a id="pub-static-attribs" name="pub-static-attribs"></a>
-Static Public Attributes</h2></td></tr>
-<tr class="memitem:a2da3306697c2b77909bef7eea39ee668" id="r_a2da3306697c2b77909bef7eea39ee668"><td class="memItemLeft">static constexpr bool&#160;</td><td class="memItemRight"><a class="el" href="#a2da3306697c2b77909bef7eea39ee668">coalesce</a> = false</td></tr>
-<tr class="memdesc:a2da3306697c2b77909bef7eea39ee668"><td class="mdescLeft">&#160;</td><td class="mdescRight">If <span class="tt">true</span>, a checkpoint keeps only the most recent entry per <span class="tt">(modelType, entityKey, actionType)</span>. If <span class="tt">false</span> (default), every entry survives.  <br /></td></tr>
-</table>
-<a name="details" id="details"></a><h2 id="header-details" class="groupheader">Detailed Description</h2>
-<div class="textblock"><div class="compoundTemplParams">template&lt;typename Action&gt;<br />
-struct morph::model::ActionLogPolicy&lt; Action &gt;</div><p>Per-action policy deciding how repeated executions are checkpointed into a durable action log. </p>
-<p>Deliberately minimal for now — only <span class="tt"><a class="el" href="#a2da3306697c2b77909bef7eea39ee668" title="If true, a checkpoint keeps only the most recent entry per (modelType, entityKey, actionType)....">coalesce</a></span> exists, and it has no registration macro yet. Specialise directly for the rare action where only the latest occurrence should survive a checkpoint (e.g. a form-field edit fired repeatedly via <span class="tt">BridgeHandler::set&lt;...&gt;</span>); every other action defaults to <span class="tt">false</span>, meaning every execution is treated as a distinct, permanent fact (the right default for anything resembling a business event). </p><dl class="tparams"><dt>Template Parameters</dt><dd>
-  <table class="tparams">
-    <tr><td class="paramname">Action</td><td>Concrete action type. </td></tr>
-  </table>
-  </dd>
-</dl>
-
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00157">157</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
-</div><a name="doc-variable-members" id="doc-variable-members"></a><h2 id="header-doc-variable-members" class="groupheader">Member Data Documentation</h2>
-<a id="a2da3306697c2b77909bef7eea39ee668" name="a2da3306697c2b77909bef7eea39ee668"></a>
-<h2 class="memtitle"><span class="permalink"><a href="#a2da3306697c2b77909bef7eea39ee668">&#9670;&#160;</a></span>coalesce</h2>
-
-<div class="memitem">
-<div class="memproto">
-<div class="memtemplate">
-template&lt;typename Action&gt; </div>
-<table class="mlabels">
-  <tr>
-  <td class="mlabels-left">
-      <table class="memname">
-        <tr>
-          <td class="memname">bool <a class="el" href="../../da/dba/structmorph_1_1model_1_1ActionLogPolicy.html">morph::model::ActionLogPolicy</a>&lt; Action &gt;::coalesce = false</td>
-        </tr>
-      </table>
-  </td>
-  <td class="mlabels-right">
-<span class="mlabels"><span class="mlabel static">static</span><span class="mlabel constexpr">constexpr</span></span>  </td>
-  </tr>
-</table>
-</div><div class="memdoc">
-
-<p>If <span class="tt">true</span>, a checkpoint keeps only the most recent entry per <span class="tt">(modelType, entityKey, actionType)</span>. If <span class="tt">false</span> (default), every entry survives. </p>
-
-<p class="definition">Definition at line <a class="el" href="../../d1/da2/registry_8hpp_source.html#l00161">161</a> of file <a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a>.</p>
-
-</div>
-</div>
-<hr/>The documentation for this struct was generated from the following file:<ul>
-<li>morph/core/<a class="el" href="../../d1/da2/registry_8hpp_source.html">registry.hpp</a></li>
-</ul>
-</div><!-- contents -->
+<p>This is the complete list of members for <a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a>, including all inherited members.</p>
+<table class="directory">
+  <tr class="even"><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html#ab07096909467f8d092cc4f700a2cd16b">clamped</a>() const noexcept</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="odd"><td class="entry"><b>operator=</b>(const WireClampScope &amp;)=delete (defined in <a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a>)</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>operator=</b>(WireClampScope &amp;&amp;)=delete (defined in <a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a>)</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"></td></tr>
+  <tr class="odd"><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aa5b2591743ee0e3f174346b0aadb97c2">WireClampScope</a>() noexcept</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+  <tr bgcolor="#f0f0f0" class="even"><td class="entry"><b>WireClampScope</b>(const WireClampScope &amp;)=delete (defined in <a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a>)</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"></td></tr>
+  <tr bgcolor="#f0f0f0" class="odd"><td class="entry"><b>WireClampScope</b>(WireClampScope &amp;&amp;)=delete (defined in <a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a>)</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"></td></tr>
+  <tr class="even"><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aabf463705127cf7821606cb315e0ed36">~WireClampScope</a>()</td><td class="entry"><a class="el" href="../../d3/d68/classmorph_1_1math_1_1WireClampScope.html">morph::math::WireClampScope</a></td><td class="entry"><span class="mlabel">inline</span></td></tr>
+</table></div><!-- contents -->
 </div><!-- doc-content -->
-<div id="page-nav" class="page-nav-panel">
-<div id="page-nav-resize-handle"></div>
-<div id="page-nav-tree">
-<div id="page-nav-contents">
-</div><!-- page-nav-contents -->
-</div><!-- page-nav-tree -->
-</div><!-- page-nav -->
 </div><!-- container -->
 <!-- start footer part -->
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
-    <li class="navelem"><b>morph</b></li><li class="navelem"><b>model</b></li><li class="navelem"><a href="../../da/dba/structmorph_1_1model_1_1ActionLogPolicy.html">ActionLogPolicy</a></li>
     <li class="footer">Generated by <a href="https://www.doxygen.org/index.html"><img class="footer" src="../../doxygen.svg" width="104" height="31" alt="doxygen"/></a> 1.17.0 </li>
   </ul>
 </div>

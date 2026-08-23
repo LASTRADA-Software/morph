@@ -18,5 +18,6 @@ var searchData=
   ['_7esocketbackend_15',['~SocketBackend',['../d5/d98/classmorph_1_1net_1_1SocketBackend.html#a7de340062de34a174bd659f4d68ee69e',1,'morph::net::SocketBackend']]],
   ['_7esocketserver_16',['~SocketServer',['../dc/d9a/classmorph_1_1net_1_1SocketServer.html#a120e0fa0fd4691bf8d3b957c1357888d',1,'morph::net::SocketServer']]],
   ['_7esqliteofflinequeue_17',['~SqliteOfflineQueue',['../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa793d4340bf8da09261b51613389ca4b',1,'morph::offline::SqliteOfflineQueue']]],
-  ['_7ethreadpoolexecutor_18',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]]
+  ['_7ethreadpoolexecutor_18',['~ThreadPoolExecutor',['../d9/db3/classmorph_1_1exec_1_1ThreadPoolExecutor.html#a066c0eb2310d4519dce22b2db5c46057',1,'morph::exec::ThreadPoolExecutor']]],
+  ['_7ewireclampscope_19',['~WireClampScope',['../d3/d68/classmorph_1_1math_1_1WireClampScope.html#aabf463705127cf7821606cb315e0ed36',1,'morph::math::WireClampScope']]]
 ];
