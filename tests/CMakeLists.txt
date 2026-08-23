@@ -125,9 +125,16 @@ apply_warnings(morph_tests)
 # D:/caching/README.md for the tool this refers to, and
 # https://github.com/LASTRADA-Software/fastcached/issues/51 for the filed
 # report).
-set_target_properties(morph_tests PROPERTIES
-    C_COMPILER_LAUNCHER ""
-    CXX_COMPILER_LAUNCHER "")
+# Gated on fastcache-cc actually being the launcher. Clearing the property
+# unconditionally clears *whatever* launcher is configured -- so on a CI runner,
+# where the launcher is sccache, this target silently bypassed the compiler
+# cache. morph_tests is ~92 TUs and is essentially the whole build of the plain
+# matrix legs: `Linux / gcc-debug` compiled 101 TUs while sccache saw 9.
+if(MORPH_COMPILER_CACHE_IS_FASTCACHE)
+    set_target_properties(morph_tests PROPERTIES
+        C_COMPILER_LAUNCHER ""
+        CXX_COMPILER_LAUNCHER "")
+endif()
 
 # Several individual test files (schema/rule template instantiation over many
 # action/form types, e.g. test_quantity_forms.cpp) have independently pushed

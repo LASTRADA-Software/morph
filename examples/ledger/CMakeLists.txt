@@ -43,12 +43,16 @@ morph_add_rung(NAME ledger)
 # the same stale bytes on the very next build. ladder_ledger_tests opts out
 # for the same reason.
 if(TARGET ladder_ledger_lib)
-    set_target_properties(ladder_ledger_lib PROPERTIES
-        C_COMPILER_LAUNCHER ""
-        CXX_COMPILER_LAUNCHER "")
+    if(MORPH_COMPILER_CACHE_IS_FASTCACHE)
+        set_target_properties(ladder_ledger_lib PROPERTIES
+            C_COMPILER_LAUNCHER ""
+            CXX_COMPILER_LAUNCHER "")
+    endif()
 endif()
 if(TARGET ladder_ledger_tests)
-    set_target_properties(ladder_ledger_tests PROPERTIES
-        C_COMPILER_LAUNCHER ""
-        CXX_COMPILER_LAUNCHER "")
+    if(MORPH_COMPILER_CACHE_IS_FASTCACHE)
+        set_target_properties(ladder_ledger_tests PROPERTIES
+            C_COMPILER_LAUNCHER ""
+            CXX_COMPILER_LAUNCHER "")
+    endif()
 endif()
