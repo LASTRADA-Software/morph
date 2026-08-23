@@ -3,6 +3,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <string_view>
+#include <vector>
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
@@ -15,6 +17,7 @@
 #include "lims/core/self_journal.hpp"
 #include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
+#include "lims/dto/verification_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 
 /// @file
@@ -144,6 +147,70 @@ public:
     /// @return The three "no number" codes, with display text.
     ListResultQualifiersResult execute(const ListResultQualifiers& action);
 
+    /// @brief Every role @p principal currently holds.
+    ///
+    /// Static because `lims::auth::LimsAuthorizer` wires its own `RoleLookup`
+    /// to the very same query: one source of truth for what a principal may
+    /// do, read by both enforcement points.
+    /// @param principal The principal to look up.
+    /// @return The roles held, in grant order.
+    [[nodiscard]] static std::vector<LimsRole> rolesOf(std::string_view principal);
+
+    /// @brief Grants a role to a principal.
+    ///
+    /// Requires `LimsRole::Supervisor`, except on a lab that has no supervisor
+    /// yet, where the first grant is allowed so the system can be bootstrapped.
+    /// The exception closes the instant any supervisor exists, and the
+    /// bootstrap grant is journaled like every other one.
+    /// @param action The principal and the role.
+    /// @return Every role that principal now holds.
+    /// @throws ValidationError if no principal is named.
+    /// @throws Forbidden if the caller is not a supervisor and one already exists.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    RoleGrantResult execute(const GrantRole& action);
+
+    /// @brief Records the four-eyes verification of one captured result.
+    ///
+    /// Both halves of the control are enforced here, because only one of them
+    /// *can* be enforced anywhere else: the caller must hold
+    /// `LimsRole::Verifier` (which `lims::auth::LimsAuthorizer` also checks at
+    /// the `RemoteServer` edge, and which is re-checked here because no
+    /// authorizer runs on the `Local` path), and the caller must not be the
+    /// analyst who captured the result (which `IAuthorizer` structurally
+    /// cannot express — it never sees the result).
+    /// @param action The result to verify.
+    /// @return The recorded verification.
+    /// @throws ValidationError if no result is named.
+    /// @throws NotFound if the result does not exist.
+    /// @throws Forbidden if the caller lacks `Verifier`, or captured the result.
+    /// @throws IllegalTransition if the sample is not awaiting verification.
+    /// @throws Conflict if the result is already verified.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    VerificationView execute(const VerifyResult& action);
+
+    /// @brief Lists the verifications recorded against the attached sample.
+    /// @param action Carries no fields of its own.
+    /// @return Every verification for the sample.
+    /// @throws NotFound if this handler is not attached to a sample.
+    ListVerificationsResult execute(const ListVerifications& action);
+
+    /// @brief Reconstructs the attached sample's history **from the journal
+    ///        alone**.
+    ///
+    /// Reads the attached action log and nothing else — no database access of
+    /// any kind — which is what makes the README's definition of done ("every
+    /// state a sample was ever in is reconstructible from the journal alone")
+    /// a claim this method can actually support rather than assert.
+    ///
+    /// An entry this build cannot interpret is reported as
+    /// `AuditStepKind::Unreadable`, never skipped: an audit trail that quietly
+    /// omits what it could not read is worse than one that admits the gap,
+    /// because the omission is invisible.
+    /// @param action Carries no fields of its own.
+    /// @return Every recorded step, and the state sequence they imply.
+    /// @throws NotFound if this handler is not attached to a sample.
+    AuditTrailResult execute(const GetAuditTrail& action);
+
     /// @brief Applies one queued field update, or flags it as a conflict.
     ///
     /// The heart of §7. Applies @p action only if the server still holds the
@@ -253,6 +320,17 @@ private:
     /// @return The stored result.
     ResultView applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author);
 
+    /// @brief Throws `IllegalTransition` unless every result captured against
+    ///        the attached sample has a verification recorded.
+    ///
+    /// The `PublishSample` precondition, and the reason the four-eyes step is
+    /// load-bearing rather than decorative.
+    void requireEveryResultVerified() const;
+
+    /// @brief Throws `Forbidden` unless the authenticated principal holds @p role.
+    /// @param role The role the action requires.
+    static void requireRole(LimsRole role);
+
     /// @brief Whether @p opKey names an operation this server already decided.
     /// @param opKey The operation's dedup token; empty is never a match.
     /// @return `true` when the key is recorded in `lims_replayed_ops`.
@@ -296,6 +374,11 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResul
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::QueuedCapture, "QueuedCapture")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ResolveConflict, "ResolveConflict")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GrantRole, "GrantRole")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
 
 // Hand-written ModelKeyTraits/ActionKeyTraits rather than
 // BRIDGE_MODEL_KEY/BRIDGE_KEY_FROM: those macros deduce the model's

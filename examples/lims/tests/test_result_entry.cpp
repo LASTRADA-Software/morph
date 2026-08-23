@@ -469,6 +469,18 @@ TEST_CASE("Results can only be captured while a sample is in progress", "[lims][
     model.execute(lims::ReturnForRework{.reason = "recount"});
     model.execute(capture);
     model.execute(lims::SubmitForVerification{});
+
+    // Publishing needs the second pair of eyes first (README §6): a sample
+    // whose readings nobody has verified cannot be released to the client.
+    model.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+    const auto captured = model.execute(lims::ListResults{}).results;
+    REQUIRE(captured.size() == 1);
+    {
+        const ScopedPrincipal bob{"bob"};
+        lims::SampleModel verifier;
+        verifier.execute(lims::OpenSample{.sampleId = captured[0].sampleId});
+        verifier.execute(lims::VerifyResult{.resultId = captured[0].id});
+    }
     model.execute(lims::PublishSample{});
 
     // Published: a released report that quietly accepted a new result is the

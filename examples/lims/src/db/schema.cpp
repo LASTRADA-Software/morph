@@ -140,3 +140,15 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000008, "Create lims_replayed_ops table") {
         .RequiredColumn("op_key", Varchar(128))
         .RequiredColumn("decided_at", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000009, "Create lims_operators table") {
+    // The single source of truth for roles: the authorizer at the RemoteServer
+    // edge and the model on every dispatch path both read this one table,
+    // rather than each keeping its own idea of who may verify a result.
+    plan.CreateTableIfNotExists("lims_operators")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("principal", Varchar(64))
+        .RequiredColumn("role", Integer())
+        .RequiredColumn("granted_by", Varchar(64))
+        .RequiredColumn("granted_at", Bigint());
+}

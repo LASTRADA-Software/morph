@@ -376,6 +376,63 @@ count at zero and mints keys colliding with genuinely different earlier
 edits — replay would then silently *skip* a real reading. The rung's own
 self-conflict test caught it.
 
+### 16. Four eyes is two rules, enforced in two places (§6)
+
+The verifier must **hold the role** and must **not be the analyst who
+captured the reading**. Only the first is a type-level fact, so only the first
+can be checked before dispatch: `lims::auth::LimsAuthorizer` does it at the
+`RemoteServer` edge, and `SampleModel` re-does it on every dispatch path,
+because no authorizer runs in `Local` mode at all. The second is a row-level
+fact `IAuthorizer` structurally cannot express — it is handed the model and
+action type ids and the caller's session, never the result — so it lives only
+in the model. Neither check stands in for the other, and both are tested.
+
+Roles are **not hierarchical**: a supervisor who must also verify is granted
+`Verifier` explicitly. An implicit hierarchy is how somebody ends up being the
+second pair of eyes on their own work without anyone deciding they should be.
+
+`LimsAuthorizer` derives from `SigningAuthorizer` rather than
+`AllowAllAuthorizer` (polls' choice) because a role gate needs an
+authenticated principal: a non-authenticating authorizer makes `RemoteServer`
+*clear* `Context::principal` before dispatch, leaving nothing to key on. Roles
+come from the `lims_operators` table, not the token's `roles` claim — a token
+lives for its expiry, so a role revoked mid-shift would keep working until it
+aged out.
+
+**The bootstrap carve-out.** A lab with no supervisor cannot appoint its
+first one, so the first `GrantRole` is allowed whoever makes it. The exception
+closes the instant any supervisor exists and the grant is journaled like every
+other, so it is visible in the trail rather than a back door.
+`LimsAuthorizer` deliberately does *not* mirror the carve-out — duplicating a
+security exception is how the two copies drift — which means the very first
+grant must be made locally, never remotely against an empty lab.
+
+**Publishing requires verification.** A four-eyes control nothing depends on
+is theatre, so `PublishSample` refuses while any captured result is
+unverified.
+
+### 17. The audit trail is reconstructed from the journal, and only the journal (§6)
+
+`execute(GetAuditTrail)` reads the attached action log and opens no
+`DataMapper` at all. That is what makes the definition of done — "every state
+a sample was ever in is reconstructible from the journal alone" — a claim the
+method can support rather than assert, and the test asserts it the only honest
+way: it deletes every row the sample has and reconstructs anyway.
+
+An entry this build cannot interpret becomes an `AuditStepKind::Unreadable`
+step, **never a skipped one**. Skipping is the tempting implementation and the
+wrong one: a trail that quietly omits what it could not read looks complete,
+so nobody discovers the omission.
+
+**What that does not cover, stated plainly.** `Unreadable` catches an unknown
+action id and a result that does not parse. It cannot catch a payload that
+parses into something *else* — a renamed field decodes to a default, silently,
+so a trail reconstructed across a rename is confidently wrong rather than
+visibly incomplete. That is `docs/findings/010`, and this rung does **not**
+close it: the README names this rung the owner of the ladder's payload-evolution
+answer, and shipping a half-considered scheme that rungs 5 and 7 must then
+live with would be worse than filing the diagnosis with the options laid out.
+
 ## Findings raised by this rung
 
 - **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
@@ -396,6 +453,15 @@ self-conflict test caught it.
   `validate()` and is stored unflagged, because the rule vocabulary cannot
   name a bound that lives in a database row. Bridges directly into rung 7's
   runtime custom fields, which are planned on the opposite assumption.
+- **[`docs/findings/010`](../../docs/findings/010-journal-payload-evolution-decodes-silently-to-defaults.md)
+  — a journal entry from an older build decodes leniently to defaults, with no
+  signal.** `ActionTraits::fromJson` reads with `error_on_unknown_keys = false`,
+  so a renamed field is dropped and the new one takes its default; `LogEntry::v`
+  versions the *line format*, not the application payload. An audit trail
+  reconstructed across such a rename reports the wrong state with full
+  confidence. **This rung was named the owner of the ladder's answer and has
+  not closed it** — the finding carries the diagnosis, a measured repro, and
+  three options with the trade-off that decides between them.
 - **A schema's `required` array can silently contradict its own `x-rules`.**
   `schemaJson`'s required-by-default rule put both `value` and `qualifier`
   in `required` while the `exactlyOneOf` entry beside them said at most one

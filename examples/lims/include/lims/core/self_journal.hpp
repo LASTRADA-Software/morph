@@ -8,6 +8,7 @@
 #include <morph/session/session.hpp>
 #include <string>
 #include <utility>
+#include <vector>
 
 /// @file
 /// Self-journaling for a plain-constructed model.
@@ -97,6 +98,19 @@ public:
         entry.error = error;
         entry.outcome = ::morph::journal::Outcome::Failed;
         append(std::move(entry));
+    }
+
+    /// @brief Every entry recorded against this instance's own identity.
+    ///
+    /// The read side of the journal, so a model can render an audit trail from
+    /// what it recorded rather than from the store it also wrote to. Empty
+    /// when no log is attached.
+    /// @return The entries for this instance's entity key, in append order.
+    [[nodiscard]] std::vector<::morph::journal::LogEntry> entries() const {
+        if (!_log) {
+            return {};
+        }
+        return _log->entries(_entityKey);
     }
 
     /// @brief Appends a payload this build could not act on at all.

@@ -4,8 +4,11 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <morph/session/session.hpp>
+#include <algorithm>
 #include <string>
+#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "lims/core/errors.hpp"
 #include "lims/core/model_support.hpp"
@@ -121,6 +124,103 @@ namespace {
         throw NotFound{"sample " + std::to_string(sampleId) + " does not exist"};
     }
     return rows.front();
+}
+
+/// @brief Whether @p actionType is one of the lifecycle transitions, whose
+///        recorded result is a `SampleView`.
+/// @param actionType The recorded action id.
+/// @return `true` for an action whose result carries a sample state.
+[[nodiscard]] bool isLifecycleAction(std::string_view actionType) {
+    return actionType == "RegisterSample" || actionType == "ReceiveSample" || actionType == "StartWork" ||
+           actionType == "SubmitForVerification" || actionType == "ReturnForRework" ||
+           actionType == "PublishSample" || actionType == "RejectSample";
+}
+
+/// @brief Reconstructs one audit step from one journal entry.
+///
+/// The whole of "reconstructible from the journal alone", and the reason it is
+/// a `switch`-like chain over a *closed* set of action ids rather than a
+/// generic decode: an entry this build does not recognise, or whose result
+/// does not decode, becomes an `Unreadable` step. It is never skipped.
+///
+/// Skipping is the tempting implementation and the wrong one. An audit trail
+/// that quietly omits what it could not read looks complete, so nobody
+/// discovers the omission — which is exactly how the rung README's
+/// "journal payload evolution" strain point turns "reconstructible from the
+/// journal alone" into a false claim. An admitted gap can at least be
+/// investigated.
+/// @param entry The recorded entry.
+/// @return The reconstructed step.
+[[nodiscard]] AuditStep auditStepFor(const ::morph::journal::LogEntry& entry) {
+    AuditStep step{
+        .at = timestampFromMillis(entry.timestampMs),
+        .principal = entry.principal,
+        .action = entry.actionType,
+        .kind = AuditStepKind::Unreadable,
+        .outcome = entry.outcome == ::morph::journal::Outcome::Succeeded ? AuditOutcome::Succeeded
+                                                                        : AuditOutcome::Refused,
+        .state = SampleState::Registered,
+        .version = SampleVersion{},
+        .detail = entry.error,
+    };
+
+    // A refused attempt is fully reconstructible from the entry itself: the
+    // action, the author, the instant, and why it was refused. There is no
+    // result to decode, so the kind is settled here.
+    if (step.outcome == AuditOutcome::Refused) {
+        step.kind = isLifecycleAction(entry.actionType) ? AuditStepKind::LifecycleTransition
+                                                        : AuditStepKind::Unreadable;
+        if (step.kind == AuditStepKind::Unreadable && !entry.actionType.empty()) {
+            // A recognised non-lifecycle action that was refused is still a
+            // readable step, just not a lifecycle one.
+            if (entry.actionType == "CaptureConcentration") {
+                step.kind = AuditStepKind::ResultCaptured;
+            } else if (entry.actionType == "VerifyResult") {
+                step.kind = AuditStepKind::ResultVerified;
+            } else if (entry.actionType == "QueuedCapture") {
+                step.kind = AuditStepKind::OfflineReplay;
+            } else if (entry.actionType == "ResolveConflict") {
+                step.kind = AuditStepKind::ConflictResolved;
+            } else if (entry.actionType == "GrantRole") {
+                step.kind = AuditStepKind::RoleGranted;
+            }
+        }
+        return step;
+    }
+
+    try {
+        if (isLifecycleAction(entry.actionType)) {
+            const auto view = ::morph::model::ActionTraits<ReceiveSample>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::LifecycleTransition;
+            step.state = view.state;
+            step.version = view.version;
+        } else if (entry.actionType == "CaptureConcentration") {
+            static_cast<void>(::morph::model::ActionTraits<CaptureConcentration>::resultFromJson(entry.result));
+            step.kind = AuditStepKind::ResultCaptured;
+        } else if (entry.actionType == "VerifyResult") {
+            const auto view = ::morph::model::ActionTraits<VerifyResult>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::ResultVerified;
+            step.detail = view.capturedBy;
+        } else if (entry.actionType == "QueuedCapture") {
+            const auto replay = ::morph::model::ActionTraits<QueuedCapture>::resultFromJson(entry.result);
+            step.kind = AuditStepKind::OfflineReplay;
+            step.version = replay.serverVersion;
+            step.detail = replay.outcome == ReplayOutcome::Conflicted ? std::string{"conflicted"}
+                                                                      : std::string{"applied"};
+        } else if (entry.actionType == "ResolveConflict") {
+            static_cast<void>(::morph::model::ActionTraits<ResolveConflict>::resultFromJson(entry.result));
+            step.kind = AuditStepKind::ConflictResolved;
+        } else if (entry.actionType == "GrantRole") {
+            static_cast<void>(::morph::model::ActionTraits<GrantRole>::resultFromJson(entry.result));
+            step.kind = AuditStepKind::RoleGranted;
+        } else {
+            step.detail = "unrecognised action id '" + entry.actionType + "'";
+        }
+    } catch (const std::exception& error) {
+        step.kind = AuditStepKind::Unreadable;
+        step.detail = std::string{"result payload did not decode: "} + error.what();
+    }
+    return step;
 }
 
 }  // namespace
@@ -243,6 +343,13 @@ SampleView SampleModel::transition(const Action& action, SampleState target) {
         if (!isLegalTransition(before.state, target)) {
             throw IllegalTransition{std::string{"a "} + std::string{stateName(before.state)} +
                                     " sample cannot become " + std::string{stateName(target)}};
+        }
+        if constexpr (std::is_same_v<Action, PublishSample>) {
+            // A four-eyes control nothing depends on is theatre. Publishing is
+            // the point at which the lab tells the client a number is true, so
+            // it is the point that has to insist every number in the report
+            // has been through a second pair of eyes.
+            requireEveryResultVerified();
         }
         auto after = writeState(target);
         _journal.recordSuccess<SampleModel>(action, after, nowMillis());
@@ -566,6 +673,203 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
         _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
         throw;
     }
+}
+
+
+std::vector<LimsRole> SampleModel::rolesOf(std::string_view principal) {
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::OperatorRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::OperatorRecord::principal>, "=", std::string{principal})
+                    .All();
+    std::vector<LimsRole> roles;
+    roles.reserve(rows.size());
+    for (const auto& row : rows) {
+        roles.push_back(static_cast<LimsRole>(row.role.Value()));
+    }
+    return roles;
+}
+
+void SampleModel::requireEveryResultVerified() const {
+    Lightweight::DataMapper mapper;
+    for (const auto& result : mapper.Query<db::ResultRecord>()
+                                  .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
+                                  .All()) {
+        if (mapper.Query<db::VerificationRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", result.id.Value())
+                .All()
+                .empty()) {
+            throw IllegalTransition{"result " + std::to_string(result.id.Value()) +
+                                    " has not been verified; a sample cannot be published with unverified results"};
+        }
+    }
+}
+
+void SampleModel::requireRole(LimsRole role) {
+    const auto& principal = ::morph::session::current()->principal;
+    const auto held = rolesOf(principal);
+    if (std::ranges::find(held, role) == held.end()) {
+        throw Forbidden{"'" + principal + "' does not hold the " + std::string{roleName(role)} + " role"};
+    }
+}
+
+RoleGrantResult SampleModel::execute(const GrantRole& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"GrantRole: a principal is required"};
+        }
+
+        Lightweight::DataMapper mapper;
+        // The bootstrap carve-out, and its exact boundary: a lab with no
+        // supervisor at all has no way to appoint its first one, so the first
+        // grant is permitted. The moment *any* supervisor exists the exception
+        // is gone -- and the bootstrap grant is journaled like every other, so
+        // it is visible in the audit trail rather than a silent back door.
+        const auto supervisors = mapper.Query<db::OperatorRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::OperatorRecord::role>, "=",
+                                            static_cast<int>(LimsRole::Supervisor))
+                                     .All();
+        if (!supervisors.empty()) {
+            requireRole(LimsRole::Supervisor);
+        }
+
+        // Idempotent: granting a role twice is not an error and does not
+        // produce two rows a revoke would then have to chase.
+        const auto existing = rolesOf(action.principal);
+        if (std::ranges::find(existing, action.role) == existing.end()) {
+            db::OperatorRecord row;
+            row.principal = Lightweight::SqlAnsiString<64>{action.principal};
+            row.role = static_cast<int>(action.role);
+            row.grantedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+            row.grantedAt = nowMillis();
+            mapper.Create(row);
+        }
+
+        RoleGrantResult result{.principal = action.principal, .roles = rolesOf(action.principal)};
+        _journal.recordSuccess<SampleModel>(action, result, nowMillis());
+        return result;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+VerificationView SampleModel::execute(const VerifyResult& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"VerifyResult: a resultId is required"};
+        }
+        // Half one of four eyes: the role. Re-checked here rather than left to
+        // lims::auth::LimsAuthorizer, because no authorizer runs on the Local
+        // dispatch path at all -- a client-side gate is UX, not security
+        // (examples/IMPLEMENTATION.md rule 1).
+        requireRole(LimsRole::Verifier);
+
+        Lightweight::DataMapper mapper;
+        auto results = mapper.Query<db::ResultRecord>()
+                           .Where(::Lightweight::FieldNameOf<&db::ResultRecord::id>, "=", *action.resultId)
+                           .All();
+        if (results.empty()) {
+            throw NotFound{"VerifyResult: no such result"};
+        }
+        const auto& result = results.front();
+        const auto capturedBy = std::string{result.capturedBy.Value().ToStringView()};
+        const auto& principal = ::morph::session::current()->principal;
+
+        // Half two: the second pair of eyes must belong to a second person.
+        // This is the half `IAuthorizer` cannot express -- it is handed the
+        // model and action type ids and never the row -- so it can only live
+        // here.
+        if (capturedBy == principal) {
+            throw Forbidden{"VerifyResult: '" + principal +
+                            "' captured this result and cannot also verify it"};
+        }
+
+        const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
+        const auto sample = toView(loadSample(mapper, sampleId));
+        if (sample.state != SampleState::ToBeVerified) {
+            throw IllegalTransition{
+                std::string{"results are verified while a sample is to-be-verified; this one is "} +
+                std::string{stateName(sample.state)}};
+        }
+
+        if (!mapper.Query<db::VerificationRecord>()
+                 .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=", *action.resultId)
+                 .All()
+                 .empty()) {
+            throw Conflict{"VerifyResult: result " + std::to_string(*action.resultId) + " is already verified"};
+        }
+
+        db::VerificationRecord row;
+        row.result = static_cast<std::uint64_t>(*action.resultId);
+        row.verifiedBy = Lightweight::SqlAnsiString<64>{principal};
+        row.verifiedAt = nowMillis();
+        mapper.Create(row);
+
+        VerificationView view{
+            .id = VerificationId{static_cast<std::int64_t>(row.id.Value())},
+            .resultId = action.resultId,
+            .sampleId = SampleId{sampleId},
+            .capturedBy = capturedBy,
+            .verifiedBy = principal,
+            .verifiedAt = timestampFromMillis(row.verifiedAt.Value()),
+        };
+        _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+        return view;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListVerificationsResult SampleModel::execute(const ListVerifications& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    ListVerificationsResult result;
+    for (const auto& resultRow : mapper.Query<db::ResultRecord>()
+                                     .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
+                                     .All()) {
+        for (const auto& row : mapper.Query<db::VerificationRecord>()
+                                   .Where(::Lightweight::FieldNameOf<&db::VerificationRecord::result>, "=",
+                                          resultRow.id.Value())
+                                   .All()) {
+            result.verifications.push_back(VerificationView{
+                .id = VerificationId{static_cast<std::int64_t>(row.id.Value())},
+                .resultId = ResultId{static_cast<std::int64_t>(resultRow.id.Value())},
+                .sampleId = SampleId{*_sampleId},
+                .capturedBy = std::string{resultRow.capturedBy.Value().ToStringView()},
+                .verifiedBy = std::string{row.verifiedBy.Value().ToStringView()},
+                .verifiedAt = timestampFromMillis(row.verifiedAt.Value()),
+            });
+        }
+    }
+    return result;
+}
+
+AuditTrailResult SampleModel::execute(const GetAuditTrail& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+
+    // Deliberately no DataMapper in this method. "Reconstructible from the
+    // journal alone" is only a claim worth making if the reconstruction
+    // genuinely cannot consult the store, and the way to guarantee that is not
+    // to open it. `test_verification_audit.cpp` deletes every row the sample
+    // has and reconstructs the trail anyway.
+    AuditTrailResult trail;
+    for (const auto& entry : _journal.entries()) {
+        trail.steps.push_back(auditStepFor(entry));
+        const auto& step = trail.steps.back();
+        if (step.kind == AuditStepKind::LifecycleTransition && step.outcome == AuditOutcome::Succeeded) {
+            trail.states.push_back(step.state);
+        }
+    }
+    return trail;
 }
 
 void SampleModel::attachOfflineQueue(std::shared_ptr<::morph::offline::IOfflineQueue> queue) {

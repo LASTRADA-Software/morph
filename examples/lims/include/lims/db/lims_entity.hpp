@@ -142,6 +142,23 @@ struct OfflineConflictRecord {
     Light::Field<Light::SqlAnsiString<255>, Light::SqlRealName{"resolution_note"}> resolutionNote;  // 11
 };
 
+/// @brief One principal's grant of one role.
+///
+/// The **single source of truth** for what a principal may do. Both
+/// enforcement points read it: `lims::auth::LimsAuthorizer` at the
+/// `RemoteServer` edge, and `SampleModel` itself on every dispatch path
+/// (including `Local`, where no authorizer runs at all). One table, two
+/// checks — not two tables that can drift apart.
+struct OperatorRecord {
+    static constexpr std::string_view TableName = "lims_operators";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"principal"}> principal;                     // 1
+    /// @brief `LimsRole` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"role"}> role{0};  // 2
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"granted_by"}> grantedBy;  // 3
+    Light::Field<std::int64_t, Light::SqlRealName{"granted_at"}> grantedAt{0};           // 4
+};
+
 /// @brief One queued operation this server has already *decided*.
 ///
 /// `docs/spec/offline/offline.md` puts idempotency-key enforcement on the
