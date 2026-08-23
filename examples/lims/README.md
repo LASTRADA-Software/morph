@@ -332,7 +332,7 @@ own strand, where `session::current()` is null, so every queued item is
 refused for want of a principal. A lab reading replayed with no identified
 author is what this README calls disqualifying, so failing closed is right —
 but it does mean the framework's own replay seam cannot carry an
-authenticated replay. That is `docs/findings/014`, and it was found only by
+authenticated replay. That is morph#201, and it was found only by
 driving replay through `switchBackend` instead of calling the hook directly;
 the §7 suite's own helper calls it from a thread that has a session
 installed, which the framework never does.
@@ -341,7 +341,7 @@ The write half could not use a framework seam either: there is no
 enqueue-on-failure hook, and the machine that must make the decision (a
 disconnected field client) has no model on it at all.
 `include/lims/offline/field_outbox.hpp` is the app-layer answer, and
-`docs/findings/008` is the finding.
+morph#197 is the finding.
 
 So neither end of the offline round trip goes through a framework seam. That
 is the honest summary of §7's framework story.
@@ -386,7 +386,7 @@ This is where `docs/spec/offline/offline.md` puts the enforcement ("the queue
 … never interprets, requires, or enforces uniqueness on it — enforcement is
 the replay consumer's job"), and it is also the only way to be correct on all
 three shipped queues, which disagree about whether they dedup at enqueue time
-(`docs/findings/007`).
+(morph#175).
 
 The operation key is a minted random 128-bit id, per the spec's own
 recommendation. A counter was tried first and was wrong: `FieldOutbox` holds
@@ -447,7 +447,7 @@ so nobody discovers the omission.
 action id and a result that does not parse. It cannot catch a payload that
 parses into something *else* — a renamed field decodes to a default, silently,
 so a trail reconstructed across a rename is confidently wrong rather than
-visibly incomplete. That is `docs/findings/010`, and this rung does **not**
+visibly incomplete. That is morph#174, and this rung does **not**
 close it: the README names this rung the owner of the ladder's payload-evolution
 answer, and shipping a half-considered scheme that rungs 5 and 7 must then
 live with would be worse than filing the diagnosis with the options laid out.
@@ -490,7 +490,7 @@ claim the rule holds, but still submits, because a client that blocked on an
 unknown rule could not talk to a newer server at all.
 
 That evaluator is the third implementation of one closed vocabulary the
-framework owns, which is `docs/findings/011`.
+framework owns, which is morph#176.
 
 ### 19. `WorksheetModel` is not built, and the model list is corrected (§ model list)
 
@@ -636,11 +636,11 @@ exists to show. Fixed by rekeying the journal to the result's own sample
 Neither this component nor rung 5's could have scored anything before this,
 because `scripts/coverage.sh`'s rung list had drifted from CMake's and named
 only rungs 1–4 — so ledger's carefully-measured 87% gate was matching a set of
-files no uploaded report contained. That is `docs/findings/015`, fixed here.
+files no uploaded report contained. Fixed here.
 
 ## Findings raised by this rung
 
-- **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
+- **[morph#163](https://github.com/LASTRADA-Software/morph/issues/163)
   — `ModelKey` rejects strong id types.** `BRIDGE_MODEL_KEY` routes the key
   through `keyToString`, whose concept admits only `std::integral` or
   `std::string`, while `IMPLEMENTATION.md` rule 3 mandates a strong id
@@ -650,7 +650,7 @@ files no uploaded report contained. That is `docs/findings/015`, fixed here.
 - **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
   order §5 above, corrected in place). They landed in commit 332f82c (#78)
   and are specified in `docs/spec/forms/forms.md`.
-- **[`docs/findings/006`](../../docs/findings/006-forms-schema-cannot-carry-per-instance-data.md)
+- **[morph#164](https://github.com/LASTRADA-Software/morph/issues/164)
   — a forms schema is a pure function of the compiled action type.**
   Per-instance data cannot reach the keys the framework enforces: two
   analysis versions declaring 3 and 1 decimal places both serve
@@ -658,7 +658,7 @@ files no uploaded report contained. That is `docs/findings/015`, fixed here.
   `validate()` and is stored unflagged, because the rule vocabulary cannot
   name a bound that lives in a database row. Bridges directly into rung 7's
   runtime custom fields, which are planned on the opposite assumption.
-- **[`docs/findings/010`](../../docs/findings/010-journal-payload-evolution-decodes-silently-to-defaults.md)
+- **[morph#174](https://github.com/LASTRADA-Software/morph/issues/174)
   — a journal entry from an older build decodes leniently to defaults, with no
   signal.** `ActionTraits::fromJson` reads with `error_on_unknown_keys = false`,
   so a renamed field is dropped and the new one takes its default; `LogEntry::v`
@@ -680,27 +680,27 @@ files no uploaded report contained. That is `docs/findings/015`, fixed here.
   to fail loudly. `docs/spec/forms/forms.md` documents the two features in
   separate sections and never mentions their interaction. Guarded here by a
   test asserting `required` is exactly `["analysisVersionId"]`.
-- **[`docs/findings/007`](../../docs/findings/007-offline-queue-idempotency-dedup-divergence.md)
+- **[morph#175](https://github.com/LASTRADA-Software/morph/issues/175)
   — the three shipped `IOfflineQueue`s disagree about repeated idempotency
   keys.** `InMemoryOfflineQueue` admits the duplicate; `FileOfflineQueue` and
   `SqliteOfflineQueue` dedup; the interface contract says none of them should,
   and the spec's `SqliteOfflineQueue` section claims a parity with
   `InMemoryOfflineQueue` that does not exist. Three-implementation repro in the
   finding.
-- **[`docs/findings/008`](../../docs/findings/008-no-model-seam-for-the-offline-write-path.md)
+- **[morph#197](https://github.com/LASTRADA-Software/morph/issues/197)
   — the offline write path has no model-side seam.** Rule 1 says all domain
   logic lives in models; the offline spec says enqueue-on-failure is the
   application's job at the dispatch site; and a disconnected field client has
   no model to put it in anyway. `FieldOutbox` is this rung's app-layer answer,
   and it carries a real invariant (a client's own successive offline edits must
   chain), not glue.
-- **[`docs/findings/009`](../../docs/findings/009-offline-sqlite-option-breaks-non-apple-clang-on-macos.md)
+- **[morph#172](https://github.com/LASTRADA-Software/morph/issues/172)
   — `MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
   clang.** `FindSQLite3` resolves the SDK's whole `/usr/include`, which is then
   injected as `-isystem` ahead of libc++'s own headers. The repo's own
   `morph_offline_sqlite_tests` target fails identically, which is why the
   durable queue had never been built here before.
-- **[`docs/findings/011`](../../docs/findings/011-no-shared-conformance-corpus-for-x-rules.md)
+- **[morph#176](https://github.com/LASTRADA-Software/morph/issues/176)
   — `x-rules` has one client-side evaluator and no shared corpus.** The spec
   makes client/server parity the reason the vocabulary is closed, but the only
   client-side implementation is JavaScript inside `DynamicForm.qml`, each side
@@ -708,29 +708,28 @@ files no uploaded report contained. That is `docs/findings/015`, fixed here.
   scope note does not list `x-rules` at all. A non-QML client — which is what
   this rung's field devices are — must reimplement the whole vocabulary,
   vacuity asymmetry and fail-closed rule included.
-- **[`docs/findings/012`](../../docs/findings/012-ladder-rung-label-lost-for-test-names-containing-semicolons.md)
+- **[morph#173](https://github.com/LASTRADA-Software/morph/issues/173)
   — a ladder test whose name contains a semicolon never gets its
   `ladder-<rung>` label.** `morph_add_rung`'s re-labelling step iterates
   `IN LISTS`, which splits the name, so `set_tests_properties` applies to
   nothing and nothing warns. Found here the hard way: `ctest -L ladder-lims`
   reported 85 cases while the binary reported 87. Two lims cases were renamed;
   12 pre-existing ones repo-wide are still affected.
-- **[`docs/findings/013`](../../docs/findings/013-no-public-decimal-only-quantity-renderer.md)
+- **[morph#199](https://github.com/LASTRADA-Software/morph/issues/199)
   — a `Quantity`'s exact decimal can only be rendered with its unit appended.**
   `morph::units::toString` always concatenates the unit; the decimal-only
   formatter is in `morph::units::detail`, and `std::format("{}", rational)`
   prints the *fraction* (`"12/5"`), not the decimal. A table that places the
   number and the unit separately has to take the suffix back off a string that
   just had it put on.
-- **[`docs/findings/014`](../../docs/findings/014-onbackendchanged-replay-has-no-session.md)
+- **[morph#201](https://github.com/LASTRADA-Software/morph/issues/201)
   — `Model::onBackendChanged()` runs with no session.** The offline spec names
   it as *the* seam for rich replay outcomes, but `switchBackend` posts it onto
   the model's strand where `session::current()` is null, so a replay that must
   know who is replaying cannot use it. Found by driving replay through
   `switchBackend` rather than calling the hook directly — the §7 suite's own
   helper had been supplying a session the framework never does.
-- **[`docs/findings/015`](../../docs/findings/015-coverage-script-rung-list-drifted-so-ledgers-gate-scored-nothing.md)
-  — `scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
+- **`scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
   lims were both missing, so neither reached any uploaded report — and rung
   5's codecov component, with a target derived from a genuinely careful
   measurement, was scoring files the report did not contain. A component that

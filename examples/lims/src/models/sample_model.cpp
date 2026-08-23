@@ -576,7 +576,7 @@ ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
 
         // At-most-once, enforced here because the queue is documented not to
         // enforce it -- and because the shipped queues disagree about whether
-        // they do anyway (docs/findings/007).
+        // they do anyway (morph#175).
         if (alreadyDecided(*action.operationKey)) {
             return ReplayCaptureResult{.outcome = ReplayOutcome::Skipped, .sampleId = action.sampleId};
         }

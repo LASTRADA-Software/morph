@@ -479,7 +479,7 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
 
     // The `Unreadable` machinery above cannot catch this: the payload *does*
     // decode, it just decodes to something else. Only a per-entry payload
-    // version could, and this rung does not have one -- see docs/findings/010.
+    // version could, and this rung does not have one -- see morph#174.
 }
 
 TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audit]") {

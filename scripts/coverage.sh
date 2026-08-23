@@ -52,7 +52,7 @@ fi
 # carefully measured 87% target, was scoring a set of files the report did not
 # contain. A component that matches nothing does not fail; it silently reports
 # nothing, which is the same shape of defect this list's own comment above
-# warns about. Added here at rung 6's close; see docs/findings/015.
+# warns about. Added here at rung 6's close.
 _MORPH_LADDER_RUNGS=(pastebin bookmarks polls kanban ledger lims)
 RUNG_TEST_EXES=()
 for _rung in "${_MORPH_LADDER_RUNGS[@]}"; do

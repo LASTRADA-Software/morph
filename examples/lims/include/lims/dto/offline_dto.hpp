@@ -138,7 +138,7 @@ struct QueuedCapture {
     /// at-most-once *whatever* delivered it — the queue, a re-dispatch, or a
     /// journal replay. The queue itself is documented not to enforce
     /// uniqueness, and the shipped implementations disagree about whether they
-    /// do anyway (`docs/findings/007`), so the enforcement has to live where
+    /// do anyway (morph#175), so the enforcement has to live where
     /// it is asked for: in the consumer.
     OperationKey operationKey;
 

@@ -264,7 +264,7 @@ component_management:
     # rung 6 also fixed scripts/coverage.sh, whose `_MORPH_LADDER_RUNGS` list
     # had drifted from CMake's and named only rungs 1-4. ledger's component
     # was matching a set of files no uploaded report contained -- silently
-    # reporting nothing rather than failing. See docs/findings/015.
+    # reporting nothing rather than failing. Fixed by rung 6.
     #
     # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
     # rounded report percentage) over the full lims suite:
@@ -380,7 +380,7 @@ ignore:
   - "examples/kanban/gui/**"
   - "examples/kanban/gui_wasm/**"
   # Rungs 5-6, on the same terms. Both entered the coverage report for the
-  # first time with rung 6's fix to scripts/coverage.sh (docs/findings/015).
+  # first time with rung 6's fix to scripts/coverage.sh.
   - "examples/ledger/tests/**"
   - "examples/ledger/gui/**"
   - "examples/ledger/gui_wasm/**"

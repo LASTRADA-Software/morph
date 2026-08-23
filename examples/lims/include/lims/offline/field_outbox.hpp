@@ -25,7 +25,7 @@
 /// disconnected field client has no model to put it in either: a rung's models
 /// live server-side behind Lightweight/ODBC (rule 4's WASM clause), so the one
 /// machine that must decide "queue this instead of sending it" is the one
-/// machine with no model on it. See `docs/findings/008`.
+/// machine with no model on it. See morph#197.
 ///
 /// @par What it actually does: chain a client's own edits
 /// The trap the README names, and the one ODK Central hit: a client that edits

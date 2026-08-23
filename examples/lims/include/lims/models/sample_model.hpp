@@ -228,7 +228,7 @@ public:
     /// is skipped. That enforcement belongs here, not in the queue
     /// (`docs/spec/offline/offline.md`), and it is what makes replay correct
     /// against every shipped `IOfflineQueue` regardless of whether that
-    /// implementation happens to dedup at enqueue time (`docs/findings/007`).
+    /// implementation happens to dedup at enqueue time (morph#175).
     /// @param action The queued update, with the base version it assumed.
     /// @return What replay did, and the conflict id if it flagged one.
     /// @throws ValidationError if the envelope is not well-formed.

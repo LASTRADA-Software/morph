@@ -83,7 +83,7 @@ template <typename Q>
 /// exact rather than a guess: `toString` is
 /// literally `formatRationalDecimal(value) + display` (quantity.hpp), so
 /// chopping `display.size()` characters can only ever remove the unit. See
-/// `docs/findings/013`.
+/// morph#199.
 /// @tparam Q The `Quantity` specialisation.
 /// @param quantity The value to render.
 /// @return Its shortest exact decimal at its own precision, or `""`.
