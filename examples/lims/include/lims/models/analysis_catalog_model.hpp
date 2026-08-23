@@ -32,6 +32,18 @@ class AnalysisCatalogModel {
     ListAnalysesResult execute(const ListAnalyses& action);
     AnalysisVersionView execute(const GetAnalysisVersion& action);
 
+    /// @brief Returns the result-entry form for one analysis version.
+    ///
+    /// The compiled action's schema with that version's own precision, spec
+    /// range and detection limits merged in. Rendering is therefore
+    /// version-bound; validation is not — see `AnalysisSchemaView::schemaJson`.
+    /// @param action The version whose form is wanted.
+    /// @return The rendered schema.
+    /// @throws ValidationError if no version is named, or if the version's
+    ///         canonical unit has no compiled result-entry action in this rung.
+    /// @throws NotFound if the version does not exist.
+    AnalysisSchemaView execute(const GetAnalysisSchema& action);
+
     /// @brief Attaches a durable action log and this instance's identity, so
     ///        every mutating `execute()` records a `LogEntry`.
     ///
@@ -60,3 +72,5 @@ BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::DefineAnalysis, "Define
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ReviseAnalysis, "ReviseAnalysis")
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::ListAnalyses, "ListAnalyses")
 BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisVersion, "GetAnalysisVersion")
+BRIDGE_REGISTER_ACTION(lims::AnalysisCatalogModel, lims::GetAnalysisSchema, "GetAnalysisSchema",
+                       ::morph::model::Loggable::No)

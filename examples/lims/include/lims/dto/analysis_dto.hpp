@@ -118,6 +118,42 @@ struct GetAnalysisVersion {
     [[nodiscard]] bool validate() const noexcept { return versionId.hasValue(); }
 };
 
+/// @brief Returns the *result-entry form* for one analysis version — the
+///        schema a client renders to capture a result under that version.
+///
+/// Distinct from `GetAnalysisVersion`, which returns the definition as data.
+/// This returns the definition already merged into the compiled action's JSON
+/// Schema, which is what the README's ODK-style "clients render the version
+/// the result was captured with" needs.
+struct GetAnalysisSchema {
+    /// @brief The version whose form is wanted.
+    AnalysisVersionId versionId;
+
+    /// @brief Whether a version is named.
+    /// @return `true` if `versionId` carries a value.
+    [[nodiscard]] bool validate() const noexcept { return versionId.hasValue(); }
+};
+
+/// @brief One version's rendered result-entry form.
+struct AnalysisSchemaView {
+    /// @brief The version the form belongs to.
+    AnalysisVersionId versionId;
+
+    /// @brief That version's ordinal.
+    std::int32_t version = 1;
+
+    /// @brief The JSON Schema text a client renders.
+    ///
+    /// **Rendering is version-bound; validation is not.** The bounds,
+    /// detection limits and per-version precision in here are *data* merged
+    /// into the schema by the model. Everything `morph::forms` itself
+    /// enforces — the `required` array, the `x-rules` list, and the
+    /// `x-decimalPlaces` glaze emits for the field — comes from the compiled
+    /// `CaptureConcentration` struct and is identical for every version. See
+    /// the rung README's §4 decision and `test_schema_versioning.cpp`.
+    std::string schemaJson;
+};
+
 struct DefineAnalysisResult {
     AnalysisId analysisId;
     AnalysisVersionId versionId;

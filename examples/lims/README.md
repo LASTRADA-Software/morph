@@ -289,6 +289,30 @@ live rows would make "the sample's results" ambiguous. The superseded value
 is not lost — the journal holds every capture, which is exactly where a
 21 CFR-style trail expects to find it.
 
+### 10. Rendering is version-bound; validation is not (§4, review D4)
+
+`GetAnalysisSchema{versionId}` serves the result-entry form for one version:
+the compiled `CaptureConcentration` schema with that version's own
+precision, spec range and detection limits merged into the `value` property
+as `x-versionDecimalPlaces` / `x-specLow` / `x-specHigh` /
+`x-limitOfDetection` / `x-upperDetectionLimit`. Revising an analysis leaves
+the old version's served form byte-identical, which is the ODK property the
+README asks for.
+
+Everything `morph::forms` itself derives is compiled and therefore identical
+for every version: the `required` array, the `x-rules` list, and
+`x-decimalPlaces` (from `Quantity<mg_per_L, 3>`'s template parameter). The
+per-version precision is served *beside* `x-decimalPlaces` rather than
+overwriting it — `x-decimalPlaces` is a contract the framework enforces on
+dispatch, so rewriting it would advertise a promise no code keeps. The
+disagreement is visible instead of hidden, and every version-specific rule
+this rung actually enforces is a hand-written model check reading the
+version row.
+
+`GetAnalysisSchema` **refuses** a version whose canonical unit has no
+compiled result-entry action, rather than serving the mg/L form for an amps
+analysis.
+
 ## Findings raised by this rung
 
 - **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
@@ -301,6 +325,14 @@ is not lost — the journal holds every capture, which is exactly where a
 - **The round-5 "no `and`/`or`/`not` combinators" claim is stale** (build
   order §5 above, corrected in place). They landed in commit 332f82c (#78)
   and are specified in `docs/spec/forms/forms.md`.
+- **[`docs/findings/006`](../../docs/findings/006-forms-schema-cannot-carry-per-instance-data.md)
+  — a forms schema is a pure function of the compiled action type.**
+  Per-instance data cannot reach the keys the framework enforces: two
+  analysis versions declaring 3 and 1 decimal places both serve
+  `"x-decimalPlaces":3`, and a value outside a served spec range passes
+  `validate()` and is stored unflagged, because the rule vocabulary cannot
+  name a bound that lives in a database row. Bridges directly into rung 7's
+  runtime custom fields, which are planned on the opposite assumption.
 - **A schema's `required` array can silently contradict its own `x-rules`.**
   `schemaJson`'s required-by-default rule put both `value` and `qualifier`
   in `required` while the `exactlyOneOf` entry beside them said at most one

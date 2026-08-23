@@ -4,9 +4,11 @@
 #include "lims/core/errors.hpp"
 #include "lims/core/model_support.hpp"
 #include "lims/db/lims_entity.hpp"
+#include "lims/dto/result_dto.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <morph/forms/forms.hpp>
 #include <morph/session/session.hpp>
 
 #include <algorithm>
@@ -53,6 +55,64 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
         .limitOfDetection = readBound(row.lodNum.Value(), row.lodDen.Value()),
         .upperDetectionLimit = readBound(row.udlNum.Value(), row.udlDen.Value()),
     };
+}
+
+
+/// @brief Renders one bound as a `{"num":..,"den":..}` schema node.
+/// @param bound The exact bound.
+/// @return The DOM node.
+[[nodiscard]] glz::generic_u64 boundNode(const AnalysisBound& bound) {
+    glz::generic_u64 node{};
+    node["num"] = bound.numerator;
+    node["den"] = bound.denominator;
+    return node;
+}
+
+/// @brief Merges @p version's own data into the compiled result-entry form.
+///
+/// This function is the whole of "clients render the version the result was
+/// captured with", and its shape is the finding: the *structure* of the form
+/// (which fields exist, which are required, the `x-rules` list, the field's
+/// `x-decimalPlaces` and `ExtUnits`) comes from the compiled
+/// `CaptureConcentration` struct and is the same for every version; only the
+/// values patched in below vary. A version that wanted a different *shape* —
+/// an extra field, a different rule — could not be served at all without
+/// recompiling, which is exactly the "schemas become data" boundary the
+/// README predicts.
+///
+/// The per-version precision is emitted as `x-versionDecimalPlaces` rather
+/// than overwriting `x-decimalPlaces`: the latter is a contract the framework
+/// itself enforces on dispatch (`docs/spec/forms/forms.md`, "Advertised
+/// precision is enforced on dispatch") against the compiled
+/// `Quantity`'s declared decimals, so rewriting it would advertise a promise
+/// no code keeps. Both are served, and the disagreement is visible rather
+/// than hidden.
+/// @param version The version to render.
+/// @return The schema text a client renders.
+[[nodiscard]] std::string renderSchemaFor(const AnalysisVersionView& version) {
+    const auto base = ::morph::forms::schemaJson<CaptureConcentration>();
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
+    glz::generic_u64 dom{};
+    if (glz::read_json(dom, base)) {
+        return base;  // not JSON we can patch; serve it verbatim rather than mangle it
+    }
+    auto& value = dom["properties"]["value"];
+    value["x-versionDecimalPlaces"] = static_cast<std::int64_t>(version.decimalPlaces);
+    if (version.specLow) {
+        value["x-specLow"] = boundNode(*version.specLow);
+    }
+    if (version.specHigh) {
+        value["x-specHigh"] = boundNode(*version.specHigh);
+    }
+    if (version.limitOfDetection) {
+        value["x-limitOfDetection"] = boundNode(*version.limitOfDetection);
+    }
+    if (version.upperDetectionLimit) {
+        value["x-upperDetectionLimit"] = boundNode(*version.upperDetectionLimit);
+    }
+    dom["x-analysisVersion"] = static_cast<std::int64_t>(version.version);
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+    return glz::write_json(dom).value_or(base);
 }
 
 }  // namespace
@@ -181,6 +241,26 @@ AnalysisVersionView AnalysisCatalogModel::execute(const GetAnalysisVersion& acti
         throw NotFound{"GetAnalysisVersion: version's analysis is missing"};
     }
     return toView(versions.front(), std::string{analysisRows.front().name.Value().ToStringView()});
+}
+
+AnalysisSchemaView AnalysisCatalogModel::execute(const GetAnalysisSchema& action) {
+    if (!action.validate()) {
+        throw ValidationError{"GetAnalysisSchema: versionId is required"};
+    }
+    const auto version = execute(GetAnalysisVersion{.versionId = action.versionId});
+    if (version.canonicalUnit != std::string{Concentration::unitMeta().id}) {
+        // Honest refusal rather than a plausible-looking wrong form. There is
+        // one compiled result-entry action per *unit family*, not per
+        // analysis, so a version denominated in anything but mg/L has no form
+        // to serve — see the rung README's findings section.
+        throw ValidationError{"GetAnalysisSchema: no compiled result-entry action for unit '" +
+                              version.canonicalUnit + "'"};
+    }
+    return AnalysisSchemaView{
+        .versionId = version.id,
+        .version = version.version,
+        .schemaJson = renderSchemaFor(version),
+    };
 }
 
 void AnalysisCatalogModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
