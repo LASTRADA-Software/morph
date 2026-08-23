@@ -92,6 +92,7 @@
 
 #include <glaze/glaze.hpp>
 
+#include <atomic>
 #include <cassert>
 #include <cmath>
 #include <compare>
@@ -101,8 +102,10 @@
 #include <format>
 #include <limits>
 #include <numeric>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 namespace morph::math {
 
@@ -164,6 +167,63 @@ enum class RationalError : std::uint8_t {
     NotFinite,       ///< Floating-point input was NaN or +/-Inf (fromFloat only).
     Overflow,        ///< Result or an intermediate term exceeds int64_t range
                      ///< (`fromFloat`, and the `checked*` arithmetic helpers).
+};
+
+namespace detail {
+
+/// @brief Per-thread clamp counter, scoped by `WireClampScope`.
+/// @return Reference to this thread's counter.
+[[nodiscard]] inline std::size_t& wireClampCounter() noexcept {
+    static thread_local std::size_t clamped = 0;
+    return clamped;
+}
+
+}  // namespace detail
+
+/// @brief Observes whether any `Rational` had to be clamped while decoding
+///        inside this scope.
+///
+/// Decoding a `Rational` cannot fail. `setWire` rebuilds through the
+/// canonicalising constructor, which clamps rather than rejects, so
+/// `{"num":5,"den":0,"dp":2}` becomes a perfectly plausible `5/1` and nothing
+/// downstream can tell the value was altered.
+///
+/// This makes that observable at the point where it matters -- around a decode
+/// -- without giving `Rational` an opinion about what should happen next.
+/// Whether a clamped value is a protocol violation to reject or a harmless
+/// normalisation depends on whether the caller is reading a trusted local
+/// value or an untrusted payload off a socket, and only the decoding layer
+/// knows which:
+///
+/// @code
+/// morph::math::WireClampScope clamps;
+/// if (auto err = glz::read<opts>(action, json)) { ... }
+/// if (clamps.clamped() != 0) {
+///     // reject the payload
+/// }
+/// @endcode
+///
+/// Thread-local and scoped: a decode is synchronous on one thread, and a
+/// nested decode must not steal its parent's count.
+class WireClampScope {
+  public:
+    /// @brief Starts a fresh count, saving any enclosing scope's.
+    WireClampScope() noexcept : _saved{detail::wireClampCounter()} { detail::wireClampCounter() = 0; }
+
+    WireClampScope(const WireClampScope&) = delete;
+    WireClampScope& operator=(const WireClampScope&) = delete;
+    WireClampScope(WireClampScope&&) = delete;
+    WireClampScope& operator=(WireClampScope&&) = delete;
+
+    /// @brief Folds this scope's count back into the enclosing one.
+    ~WireClampScope() { detail::wireClampCounter() += _saved; }
+
+    /// @brief How many `Rational` values were clamped so far in this scope.
+    /// @return The clamp count.
+    [[nodiscard]] std::size_t clamped() const noexcept { return detail::wireClampCounter(); }
+
+  private:
+    std::size_t _saved;
 };
 
 namespace detail {
@@ -534,14 +594,48 @@ struct Rational {
         std::int64_t num{0};   ///< Signed numerator as sent/received.
         std::int64_t den{1};   ///< Denominator as sent/received; may be non-canonical.
         std::uint32_t dp{1};   ///< Decimal-precision tag as sent/received.
+
+        /// @brief Whether these raw values decode without being clamped.
+        ///
+        /// Names the three clamps `setWire` would otherwise apply silently, so
+        /// "was this value altered on the way in?" is answerable *before* the
+        /// canonicalising constructor has already hidden the answer. A caller
+        /// that has its own decoded `Wire` can ask directly; the wire codec
+        /// asks on its behalf, and a `WireClampScope` around the decode acts on it.
+        ///
+        /// Note that a non-canonical but representable denominator (`4/8`, or
+        /// a negative `den`) is *valid*: reducing and sign-normalising it is
+        /// canonicalisation, not clamping, and round-trips the same value.
+        ///
+        /// @return `true` if the values survive decoding unaltered in magnitude.
+        [[nodiscard]] constexpr bool validate() const noexcept {
+            // `std::in_range` on the magnitude, rather than `!= INT64_MIN`:
+            // the actual requirement is that the component can be negated,
+            // which is to say its magnitude is representable as int64. That is
+            // what canonicalising needs, and it says so directly.
+            return den != 0 && dp <= kMaxDecimalPlaces && std::in_range<std::int64_t>(detail::absU64(num))
+                && std::in_range<std::int64_t>(detail::absU64(den));
+        }
     };
 
     /// @brief Wire-codec entry (Glaze read side): rebuilds through the
-    ///        canonicalising constructor, silently clamping hostile input
-    ///        (`den == 0`, out-of-range `dp`, `INT64_MIN` components whose
-    ///        negation would overflow) instead of asserting.
+    ///        canonicalising constructor, clamping what it cannot represent.
+    ///
+    /// `den == 0`, an out-of-range `dp`, or a component whose magnitude does
+    /// not fit are clamped rather than rejected, so this never fails — which
+    /// means `{"num":5,"den":0,"dp":2}` decodes to a perfectly plausible
+    /// `5/1`, and nothing downstream can tell the value was altered.
+    ///
+    /// Rejecting here would be the wrong layer's call. Whether a clamped value
+    /// is a protocol violation or a harmless normalisation depends on where
+    /// the bytes came from, and this function cannot know. It records the fact
+    /// instead, for a `WireClampScope` around the decode to act on.
+    ///
     /// @param wire Raw values decoded from JSON.
-void setWire(Wire wire) noexcept {
+    void setWire(Wire wire) noexcept {
+        if (!wire.validate()) {
+            ++detail::wireClampCounter();
+        }
         constexpr auto int64Min = std::numeric_limits<std::int64_t>::min();
         constexpr auto negatableMin = -std::numeric_limits<std::int64_t>::max();
         *this = Rational{Numerator{wire.num == int64Min ? negatableMin : wire.num},

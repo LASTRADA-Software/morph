@@ -304,6 +304,32 @@ struct ActionLogPolicy {
 When `coalesce` is `true`, a checkpoint keeps only the most recent entry per
 `(modelType, entityKey, actionType)` triple.
 
+### `fromJson` is the codec boundary for an action payload
+
+`morph::wire` carries an execute envelope's `body` as an opaque `std::string`
+and never parses it — `wire.hpp` states this directly ("payload smuggled
+*inside* `body` is invisible to any structural/depth check"). So
+`ActionTraits<A>::fromJson` is the first and only place the body's contents are
+decoded into typed fields, which makes it the layer responsible for what a
+malformed payload means.
+
+That matters for values whose decode **cannot fail**.
+[`morph::math::Rational`](../util/rational.md) is the case in point: `setWire`
+clamps what it cannot represent rather than rejecting, so
+`{"num":5,"den":0,"dp":2}` would otherwise arrive as a perfectly plausible
+`5/1`. A model's own `validate()` runs *after* the decode and has nothing left
+to notice — the value looks fine by then.
+
+`fromJson` therefore wraps its `glz::read` in a `morph::math::WireClampScope`
+and throws `ParseError` if anything was clamped. `Rational` reports the fact;
+this layer decides it is a protocol violation, because this is the layer that
+knows the bytes came off a wire. A local caller constructing the same value in
+code is unaffected.
+
+Note that a *non-canonical but representable* value is accepted: `4/8` reduces
+to `1/2`, and reduction is canonicalisation, not clamping — the value survives
+intact.
+
 ## Type-erased holders and factory
 
 ### `IModelHolder`
