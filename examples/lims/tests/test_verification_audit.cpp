@@ -228,7 +228,7 @@ TEST_CASE("A sample cannot be published while any of its results is unverified",
 
 TEST_CASE("The authorizer gates the role-requiring actions and nothing else", "[lims][audit][authorizer]") {
     const std::string secret = "shared-lab-secret";
-    const morph::session::TokenIssuer issuer{secret};
+    const morph::session::TokenIssuer issuer{secret, morph::session::hmacSha256};
 
     // The role source the authorizer consults. In production this is the same
     // `lims_operators` query the model uses; here it is a fixed table, so the
@@ -283,7 +283,7 @@ TEST_CASE("The authorizer gates the role-requiring actions and nothing else", "[
 
 TEST_CASE("An authorizer with no role source fails closed", "[lims][audit][authorizer]") {
     const std::string secret = "shared-lab-secret";
-    const morph::session::TokenIssuer issuer{secret};
+    const morph::session::TokenIssuer issuer{secret, morph::session::hmacSha256};
     const lims::auth::LimsAuthorizer authorizer{secret, nullptr};
 
     morph::session::Context bob;
