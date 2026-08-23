@@ -226,6 +226,9 @@ requires requires { typename std::type_identity_t&lt;<a class="el" href="../../d
 <tr class="memitem:aa271848c7005fad827a4f1379d1595be" id="r_aa271848c7005fad827a4f1379d1595be"><td class="memTemplParams" colspan="2">template&lt;auto U, std::uint32_t Dec&gt; </td></tr>
 <tr class="memitem:aa271848c7005fad827a4f1379d1595be template"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, Dec &gt;&#160;</td><td class="memItemRight"><a class="el" href="#aa271848c7005fad827a4f1379d1595be">morph::units::operator/</a> (const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, Dec &gt; &amp;lhs, const <a class="el" href="../../d2/d5c/structmorph_1_1math_1_1Rational.html">math::Rational</a> &amp;divisor)</td></tr>
 <tr class="memdesc:aa271848c7005fad827a4f1379d1595be"><td class="mdescLeft">&#160;</td><td class="mdescRight">Divides by a dimensionless rational (unit and declared precision kept). Empty when the quantity is empty or the divisor is zero.  <br /></td></tr>
+<tr class="memitem:a2c81a76e847c19a25e8e315015f4713d" id="r_a2c81a76e847c19a25e8e315015f4713d"><td class="memTemplParams" colspan="2">template&lt;auto U, std::uint32_t Dec&gt; </td></tr>
+<tr class="memitem:a2c81a76e847c19a25e8e315015f4713d template"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a2c81a76e847c19a25e8e315015f4713d">morph::units::toDecimalString</a> (const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, Dec &gt; &amp;quantity)</td></tr>
+<tr class="memdesc:a2c81a76e847c19a25e8e315015f4713d"><td class="mdescLeft">&#160;</td><td class="mdescRight">Renders <code class="param">quantity's</code> exact decimal <b>alone</b>, with no unit suffix (<span class="tt">"5.2"</span>, <span class="tt">"6"</span>, <span class="tt">"N/A"</span>).  <br /></td></tr>
 <tr class="memitem:a22d27c318fd909bab2e0562e48e2bf14" id="r_a22d27c318fd909bab2e0562e48e2bf14"><td class="memTemplParams" colspan="2">template&lt;auto U, std::uint32_t Dec&gt; </td></tr>
 <tr class="memitem:a22d27c318fd909bab2e0562e48e2bf14 template"><td class="memItemLeft">std::string&#160;</td><td class="memItemRight"><a class="el" href="#a22d27c318fd909bab2e0562e48e2bf14">morph::units::toString</a> (const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, Dec &gt; &amp;quantity)</td></tr>
 <tr class="memdesc:a22d27c318fd909bab2e0562e48e2bf14"><td class="mdescLeft">&#160;</td><td class="mdescRight">Renders <code class="param">quantity</code> as value + unit (<span class="tt">5.2kW</span>, <span class="tt">N/A%</span>) — the same text <span class="tt">std::format("{}", quantity)</span> produces via the <span class="tt">std::formatter</span> specialization just below, exposed as a plain function so a caller can render a <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html" title="A unit-tagged, optionally-empty exact value with a declared precision in its type and (optionally) a ...">Quantity</a></span> without going through <span class="tt">std::format</span> itself.  <br /></td></tr>
@@ -307,7 +310,7 @@ requires RatioConvertible&lt;From, To&gt;</div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00805">805</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00808">808</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -350,7 +353,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when both empty or both engaged with equal value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00822">822</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00825">825</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -399,7 +402,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00834">834</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00837">837</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -442,7 +445,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00853">853</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00856">856</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -485,7 +488,7 @@ template&lt;auto U, std::uint32_t DecA, std::uint32_t DecB&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference, or empty when either operand is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00867">867</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00870">870</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -529,7 +532,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact sum in <span class="tt">A</span>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00882">882</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00885">885</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -573,7 +576,7 @@ requires (detail::SameEnumDistinct&lt;A, B&gt; &amp;&amp; requires(Quantity&lt;B
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact difference in <span class="tt">A</span>'s unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00892">892</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00895">895</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -611,7 +614,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The negated value, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00900">900</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00903">903</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -655,7 +658,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A * B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact product in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00917">917</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00920">920</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -699,7 +702,7 @@ requires requires { typename std::type_identity_t&lt;Quantity&lt;A / B&gt;&gt;; 
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The exact quotient in the deduced unit, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00934">934</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00937">937</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -742,7 +745,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00952">952</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00955">955</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -785,7 +788,7 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The scaled quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00966">966</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00969">969</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -828,7 +831,55 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The divided quantity, or empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00976">976</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00979">979</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="a2c81a76e847c19a25e8e315015f4713d" name="a2c81a76e847c19a25e8e315015f4713d"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2c81a76e847c19a25e8e315015f4713d">&#9670;&#160;</a></span>toDecimalString()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t Dec&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname">std::string morph::units::toDecimalString </td>
+          <td>(</td>
+          <td class="paramtype">const <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">Quantity</a>&lt; U, Dec &gt; &amp;</td>          <td class="paramname"><span class="paramname"><em>quantity</em></span></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Renders <code class="param">quantity's</code> exact decimal <b>alone</b>, with no unit suffix (<span class="tt">"5.2"</span>, <span class="tt">"6"</span>, <span class="tt">"N/A"</span>). </p>
+<p>The numeric half of <span class="tt">toString</span>, and the only public way to obtain it. A view that places the number and the unit separately — a table with the unit in its column header, a right-aligned suffix, an editable field whose adjacent label carries the unit — asks for the two halves independently instead of concatenating them and then chopping the suffix back off. The unit half is <span class="tt">Quantity::unitMeta().display</span>.</p>
+<p>This is the same exact-decimal path <span class="tt">std::format("{}", quantity)</span> takes: an integer long division of the canonical <span class="tt">Rational</span> at its <b>runtime</b> <span class="tt">DecimalPlaces</span>, trailing zeros trimmed. It is deliberately <b>not</b> <span class="tt">std::format("{}", *quantity.value())</span> (which prints a <span class="tt">num/den</span> fraction) nor <span class="tt">std::format("{:.Nf}", *quantity.value())</span> (which delegates to <span class="tt">std::formatter&lt;double&gt;</span> via <span class="tt">toDouble()</span> and so leaves the exact domain — <span class="tt">9007199254740993</span> renders as <span class="tt">…992</span> there and as itself here).</p>
+<p><b>An empty quantity renders as the fixed literal <span class="tt">"N/A"</span>, not as an empty string.</b> That keeps the identity <span class="tt">toString(q) == toDecimalString(q) +
+unitMeta().display</span> true for every value, engaged or not, so <span class="tt">toString</span> can be — and is — implemented in terms of this function rather than growing a second rendering path that can drift from it. Rendering an absent value as blank is a presentation policy and belongs to the layer that has a layout to decide it for; the value type only reports the fact that nothing is there. A caller that wants a blank writes <span class="tt">q.hasValue() ? toDecimalString(q) : ""</span>. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+  <table class="tparams">
+    <tr><td class="paramname">U</td><td>Unit enumerator. </td></tr>
+    <tr><td class="paramname">Dec</td><td>Declared decimals. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">quantity</td><td>The value to render. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The exact decimal text, or <span class="tt">"N/A"</span> when the quantity is empty. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01067">1067</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -860,7 +911,8 @@ template&lt;auto U, std::uint32_t Dec&gt; </div>
 <p>Renders <code class="param">quantity</code> as value + unit (<span class="tt">5.2kW</span>, <span class="tt">N/A%</span>) — the same text <span class="tt">std::format("{}", quantity)</span> produces via the <span class="tt">std::formatter</span> specialization just below, exposed as a plain function so a caller can render a <span class="tt">Quantity</span> without going through <span class="tt">std::format</span> itself. </p>
 <p>Exists because Emscripten's bundled libc++ (older than the Linux/Windows standard library this project otherwise builds against — see <span class="tt">.github/workflows/wasm-ladder.yml</span>'s <span class="tt">EMSDK_VERSION</span>) has a known limitation recognising <span class="tt">std::formatter</span> partial specializations parameterized over an <span class="tt">auto</span> non-type template parameter (<span class="tt">U</span> here) for <span class="tt">std::format</span>'s compile-time formattability check — <span class="tt">std::format("{}",
 someQuantity)</span> fails to compile there with "the supplied type is not
-formattable" even though the specialization is valid and the identical call compiles and runs correctly on every other toolchain this project targets. <span class="tt">toString()</span> bypasses that check entirely: it calls the same underlying logic directly instead of through <span class="tt">std::format</span>'s trait machinery, so it works identically everywhere, WASM included. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+formattable" even though the specialization is valid and the identical call compiles and runs correctly on every other toolchain this project targets. <span class="tt">toString()</span> bypasses that check entirely: it calls the same underlying logic directly instead of through <span class="tt">std::format</span>'s trait machinery, so it works identically everywhere, WASM included.</p>
+<p>Defined as <span class="tt">toDecimalString(quantity) + unitMeta().display</span> — the number and the unit are one concatenation with a single implementation of each half, so a caller that needs them apart calls <span class="tt">toDecimalString</span> rather than undoing the join. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">U</td><td>Unit enumerator. </td></tr>
     <tr><td class="paramname">Dec</td><td>Declared decimals. </td></tr>
@@ -875,7 +927,7 @@ formattable" even though the specialization is valid and the identical call comp
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The formatted text. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01055">1055</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01098">1098</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -910,7 +962,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00799">799</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00802">802</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

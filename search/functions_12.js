@@ -9,10 +9,11 @@ var searchData=
   ['timeouterror_6',['TimeoutError',['../d5/d80/structmorph_1_1backend_1_1TimeoutError.html#ac11e1e31982dea91b70cc23594e0db18',1,'morph::backend::TimeoutError']]],
   ['timestamp_7',['Timestamp',['../db/dec/structmorph_1_1time_1_1Timestamp.html#a6f0011d4b7e6f830120f26ecf1e72158',1,'morph::time::Timestamp::Timestamp() noexcept=default'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#acccb28c6dec977648081e13ec4b179fa',1,'morph::time::Timestamp::Timestamp(DateTime instant) noexcept'],['../db/dec/structmorph_1_1time_1_1Timestamp.html#a55072b0f18766e9c598e28db21c6304f',1,'morph::time::Timestamp::Timestamp(std::optional&lt; DateTime &gt; payload) noexcept']]],
   ['title_8',['title',['../d8/d09/structmorph_1_1app_1_1App.html#a3aa6fb3575a903c3a7408d62174b8a35',1,'morph::app::App::title()'],['../d8/d94/structmorph_1_1flows_1_1WizardStep.html#ad5de8ca7c4468868fce34602b619e9c3',1,'morph::flows::WizardStep::title()'],['../d6/d94/structmorph_1_1flows_1_1Wizard.html#a5bd5e3a256370005d744004ac8a7c054',1,'morph::flows::Wizard::title()']]],
-  ['todouble_9',['toDouble',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3cd9f4e3830cd78a079cf153f0c6b262',1,'morph::math::Rational::toDouble() const noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad23677b23350cb20d9608258ef7db282',1,'morph::math::Rational::toDouble(std::uint32_t requestedDecimalPlaces) const noexcept']]],
-  ['toiso8601_10',['toIso8601',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a3eae093e49a3d3b00399ccb33b69bb50',1,'morph::time::DateTime']]],
-  ['tokenissuer_11',['TokenIssuer',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#a481f5554cb6af08565623f293a61e5e8',1,'morph::session::TokenIssuer']]],
-  ['tokenverifier_12',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#aa635acbcb8543b3ed5d5475dc47355ad',1,'morph::session::TokenVerifier']]],
-  ['tostring_13',['toString',['../d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14',1,'morph::units']]],
-  ['trunc_14',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]]
+  ['todecimalstring_9',['toDecimalString',['../d9/db8/quantity_8hpp.html#a2c81a76e847c19a25e8e315015f4713d',1,'morph::units']]],
+  ['todouble_10',['toDouble',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3cd9f4e3830cd78a079cf153f0c6b262',1,'morph::math::Rational::toDouble() const noexcept'],['../d2/d5c/structmorph_1_1math_1_1Rational.html#ad23677b23350cb20d9608258ef7db282',1,'morph::math::Rational::toDouble(std::uint32_t requestedDecimalPlaces) const noexcept']]],
+  ['toiso8601_11',['toIso8601',['../d5/d44/structmorph_1_1time_1_1DateTime.html#a3eae093e49a3d3b00399ccb33b69bb50',1,'morph::time::DateTime']]],
+  ['tokenissuer_12',['TokenIssuer',['../dc/de7/classmorph_1_1session_1_1TokenIssuer.html#a481f5554cb6af08565623f293a61e5e8',1,'morph::session::TokenIssuer']]],
+  ['tokenverifier_13',['TokenVerifier',['../d5/dc7/classmorph_1_1session_1_1TokenVerifier.html#aa635acbcb8543b3ed5d5475dc47355ad',1,'morph::session::TokenVerifier']]],
+  ['tostring_14',['toString',['../d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14',1,'morph::units']]],
+  ['trunc_15',['trunc',['../d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641',1,'morph::math']]]
 ];

@@ -26,6 +26,7 @@ var quantity_8hpp =
     [ "morph::units::operator*", "d9/db8/quantity_8hpp.html#a4e4b8edd17603f30bcb664a318637456", null ],
     [ "morph::units::operator*", "d9/db8/quantity_8hpp.html#a799a5e7b348059e5ae185ff1e1438866", null ],
     [ "morph::units::operator/", "d9/db8/quantity_8hpp.html#aa271848c7005fad827a4f1379d1595be", null ],
+    [ "morph::units::toDecimalString", "d9/db8/quantity_8hpp.html#a2c81a76e847c19a25e8e315015f4713d", null ],
     [ "morph::units::toString", "d9/db8/quantity_8hpp.html#a22d27c318fd909bab2e0562e48e2bf14", null ],
     [ "morph::units::isQuantity", "d9/db8/quantity_8hpp.html#a58fa61dc1e60108e7e44631ffe60ce69", null ]
 ];
