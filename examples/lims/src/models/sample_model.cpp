@@ -413,10 +413,31 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
                               std::string{Concentration::unitMeta().id}};
     }
 
+    // The conditional field, made load-bearing (README §5). `validate()` has
+    // already established that a `diluted` preparation carries a factor -- the
+    // client learns the same rule from `x-rules` in the served schema and the
+    // server re-runs the compiled one -- so all that is left here is the
+    // domain arithmetic and the one check a cross-field rule cannot express:
+    // a factor must be a positive number.
+    auto dilutionMultiplier = ::morph::math::Rational::one(::morph::math::DecimalPlaces{3});
+    if (capture.dilution.hasValue() && *capture.dilution == std::string{kDilutionDiluted}) {
+        if (!capture.dilutionFactor.hasValue() || (*capture.dilutionFactor).numerator <= 0) {
+            throw ValidationError{"CaptureConcentration: a diluted aliquot needs a positive dilution factor"};
+        }
+        dilutionMultiplier = *capture.dilutionFactor;
+    } else if (capture.dilution.hasValue() && *capture.dilution != std::string{kDilutionNeat}) {
+        // Fail-closed on an unknown preparation code, for the same reason the
+        // qualifier codes are: guessing turns "this client speaks a dialect we
+        // do not know" into a silently undiluted reading.
+        throw ValidationError{"CaptureConcentration: unknown dilution mode '" + *capture.dilution + "'"};
+    }
+
     auto qualifier = ResultQualifier::Measured;
     std::optional<::morph::math::Rational> stored;
     if (capture.value.hasValue()) {
-        const auto& reading = *capture.value;
+        // Exact: the reported concentration accounts for the dilution, and it
+        // does so through `Rational`, never a `double`.
+        const auto reading = *capture.value * dilutionMultiplier;
         if (!isExactAtDecimals(reading, version.decimalPlaces.Value())) {
             throw ValidationError{"CaptureConcentration: the reading carries more precision than analysis version " +
                                   std::to_string(*capture.analysisVersionId) + " declares"};
@@ -463,6 +484,14 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
 
     sqlTxn.Commit();
     return toResultView(row);
+}
+
+ListDilutionModesResult SampleModel::execute(const ListDilutionModes& action) {
+    static_cast<void>(action);
+    return ListDilutionModesResult{.modes = {
+                                       {.id = std::string{kDilutionNeat}, .name = "Neat"},
+                                       {.id = std::string{kDilutionDiluted}, .name = "Diluted"},
+                                   }};
 }
 
 ResultView SampleModel::execute(const CaptureConcentration& action) {

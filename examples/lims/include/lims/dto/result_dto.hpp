@@ -118,6 +118,39 @@ struct ListResultQualifiersResult {
 ///        half of the result encoding.
 using QualifierChoice = ::morph::forms::Choice<std::string, "ListResultQualifiers", "id", "name">;
 
+/// @brief Wire code meaning the aliquot was measured undiluted.
+inline constexpr std::string_view kDilutionNeat = "neat";
+
+/// @brief Wire code meaning the aliquot was diluted before measuring.
+inline constexpr std::string_view kDilutionDiluted = "diluted";
+
+/// @brief How the aliquot was prepared. The conditional-logic driver (README
+///        build order §5): a dilution factor is required, and shown, only when
+///        this says the aliquot was diluted.
+using DilutionChoice = ::morph::forms::Choice<std::string, "ListDilutionModes", "id", "name">;
+
+/// @brief One row of the dilution picklist.
+struct DilutionOption {
+    /// @brief The wire code submitted as the field's value.
+    std::string id;
+
+    /// @brief The text shown to the operator.
+    std::string name;
+};
+
+/// @brief Serves the dilution picklist.
+struct ListDilutionModes {
+    /// @brief Always ready: a picklist takes no arguments.
+    /// @return `true`.
+    [[nodiscard]] bool validate() const noexcept { return true; }
+};
+
+/// @brief The dilution picklist.
+struct ListDilutionModesResult {
+    /// @brief The preparation modes, with display text.
+    std::vector<DilutionOption> modes;
+};
+
 /// @brief Captures a concentration result against the attached sample.
 ///
 /// The value is submitted in the analysis version's **canonical** unit
@@ -137,6 +170,20 @@ struct CaptureConcentration {
     /// @brief Which non-reading this is. Empty for a reading.
     QualifierChoice qualifier;
 
+    /// @brief How the aliquot was prepared. Empty means "not stated", which
+    ///        the rules treat exactly like `neat`: `equals` is **not** vacuous
+    ///        on an unengaged field, so an empty `dilution` makes the
+    ///        `requiredWhen` below vacuously satisfied rather than failing.
+    DilutionChoice dilution;
+
+    /// @brief The factor the aliquot was diluted by — required, and shown,
+    ///        only when `dilution` says `diluted`.
+    ///
+    /// Load-bearing rather than decorative: the model multiplies the reading
+    /// by it before storing, exactly (`Rational`, never a `double`), so a
+    /// mis-declared dilution changes the reported concentration.
+    DilutionFactor dilutionFactor;
+
     /// @brief Neither half of the sum is *unconditionally* required — the
     ///        `exactlyOneOf` rule below is the only gate on them.
     ///
@@ -147,12 +194,21 @@ struct CaptureConcentration {
     /// `required` would demand both fields, and a payload satisfying it would
     /// then fail `exactlyOneOf` on the server. Nothing in `morph::forms`
     /// detects that contradiction, so the encoding has to opt out by hand.
-    static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
+    static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"},
+                                               std::string_view{"dilution"}, std::string_view{"dilutionFactor"}};
 
     /// @brief The sum-type encoding, as a cross-field rule the client and the
     ///        server both evaluate from one declaration.
     static constexpr auto formRules = ::morph::forms::ruleList(
-        ::morph::forms::exactlyOneOf(&CaptureConcentration::value, &CaptureConcentration::qualifier));
+        ::morph::forms::exactlyOneOf(&CaptureConcentration::value, &CaptureConcentration::qualifier),
+        // The conditional pair. They are declared *separately* and neither
+        // implies the other, which is the framework's stated contract: an
+        // author who wants "hidden ⇒ also not required" says so twice, on
+        // purpose. See the rung README's §5 decision on clear-on-hide.
+        ::morph::forms::requiredWhen(&CaptureConcentration::dilutionFactor,
+                                     ::morph::forms::equals(&CaptureConcentration::dilution, "diluted")),
+        ::morph::forms::visibleWhen(&CaptureConcentration::dilutionFactor,
+                                    ::morph::forms::equals(&CaptureConcentration::dilution, "diluted")));
 
     /// @brief Whether this capture is well-formed.
     ///

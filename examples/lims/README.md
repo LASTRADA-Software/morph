@@ -433,6 +433,46 @@ close it: the README names this rung the owner of the ladder's payload-evolution
 answer, and shipping a half-considered scheme that rungs 5 and 7 must then
 live with would be worse than filing the diagnosis with the options laid out.
 
+### 18. Conditional logic is declared once and evaluated twice, and this rung proves it (§5)
+
+`CaptureConcentration` gains the README's own example: a dilution factor
+required, and shown, only when the preparation says the aliquot was diluted.
+Both rules are declared — `requiredWhen` **and** `visibleWhen`, over the same
+`equals(dilution, "diluted")` condition — because neither implies the other,
+which is the framework's stated contract rather than an oversight.
+
+**Clear-on-hide: decided as "do not".** A hidden field's draft value still
+travels; the framework says so and this rung does not fight it. Instead the
+*server* ignores a dilution factor whose preparation says `neat`, so an
+operator who selects `diluted`, types a factor, then switches back to `neat`
+gets 2.4 mg/L rather than 24 — and gets it whether or not their renderer
+bothered to clear the field. Clearing client-side would have made the outcome
+depend on renderer behaviour the server cannot verify.
+
+**The factor is load-bearing.** The model multiplies the reading by it,
+exactly (`Rational`, never a `double`), so a mis-declared dilution changes the
+reported concentration. A conditional field nothing depends on would test the
+rule vocabulary and nothing else.
+
+`requiredWhen` can insist a field is filled in; it cannot insist the number
+means anything, so the model separately refuses a factor of zero or less, and
+fail-closes on an unknown preparation code exactly as it does for an unknown
+qualifier code.
+
+**The parity suite.** `test_conditional_logic.cpp` evaluates the *served*
+`x-rules` JSON with a generic, data-driven evaluator — the one a non-QML client
+has to write — and asserts it agrees with the compiled `allRulesSatisfied`
+across all 24 points of the rule state space, with the matrix asserted to
+contain both verdicts so a client that always says yes could not pass. It also
+pins the two behaviours D8 names: `equals` is **not** vacuous on an unengaged
+field (unlike the comparison kinds), and an unrecognised rule kind **fails
+closed on evaluation** while **deferring on enforcement** — the client does not
+claim the rule holds, but still submits, because a client that blocked on an
+unknown rule could not talk to a newer server at all.
+
+That evaluator is the third implementation of one closed vocabulary the
+framework owns, which is `docs/findings/011`.
+
 ## Findings raised by this rung
 
 - **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
@@ -495,6 +535,14 @@ live with would be worse than filing the diagnosis with the options laid out.
   injected as `-isystem` ahead of libc++'s own headers. The repo's own
   `morph_offline_sqlite_tests` target fails identically, which is why the
   durable queue had never been built here before.
+- **[`docs/findings/011`](../../docs/findings/011-no-shared-conformance-corpus-for-x-rules.md)
+  — `x-rules` has one client-side evaluator and no shared corpus.** The spec
+  makes client/server parity the reason the vocabulary is closed, but the only
+  client-side implementation is JavaScript inside `DynamicForm.qml`, each side
+  is tested against its own expectations, and the renderer conformance kit's
+  scope note does not list `x-rules` at all. A non-QML client — which is what
+  this rung's field devices are — must reimplement the whole vocabulary,
+  vacuity asymmetry and fail-closed rule included.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

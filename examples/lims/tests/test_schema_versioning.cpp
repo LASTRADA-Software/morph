@@ -178,11 +178,11 @@ TEST_CASE("Only the version's *data* varies; the framework-enforced parts are id
     // in both versions' forms: the rule list and the required array.
     const auto compiled = morph::forms::schemaJson<lims::CaptureConcentration>();
     for (const auto& served : {schemaV1.schemaJson, schemaV2.schemaJson}) {
-        CHECK(served.find(R"("x-rules":[{"kind":"exactlyOneOf","fields":["value","qualifier"]}])") !=
+        CHECK(served.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") !=
               std::string::npos);
         CHECK(served.find(R"("required":["analysisVersionId"])") != std::string::npos);
     }
-    CHECK(compiled.find(R"("x-rules":[{"kind":"exactlyOneOf","fields":["value","qualifier"]}])") != std::string::npos);
+    CHECK(compiled.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") != std::string::npos);
 }
 
 TEST_CASE("The spec range a served schema advertises is enforced by nobody",

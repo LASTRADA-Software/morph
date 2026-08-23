@@ -142,6 +142,11 @@ public:
     /// @throws NotFound if this handler is not attached to a sample.
     ListResultsResult execute(const ListResults& action);
 
+    /// @brief Serves the dilution picklist a `DilutionChoice` renders from.
+    /// @param action Carries no fields of its own.
+    /// @return The preparation modes, with display text.
+    ListDilutionModesResult execute(const ListDilutionModes& action);
+
     /// @brief Serves the qualifier picklist a `QualifierChoice` renders from.
     /// @param action Carries no fields of its own.
     /// @return The three "no number" codes, with display text.
@@ -370,6 +375,8 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::RejectSample, "RejectSample")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::CaptureConcentration, "CaptureConcentration")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResults, "ListResults", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResultQualifiers",
+                       ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListDilutionModes, "ListDilutionModes",
                        ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::QueuedCapture, "QueuedCapture")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", ::morph::model::Loggable::No)

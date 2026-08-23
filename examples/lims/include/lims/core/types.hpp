@@ -184,6 +184,13 @@ using ConcentrationMicro = ::morph::units::Quantity<LimsUnit::ug_per_L, 3>;
 ///        fine-ratio range the README flags as a strain point.
 using ConcentrationNano = ::morph::units::Quantity<LimsUnit::ng_per_L, 3>;
 
+/// @brief A dilution factor: dimensionless, three decimal places.
+///
+/// A `Quantity` over the `scalar` unit rather than a bare `Rational` so it
+/// joins the forms palette as an empty-capable field — which is what lets the
+/// conditional rules in `result_dto.hpp` name it at all.
+using DilutionFactor = ::morph::units::Quantity<LimsUnit::scalar, 3>;
+
 /// @brief A current reading, in the canonical amps at 3 decimal places —
 ///        the InvenTree "1500 mA against a template in A" flow.
 using Current = ::morph::units::Quantity<LimsUnit::A, 3>;
