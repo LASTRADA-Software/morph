@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "poll_qml_bridges.hpp"
 #include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 #include "poll_schemas.hpp"
 
@@ -20,14 +21,12 @@ namespace polls::gui {
 
 namespace {
 
-/// @brief An `OptionId` as the plain number QML rows carry, or `-1` when
-///        unengaged (Lightweight's `ServerSideAutoIncrement` starts at 1, so
-///        `-1` is never a real id). Same convention as
-///        `bookmarks::gui::idNumber`.
-[[nodiscard]] qlonglong idNumber(const OptionId& id) { return id.hasValue() ? static_cast<qlonglong>(*id) : -1; }
-
-/// @brief A `PollEventId` as the plain number a cursor/event row carries.
-[[nodiscard]] qlonglong idNumber(const PollEventId& id) { return id.hasValue() ? static_cast<qlonglong>(*id) : -1; }
+// An `OptionId`/`PollEventId` as the plain number QML rows carry, `kNoId`
+// when unengaged. Both are zero-sentinel ids (`core/types.hpp`: the payload is
+// a bare `std::int64_t` whose own "not entered" value is `0`), so `id{0}` is
+// already the empty state before it reaches the conversion -- see
+// `gui/id_qml.hpp`'s "What an id is here".
+using ::morph::ladder::gui::idNumber;
 
 /// @brief A `Count` rendered via `morph::units::toString` — an integer text,
 ///        since `polls::Count` is always a whole number (`units.hpp`).

@@ -7,6 +7,8 @@
 #include "lims/dto/sample_dto.hpp"
 #include "lims/dto/verification_dto.hpp"
 
+#include "gui/id_qml.hpp"
+
 #include <QString>
 #include <QVariant>
 #include <QVariantList>
@@ -28,8 +30,9 @@
 /// about what "state" is spelled.
 ///
 /// @par Conventions, stated once
-/// - An id is a plain number, `-1` when unengaged. A real key is never `-1`
-///   (`ServerSideAutoIncrement` starts at 1), so the sentinel is unambiguous.
+/// - An id is a plain number, `morph::ladder::gui::kNoId` (`-1`) when
+///   unengaged. A real key is never `-1` (`ServerSideAutoIncrement` starts at
+///   1), so the sentinel is unambiguous.
 /// - A `Quantity` crosses as **two** keys: `valueText`, the exact decimal
 ///   rendered at its own precision, and `hasValue`. Never as a `double` — a
 ///   lab result that a binding could round on its way to a label is the one
@@ -40,14 +43,11 @@
 
 namespace lims::gui {
 
-/// @brief An id as the plain number QML rows and invokables carry.
-/// @tparam Id A strong id type exposing `hasValue()`/`operator*`.
-/// @param id The id to convert.
-/// @return Its number, or `-1` when unengaged.
-template <typename Id>
-[[nodiscard]] inline qlonglong idNumber(const Id& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
+/// An id as the plain number QML rows and invokables carry, `-1` when
+/// unengaged. Re-exported rather than redefined (morph#169) so this rung's
+/// `-1` is the same named `kNoId` the other four rungs publish, and so the
+/// name stays `lims::gui::idNumber` for the callers and tests that use it.
+using ::morph::ladder::gui::idNumber;
 
 /// @brief A `string_view` as a `QString`.
 /// @param text The text to convert.

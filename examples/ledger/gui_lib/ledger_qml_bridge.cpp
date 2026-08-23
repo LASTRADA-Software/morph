@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "ledger_qml_bridge.hpp"
+#include "gui/id_qml.hpp"
 
 #include "ledger/core/units.hpp"
 
@@ -12,28 +13,8 @@ namespace ledger::gui {
 
 namespace {
 
-/// @brief A strong id as the plain number QML holds, or `-1` when
-///        unengaged -- same convention as `kanban::gui::idNumber`.
-/// @tparam IdT The strong-id type.
-/// @param id The id to render.
-/// @return The payload, or `-1`.
-template <typename IdT>
-[[nodiscard]] qlonglong idNumber(const IdT& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
-
-/// @brief Parses a plain-number id string back into a strong id.
-/// @tparam IdT The strong-id type to build.
-/// @param text The QML-side id text.
-/// @return The parsed id, or a disengaged one when @p text is not a number --
-///         the model refuses a disengaged id with a typed error, which the
-///         presenter relays as `failed`, so this needs no throw of its own.
-template <typename IdT>
-[[nodiscard]] IdT idFromText(const QString& text) {
-    bool ok = false;
-    const auto value = text.toLongLong(&ok);
-    return ok ? IdT{value} : IdT{};
-}
+using ::morph::ladder::gui::idFromText;
+using ::morph::ladder::gui::idNumber;
 
 /// @brief `AccountKind` as the lowercase token QML passes.
 /// @param text The token.

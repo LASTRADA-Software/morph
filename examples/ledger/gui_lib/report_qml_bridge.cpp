@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "report_qml_bridge.hpp"
+#include "gui/id_qml.hpp"
 
 #include <glaze/glaze.hpp>
 
@@ -11,16 +12,7 @@ namespace ledger::gui {
 
 namespace {
 
-/// @brief Parses a plain-number id string into a strong id.
-/// @tparam IdT The strong-id type to build.
-/// @param text The QML-side id text.
-/// @return The parsed id, or a disengaged one.
-template <typename IdT>
-[[nodiscard]] IdT idFromText(const QString& text) {
-    bool ok = false;
-    const auto value = text.toLongLong(&ok);
-    return ok ? IdT{value} : IdT{};
-}
+using ::morph::ladder::gui::idFromText;
 
 }  // namespace
 

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "budget_qml_bridge.hpp"
+#include "gui/id_qml.hpp"
 
 #include "ledger/core/units.hpp"
 
@@ -10,27 +11,8 @@ namespace ledger::gui {
 
 namespace {
 
-/// @brief A strong id as the plain-number string QML holds, or empty when
-///        unengaged.
-/// @tparam IdT The strong-id type.
-/// @param id The id to render.
-/// @return The payload as text, or an empty string.
-template <typename IdT>
-[[nodiscard]] QString idText(const IdT& id) {
-    return id.hasValue() ? QString::number(*id) : QString{};
-}
-
-/// @brief Parses a plain-number id string into a strong id.
-/// @tparam IdT The strong-id type to build.
-/// @param text The QML-side id text.
-/// @return The parsed id, or a disengaged one -- which the model refuses with
-///         a typed error the presenter relays, so this needs no throw.
-template <typename IdT>
-[[nodiscard]] IdT idFromText(const QString& text) {
-    bool ok = false;
-    const auto value = text.toLongLong(&ok);
-    return ok ? IdT{value} : IdT{};
-}
+using ::morph::ladder::gui::idFromText;
+using ::morph::ladder::gui::idText;
 
 /// @brief An exact `Rational` as the triple QML binds to, under @p prefix.
 ///
