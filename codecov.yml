@@ -256,6 +256,72 @@ component_management:
           target: 87%
           informational: true
 
+    # Rung 6, lims. Scoped to the rung's models, like ledger's above and for
+    # the same reason: the number then describes domain logic rather than
+    # being diluted by presenters and QML adapters that have their own suites.
+    #
+    # NOTE: neither this component nor ledger's could score anything until
+    # rung 6 also fixed scripts/coverage.sh, whose `_MORPH_LADDER_RUNGS` list
+    # had drifted from CMake's and named only rungs 1-4. ledger's component
+    # was matching a set of files no uploaded report contained -- silently
+    # reporting nothing rather than failing. See docs/findings/015.
+    #
+    # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
+    # rounded report percentage) over the full lims suite:
+    #
+    #     src/models/sample_model.cpp             666/671   99.25%
+    #     src/models/analysis_catalog_model.cpp   182/186   97.85%
+    #     include/lims/models/sample_model.hpp      7/7    100.00%
+    #     -------------------------------------------------------
+    #     total                                   855/864   98.96%
+    #
+    # The remaining misses are three defensive guards, each unreachable
+    # through the model's own API rather than merely untested:
+    #   * sample_model.cpp, `alreadyDecided`'s empty-key guard --
+    #     `QueuedCapture::validate()` refuses an empty `operationKey` before
+    #     any dispatch path reaches the lookup, so the guard only fires for a
+    #     caller that bypassed validation entirely.
+    #   * analysis_catalog_model.cpp, `renderSchemaFor`'s "not JSON we can
+    #     patch" arm -- the input is `morph::forms::schemaJson<A>()`, which
+    #     either produces valid JSON or an empty string; there is no input a
+    #     caller can supply.
+    #   * analysis_catalog_model.cpp, `GetAnalysisVersion`'s "version's
+    #     analysis is missing" arm -- `lims_analysis_versions.analysis_id` is
+    #     a declared foreign key, so a version row with no analysis row cannot
+    #     exist while the constraint is enforced.
+    # Each is kept rather than deleted because each turns an impossible state
+    # into a typed error instead of a dereference; none is reachable by a test
+    # that does not first disable the very thing making it impossible.
+    #
+    # Target 97%, a margin below the 98.96% ceiling so an ordinary refactor
+    # does not trip it while a real regression does. `informational: true`,
+    # consistent with every other ladder component (morph#133): the ladder's
+    # gates are raised together once it is built, not one rung at a time with
+    # the newest code gated most strictly.
+    #
+    # Measuring this honestly was worth doing rather than rounding past, twice
+    # over. The first measurement came in at 93.27%, and the gap was not
+    # padding: it included `AnalysisCatalogModel::attachActionLog`, never
+    # called by any test, so the catalogue's whole journaling path was
+    # unverified -- and the audit trail's own classifier, whose
+    # `VerifyResult` branch was dead because verifications were being
+    # journaled under an *empty* entity key. That second one was a real
+    # defect, not a coverage artifact: a sample's audit trail silently omitted
+    # the second pair of eyes. Fixed by rekeying the journal to the result's
+    # own sample, and pinned by a test.
+    - component_id: lims
+      name: "application ladder rung 6 (examples/lims models)"
+      paths:
+        - examples/lims/src/models/**
+        - examples/lims/include/lims/models/**
+      statuses:
+        - type: project
+          target: 97%
+          informational: true
+        - type: patch
+          target: 97%
+          informational: true
+
 # Always post the coverage-comparison comment on a PR, even on the first upload
 # after activation and even when the base report is still processing.
 #
@@ -313,3 +379,11 @@ ignore:
   - "examples/kanban/tests/**"
   - "examples/kanban/gui/**"
   - "examples/kanban/gui_wasm/**"
+  # Rungs 5-6, on the same terms. Both entered the coverage report for the
+  # first time with rung 6's fix to scripts/coverage.sh (docs/findings/015).
+  - "examples/ledger/tests/**"
+  - "examples/ledger/gui/**"
+  - "examples/ledger/gui_wasm/**"
+  - "examples/lims/tests/**"
+  - "examples/lims/gui/**"
+  - "examples/lims/gui_wasm/**"

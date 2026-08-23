@@ -671,6 +671,9 @@ ConflictView SampleModel::execute(const ResolveConflict& action) {
             throw NotFound{"ResolveConflict: no such conflict"};
         }
         auto row = rows.front();
+        // Same reason as `execute(VerifyResult)`: a resolution belongs to the
+        // conflict's sample, whatever this handler is attached to.
+        _journal.rekey(std::to_string(row.sample.Value()));
         if (static_cast<ConflictStatus>(row.status.Value()) != ConflictStatus::Open) {
             throw Conflict{"ResolveConflict: conflict " + std::to_string(*action.conflictId) +
                            " has already been resolved"};
@@ -816,6 +819,13 @@ VerificationView SampleModel::execute(const VerifyResult& action) {
         }
 
         const auto sampleId = static_cast<std::int64_t>(result.sample.Value());
+        // Journal this verification against the *sample* it belongs to, not
+        // against whatever this handler happened to be attached to. A
+        // verifier's handler is typically attached to nothing (it acts on a
+        // result id), so without this the entry lands under an empty entity
+        // key and the sample's own audit trail silently omits the second pair
+        // of eyes -- which is the one thing a four-eyes record exists to show.
+        _journal.rekey(std::to_string(sampleId));
         const auto sample = toView(loadSample(mapper, sampleId));
         if (sample.state != SampleState::ToBeVerified) {
             throw IllegalTransition{

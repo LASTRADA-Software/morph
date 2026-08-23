@@ -14,6 +14,8 @@
 //      deleting every row the sample has and reconstructing anyway.
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
+#include <algorithm>
+
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/journal/action_log.hpp>
@@ -478,4 +480,208 @@ TEST_CASE("A renamed payload field decodes to a default, silently -- the payload
     // The `Unreadable` machinery above cannot catch this: the payload *does*
     // decode, it just decodes to something else. Only a per-entry payload
     // version could, and this rung does not have one -- see docs/findings/010.
+}
+
+TEST_CASE("A verification appears in the sample's own audit trail", "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ReadyToVerify lab{log};
+    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+
+    {
+        // Bob's handler is attached to nothing — he acts on a result id. The
+        // verification must still be recorded against the sample, or the
+        // sample's trail omits the second pair of eyes entirely.
+        const ScopedPrincipal bob{"bob"};
+        lims::SampleModel verifier;
+        verifier.attachActionLog(log, std::string{});
+        verifier.execute(lims::VerifyResult{.resultId = lab.result.id});
+    }
+
+    const auto trail = lab.bench.execute(lims::GetAuditTrail{});
+    bool sawVerification = false;
+    for (const auto& step : trail.steps) {
+        if (step.kind == lims::AuditStepKind::ResultVerified) {
+            sawVerification = true;
+            CHECK(step.principal == "bob");
+            CHECK(step.outcome == lims::AuditOutcome::Succeeded);
+            // The trail names both halves of four eyes: who verified, and
+            // whose reading they verified.
+            CHECK(step.detail == "alice");
+        }
+    }
+    CHECK(sawVerification);
+}
+
+TEST_CASE("A refused verification appears in the trail, marked refused", "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    ReadyToVerify lab{log};
+    lab.bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Verifier});
+
+    // Alice captured the reading, so she cannot verify it. The attempt is
+    // audit-worthy precisely because it was refused.
+    CHECK_THROWS_AS(lab.bench.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::Forbidden);
+
+    const auto trail = lab.bench.execute(lims::GetAuditTrail{});
+    bool sawRefusal = false;
+    for (const auto& step : trail.steps) {
+        if (step.action == "VerifyResult") {
+            sawRefusal = true;
+            CHECK(step.kind == lims::AuditStepKind::ResultVerified);
+            CHECK(step.outcome == lims::AuditOutcome::Refused);
+            CHECK(step.detail.find("cannot also verify") != std::string::npos);
+        }
+    }
+    CHECK(sawRefusal);
+}
+
+TEST_CASE("Offline replay and conflict resolution both reach the sample's trail", "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+
+    lims::AnalysisCatalogModel catalog;
+    const auto nitrate = catalog.execute(
+        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    lims::SampleModel bench;
+    bench.attachActionLog(log, std::string{});
+    const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+    const auto sample = bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    bench.execute(lims::ReceiveSample{});
+    const auto atWork = bench.execute(lims::StartWork{});
+
+    // A field update prepared against the version before the bench moved on,
+    // so replay flags it.
+    lims::QueuedCapture stale{
+        .sampleId = sample.id,
+        .baseVersion = lims::SampleVersion{*atWork.version - 1},
+        .capturedBy = "alice",
+        .operationKey = lims::OperationKey{"op-audit-1"},
+        .capture = lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
+                                              .value = lims::Concentration{exact(12, 5, 3)}},
+    };
+    const auto replayed = bench.execute(stale);
+    REQUIRE(replayed.outcome == lims::ReplayOutcome::Conflicted);
+
+    {
+        // Resolved from a handler attached to *nothing* — a supervisor
+        // working a conflicts queue acts on a conflict id, not on a sample.
+        // The resolution must still land in that sample's trail, which is
+        // what the rekey inside `execute(ResolveConflict)` is for. Resolving
+        // through `bench` instead would prove nothing: it is already keyed to
+        // this sample, so the rekey would be a no-op.
+        lims::SampleModel supervisor;
+        supervisor.attachActionLog(log, std::string{});
+        supervisor.execute(lims::ResolveConflict{.conflictId = replayed.conflictId,
+                                                 .resolution = lims::ConflictResolution::DiscardStale,
+                                                 .note = "prepared against a superseded version"});
+    }
+
+    const auto trail = bench.execute(lims::GetAuditTrail{});
+    bool sawReplay = false;
+    bool sawResolution = false;
+    for (const auto& step : trail.steps) {
+        if (step.kind == lims::AuditStepKind::OfflineReplay) {
+            sawReplay = true;
+            // The trail says which way replay went, not merely that it ran.
+            CHECK(step.detail == "conflicted");
+        }
+        if (step.kind == lims::AuditStepKind::ConflictResolved) {
+            sawResolution = true;
+            CHECK(step.principal == "alice");
+        }
+    }
+    CHECK(sawReplay);
+    CHECK(sawResolution);
+}
+
+TEST_CASE("A verification is refused unless the sample is awaiting verification", "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    ReadyToVerify lab;
+    lab.bench.execute(lims::GrantRole{.principal = "bob", .role = lims::LimsRole::Verifier});
+
+    // Back to the bench: the reading is being reworked, so it is not up for
+    // verification any more.
+    lab.bench.execute(lims::ReturnForRework{.reason = "duplicate out of tolerance"});
+
+    const ScopedPrincipal bob{"bob"};
+    lims::SampleModel verifier;
+    CHECK_THROWS_AS(verifier.execute(lims::VerifyResult{.resultId = lab.result.id}), lims::IllegalTransition);
+}
+
+TEST_CASE("The audit and verification listings need an attached handler", "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::SampleModel model;
+
+    CHECK_THROWS_AS(model.execute(lims::GetAuditTrail{}), lims::NotFound);
+    CHECK_THROWS_AS(model.execute(lims::ListVerifications{}), lims::NotFound);
+}
+
+TEST_CASE("Every refused action kind is named in the trail, not lumped as unreadable",
+          "[lims][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+
+    lims::AnalysisCatalogModel catalog;
+    const auto nitrate = catalog.execute(
+        lims::DefineAnalysis{.name = "Nitrate", .canonicalUnit = "mg_per_L", .decimalPlaces = 3});
+    lims::SampleModel bench;
+    bench.attachActionLog(log, std::string{});
+    const auto client = bench.execute(lims::RegisterClient{.name = "Waterworks Ltd"});
+    bench.execute(lims::RegisterSample{.clientId = client.clientId, .reference = "WW-1"});
+    bench.execute(lims::ReceiveSample{});
+    const auto atWork = bench.execute(lims::StartWork{});
+
+    // One refusal of each remaining kind, so the trail's own classifier is
+    // exercised on a *failed* entry rather than only a successful one. A
+    // refused entry has no result to decode, so its kind comes from the
+    // action id alone — which is exactly the path that would silently
+    // degrade to `Unreadable` if an id were mistyped.
+    CHECK_THROWS_AS(bench.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(bench.execute(lims::QueuedCapture{.sampleId = atWork.id, .capturedBy = "alice"}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(bench.execute(lims::ResolveConflict{.conflictId = lims::ConflictId{424242},
+                                                        .note = "no such conflict"}),
+                    lims::NotFound);
+    // A supervisor has to exist before a grant can be refused at all — the
+    // bootstrap carve-out lets the *first* grant through whoever makes it.
+    bench.execute(lims::GrantRole{.principal = "alice", .role = lims::LimsRole::Supervisor});
+    {
+        const ScopedPrincipal mallory{"mallory"};
+        lims::SampleModel intruder;
+        intruder.attachActionLog(log, std::to_string(*atWork.id));
+        CHECK_THROWS_AS(intruder.execute(lims::GrantRole{.principal = "mallory",
+                                                          .role = lims::LimsRole::Supervisor}),
+                        lims::Forbidden);
+    }
+
+    std::vector<lims::AuditStepKind> refusedKinds;
+    for (const auto& step : bench.execute(lims::GetAuditTrail{}).steps) {
+        if (step.outcome == lims::AuditOutcome::Refused) {
+            refusedKinds.push_back(step.kind);
+        }
+    }
+    const auto has = [&refusedKinds](lims::AuditStepKind kind) {
+        return std::find(refusedKinds.begin(), refusedKinds.end(), kind) != refusedKinds.end();
+    };
+    CHECK(has(lims::AuditStepKind::ResultCaptured));
+    CHECK(has(lims::AuditStepKind::OfflineReplay));
+    CHECK(has(lims::AuditStepKind::ConflictResolved));
+    CHECK(has(lims::AuditStepKind::RoleGranted));
+    // And none of them degraded to the catch-all.
+    CHECK_FALSE(has(lims::AuditStepKind::Unreadable));
+}
+
+TEST_CASE("Listing conflicts needs an attached handler", "[lims][audit][offline]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::SampleModel model;
+    CHECK_THROWS_AS(model.execute(lims::ListConflicts{}), lims::NotFound);
 }

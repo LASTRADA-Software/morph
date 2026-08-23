@@ -11,6 +11,9 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
+
+#include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 
 #include <string>
@@ -145,4 +148,90 @@ TEST_CASE("Revising an unknown analysis is NotFound, not a silent insert", "[lim
                                                         .canonicalUnit = "mg_per_L",
                                                         .decimalPlaces = 3}),
                     lims::NotFound);
+}
+
+TEST_CASE("Revising and fetching refuse malformed requests", "[lims][catalog]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel model;
+
+    const auto v1 = model.execute(nitrate());
+    // A zero-denominator bound on a revision is as unusable as on a
+    // definition, and is refused by the same `validate()`.
+    CHECK_THROWS_AS(model.execute(lims::ReviseAnalysis{
+                        .analysisId = v1.analysisId,
+                        .canonicalUnit = "mg_per_L",
+                        .decimalPlaces = 3,
+                        .specHigh = lims::AnalysisBound{.numerator = 10, .denominator = 0}}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::GetAnalysisVersion{}), lims::ValidationError);
+}
+
+TEST_CASE("The served schema carries the version's detection limits too", "[lims][catalog][schema]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel model;
+
+    // nitrate() declares both an LOD and a UDL, so both must reach the form —
+    // a renderer that only ever saw the spec range could not tell an operator
+    // where the instrument's floor and ceiling are.
+    const auto defined = model.execute(nitrate());
+    const auto served = model.execute(lims::GetAnalysisSchema{.versionId = defined.versionId});
+    CHECK(served.schemaJson.find("x-limitOfDetection") != std::string::npos);
+    CHECK(served.schemaJson.find("x-upperDetectionLimit") != std::string::npos);
+    CHECK(served.schemaJson.find("x-specLow") != std::string::npos);
+    CHECK(served.schemaJson.find("x-specHigh") != std::string::npos);
+}
+
+TEST_CASE("The catalogue journals its edits against the attached identity", "[lims][catalog][audit]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    auto log = std::make_shared<morph::journal::InMemoryActionLog>();
+    lims::AnalysisCatalogModel model;
+    model.attachActionLog(log, std::string{"catalogue"});
+
+    const auto v1 = model.execute(nitrate());
+    model.execute(lims::ReviseAnalysis{.analysisId = v1.analysisId,
+                                       .canonicalUnit = "mg_per_L",
+                                       .decimalPlaces = 3,
+                                       .specHigh = lims::AnalysisBound{.numerator = 10, .denominator = 1}});
+
+    // The catalogue is lab-wide, so its entries carry the identity given at
+    // attach time rather than a per-entity one. Editing a definition is an
+    // auditable act: an analysis whose bounds moved without a recorded author
+    // is exactly what a regulator asks about.
+    const auto entries = log->entries("catalogue");
+    REQUIRE(entries.size() == 2);
+    CHECK(entries[0].actionType == "DefineAnalysis");
+    CHECK(entries[1].actionType == "ReviseAnalysis");
+    for (const auto& entry : entries) {
+        CHECK(entry.modelType == "AnalysisCatalogModel");
+        CHECK(entry.principal == "alice");
+        CHECK(entry.outcome == morph::journal::Outcome::Succeeded);
+    }
+}
+
+TEST_CASE("An analysis with no versions is skipped rather than listed half-formed",
+          "[lims][catalog]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel model;
+
+    model.execute(nitrate());
+
+    // An identity row with no version row cannot arise through the model
+    // (DefineAnalysis writes both in one transaction), so it is written
+    // directly. It is still worth handling: the two tables are separate, and
+    // a listing that dereferenced a missing version would crash rather than
+    // omit.
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::AnalysisRecord orphan;
+        orphan.name = Lightweight::SqlAnsiString<128>{std::string{"Orphan"}};
+        mapper.Create(orphan);
+    }
+
+    const auto listed = model.execute(lims::ListAnalyses{});
+    REQUIRE(listed.analyses.size() == 1);
+    CHECK(listed.analyses.front().name == "Nitrate");
 }

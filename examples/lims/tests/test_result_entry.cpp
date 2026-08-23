@@ -6,6 +6,7 @@
 // an offline payload *distinguishably*.
 
 #include <array>
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <memory>
 #include <morph/forms/forms.hpp>
@@ -16,6 +17,7 @@
 #include <vector>
 
 #include "lims/core/errors.hpp"
+#include "lims/db/lims_entity.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
 #include "lims/models/sample_model.hpp"
 #include "lims_test_support.hpp"
@@ -633,4 +635,65 @@ TEST_CASE("Capturing against an analysis version that does not exist is NotFound
     CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = lims::AnalysisVersionId{424242},
                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
                     lims::NotFound);
+}
+
+TEST_CASE("Both halves of the sum engaged is refused by the model, not just by validate()",
+          "[lims][result][encoding]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel catalog;
+    lims::SampleModel model;
+
+    const auto nitrate = defineNitrate(catalog);
+    sampleAtWork(model);
+
+    // `exactlyOneOf` is checked by the action's own `validate()`, which every
+    // dispatch path runs — but a caller reaching the model directly (a test,
+    // another model, a replay) bypasses that path entirely, so the model
+    // re-checks. Client gates are UX, not security.
+    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{
+                        .analysisVersionId = nitrate.versionId,
+                        .value = lims::Concentration{exact(12, 5, 3)},
+                        .qualifier = lims::QualifierChoice{std::string{lims::kQualifierBelowLod}}}),
+                    lims::ValidationError);
+    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId}),
+                    lims::ValidationError);
+    CHECK(model.execute(lims::ListResults{}).results.empty());
+}
+
+TEST_CASE("A version declaring an impossible precision cannot be captured against",
+          "[lims][result][precision]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::SampleModel model;
+    sampleAtWork(model);
+
+    // `DefineAnalysis::validate()` bounds decimalPlaces to [0, 18], so a row
+    // outside that range cannot arise through the model. It is written
+    // directly here because the *storage* half must fail closed regardless of
+    // how a row got there: `Rational` cannot represent more than 18 decimal
+    // places, so a version demanding 99 has no reading that could satisfy it,
+    // and the capture is refused rather than silently accepted at some other
+    // precision.
+    lims::AnalysisVersionId impossible;
+    {
+        Lightweight::DataMapper mapper;
+        lims::db::AnalysisRecord analysis;
+        analysis.name = Lightweight::SqlAnsiString<128>{std::string{"Impossible"}};
+        mapper.Create(analysis);
+
+        lims::db::AnalysisVersionRecord version;
+        version.analysis = analysis;
+        version.version = 1;
+        version.canonicalUnit = Lightweight::SqlAnsiString<32>{std::string{"mg_per_L"}};
+        version.decimalPlaces = 99;
+        version.createdAt = 0;
+        mapper.Create(version);
+        impossible = lims::AnalysisVersionId{static_cast<std::int64_t>(version.id.Value())};
+    }
+
+    CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = impossible,
+                                                              .value = lims::Concentration{exact(12, 5, 3)}}),
+                    lims::ValidationError);
+    CHECK(model.execute(lims::ListResults{}).results.empty());
 }

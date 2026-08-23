@@ -46,7 +46,14 @@ fi
 # `_MORPH_LADDER_RUNGS` deliberately mirrors examples/CMakeLists.txt's own
 # `_morph_known_rungs` list. A rung that was not configured in this build
 # contributes nothing, exactly as before, via the `-x` guard.
-_MORPH_LADDER_RUNGS=(pastebin bookmarks polls kanban)
+# Drift is exactly what this list is for, and it had drifted: ledger (rung 5)
+# and lims (rung 6) were both missing, so neither contributed a single line to
+# any uploaded report -- and codecov.yml's `ledger` component, added with a
+# carefully measured 87% target, was scoring a set of files the report did not
+# contain. A component that matches nothing does not fail; it silently reports
+# nothing, which is the same shape of defect this list's own comment above
+# warns about. Added here at rung 6's close; see docs/findings/015.
+_MORPH_LADDER_RUNGS=(pastebin bookmarks polls kanban ledger lims)
 RUNG_TEST_EXES=()
 for _rung in "${_MORPH_LADDER_RUNGS[@]}"; do
     _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"

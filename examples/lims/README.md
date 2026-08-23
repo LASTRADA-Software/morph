@@ -48,7 +48,9 @@ Three anchors, each for a different layer:
 
 Models: `SampleModel` keyed by sample id (shared instance — bench and office
 clients attach to the same sample), `AnalysisCatalogModel` (analysis
-definitions = form schemas, versioned), `WorksheetModel`.
+definitions = form schemas, versioned). ~~`WorksheetModel`~~ — **struck
+after the rest of the rung was built; see resolved decision 19 for the
+reasoning.**
 
 Entities: client/project, sample, analysis definition (name, unit, entry
 units, decimal places, specification range, LOD/UDL), analysis result,
@@ -490,6 +492,48 @@ unknown rule could not talk to a newer server at all.
 That evaluator is the third implementation of one closed vocabulary the
 framework owns, which is `docs/findings/011`.
 
+### 19. `WorksheetModel` is not built, and the model list is corrected (§ model list)
+
+A worksheet, in SENAITE's sense, groups analyses drawn from *several* samples
+so one analyst can run them together — twenty nitrate determinations from
+twenty samples on one plate. It is a work-organisation unit, not a data one.
+
+It is not built, and the "What to implement" list above is corrected rather
+than left carrying an unfulfilled promise. The reasoning, so a later reader
+can disagree with it on the merits:
+
+**Nothing in the rung's definition of done needs it.** The three DoD items are
+the InvenTree unit flow, the offline conflict demo, and the audit trail; a
+worksheet appears in none of them.
+
+**It would exercise no morph surface this rung has not already stressed.**
+Every subsystem the README's own "morph subsystems exercised" list names —
+unit algebra, schema-driven forms at depth, shared sample instances, the
+offline queue's conflict semantics, role-gated transitions, the journal as
+audit — is covered without it.
+
+**Its one genuinely interesting property is neutralised by a decision this
+rung already took.** A worksheet writes results for samples whose own
+`SampleModel` instances may be live, which is exactly where the
+cross-*instance* staleness hazard `examples/bank`'s README documents ("The
+honest edge") lives. It does not arise here: this rung's models cache nothing
+but the id they are attached to and re-read the store on every call, so a
+second writer is visible immediately. Building a worksheet to demonstrate a
+hazard the design already forecloses would demonstrate nothing.
+
+**The one gap it would re-hit is already filed.** A batch assignment
+(`vector<SampleAnalysis>`) is an array-of-objects field, which `DynamicForm`'s
+array control does not render — a gap `examples/polls` hit and recorded first.
+Re-confirming it costs a model and a table and produces no new finding.
+
+**What would change the answer.** A worksheet becomes worth building the day
+this rung needs an operation that is *atomic across several samples* — one
+transaction covering rows owned by several keyed instances. That is a real
+framework question (morph serialises per instance, not across instances) and
+none of §2–§7 raised it. If a rung 7 or 8 needs cross-instance atomicity, the
+worksheet is the natural place to put it, and this decision should be
+revisited then rather than treated as settled.
+
 ## The client
 
 Two surfaces, one shell (`gui/qml/Main.qml`): the sample lifecycle and result
@@ -563,6 +607,36 @@ resolved dynamically against objects that test never supplies.
 against the real bridges' metaobjects that every signal the QML connects to
 exists, and against their real property bags that every key a delegate reads
 is present.
+
+### 20. Model coverage is 98.96%, and measuring it found a real defect (§ coverage gate)
+
+`codecov.yml` gains a `lims` component scoped to `examples/lims/src/models/**`
+and `examples/lims/include/lims/models/**` — the paths
+`examples/IMPLEMENTATION.md` rule 5's bar actually names — with a 97% target,
+a margin below the measured 855/864 = 98.96% ceiling.
+
+The remaining nine lines are three defensive guards, each unreachable through
+the model's own API rather than merely untested: `alreadyDecided`'s empty-key
+guard (validation refuses an empty operation key first), `renderSchemaFor`'s
+malformed-JSON arm (its input is `schemaJson<A>()`), and
+`GetAnalysisVersion`'s dangling-version arm (a declared foreign key forbids
+the row). Each turns an impossible state into a typed error instead of a
+dereference, so each is kept.
+
+Measuring rather than assuming was worth it twice. The first measurement came
+in at 93.27%, and the gap was not padding: `AnalysisCatalogModel::attachActionLog`
+had no caller at all, so the catalogue's entire journaling path was
+unverified — and the audit trail's `VerifyResult` branch was **dead**, because
+verifications were journaled under an *empty* entity key. That was a real
+defect rather than a coverage artifact: a sample's audit trail silently
+omitted the second pair of eyes, which is the one thing a four-eyes record
+exists to show. Fixed by rekeying the journal to the result's own sample
+(same for conflict resolutions), and pinned by its own test.
+
+Neither this component nor rung 5's could have scored anything before this,
+because `scripts/coverage.sh`'s rung list had drifted from CMake's and named
+only rungs 1–4 — so ledger's carefully-measured 87% gate was matching a set of
+files no uploaded report contained. That is `docs/findings/015`, fixed here.
 
 ## Findings raised by this rung
 
@@ -655,6 +729,12 @@ is present.
   know who is replaying cannot use it. Found by driving replay through
   `switchBackend` rather than calling the hook directly — the §7 suite's own
   helper had been supplying a session the framework never does.
+- **[`docs/findings/015`](../../docs/findings/015-coverage-script-rung-list-drifted-so-ledgers-gate-scored-nothing.md)
+  — `scripts/coverage.sh`'s rung list had drifted from CMake's.** ledger and
+  lims were both missing, so neither reached any uploaded report — and rung
+  5's codecov component, with a target derived from a genuinely careful
+  measurement, was scoring files the report did not contain. A component that
+  matches nothing does not fail; it reports nothing. Fixed here.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what
