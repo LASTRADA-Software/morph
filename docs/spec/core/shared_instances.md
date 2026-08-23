@@ -88,8 +88,33 @@ action naming the same entity uses `BRIDGE_KEY_FROM`, which records only that
 the action carries the key. Most models need just the one line, because most
 have a single loader action and the rest are keyless.
 
-A key type must be one morph can carry on the wire and use as a map key: an
-integral type or `std::string`.
+A key type must be one morph can carry on the wire and use as a map key. Two
+kinds qualify:
+
+- **`RawModelKey`** — an integral type (excluding `bool`, which carries one bit
+  of identity and is far more likely to be a mistake) or `std::string`.
+- **`WrappedModelKey`** — a *strong id* wrapping one of those: any type with
+  `hasValue()` and an `operator*` yielding a `RawModelKey`, and constructible
+  back from that raw value. Detected structurally, like every other trait here,
+  so a strong id needs no declaration to become usable as a key.
+
+The second exists because `examples/IMPLEMENTATION.md` rule 3 *requires* entity
+identity to be a per-entity strong id exposing `hasValue()`, so it joins the
+forms palette as an empty-capable field. While `ModelKey` admitted only raw
+scalars, those two rules could not both be obeyed: a rung following rule 3
+could not use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` at all, and three rungs
+independently hand-wrote `ModelKeyTraits`/`ActionKeyTraits` instead — each
+re-stating the `*id` unwrapping the macro exists to hide (morph#163).
+
+A strong id encodes as **whatever it wraps**, so it shares a directory entry
+with the raw key of the same value; the directory stays one map keyed on
+strings.
+
+**An empty strong id is refused, not encoded.** `keyToString` throws for an id
+with no value. Encoding it as `""` or `"0"` would route every caller holding an
+unset id to a single shared instance — silently, and looking like it worked.
+`BridgeHandler` turns that throw into a rejected `Completion`, so it surfaces
+where the caller can see it.
 
 A model may still declare `using PrimaryKey = …` in its own body, and that wins
 over the deduced type — *infer by default, declare to override*, the same rule

@@ -61,6 +61,7 @@ add_executable(morph_tests
     test_coverage_push95.cpp
     test_server_limits.cpp
     test_shared_instances.cpp
+    test_strong_id_keys.cpp
     test_wire_encode_fault.cpp
     test_wire_hardening.cpp
     test_protocol_version.cpp

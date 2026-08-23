@@ -8,6 +8,7 @@
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <utility>
 
 /// @file
 /// Primary keys for model instances.
@@ -30,15 +31,56 @@
 
 namespace morph::model {
 
-/// @brief Key types a model may declare as its `PrimaryKey`.
+/// @brief Key types that are themselves a wire-encodable scalar.
 ///
 /// Restricted to integral types and `std::string` because a key must round-trip
 /// losslessly through the wire's string encoding and be usable as a map key.
 /// `bool` is excluded: it carries one bit of identity, which is never a
 /// meaningful primary key and is far more likely to be a mistake.
 template <typename K>
-concept ModelKey =
+concept RawModelKey =
     (std::integral<K> && !std::same_as<std::remove_cv_t<K>, bool>) || std::same_as<std::remove_cv_t<K>, std::string>;
+
+/// @brief Key types that *wrap* a `RawModelKey` — the ladder's strong ids.
+///
+/// `examples/IMPLEMENTATION.md` rule 3 requires entity identity to be a
+/// per-entity strong id type (`struct PasteId`, `struct OptionId`) exposing
+/// `hasValue()`, so that it joins the forms palette as an empty-capable field.
+/// Such a type is not integral and is not `std::string`, so before this it
+/// satisfied no arm of `ModelKey` at all — and a rung obeying rule 3 could not
+/// use `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM`, the very macros the framework
+/// provides for keying. Three rungs hand-wrote the traits instead, each
+/// re-stating the `*id` unwrapping convention the macro exists to hide.
+///
+/// The shape is deduced structurally rather than declared, matching how a
+/// keyed model is detected: any type with `hasValue()` and an `operator*`
+/// yielding a `RawModelKey`, and constructible back from that raw value so the
+/// key round-trips from the wire. Both ladder spellings qualify — an
+/// `std::optional`-backed id whose `operator*` returns a reference, and a
+/// sentinel-backed one (`0` means empty) whose `operator*` returns by value.
+template <typename K>
+concept WrappedModelKey = !RawModelKey<K> && requires(const K& key) {
+    { key.hasValue() } -> std::convertible_to<bool>;
+    { *key };
+    requires RawModelKey<std::remove_cvref_t<decltype(*key)>>;
+    requires requires(std::remove_cvref_t<decltype(*key)> raw) { K{std::move(raw)}; };
+};
+
+/// @brief Key types a model may declare as its `PrimaryKey`.
+///
+/// Either a wire-encodable scalar (`RawModelKey`) or a strong id wrapping one
+/// (`WrappedModelKey`).
+template <typename K>
+concept ModelKey = RawModelKey<K> || WrappedModelKey<K>;
+
+namespace detail {
+
+/// @brief The scalar a `WrappedModelKey` wraps.
+/// @tparam K The wrapping strong id type.
+template <WrappedModelKey K>
+using UnwrappedKeyOf = std::remove_cvref_t<decltype(*std::declval<const K&>())>;
+
+}  // namespace detail
 
 /// @brief The key type of a model, when one has been declared *for* it.
 ///
@@ -99,15 +141,32 @@ using PrimaryKeyOf = detail::KeyTypeOf<M>::type;
 
 /// @brief Encodes a primary key as its canonical wire string.
 ///
-/// Integral keys are decimal; `std::string` keys pass through unchanged. The
-/// encoding is total — every valid key has exactly one representation — so two
-/// clients naming the same key always land on the same directory entry.
+/// Integral keys are decimal; `std::string` keys pass through unchanged; a
+/// strong id encodes as whatever it wraps, so it shares a directory entry with
+/// the raw key of the same value. The encoding is total for every *engaged*
+/// key — each has exactly one representation — so two clients naming the same
+/// key always land on the same directory entry.
 /// @tparam K Key type satisfying `ModelKey`.
 /// @param key Key value to encode.
 /// @return The canonical string form of @p key.
+/// @throws std::runtime_error if @p key is a strong id with no value. Such an
+///         id names no instance, and encoding it as `""` or `"0"` would route
+///         every caller holding an unset id to a single shared instance.
 template <ModelKey K>
 [[nodiscard]] std::string keyToString(const K& key) {
-    if constexpr (std::same_as<std::remove_cv_t<K>, std::string>) {
+    if constexpr (WrappedModelKey<K>) {
+        // An empty strong id names no instance. Unwrapping it is undefined
+        // behaviour (`operator*` on a disengaged optional), and encoding it as
+        // "" or "0" would silently route every caller holding an unset id to
+        // one shared instance -- the worst possible failure, because it looks
+        // like it worked. Both call sites in `BridgeHandler` turn a throw here
+        // into a rejected `Completion`, so this surfaces as an error the
+        // caller can see.
+        if (!key.hasValue()) {
+            throw std::runtime_error("primary key is empty: a strong id with no value names no model instance");
+        }
+        return keyToString(*key);
+    } else if constexpr (std::same_as<std::remove_cv_t<K>, std::string>) {
         return key;
     } else {
         return std::to_string(key);
@@ -116,6 +175,8 @@ template <ModelKey K>
 
 /// @brief Decodes a primary key from its canonical wire string.
 ///
+/// A strong id is reconstructed by decoding what it wraps and rewrapping it,
+/// so `keyFromString<PasteId>(keyToString(id)) == id` for any engaged `id`.
 /// @tparam K Key type satisfying `ModelKey`.
 /// @param text Canonical string form, as produced by `keyToString`.
 /// @return The decoded key.
@@ -125,7 +186,9 @@ template <ModelKey K>
 ///         silently yielding 0 would route the caller to the wrong instance.
 template <ModelKey K>
 [[nodiscard]] K keyFromString(std::string_view text) {
-    if constexpr (std::same_as<std::remove_cv_t<K>, std::string>) {
+    if constexpr (WrappedModelKey<K>) {
+        return K{keyFromString<detail::UnwrappedKeyOf<K>>(text)};
+    } else if constexpr (std::same_as<std::remove_cv_t<K>, std::string>) {
         return std::string{text};
     } else {
         K value{};
