@@ -88,6 +88,8 @@
 ///       (e.g. sums over large coprime denominators). Keep operands within
 ///       the decimal-scaled ranges the precision tags imply.
 
+#include <morph/core/logger.hpp>
+
 #include <glaze/glaze.hpp>
 
 #include <cassert>
@@ -160,7 +162,8 @@ inline constexpr std::uint32_t kMaxDecimalPlaces = 18;
 enum class RationalError : std::uint8_t {
     DivisionByZero,  ///< Divisor numerator is zero (operator/, reciprocal, From).
     NotFinite,       ///< Floating-point input was NaN or +/-Inf (fromFloat only).
-    Overflow,        ///< Scaled magnitude exceeds int64_t range (fromFloat only).
+    Overflow,        ///< Result or an intermediate term exceeds int64_t range
+                     ///< (`fromFloat`, and the `checked*` arithmetic helpers).
 };
 
 namespace detail {
@@ -184,6 +187,63 @@ namespace detail {
 [[nodiscard]] constexpr std::uint32_t clampDecimalPlaces(std::uint32_t rawDecimalPlaces) noexcept {
     assert(rawDecimalPlaces <= kMaxDecimalPlaces);
     return clampWireDecimalPlaces(rawDecimalPlaces);
+}
+
+/// @brief Whether `lhs + rhs` would overflow `std::int64_t`.
+///
+/// Asks *before* performing the addition. Detecting overflow by doing it and
+/// inspecting the result is undefined behaviour for signed types, so the
+/// question has to be answered from the operands alone.
+/// @param lhs Left addend.
+/// @param rhs Right addend.
+/// @return `true` if the sum is not representable.
+[[nodiscard]] constexpr bool addOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (rhs > 0 && lhs > maxValue - rhs) {
+        return true;
+    }
+    return rhs < 0 && lhs < minValue - rhs;
+}
+
+/// @brief Whether `lhs - rhs` would overflow `std::int64_t`.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return `true` if the difference is not representable.
+[[nodiscard]] constexpr bool subOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (rhs < 0 && lhs > maxValue + rhs) {
+        return true;
+    }
+    return rhs > 0 && lhs < minValue + rhs;
+}
+
+/// @brief Whether `lhs * rhs` would overflow `std::int64_t`.
+///
+/// Division-based rather than a wide-product comparison so it stays valid in a
+/// constant expression on every supported compiler (MSVC has no `__int128`).
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return `true` if the product is not representable.
+[[nodiscard]] constexpr bool mulOverflows(std::int64_t lhs, std::int64_t rhs) noexcept {
+    constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+    constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+    if (lhs == 0 || rhs == 0) {
+        return false;
+    }
+    // -1 is the one factor whose product can overflow without either operand
+    // being large: -1 * INT64_MIN has no positive counterpart.
+    if (lhs == -1) {
+        return rhs == minValue;
+    }
+    if (rhs == -1) {
+        return lhs == minValue;
+    }
+    if (lhs > 0) {
+        return rhs > 0 ? lhs > maxValue / rhs : rhs < minValue / lhs;
+    }
+    return rhs > 0 ? lhs < minValue / rhs : lhs < maxValue / rhs;
 }
 
 /// @brief A 64x64 -> 128-bit unsigned product, comparable high-word-first.
@@ -401,30 +461,36 @@ struct Rational {
 
     /// @brief In-place addition. Result precision becomes `max` of the two.
     /// Uses reduce-before-multiply to extend the safe int64 range (Knuth 4.5.1).
+    ///
+    /// **Saturates rather than overflowing.** If the exact sum -- or any
+    /// intermediate cross-term needed to reach it -- is not representable, this
+    /// logs at `error` and clamps to the largest magnitude of the correct sign
+    /// instead of committing signed-overflow undefined behaviour. See
+    /// `saturateToward` for why a defined wrong answer beats UB here.
     /// @param rhs Value to add.
     /// @return `*this`.
     constexpr Rational& operator+=(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) + (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
-        widenPrecisionTo(rhs.decimalPlaces);
-        canonicalise();
+        if (addWouldOverflow(rhs)) {
+            reportOverflow("operator+=");
+            saturateToward(compareForSaturation(rhs, true), rhs.decimalPlaces);
+            return *this;
+        }
+        addAssignUnchecked(rhs);
         return *this;
     }
 
     /// @brief In-place subtraction. Result precision becomes `max` of the two.
+    ///
+    /// Saturates rather than overflowing; see `operator+=`.
     /// @param rhs Value to subtract.
     /// @return `*this`.
     constexpr Rational& operator-=(const Rational& rhs) noexcept {
-        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
-        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
-        auto const leftDenominatorScaled = denominator / denominatorGcd;
-        numerator = (numerator * rightDenominatorScaled) - (rhs.numerator * leftDenominatorScaled);
-        denominator = denominator * rightDenominatorScaled;
-        widenPrecisionTo(rhs.decimalPlaces);
-        canonicalise();
+        if (subWouldOverflow(rhs)) {
+            reportOverflow("operator-=");
+            saturateToward(compareForSaturation(rhs, false), rhs.decimalPlaces);
+            return *this;
+        }
+        subAssignUnchecked(rhs);
         return *this;
     }
 
@@ -432,19 +498,18 @@ struct Rational {
     /// Cross-cancels common factors before multiplying.
     /// @param rhs Value to multiply by.
     /// @return `*this`.
+    ///
+    /// Saturates rather than overflowing; see `operator+=`.
     constexpr Rational& operator*=(const Rational& rhs) noexcept {
-        auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
-        auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
-        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
-        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, denominator);
-        auto const reducedLeftNumerator = numerator / crossDivisorOne;
-        auto const reducedRightNumerator = rhs.numerator / crossDivisorTwo;
-        auto const reducedLeftDenominator = denominator / crossDivisorTwo;
-        auto const reducedRightDenominator = rhs.denominator / crossDivisorOne;
-        numerator = reducedLeftNumerator * reducedRightNumerator;
-        denominator = reducedLeftDenominator * reducedRightDenominator;
-        widenPrecisionTo(rhs.decimalPlaces);
-        canonicalise();
+        if (mulWouldOverflow(rhs)) {
+            reportOverflow("operator*=");
+            // Sign of a product is the product of the signs; zero operands
+            // cannot overflow, so neither sign is zero here.
+            const bool negative = (numerator < 0) != (rhs.numerator < 0);
+            saturateToward(negative ? -1 : 1, rhs.decimalPlaces);
+            return *this;
+        }
+        mulAssignUnchecked(rhs);
         return *this;
     }
 
@@ -489,6 +554,197 @@ void setWire(Wire wire) noexcept {
     [[nodiscard]] Wire getWire() const noexcept { return Wire{.num = numerator, .den = denominator, .dp = decimalPlaces.value}; }
 
 private:
+    /// @brief Logs an overflow that `operator+=`/`-=`/`*=` saturated instead
+    ///        of committing.
+    ///
+    /// Skipped during constant evaluation: `log` is not `constexpr`, and a
+    /// `constexpr` arithmetic expression that saturates should still compile.
+    ///
+    /// The `try`/`catch` is not defensive padding. `morph::log` offers no
+    /// `noexcept` guarantee -- a user-installed sink may throw, and
+    /// `detail::log`'s own `scoped_lock` may throw `std::system_error` -- and
+    /// an arithmetic operator must not start failing because logging failed.
+    /// `CompletionState`'s destructor carries the identical workaround for the
+    /// identical reason. Both can go once morph#158 makes the logging layer
+    /// non-throwing.
+    /// @param where Which operator saturated.
+    static constexpr void reportOverflow(std::string_view where) noexcept {
+        if (!std::is_constant_evaluated()) {
+            // NOLINTBEGIN(bugprone-empty-catch) -- see above: logging must not
+            // turn a defined-but-clamped result into a thrown exception.
+            try {
+                ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
+                                       "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
+                                       where);
+            } catch (...) {
+            }
+            // NOLINTEND(bugprone-empty-catch)
+        }
+    }
+
+    /// @brief Logs an `INT64_MIN` component clamped by `canonicalise`.
+    ///
+    /// Skipped during constant evaluation, and non-throwing, like
+    /// `reportOverflow` -- see that function for why the `catch` is there.
+    static constexpr void reportClamp() noexcept {
+        if (!std::is_constant_evaluated()) {
+            // NOLINTBEGIN(bugprone-empty-catch)
+            try {
+                ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
+                                       "canonicalising it would require negating a value with no positive "
+                                       "counterpart.");
+            } catch (...) {
+            }
+            // NOLINTEND(bugprone-empty-catch)
+        }
+    }
+
+    /// @brief The sign the saturated result should carry, for `+=` / `-=`.
+    ///
+    /// Determined by exact comparison rather than by computing the true sum,
+    /// which by definition does not fit. `a + b` has the sign of `a` versus
+    /// `-b`; `a - b` has the sign of `a` versus `b`. Both use the type's own
+    /// exact 128-bit-wide comparison, so a mixed-sign case whose cross-terms
+    /// overflow still saturates in the mathematically correct direction.
+    /// @param rhs      The other operand.
+    /// @param addition `true` for `+=`, `false` for `-=`.
+    /// @return `-1`, `0` or `1`.
+    [[nodiscard]] constexpr int compareForSaturation(const Rational& rhs, bool addition) const noexcept {
+        const auto ordering = addition ? (*this <=> -rhs) : (*this <=> rhs);
+        // std::is_lt/is_gt, not `ordering < 0`: comparing an ordering against
+        // the literal 0 trips -Wzero-as-null-pointer-constant under
+        // -Weverything, which this repository builds with.
+        if (std::is_lt(ordering)) {
+            return -1;
+        }
+        return std::is_gt(ordering) ? 1 : 0;
+    }
+
+    /// @brief Clamps this value to the largest representable magnitude with
+    ///        sign @p sign, at `max(decimalPlaces, other)`.
+    ///
+    /// Saturation, not an exception and not UB. `operator+` and friends are
+    /// used inside strand-bound model code and in `constexpr` expressions;
+    /// throwing would change their contract for every existing caller, while
+    /// leaving the overflow undefined is what this whole change exists to
+    /// stop. A clamped value is wrong, but it is *defined* wrong, it is
+    /// logged, and `checkedAdd`/`checkedSub`/`checkedMul` remain available for
+    /// callers that need to detect the condition rather than absorb it.
+    /// @param sign  Direction to clamp toward; `0` yields zero.
+    /// @param other The other operand's precision, folded in as usual.
+    constexpr void saturateToward(int sign, DecimalPlaces other) noexcept {
+        constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+        numerator = sign == 0 ? 0 : (sign < 0 ? -maxValue : maxValue);
+        denominator = 1;
+        widenPrecisionTo(other);
+    }
+
+    /// @brief `operator+=`'s arithmetic, without the overflow check.
+    /// @param rhs Value to add.
+    constexpr void addAssignUnchecked(const Rational& rhs) noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
+        auto const leftDenominatorScaled = denominator / denominatorGcd;
+        numerator = (numerator * rightDenominatorScaled) + (rhs.numerator * leftDenominatorScaled);
+        denominator = denominator * rightDenominatorScaled;
+        widenPrecisionTo(rhs.decimalPlaces);
+        canonicalise();
+    }
+
+    /// @brief `operator-=`'s arithmetic, without the overflow check.
+    /// @param rhs Value to subtract.
+    constexpr void subAssignUnchecked(const Rational& rhs) noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        auto const rightDenominatorScaled = rhs.denominator / denominatorGcd;
+        auto const leftDenominatorScaled = denominator / denominatorGcd;
+        numerator = (numerator * rightDenominatorScaled) - (rhs.numerator * leftDenominatorScaled);
+        denominator = denominator * rightDenominatorScaled;
+        widenPrecisionTo(rhs.decimalPlaces);
+        canonicalise();
+    }
+
+    /// @brief `operator*=`'s arithmetic, without the overflow check.
+    /// @param rhs Value to multiply by.
+    constexpr void mulAssignUnchecked(const Rational& rhs) noexcept {
+        auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
+        auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, denominator);
+        auto const reducedLeftNumerator = numerator / crossDivisorOne;
+        auto const reducedRightNumerator = rhs.numerator / crossDivisorTwo;
+        auto const reducedLeftDenominator = denominator / crossDivisorTwo;
+        auto const reducedRightDenominator = rhs.denominator / crossDivisorOne;
+        numerator = reducedLeftNumerator * reducedRightNumerator;
+        denominator = reducedLeftDenominator * reducedRightDenominator;
+        widenPrecisionTo(rhs.decimalPlaces);
+        canonicalise();
+    }
+
+  public:
+    /// @brief Applies `+=`'s arithmetic, having already proven it cannot overflow.
+    ///
+    /// For `checkedAdd`, which has just run `addWouldOverflow` and must not
+    /// re-enter `operator+=`'s saturating path. Calling this without that
+    /// check is undefined on overflow -- the check is the precondition.
+    /// @param rhs Value to add.
+    constexpr void addAssignChecked(const Rational& rhs) noexcept { addAssignUnchecked(rhs); }
+
+    /// @brief Applies `-=`'s arithmetic, having already proven it cannot overflow.
+    /// @param rhs Value to subtract.
+    constexpr void subAssignChecked(const Rational& rhs) noexcept { subAssignUnchecked(rhs); }
+
+    /// @brief Applies `*=`'s arithmetic, having already proven it cannot overflow.
+    /// @param rhs Value to multiply by.
+    constexpr void mulAssignChecked(const Rational& rhs) noexcept { mulAssignUnchecked(rhs); }
+
+    /// @brief Whether `*this + rhs` would overflow any intermediate or the result.
+    /// @param rhs The addend.
+    /// @return `true` if the addition cannot be performed exactly.
+    [[nodiscard]] constexpr bool addWouldOverflow(const Rational& rhs) const noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        auto const rightScaled = rhs.denominator / denominatorGcd;
+        auto const leftScaled = denominator / denominatorGcd;
+        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled)
+            || detail::mulOverflows(denominator, rightScaled)) {
+            return true;
+        }
+        return detail::addOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+    }
+
+    /// @brief Whether `*this - rhs` would overflow any intermediate or the result.
+    /// @param rhs The subtrahend.
+    /// @return `true` if the subtraction cannot be performed exactly.
+    [[nodiscard]] constexpr bool subWouldOverflow(const Rational& rhs) const noexcept {
+        auto const denominatorGcd = std::gcd(denominator, rhs.denominator);
+        auto const rightScaled = rhs.denominator / denominatorGcd;
+        auto const leftScaled = denominator / denominatorGcd;
+        if (detail::mulOverflows(numerator, rightScaled) || detail::mulOverflows(rhs.numerator, leftScaled)
+            || detail::mulOverflows(denominator, rightScaled)) {
+            return true;
+        }
+        return detail::subOverflows(numerator * rightScaled, rhs.numerator * leftScaled);
+    }
+
+    /// @brief Whether `*this * rhs` would overflow, after cross-cancelling.
+    ///
+    /// Checks the cross-cancelled factors `operator*=` actually multiplies:
+    /// cross-cancelling is what keeps most products in range, so checking the
+    /// raw operands would reject pairs that multiply perfectly well.
+    /// @param rhs The factor.
+    /// @return `true` if the product cannot be represented.
+    [[nodiscard]] constexpr bool mulWouldOverflow(const Rational& rhs) const noexcept {
+        auto const absoluteLeftNumerator = numerator < 0 ? -numerator : numerator;
+        auto const absoluteRightNumerator = rhs.numerator < 0 ? -rhs.numerator : rhs.numerator;
+        auto const crossDivisorOne = std::gcd(absoluteLeftNumerator, rhs.denominator);
+        auto const crossDivisorTwo = std::gcd(absoluteRightNumerator, denominator);
+        if (crossDivisorOne == 0 || crossDivisorTwo == 0) {
+            return false;  // a zero numerator: the product is zero
+        }
+        return detail::mulOverflows(numerator / crossDivisorOne, rhs.numerator / crossDivisorTwo)
+            || detail::mulOverflows(denominator / crossDivisorTwo, rhs.denominator / crossDivisorOne);
+    }
+
+private:
     /// @brief Restores the canonical-form invariants in place (denominator > 0,
     ///        gcd reduced, zero denominator clamped to 1). Leaves `decimalPlaces`
     ///        untouched (it is not a value property).
@@ -497,12 +753,35 @@ private:
             denominator = 1;
             return;
         }
+        constexpr auto minValue = std::numeric_limits<std::int64_t>::min();
+        constexpr auto maxValue = std::numeric_limits<std::int64_t>::max();
+
+        // Neither component may be INT64_MIN past this point. Canonicalising
+        // needs `|value|` and a sign flip, and `-INT64_MIN` is not
+        // representable -- negating it is undefined behaviour, which this
+        // function used to commit. It was reachable two ways: constructing a
+        // Rational with such a numerator directly, and *ordinary arithmetic*
+        // landing on it exactly (`-INT64_MAX - 1` is a perfectly legal
+        // subtraction whose result is INT64_MIN).
+        //
+        // Clamped to the adjacent representable magnitude, matching what
+        // `setWire` already does for the same values arriving off the wire.
+        // The value is off by one ulp; it is not undefined.
+        if (numerator == minValue || denominator == minValue) {
+            reportClamp();
+            numerator = numerator == minValue ? -maxValue : numerator;
+            denominator = denominator == minValue ? -maxValue : denominator;
+        }
+
         if (denominator < 0) {
             numerator = -numerator;
             denominator = -denominator;
         }
-        auto const absoluteNumerator = numerator < 0 ? -numerator : numerator;
-        auto const divisor = std::gcd(absoluteNumerator, denominator);
+        // Magnitudes via `absU64`, so the gcd never negates either component.
+        // The result cannot exceed INT64_MAX: gcd(a, b) <= min(a, b) and the
+        // denominator is at most INT64_MAX here.
+        auto const divisor =
+            static_cast<std::int64_t>(std::gcd(detail::absU64(numerator), detail::absU64(denominator)));
         if (divisor > 1) {
             numerator /= divisor;
             denominator /= divisor;
@@ -605,6 +884,65 @@ static_assert(std::is_standard_layout_v<Rational>);
 [[nodiscard]] constexpr std::expected<Rational, RationalError> operator/(const Rational& lhs,
                                                                          const Rational& rhs) noexcept {
     return lhs.dividedBy(rhs);
+}
+
+/// @brief Adds two Rationals, reporting overflow instead of saturating.
+///
+/// `operator+` saturates and logs when the exact sum does not fit, so it is
+/// never undefined -- but it is also silently inexact. This returns the
+/// overflow instead, for callers that must not absorb it: a ledger totalling
+/// rows needs to *stop*, not to carry on with a clamped balance.
+///
+/// Every intermediate is checked before any is formed, since detecting signed
+/// overflow by performing it is itself undefined. Note the cross-terms are the
+/// tighter bound: they can overflow while the final result would have been
+/// perfectly representable, which is exactly the case a caller cannot spot by
+/// inspecting the answer.
+///
+/// @param lhs Left addend.
+/// @param rhs Right addend.
+/// @return The exact sum, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedAdd(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    if (lhs.addWouldOverflow(rhs)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    auto result = lhs;
+    result.addAssignChecked(rhs);
+    return result;
+}
+
+/// @brief Subtracts two Rationals, reporting overflow instead of saturating.
+///
+/// The `checkedAdd` counterpart; see that function.
+/// @param lhs Minuend.
+/// @param rhs Subtrahend.
+/// @return The exact difference, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedSub(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    if (lhs.subWouldOverflow(rhs)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    auto result = lhs;
+    result.subAssignChecked(rhs);
+    return result;
+}
+
+/// @brief Multiplies two Rationals, reporting overflow instead of saturating.
+///
+/// Checks the cross-cancelled factors `operator*` actually multiplies, not the
+/// raw operands -- see `Rational::mulWouldOverflow`.
+/// @param lhs Left factor.
+/// @param rhs Right factor.
+/// @return The exact product, or `unexpected(RationalError::Overflow)`.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedMul(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    if (lhs.mulWouldOverflow(rhs)) {
+        return std::unexpected(RationalError::Overflow);
+    }
+    auto result = lhs;
+    result.mulAssignChecked(rhs);
+    return result;
 }
 
 // ---------------------------------------------------------------------------

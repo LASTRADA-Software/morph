@@ -68,6 +68,7 @@ add_executable(morph_tests
     test_action_log_phase2.cpp
     test_journal_format_versioning.cpp
     test_outbox.cpp
+    test_rational_checked.cpp
     test_rational.cpp
     test_ledger_rational_fuzz.cpp
     test_quantity.cpp

@@ -183,6 +183,69 @@ Only the wire codec (`setWire`) defends against this: it maps an `INT64_MIN`
 negates the trap value. In-code call sites get no such guard — keep operands
 well inside the envelope above.
 
+### Checked arithmetic
+
+`operator+`/`operator-`/`operator*` are fixed-width `std::int64_t` arithmetic,
+and at ledger-realistic magnitudes overflow is reachable — summing dp=2 legs of
+10^9 minor units overflows at exactly `INT64_MAX / 10^9 + 1` rows.
+
+**The operators saturate; they never overflow.** When the exact result — or any
+intermediate cross-term needed to reach it — does not fit, the operator logs at
+`error` and clamps to the largest representable magnitude *of the correct
+sign*, rather than committing signed-overflow undefined behaviour. The sign
+comes from exact comparison (`a + b` compares `a` against `-b`), not from the
+operands' magnitudes, so a mixed-sign case whose cross-terms overflow still
+saturates in the mathematically correct direction.
+
+Saturation rather than an exception because these operators are used inside
+strand-bound model code and in `constexpr` expressions: throwing would change
+their contract for every existing caller, while leaving the overflow undefined
+is what this exists to stop. A clamped value is wrong, but it is *defined*
+wrong, and it is logged.
+
+**The operators keep `noexcept`,** including when the overflow path logs. That
+needs a local `try`/`catch` around the log call, because `morph::log` offers no
+`noexcept` guarantee — a user-installed sink may throw, and `detail::log`'s own
+`scoped_lock` may throw `std::system_error` — and an arithmetic operator must
+not begin failing because logging failed. `CompletionState`'s destructor
+carries the identical workaround for the identical reason; both can go once
+morph#158 makes the logging layer non-throwing.
+
+`canonicalise` is total for the same reason. It previously negated the
+numerator unguarded, so a component of `INT64_MIN` was undefined behaviour —
+reachable both by constructing such a value directly and by *ordinary
+arithmetic landing on it exactly* (`-INT64_MAX - 1` is a legal subtraction
+whose result is `INT64_MIN`). Such a component is now clamped to `-INT64_MAX`
+and logged, matching what `setWire` already did for the same values arriving
+off the wire.
+
+`checkedAdd`, `checkedSub` and `checkedMul` return
+`std::expected<Rational, RationalError>`, yielding `RationalError::Overflow`
+rather than saturating. That is the division of labour: the operators stay
+usable and defined for code that can absorb a clamped value, while the checked
+forms stay exact-or-nothing for code that must not — a ledger totalling rows
+needs to *stop*, not carry on with a clamped balance. They check every intermediate the
+operation would form **before** forming any of it — detecting signed overflow
+by performing it and inspecting the result is itself undefined, so the question
+has to be answered from the operands alone.
+
+**The intermediate cross-terms are the binding constraint, not the result.**
+`checkedAdd` rejects operand pairs whose *final* value would have been
+perfectly representable but which cannot be reached without an intermediate
+that overflows — for instance `1/INT64_MAX + 1/(INT64_MAX-1)`, a tiny value
+with an unrepresentable common denominator. This is precisely the case a caller
+cannot detect by inspecting the answer, because under the unchecked operators
+there is no valid answer to inspect.
+
+`checkedMul` checks the *cross-cancelled* factors `operator*` actually
+multiplies, not the raw operands: cross-cancelling is what keeps most products
+in range, so checking beforehand would reject pairs that multiply perfectly
+well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
+
+Both share one set of predicates (`addWouldOverflow`, `subWouldOverflow`,
+`mulWouldOverflow`), so the operators and the checked forms cannot disagree
+about what overflows.
+
 ## Mixed-type expressions (expected propagation)
 
 Whenever an arithmetic expression contains an
@@ -298,6 +361,9 @@ through `setWire`.
 
 | Member | Signature |
 |---|---|
+| `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
+| `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
+| `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
 | `setWire(Wire)` | `void noexcept` — rebuilds through canonicalising constructor, clamping hostile input. |
 | `getWire()` | `Wire noexcept` — canonical members ready for JSON encoding. |
 | `struct Wire` | `{ int64_t num; int64_t den; uint32_t dp; }` — flat JSON representation. |
