@@ -269,11 +269,46 @@ appends the unit's `display` text to the number with no separating space:
 `5.2kW`, `6kWh`, `0.3` (empty display for a scalar). `NamedQuantity`'s formatter
 forwards to it.
 
+**Without the unit — `toDecimalString`.** The numeric half is public in its own
+right: `toDecimalString(q)` returns the exact decimal alone (`"5.2"`, `"6"`,
+`"N/A"`). It is the same rendering path, not a second one — `toString` **is**
+
+```
+toString(q) == toDecimalString(q) + std::string{unitMeta().display}
+```
+
+for every value, and is written that way. A view that places the number and the
+unit separately — a table carrying the unit in its column header, a
+right-aligned suffix, an editable field whose adjacent label carries the unit —
+asks for the two halves independently (`toDecimalString(q)` and
+`unitMeta().display`) instead of concatenating them and chopping the suffix back
+off. Without it the *only* public renderer of the exact decimal was `toString`,
+so a caller wanting the number alone had to undo a join the paragraph above
+specifies — correct today, and silently wrong the day a separator or a
+locale-aware layout is introduced between the halves.
+
+`toDecimalString` is also what a caller reaches for instead of formatting the
+payload directly: `std::format("{}", *q.value())` prints a `num/den` *fraction*,
+and `std::format("{:.2f}", *q.value())` delegates to `std::formatter<double>`
+through `Rational::toDouble()`, which is measurably lossy on values this
+renderer prints correctly (`9007199254740993` → `…992` through the double path,
+itself through this one). See `rational.md`, *Formatting*.
+
 **Empty prints `N/A`.** An empty quantity renders as the fixed literal `"N/A"`
 suffixed with the unit's `display` — `"N/A"`, `"N/AkW"`, `"N/A%"`. The `"N/A"`
 marker lives in the formatter, **not** in `UnitMeta` (which carries only `id`,
 `display`, `defaultDecimals`); the format path never touches the absent
 `Rational`.
+
+**`toDecimalString` of an empty quantity is `"N/A"`, not `""`.** This is the
+deliberate choice, and it is what keeps the identity above total. The
+alternative — rendering an absent value as a blank — would make `toString`
+inexpressible in terms of `toDecimalString` for exactly the empty case, which is
+the case that most invites a second, divergent implementation. Blank-for-absent
+is a *presentation policy*: the value type reports the fact that nothing is
+there, and the layer that has a layout decides how to show it. A caller wanting a
+blank cell writes `q.hasValue() ? toDecimalString(q) : ""`, which is what
+`examples/lims`' QML conversion layer does.
 
 **The `DecimalPlaces` flow, end to end.** The runtime tag that fixes the printed
 form flows through a calculation deterministically:
@@ -825,6 +860,7 @@ yields empty.
 |---|---|---|
 | `NamedQuantity<Name, U>` | class template | `Quantity<U>` (declared precision defaulted) that names itself `Name` on construction; slices losslessly to a plain `Quantity<U>`. `Name` is a `detail::FixedString` NTTP. Constructors: default (empty), `optional<Rational>`, and from a plain `Quantity<U>` — each names the value after building it; plus `static fromDouble(double)`. The name lives in the shared history, not as extra data. |
 | `toString(Quantity<U, Dec>)` | free function | Renders value + unit (`5.2kW`, `N/A%`) — the identical text `std::format("{}", q)` produces, via the identical logic; the `std::formatter` specialisation below delegates to it. Exists solely so a caller can render a `Quantity` without going through `std::format`'s own trait machinery: Emscripten's bundled libc++ has a known gap recognising a `std::formatter` partial specialisation parameterised over an `auto` non-type template parameter, so `std::format("{}", quantity)` fails to compile there outright, even though the specialisation is valid and works on every other toolchain this project targets. `pastebin::gui::readsText`/`bookmarks::gui::countText`/`polls::gui::countText` (the three QML-bridge call sites that render a `Quantity`) call it directly for this reason. |
+| `toDecimalString(Quantity<U, Dec>)` | free function | Renders the exact decimal **alone**, with no unit suffix (`"5.2"`, `"6"`) — `"N/A"` when the quantity is empty, *not* `""`, so that `toString(q) == toDecimalString(q) + unitMeta().display` holds for every value and `toString` can be implemented as exactly that. The only public renderer of the decimal half; for the unit half use `unitMeta().display`. Exists so a view that places number and unit separately never has to strip a suffix it just concatenated, and never has to reach for `std::format` on the payload (a fraction for an empty spec, a lossy `double` for a non-empty one). A caller that wants an absent value to show blank supplies that policy itself (`q.hasValue() ? toDecimalString(q) : ""`). |
 | `std::formatter<Quantity<U, Dec>>` | specialisation | Renders value + unit (`5.2kW`, `N/A%`) by delegating to `toString`. No `operator<<`. |
 | `std::formatter<NamedQuantity<Name, U>>` | specialisation | Forwards to the `Quantity` formatter. |
 
@@ -848,7 +884,8 @@ and `unitAlternatives()`.
 | History structure | **Shared, unit-erased DAG (`ASTUnit` / `ASTNode` / `Context`)** | `ASTNode` (step + optional name + `shared_ptr` children) linked into a DAG; each `Quantity` holds a `Context` (a `shared_ptr<ASTNode>` root). Cheap copies; reused subexpressions deduped by node identity; shareable across units. |
 | Placeholders | **Reuse, not leaf-vs-computed, mints a `cN`** | A value used once inlines (leaf → its number, computed → its expression); only a value reused across the expression earns one shared placeholder, so shared work is written once. |
 | Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reset). |
-| Formatting | **`std::formatter`, delegating to `toString`, which delegates to the shared `formatRationalDecimal` renderer** | One rendering implementation (`toString`); `std::formatter` is a thin wrapper over it, not a second implementation. `toString` itself exists as a direct call target only because `std::format`'s compile-time formattability check fails to see this formatter's `auto`-NTTP specialisation on Emscripten's bundled libc++ — see the symbol table above. No `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
+| Formatting | **`std::formatter` → `toString` → `toDecimalString` → the shared `formatRationalDecimal` renderer** | One chain, each link a thin wrapper over the next, so there is never a second implementation to drift. `toString` exists as a direct call target because `std::format`'s compile-time formattability check fails to see this formatter's `auto`-NTTP specialisation on Emscripten's bundled libc++ — see the symbol table above. No `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
+| Decimal without the unit | **Public `toDecimalString`, empty renders `"N/A"`** | The number/unit split is a real requirement (unit in a column header, right-aligned suffix, label beside an editable field), and the alternatives were stripping the suffix off `toString` or formatting the payload through `double`. `"N/A"` rather than `""` for empty is what makes `toString == toDecimalString + display` total, so `toString` is *defined* as that concatenation instead of being a parallel path; blank-for-absent stays a presentation policy for the view layer. |
 | Wire | **Payload only** | Units and history never travel; the wire stays a nullable `Rational`. |
 | Empty ordering | **Throws, not a compile error** | Emptiness is a runtime `optional` state, so ordering an empty operand throws `std::logic_error` (a testable defined diagnostic); `==` stays total. |
 | Conversion | **`UnitRelation` entries + auto-generated constrained-template `convert`; `UnitTraits::convert` static override** | Application declares exact peer-to-peer ratios in `UnitTraits::relations`; framework auto-generates a constrained `convert(From, To&)` template and records the provenance step. A `UnitTraits<E>::convert` static wins (`if constexpr`) for non-ratio conversions (C↔F, currency) — a static, not an ADL free function, because the unit is a non-type template arg so ADL can't reach the enum's namespace. Chaining composes ratio edges over the relation graph. |
