@@ -2,7 +2,7 @@
 
 These files are the **authoritative design reference** for morph. They carry
 the reasoning, invariants, and rejected alternatives that the code itself does
-not record. Per [`CLAUDE.md`](../../CLAUDE.md), read a subsystem's spec before
+not record. Per [`AGENTS.md`](../../AGENTS.md), read a subsystem's spec before
 changing that subsystem — and when a change invalidates a spec, the spec is
 what gets updated, not the other way round.
 

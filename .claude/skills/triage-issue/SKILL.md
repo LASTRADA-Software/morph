@@ -22,7 +22,7 @@ failure.
 ### 1. Read the issue, then read what it is about
 
 `gh issue view <n>`. Then read the **spec** for the subsystem it touches —
-`docs/spec/` is the authoritative design reference (CLAUDE.md), and
+`docs/spec/` is the authoritative design reference (AGENTS.md), and
 `docs/ARCHITECTURE.md` says explicitly: *"Where this document and a spec
 disagree, the spec wins."*
 

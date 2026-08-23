@@ -21,7 +21,7 @@ ctest --test-dir build --output-on-failure
 ## The spec-first workflow (please read this one section)
 
 `docs/spec/` is the **authoritative design reference** — one file per public
-type or subsystem. The rules, from `CLAUDE.md`:
+type or subsystem. The rules, from `AGENTS.md`:
 
 - **Before changing any public type or subsystem, read its spec.** The spec
   carries the invariants and reasoning the code alone does not.
