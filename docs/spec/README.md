@@ -8,7 +8,10 @@ what gets updated, not the other way round.
 
 This page is a **map**, not a summary. It exists so that "read the spec first"
 names a specific file. For the narrative walkthrough, see
-[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md).
+[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md); if you have not built anything on
+morph yet, start further back, with the tutorial in
+[`docs/GETTING-STARTED.md`](../GETTING-STARTED.md) — the three documents form a
+path: tutorial → architecture narrative → these specs.
 
 ## How an action reaches a model
 

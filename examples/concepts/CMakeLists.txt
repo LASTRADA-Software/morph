@@ -31,6 +31,7 @@ if(MORPH_BUILD_TESTS)
         message(WARNING "Catch2 not found; examples/concepts tests will not be built.")
     else()
         add_executable(morph_concepts_tests
+            getting_started.cpp
             journal_and_outbox.cpp
             offline_queue_and_sync.cpp
             server_side_validation.cpp

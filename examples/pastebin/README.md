@@ -7,6 +7,12 @@ CI-gated but has never been compiled here). A minimal pastebin: create a text
 snippet, share its URL, let it expire or burn after N reads. The smallest
 complete morph application — one entity, one model, SQLite, Qt WASM client.
 
+> **Reading this to learn morph, not to work on the rung?**
+> [`docs/GETTING-STARTED.md`](../../docs/GETTING-STARTED.md) walks this
+> application layer by layer as a tutorial. This README is the rung's own
+> design record — its resolved design questions, its findings and its
+> definition of done — and assumes the framework is already familiar.
+
 ## Running it
 
 ```bash
