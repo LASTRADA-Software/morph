@@ -150,21 +150,19 @@ struct CompletionState {
         if (!ready || !error || onErrAttached) {
             return;
         }
-        // NOLINTBEGIN(bugprone-empty-catch) — logError may throw; we swallow to avoid noexcept-escape
+        // No local guard around the logging calls: `morph::log`'s helpers are
+        // `noexcept` (docs/spec/core/logger.md, "Failure modes"), which is
+        // what makes them safe to call from a destructor at all. The variadic
+        // overload is deliberate — it formats *inside* that guarantee, where
+        // building the message by concatenation out here would allocate
+        // outside it and could still escape.
         try {
             std::rethrow_exception(error);
         } catch (const std::exception& exc) {
-            try {
-                ::morph::log::logError("[orphan] unhandled exception: " + std::string{exc.what()});
-            } catch (...) {
-            }
+            ::morph::log::logError("[orphan] unhandled exception: {}", exc.what());
         } catch (...) {
-            try {
-                ::morph::log::logError("[orphan] unhandled unknown exception");
-            } catch (...) {
-            }
+            ::morph::log::logError("[orphan] unhandled unknown exception");
         }
-        // NOLINTEND(bugprone-empty-catch)
     }
 };
 
