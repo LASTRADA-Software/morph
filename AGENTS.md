@@ -77,17 +77,6 @@ invariants, API surface, and design decisions that the code alone doesn't
 document. If a change invalidates any part of a spec, update the spec (not
 the other way around).
 
-## Feature documentation (`docs/superpowers/`)
-
-One file per feature, compressed reference documentation:
-
-- Keep each file **under 500 lines**; be concise, not exhaustive.
-- Describe **only the existing behavior, in present tense**. Never document
-  the previous state, migrations, diffs, or task checklists — these files
-  are not changelogs or implementation plans (git history covers that).
-- When a feature changes, rewrite the affected sections to state the new
-  current behavior.
-
 ## CI notes
 
 - The Docs workflow runs Doxygen with `WARN_AS_ERROR = FAIL_ON_WARNINGS`:
