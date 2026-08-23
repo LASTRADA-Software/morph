@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_qml_bridge.hpp"
+#include "gui/error_text.hpp"
 
 #include <QByteArray>
 #include <QFile>
@@ -434,12 +435,8 @@ void BoardBridge::uploadAttachment(const QString& taskId, const QString& localFi
                         if (alive.expired()) {
                             return;
                         }
-                        try {
-                            std::rethrow_exception(err);
-                        } catch (const std::exception& ex) {
-                            emit failed(QStringLiteral("uploadAttachment: AddAttachment failed: %1")
-                                            .arg(QString::fromStdString(ex.what())));
-                        }
+                        emit failed(QStringLiteral("uploadAttachment: AddAttachment failed: %1")
+                                        .arg(::morph::ladder::gui::errorText(err)));
                     });
             });
 }

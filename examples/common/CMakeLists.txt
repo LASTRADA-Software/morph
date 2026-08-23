@@ -41,6 +41,7 @@ qt_standard_project_setup(REQUIRES 6.5)
 # excludes moc output from the completeness bar — nothing extra needed here.
 add_library(morph_ladder_gui STATIC
     gui/presenter.cpp
+    gui/error_text.cpp
     gui/event_poller.cpp
 )
 add_library(morph::ladder_gui ALIAS morph_ladder_gui)
@@ -195,6 +196,7 @@ add_executable(ladder_common_tests
     testkit/test_db_pool_drain.cpp
     testkit/test_backend_rig.cpp
     testkit/test_presenter.cpp
+    testkit/test_error_text.cpp
     testkit/test_event_poller.cpp
     testkit/test_fault_proxy.cpp
     testkit/test_strand_interleaver.cpp

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "poll_presenter.hpp"
+#include "gui/error_text.hpp"
 
 namespace polls::gui {
 
@@ -7,11 +8,7 @@ PollPresenter::PollPresenter(::morph::bridge::Bridge& bridge, ::morph::exec::IEx
     : Presenter{parent}, _creator{bridge, executor}, _handler{bridge, executor} {}
 
 void PollPresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        emit failed(QString::fromStdString(ex.what()));
-    }
+    emit failed(::morph::ladder::gui::errorText(err));
 }
 
 void PollPresenter::createPoll(CreatePoll action) {

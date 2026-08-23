@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "poll_qml_bridges.hpp"
+#include "gui/error_text.hpp"
 
 #include "poll_schemas.hpp"
 
@@ -159,18 +160,6 @@ template <typename TokenT>
     };
 }
 
-/// @brief Renders @p err's message the same way `PollPresenter::reportError`
-///        does — `std::exception::what()`, or a canned message for anything
-///        that is not a `std::exception`.
-[[nodiscard]] QString describeFailure(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& ex) {
-        return QString::fromUtf8(ex.what());
-    } catch (...) {
-        return QStringLiteral("unknown error");
-    }
-}
 
 }  // namespace
 
@@ -218,7 +207,7 @@ void PollBridge::openPoll(const QString& pollId) {
             if (alive.expired()) {
                 return;
             }
-            emit failed(describeFailure(err));
+            emit failed(::morph::ladder::gui::errorText(err));
         });
 }
 
@@ -234,7 +223,7 @@ void PollBridge::refresh() {
             if (alive.expired()) {
                 return;
             }
-            emit failed(describeFailure(err));
+            emit failed(::morph::ladder::gui::errorText(err));
         });
 }
 
@@ -250,7 +239,7 @@ void PollBridge::submitVotes(const QString& participantName, const QVariantList&
             if (alive.expired()) {
                 return;
             }
-            emit failed(describeFailure(err));
+            emit failed(::morph::ladder::gui::errorText(err));
         });
 }
 
@@ -266,7 +255,7 @@ void PollBridge::updateVotes(const QString& participantName, const QVariantList&
             if (alive.expired()) {
                 return;
             }
-            emit failed(describeFailure(err));
+            emit failed(::morph::ladder::gui::errorText(err));
         });
 }
 
@@ -289,7 +278,7 @@ void PollBridge::submitIfValid(const QString& actionType, const QString& bodyJso
             if (alive.expired()) {
                 return;
             }
-            emit replyReceived(actionType, false, describeFailure(err));
+            emit replyReceived(actionType, false, ::morph::ladder::gui::errorText(err));
         });
 }
 

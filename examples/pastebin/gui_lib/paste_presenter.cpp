@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "paste_presenter.hpp"
+#include "gui/error_text.hpp"
 
 namespace pastebin::gui {
 
@@ -9,11 +10,7 @@ PastePresenter::PastePresenter(::morph::bridge::Bridge& bridge, ::morph::exec::I
 }
 
 void PastePresenter::reportError(const std::exception_ptr& err) {
-    try {
-        std::rethrow_exception(err);
-    } catch (const std::exception& e) {
-        emit failed(QString::fromStdString(e.what()));
-    }
+    emit failed(::morph::ladder::gui::errorText(err));
 }
 
 void PastePresenter::create(CreatePaste action) {
