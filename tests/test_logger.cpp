@@ -3,7 +3,10 @@
 #include <morph/core/logger.hpp>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
+#include <format>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -216,4 +219,93 @@ TEST_CASE("concurrent log calls are thread-safe", "[logger]") {
     }
 
     REQUIRE(count.load() == numThreads * msgsPerThread * 4);
+}
+
+// ── The noexcept guarantee (morph#158) ────────────────────────────────────────
+
+// Compile-time, and the part that cannot rot: if any entry point loses
+// `noexcept`, this fails to build rather than failing subtly at some call site
+// in a destructor. These assert the *declared* guarantee; the TEST_CASEs below
+// assert that it actually holds when the sink throws.
+static_assert(noexcept(morph::log::logDebug(std::string_view{})));
+static_assert(noexcept(morph::log::logInfo(std::string_view{})));
+static_assert(noexcept(morph::log::logWarn(std::string_view{})));
+static_assert(noexcept(morph::log::logError(std::string_view{})));
+// The variadic overloads are asserted through a pre-built `format_string`
+// rather than a literal. `noexcept(expr)` covers the argument conversions too,
+// and `std::basic_format_string`'s constructor -- though `consteval`, so it
+// cannot throw at run time -- is not itself declared `noexcept`. Writing
+// `noexcept(logDebug("{}", 1))` therefore reports false about the *conversion*
+// while saying nothing about the function, which is what is under test here.
+inline constexpr std::format_string<int> kIntFmt{"{}"};
+static_assert(noexcept(morph::log::logDebug(kIntFmt, 1)));
+static_assert(noexcept(morph::log::logInfo(kIntFmt, 1)));
+static_assert(noexcept(morph::log::logWarn(kIntFmt, 1)));
+static_assert(noexcept(morph::log::logError(kIntFmt, 1)));
+static_assert(noexcept(morph::log::detail::logFormat(morph::log::LogLevel::error, kIntFmt, 1)));
+static_assert(noexcept(morph::log::detail::log(morph::log::LogLevel::error, std::string_view{})));
+static_assert(noexcept(morph::log::droppedLogRecords()));
+
+TEST_CASE("morph::log: a throwing sink does not propagate to the caller", "[logger]") {
+    LogGuard guard;
+    int calls = 0;
+    morph::log::setLogger([&](morph::log::LogLevel, std::string_view) {
+        ++calls;
+        throw std::runtime_error{"sink is broken"};
+    });
+    morph::log::setLogLevel(morph::log::LogLevel::debug);
+
+    // Every public entry point, both overload families. Before morph#158 each
+    // of these unwound into the caller.
+    REQUIRE_NOTHROW(morph::log::logDebug("plain"));
+    REQUIRE_NOTHROW(morph::log::logInfo("plain"));
+    REQUIRE_NOTHROW(morph::log::logWarn("plain"));
+    REQUIRE_NOTHROW(morph::log::logError("plain"));
+    REQUIRE_NOTHROW(morph::log::logDebug("fmt {}", 1));
+    REQUIRE_NOTHROW(morph::log::logInfo("fmt {}", 1));
+    REQUIRE_NOTHROW(morph::log::logWarn("fmt {}", 1));
+    REQUIRE_NOTHROW(morph::log::logError("fmt {}", 1));
+
+    // The sink really was reached each time -- otherwise this test would pass
+    // just as well against a logger that silently dropped everything.
+    REQUIRE(calls == 8);
+}
+
+TEST_CASE("morph::log: a record lost to a throwing sink is counted", "[logger]") {
+    LogGuard guard;
+    morph::log::setLogLevel(morph::log::LogLevel::debug);
+
+    const auto before = morph::log::droppedLogRecords();
+
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"nope"}; });
+    morph::log::logError("one");
+    morph::log::logError("two {}", 3);
+
+    REQUIRE(morph::log::droppedLogRecords() == before + 2);
+}
+
+TEST_CASE("morph::log: a healthy sink drops nothing", "[logger]") {
+    LogGuard guard;
+    morph::log::setLogLevel(morph::log::LogLevel::debug);
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) {});
+
+    const auto before = morph::log::droppedLogRecords();
+    morph::log::logError("fine");
+    morph::log::logError("also {}", "fine");
+    REQUIRE(morph::log::droppedLogRecords() == before);
+}
+
+TEST_CASE("morph::log: a level-suppressed message is not a dropped record", "[logger]") {
+    LogGuard guard;
+    // A throwing sink that must never be reached, because the level rejects
+    // the message before the sink is consulted. This distinguishes "dropped"
+    // (a failure) from "suppressed" (working as configured) -- a counter that
+    // conflated them would report drops on every quiet run.
+    morph::log::setLogger([](morph::log::LogLevel, std::string_view) { throw std::runtime_error{"unreachable"}; });
+    morph::log::setLogLevel(morph::log::LogLevel::error);
+
+    const auto before = morph::log::droppedLogRecords();
+    morph::log::logDebug("suppressed");
+    morph::log::logInfo("suppressed {}", 1);
+    REQUIRE(morph::log::droppedLogRecords() == before);
 }

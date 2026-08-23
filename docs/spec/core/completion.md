@@ -115,11 +115,16 @@ re-thrown solely to extract a message:
 - Otherwise (a `catch (...)` branch), the log reads
   `[orphan] unhandled unknown exception`.
 
-The `logError` call itself is wrapped in a `try { ... } catch (...) {}` (an
-empty catch that swallows any exception `logError` might throw), so the
-`noexcept` destructor never lets an exception escape. This prevents silent
-loss of error information when a `Completion` goes out of scope without an
-`onError` handler.
+The `logError` calls need no local guard: `morph::log`'s helpers are
+`noexcept` (`logger.md`, "Failure modes"), which is what makes them safe to
+call from an implicitly-`noexcept` destructor at all. The **variadic** overload
+is used deliberately — it formats inside that guarantee, whereas building the
+message by concatenation at the call site would allocate outside it and could
+still escape. If the record cannot be emitted, the logging layer counts it in
+`morph::log::droppedLogRecords()`.
+
+This prevents silent loss of error information when a `Completion` goes out of
+scope without an `onError` handler.
 
 `onErrAttached` is set by both `attachOnError` (unconditionally, on entry) and
 `setException` (on the branch where an `onErr` handler was already registered),

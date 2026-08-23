@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <morph/core/completion.hpp>
+#include <morph/core/logger.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "test_support.hpp"
 
@@ -97,4 +100,39 @@ TEST_CASE("CompletionState: orphan destructor logs std::exception", "[completion
         // onErrAttached stays false — will log "[orphan] unhandled exception: ..."
     }
     REQUIRE(true);
+}
+
+TEST_CASE("CompletionState: an orphan destructor survives a throwing log sink", "[completion][logger]") {
+    // The motivating case for morph#158. ~CompletionState is implicitly
+    // noexcept and logs the abandoned exception, so before the logging layer
+    // became noexcept a sink that threw here meant std::terminate -- which the
+    // destructor worked around with a local try/catch(...) and a NOLINT. That
+    // workaround is gone; this is what replaces it.
+    //
+    // A test that merely destroyed the state would pass whether or not the
+    // guarantee holds, since a terminate() would abort the run rather than
+    // fail an assertion. So it also checks that the record was *counted*,
+    // which proves the sink was actually reached and actually threw.
+    morph::log::ScopedLoggerOverride const guard;
+    morph::log::setLogLevel(morph::log::LogLevel::debug);
+    int sinkCalls = 0;
+    morph::log::setLogger([&](morph::log::LogLevel, std::string_view) {
+        ++sinkCalls;
+        throw std::runtime_error{"sink throws during teardown"};
+    });
+
+    const auto droppedBefore = morph::log::droppedLogRecords();
+    {
+        auto state = std::make_shared<morph::async::detail::CompletionState<int>>();
+        state->ready = true;
+        try {
+            throw std::runtime_error{"orphaned"};
+        } catch (...) {
+            state->error = std::current_exception();
+        }
+        state->onErrAttached = false;
+    }  // ~CompletionState logs here, into a sink that throws
+
+    REQUIRE(sinkCalls == 1);
+    REQUIRE(morph::log::droppedLogRecords() == droppedBefore + 1);
 }

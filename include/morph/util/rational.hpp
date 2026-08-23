@@ -654,25 +654,16 @@ private:
     /// Skipped during constant evaluation: `log` is not `constexpr`, and a
     /// `constexpr` arithmetic expression that saturates should still compile.
     ///
-    /// The `try`/`catch` is not defensive padding. `morph::log` offers no
-    /// `noexcept` guarantee -- a user-installed sink may throw, and
-    /// `detail::log`'s own `scoped_lock` may throw `std::system_error` -- and
-    /// an arithmetic operator must not start failing because logging failed.
-    /// `CompletionState`'s destructor carries the identical workaround for the
-    /// identical reason. Both can go once morph#158 makes the logging layer
-    /// non-throwing.
+    /// No local `try`/`catch` is needed around the logging call: `morph::log`
+    /// is `noexcept` (`docs/spec/core/logger.md`), so an arithmetic operator
+    /// cannot start failing because logging failed. This function carried that
+    /// workaround until morph#158 moved the guarantee into the logging layer.
     /// @param where Which operator saturated.
     static constexpr void reportOverflow(std::string_view where) noexcept {
         if (!std::is_constant_evaluated()) {
-            // NOLINTBEGIN(bugprone-empty-catch) -- see above: logging must not
-            // turn a defined-but-clamped result into a thrown exception.
-            try {
-                ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
-                                       "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
-                                       where);
-            } catch (...) {
-            }
-            // NOLINTEND(bugprone-empty-catch)
+            ::morph::log::logError("[Rational] {} overflowed int64 and saturated; the result is clamped, "
+                                   "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
+                                   where);
         }
     }
 
@@ -682,14 +673,9 @@ private:
     /// `reportOverflow` -- see that function for why the `catch` is there.
     static constexpr void reportClamp() noexcept {
         if (!std::is_constant_evaluated()) {
-            // NOLINTBEGIN(bugprone-empty-catch)
-            try {
-                ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
-                                       "canonicalising it would require negating a value with no positive "
-                                       "counterpart.");
-            } catch (...) {
-            }
-            // NOLINTEND(bugprone-empty-catch)
+            ::morph::log::logError("[Rational] an INT64_MIN component was clamped to -INT64_MAX; "
+                                   "canonicalising it would require negating a value with no positive "
+                                   "counterpart.");
         }
     }
 

@@ -149,6 +149,9 @@ Copy and move are deleted — the guard is not copyable.
 The design splits work between a lock-free fast path and a mutex-guarded slow
 path:
 
+- **Drop counter — lock-free.** `droppedLogRecords()` is a relaxed atomic
+  `load`, and the increment on the failure path is a relaxed `fetch_add`. It is
+  outside `mtx`, so counting a drop cannot itself block or fail.
 - **Level check — lock-free.** Both `detail::log` and `detail::logFormat`
   compare `level` against `minLevel.load(relaxed)` and bail out before touching
   the mutex or doing any formatting. `setLogLevel` / `getLogLevel` are a relaxed
@@ -191,12 +194,30 @@ thread.
   the variadic overload (`logInfo("{}", s)`) only when you actually want `s`
   treated as a format string with arguments. This is why untrusted or
   brace-containing strings are safe to pass as the sole argument.
-- **A throwing sink propagates.** Exceptions from the sink are **not** caught.
-  They unwind out of `detail::log` (releasing `mtx` via the `scoped_lock`
-  destructor as the stack unwinds) and out of the originating
-  `logDebug`/`logInfo`/… call into the caller. The logging layer adds no
-  `try/catch`; a sink that must not disrupt its caller has to swallow its own
-  exceptions internally.
+- **Emitting a record never throws.** Every logging entry point --
+  `logDebug`/`logInfo`/`logWarn`/`logError`, both the `string_view` and the
+  variadic overloads, and `detail::log`/`detail::logFormat` beneath them -- is
+  `noexcept`. Three things inside can fail: `std::mutex::lock`
+  (`std::system_error`), the sink itself, and any allocation performed while
+  formatting or sanitising. All three are caught and the record is discarded.
+
+  This is a guarantee to the *caller*, and it is what makes logging legal from
+  a `noexcept` function or a destructor -- where an escaping exception is
+  `std::terminate`, not a catchable error. It replaces the previous contract,
+  under which a sink's exception propagated into whatever code happened to be
+  logging; that put the burden on the sink, which no caller can verify, since
+  the sink is installed by unrelated code.
+
+- **A discarded record is counted, not ignored.** `morph::log::droppedLogRecords()`
+  returns the number of records lost this way since process start: monotonic,
+  never reset, thread-safe. It counts *failures* only -- a message below the
+  minimum level is suppressed, not dropped. Compare two reads to attribute
+  drops to a region of code.
+
+  The cost of this design is stated plainly: swallowing hides bugs in the
+  sink. The counter is what keeps that from being silent, and the sink
+  contract already constrains sinks heavily (they must not re-enter
+  `morph::log`, and should not block).
 - **Format-time errors (variadic overload).** Argument formatting is checked at
   compile time by `std::format_string`, so mismatched placeholders are a build
   error, not a runtime one. A runtime `std::format_error` is only possible from

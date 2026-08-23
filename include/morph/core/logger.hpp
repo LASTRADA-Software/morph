@@ -112,6 +112,10 @@ struct LogState {
     // can reject a suppressed message without touching `mtx` or formatting it.
     std::atomic<LogLevel> minLevel{LogLevel::debug};
     std::mutex mtx;  // guards `sink` (and serialises sink invocation)
+    // Records discarded because the sink, the lock, or formatting threw. The
+    // logging layer is noexcept, so a failure cannot be reported by
+    // propagating; this counter is what keeps it from being silent.
+    std::atomic<std::uint64_t> dropped{0};
 };
 
 inline LogState& logState() {
@@ -125,14 +129,24 @@ inline LogState& logState() {
 /// must therefore not call back into `morph::log` (log, `setLogger`, or
 /// construct a `ScopedLoggerOverride`) — `std::mutex` is non-recursive and that
 /// would self-deadlock — and should not block for long.
-inline void log(LogLevel level, std::string_view msg) {
+inline void log(LogLevel level, std::string_view msg) noexcept {
     auto& state = logState();
     if (level < state.minLevel.load(std::memory_order_relaxed)) {
         return;  // lock-free reject of suppressed messages
     }
-    std::scoped_lock const lock{state.mtx};
-    if (state.sink) {
-        state.sink(level, msg);
+    // Nothing here may escape. Emitting a log record must never be able to
+    // disrupt the code that asked for it -- least of all a destructor, where
+    // an escaping exception is `std::terminate`. Three things inside can
+    // throw: `std::mutex::lock` (`std::system_error`), the sink itself, and
+    // any allocation the sink performs (the default one builds a sanitised
+    // copy). All three are the logging layer's problem, not the caller's.
+    try {
+        std::scoped_lock const lock{state.mtx};
+        if (state.sink) {
+            state.sink(level, msg);
+        }
+    } catch (...) {
+        state.dropped.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -164,6 +178,23 @@ inline LogLevel getLogLevel() {
     return detail::logState().minLevel.load(std::memory_order_relaxed);
 }
 
+/// @brief Number of log records discarded because emitting them threw.
+///
+/// The logging helpers are `noexcept`, so a sink that throws, a lock
+/// acquisition that fails, or a formatting error cannot be reported by
+/// propagating to the caller. Each such record increments this counter
+/// instead, so the failure is observable rather than silent. It counts
+/// *failures*, not level-suppressed messages: a message below the minimum
+/// level is not a dropped record.
+///
+/// Monotonic for the life of the process, and never reset. Compare two reads
+/// to attribute drops to a region of code. Thread-safe.
+///
+/// @return The total number of records dropped since process start.
+[[nodiscard]] inline std::uint64_t droppedLogRecords() noexcept {
+    return detail::logState().dropped.load(std::memory_order_relaxed);
+}
+
 // ── Level helpers ─────────────────────────────────────────────────────────────
 
 namespace detail {
@@ -173,42 +204,49 @@ namespace detail {
 /// The level is checked *before* formatting, so a suppressed call pays no
 /// `std::format` / allocation cost.
 template <typename... Args>
-void logFormat(LogLevel level, std::format_string<Args...> fmt, Args&&... args) {
+void logFormat(LogLevel level, std::format_string<Args...> fmt, Args&&... args) noexcept {
     if (level < logState().minLevel.load(std::memory_order_relaxed)) {
         return;
     }
-    log(level, std::format(fmt, std::forward<Args>(args)...));
+    // `std::format` allocates, so it can throw `std::bad_alloc`, and a user
+    // type's `formatter` may throw anything at all. `log()` guards its own
+    // body but cannot guard its argument, so the call is wrapped here.
+    try {
+        log(level, std::format(fmt, std::forward<Args>(args)...));
+    } catch (...) {
+        logState().dropped.fetch_add(1, std::memory_order_relaxed);
+    }
 }
 
 }  // namespace detail
 
 /// @brief Logs @p msg at `LogLevel::debug`.
-inline void logDebug(std::string_view msg) { detail::log(LogLevel::debug, msg); }
+inline void logDebug(std::string_view msg) noexcept { detail::log(LogLevel::debug, msg); }
 /// @brief Logs @p msg at `LogLevel::info`.
-inline void logInfo(std::string_view msg) { detail::log(LogLevel::info, msg); }
+inline void logInfo(std::string_view msg) noexcept { detail::log(LogLevel::info, msg); }
 /// @brief Logs @p msg at `LogLevel::warn`.
-inline void logWarn(std::string_view msg) { detail::log(LogLevel::warn, msg); }
+inline void logWarn(std::string_view msg) noexcept { detail::log(LogLevel::warn, msg); }
 /// @brief Logs @p msg at `LogLevel::error`.
-inline void logError(std::string_view msg) { detail::log(LogLevel::error, msg); }
+inline void logError(std::string_view msg) noexcept { detail::log(LogLevel::error, msg); }
 
 /// @brief Logs a formatted message at `LogLevel::debug`.
 template <typename... Args>
-void logDebug(std::format_string<Args...> fmt, Args&&... args) {
+void logDebug(std::format_string<Args...> fmt, Args&&... args) noexcept {
     detail::logFormat(LogLevel::debug, fmt, std::forward<Args>(args)...);
 }
 /// @brief Logs a formatted message at `LogLevel::info`.
 template <typename... Args>
-void logInfo(std::format_string<Args...> fmt, Args&&... args) {
+void logInfo(std::format_string<Args...> fmt, Args&&... args) noexcept {
     detail::logFormat(LogLevel::info, fmt, std::forward<Args>(args)...);
 }
 /// @brief Logs a formatted message at `LogLevel::warn`.
 template <typename... Args>
-void logWarn(std::format_string<Args...> fmt, Args&&... args) {
+void logWarn(std::format_string<Args...> fmt, Args&&... args) noexcept {
     detail::logFormat(LogLevel::warn, fmt, std::forward<Args>(args)...);
 }
 /// @brief Logs a formatted message at `LogLevel::error`.
 template <typename... Args>
-void logError(std::format_string<Args...> fmt, Args&&... args) {
+void logError(std::format_string<Args...> fmt, Args&&... args) noexcept {
     detail::logFormat(LogLevel::error, fmt, std::forward<Args>(args)...);
 }
 
