@@ -28,6 +28,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -37,6 +38,7 @@
 #include <QMetaProperty>
 #include <QMetaType>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -52,6 +54,7 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
+using morph::ladder::testkit::QmlSurfaceAudit;
 
 /// @brief Builds a rig with a fresh `PollsAuthorizer` — every polls test
 ///        file that touches `Mode::Socket` passes an explicit authorizer;
@@ -61,10 +64,6 @@ using morph::ladder::testkit::pumpUntil;
 [[nodiscard]] std::unique_ptr<BackendRig> makeRig() {
     return std::make_unique<BackendRig>(Mode::Local, 1, std::make_shared<polls::auth::PollsAuthorizer>());
 }
-
-/// @brief How many methods a class declares itself (signals + `Q_INVOKABLE`s),
-///        i.e. excluding everything it inherits from `QObject`.
-[[nodiscard]] int ownMethodCount(const QMetaObject* meta) { return meta->methodCount() - meta->methodOffset(); }
 
 /// @brief One `pollBridge.createPoll(title, optionLabels)` round trip.
 /// @param bridge       The bridge to create through.
@@ -207,36 +206,28 @@ TEST_CASE("PollBridge exposes exactly the surface Main.qml/CreatePollView.qml/Vo
     auto rig = makeRig();
     polls::gui::PollBridge bridge{rig->bridge(0), rig->executor()};
 
+    // The whole name-and-arity surface, checked against gui/qml/ itself
+    // rather than against a transcription of it: `QmlSurfaceAudit`
+    // (testkit/qml_surface.hpp) resolves every reference the three QML files
+    // make through `pollBridge` against this metaobject, and sweeps back for
+    // any member no QML binds. Both directions, no hand-written list. See
+    // that header for what it does and does not catch.
+    QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/polls/gui/qml")};
+    audit.bind(QStringLiteral("pollBridge"), bridge);
+    const QStringList findings = audit.run();
+    INFO(findings.join(QStringLiteral("\n")).toStdString());
+    CHECK(findings.isEmpty());
+    CHECK(audit.scannedFiles()
+          == QStringList{QStringLiteral("CreatePollView.qml"), QStringLiteral("Main.qml"),
+                         QStringLiteral("VoteView.qml")});
+
+    // What the audit cannot see, because QML's text does not record it:
+    // `schemasJson` is CONSTANT, which is why Main.qml parses it exactly once
+    // into `root.schemas` instead of re-parsing on every change.
     const QMetaObject* meta = bridge.metaObject();
-
-    // `root.pollBridge.schemasJson` — Main.qml.
-    REQUIRE(meta->indexOfProperty("schemasJson") >= 0);
-    CHECK(meta->property(meta->indexOfProperty("schemasJson")).isConstant());
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 1);
-
-    // `page.pollBridge.createPoll(...)` — CreatePollView.qml.
-    REQUIRE(meta->indexOfMethod("createPoll(QString,QVariantList)") >= 0);
-    // `page.pollBridge.openPoll(...)` — VoteView.qml (Component.onCompleted)
-    // and Main.qml's landing screen.
-    REQUIRE(meta->indexOfMethod("openPoll(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(meta->indexOfMethod("submitVotes(QString,QVariantList)") >= 0);
-    REQUIRE(meta->indexOfMethod("updateVotes(QString,QVariantList)") >= 0);
-    REQUIRE(meta->indexOfMethod("setAdminToken(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("submitIfValid(QString,QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("stopPolling()") >= 0);
-
-    REQUIRE(meta->indexOfSignal("created(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("opened(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("stateChanged(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("eventReceived(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("replyReceived(QString,bool,QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("pollingStopped(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
-
-    // Nothing else: an adapter method with no binding site is a stub, and one
-    // removed from under a binding is a silent runtime gap.
-    CHECK(ownMethodCount(meta) == 15);
+    const int schemasJson = meta->indexOfProperty("schemasJson");
+    REQUIRE(schemasJson >= 0);
+    CHECK(meta->property(schemasJson).isConstant());
 
     // The property's value is the shared schema document, verbatim — the
     // same one every shell builds (poll_schemas.hpp exists so they cannot

@@ -16,10 +16,19 @@
 // label at run time, and the offscreen engine-load smoke test
 // (test_gui_qml_smoke.cpp) deliberately loads the QML with every controller
 // null, so it cannot catch it either. Every assertion below that names a
-// string key, an action id or a signal signature is therefore a cross-check
-// against a real binding site in those three QML files, cited inline. Mirrors
-// rung 1's own `examples/pastebin/tests/test_paste_qml_bridges.cpp`, which
-// established this suite's shape.
+// string key or an action id is therefore a cross-check against a real
+// binding site in those three QML files, cited inline. Mirrors rung 1's own
+// `examples/pastebin/tests/test_paste_qml_bridges.cpp`, which established
+// this suite's shape.
+//
+// The metaobject half of that cross-check is no longer hand-written. The
+// first case below points `morph::ladder::testkit::QmlSurfaceAudit`
+// (`examples/common/testkit/qml_surface.hpp`) at `gui/qml/` and lets the QML
+// itself be the expectation, in both directions at once — a name QML binds
+// that no bridge has is a finding, and so is a bridge member no QML binds.
+// The citations are computed, not maintained. What that audit cannot see
+// (property storage kind, a signal parameter's C++ type) stays hand-written,
+// in the case immediately after it.
 //
 // All four adapters are Qt-Core-only (`QVariantMap` is Qt Core; the
 // engine-facing side is `setInitialProperties` in the shell), so they
@@ -54,6 +63,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -67,6 +77,7 @@
 #include <QMetaProperty>
 #include <QMetaType>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -84,6 +95,7 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
+using morph::ladder::testkit::QmlSurfaceAudit;
 
 constexpr std::string_view kSecret = "qml-bridges-test-secret";
 
@@ -257,46 +269,83 @@ template <typename Refresh>
     return -1;
 }
 
-/// @brief How many methods a class declares itself (signals + `Q_INVOKABLE`s),
-///        i.e. excluding everything it inherits from `QObject`.
-/// @param meta The class's meta-object.
-/// @return The count of own methods.
-[[nodiscard]] int ownMethodCount(const QMetaObject* meta) { return meta->methodCount() - meta->methodOffset(); }
-
 }  // namespace
 
 // ═════════════════════════════════════════════════════════════════════════
 // The QML-visible surface: names and signatures QML binds by string
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("FormsBridge exposes exactly the surface DynamicForm, LoginView.qml and BookmarkListView.qml bind against",
+TEST_CASE("Every bookmarks bridge exposes exactly the surface gui/qml binds, and nothing more",
           "[bookmarks][gui][qml-bridges]") {
+    // What replaced ~110 lines of hand-written `indexOfMethod`/`indexOfSignal`
+    // REQUIREs here, and why.
+    //
+    // The old shape enumerated each bridge's metaobject against a transcription
+    // of the QML — every expected name spelled out in C++, each one carrying a
+    // `BookmarkListView.qml:301`-style citation in a comment, plus an
+    // `ownMethodCount(meta) == 15` to catch anything added. It worked in one
+    // direction only: it proved every name a human had *transcribed* was still
+    // there. A QML file that binds a name the bridge never had — `onListd` for
+    // `listed`, `refreshAll()` for `refresh()` — satisfied it by construction,
+    // because the transcription was the expectation. The engine-load smoke test
+    // (test_gui_qml_smoke.cpp) cannot catch that either, and says so in its own
+    // file comment: it loads every root with every controller null, so no
+    // `Connections` handler name is ever resolved against a real signal.
+    //
+    // `QmlSurfaceAudit` (testkit/qml_surface.hpp) reads gui/qml/*.qml as the
+    // expectation instead, so the citations are computed rather than
+    // maintained, and both directions are covered. See that header for the
+    // exact list of what it does and does not catch.
     DbFixture fixture;
     auto rig = makeAuthedRig("alice");
     bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
+    bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
+    bookmarks::gui::TagBridge tags{rig->bridge(0), rig->executor()};
+    bookmarks::gui::SharedFeedBridge feed{rig->bridge(0), rig->executor()};
 
-    const QMetaObject* meta = forms.metaObject();
+    // The alias names are exactly the four `setInitialProperties` keys
+    // gui/main.cpp supplies, and are the one per-rung fact the audit cannot
+    // derive: it checks that each alias's *surface* agrees with the QML, not
+    // that the shell wires that alias to this class.
+    QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/bookmarks/gui/qml")};
+    audit.bind(QStringLiteral("formsController"), forms);
+    audit.bind(QStringLiteral("bookmarkController"), bookmarkBridge);
+    audit.bind(QStringLiteral("tagController"), tags);
+    audit.bind(QStringLiteral("feedController"), feed);
 
-    // `root.formsController.schemasJson` — Main.qml:35.
-    REQUIRE(meta->indexOfProperty("schemasJson") >= 0);
-    CHECK(meta->property(meta->indexOfProperty("schemasJson")).isConstant());
-    CHECK(meta->propertyCount() - meta->propertyOffset() == 1);
+    const QStringList findings = audit.run();
+    INFO(findings.join(QStringLiteral("\n")).toStdString());
+    CHECK(findings.isEmpty());
 
-    // `page.formsController.submitIfValid("Login", loginForm.previewLine)` —
-    // LoginView.qml:90; the same call with five other action ids in
-    // BookmarkListView.qml (:249, :413, :428, :480, :495). Two QString
-    // arguments, invokable from QML.
-    REQUIRE(meta->indexOfMethod("submitIfValid(QString,QString)") >= 0);
+    // The audit is only as good as the files it found: three, the same three
+    // gui/main.cpp's QML module ships.
+    CHECK(audit.scannedFiles() == QStringList{QStringLiteral("BookmarkListView.qml"), QStringLiteral("LoginView.qml"),
+                                              QStringLiteral("Main.qml")});
+}
 
-    // `function onReplyReceived(actionType, ok, payload)` — LoginView.qml:42
-    // and BookmarkListView.qml:190; `function onLoggedIn(principal)` —
-    // Main.qml:47.
-    REQUIRE(meta->indexOfSignal("replyReceived(QString,bool,QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("loggedIn(QString)") >= 0);
+TEST_CASE("The bookmarks bridges' surface carries the metaobject facts QML cannot state",
+          "[bookmarks][gui][qml-bridges]") {
+    // Everything the audit above structurally cannot see, because QML's own
+    // text does not record it: property storage kind, and the C++ type a
+    // signal parameter actually carries. Both are load-bearing here.
+    DbFixture fixture;
+    auto rig = makeAuthedRig("alice");
+    bookmarks::gui::FormsBridge forms{rig->bridge(0), rig->executor()};
+    bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
 
-    // Nothing else: an adapter method with no binding site is a stub, and one
-    // removed from under a binding is a silent runtime gap.
-    CHECK(ownMethodCount(meta) == 3);
+    // `schemasJson` is CONSTANT, which is why Main.qml:35 parses it exactly
+    // once into `root.schemas` instead of re-parsing on every change.
+    const QMetaObject* formsMeta = forms.metaObject();
+    const int schemasJson = formsMeta->indexOfProperty("schemasJson");
+    REQUIRE(schemasJson >= 0);
+    CHECK(formsMeta->property(schemasJson).isConstant());
+
+    // `bulkEdited` carries an already-rendered *string*, not a number:
+    // BookmarkListView.qml concatenates it straight into a status line.
+    const QMetaObject* bookmarkMeta = bookmarkBridge.metaObject();
+    const int bulkEdited = bookmarkMeta->indexOfSignal("bulkEdited(QString)");
+    REQUIRE(bulkEdited >= 0);
+    CHECK(bookmarkMeta->method(bulkEdited).parameterMetaType(0).id() == QMetaType::QString);
 
     // The property's value is the shared schema document, verbatim — the same
     // one every shell builds (bookmark_schemas.hpp exists so they cannot
@@ -306,82 +355,12 @@ TEST_CASE("FormsBridge exposes exactly the surface DynamicForm, LoginView.qml an
     REQUIRE(schemas.isObject());
     // The six action ids QML passes to `submitIfValid` as string literals must
     // each have a schema to render from, or the form is blank.
-    for (const char* actionType : {"Login", "CreateBookmark", "EditBookmark", "ImportBookmarks", "RenameTag",
-                                   "MergeTags"}) {
+    for (const char* actionType :
+         {"Login", "CreateBookmark", "EditBookmark", "ImportBookmarks", "RenameTag", "MergeTags"}) {
         INFO("missing schema: " << actionType);
         CHECK(schemas.object().contains(QString::fromLatin1(actionType)));
     }
     CHECK(schemas.object().size() == 6);
-}
-
-TEST_CASE("BookmarkBridge exposes exactly the surface BookmarkListView.qml binds against",
-          "[bookmarks][gui][qml-bridges]") {
-    DbFixture fixture;
-    auto rig = makeAuthedRig("alice");
-    bookmarks::gui::BookmarkBridge bookmarkBridge{rig->bridge(0), rig->executor()};
-
-    const QMetaObject* meta = bookmarkBridge.metaObject();
-
-    // `page.bookmarkController.refresh()` (BookmarkListView.qml:68),
-    // `.refreshIncludingArchived()` (:66), `.open(row.modelData.id)` (:301),
-    // `.archive(page.currentBookmark.id)` (:377), `.unarchive(...)` (:383),
-    // `.remove(...)` (:389), `.bulkArchive(page.selectedIds, true/false)`
-    // (:323, :329).
-    REQUIRE(meta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(meta->indexOfMethod("refreshIncludingArchived()") >= 0);
-    REQUIRE(meta->indexOfMethod("open(qlonglong)") >= 0);
-    REQUIRE(meta->indexOfMethod("archive(qlonglong)") >= 0);
-    REQUIRE(meta->indexOfMethod("unarchive(qlonglong)") >= 0);
-    REQUIRE(meta->indexOfMethod("remove(qlonglong)") >= 0);
-    REQUIRE(meta->indexOfMethod("bulkArchive(QVariantList,bool)") >= 0);
-
-    // `function onBound()` / `onListed(rows)` / `onLoaded(bookmark)` /
-    // `onArchived()` / `onUnarchived()` / `onRemoved()` / `onBulkEdited(affected)` /
-    // `onFailed(message)` — BookmarkListView.qml:105, :109, :114, :119, :124, :129,
-    // :135, :141.
-    REQUIRE(meta->indexOfSignal("bound()") >= 0);
-    REQUIRE(meta->indexOfSignal("listed(QVariantList)") >= 0);
-    REQUIRE(meta->indexOfSignal("loaded(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("archived()") >= 0);
-    REQUIRE(meta->indexOfSignal("unarchived()") >= 0);
-    REQUIRE(meta->indexOfSignal("removed()") >= 0);
-    REQUIRE(meta->indexOfSignal("bulkEdited(QString)") >= 0);
-    REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
-
-    CHECK(ownMethodCount(meta) == 15);
-    // `bulkEdited` carries an already-rendered *string*, not a number:
-    // BookmarkListView.qml:148 concatenates it straight into a status line.
-    const int bulkEdited = meta->indexOfSignal("bulkEdited(QString)");
-    REQUIRE(bulkEdited >= 0);
-    CHECK(meta->method(bulkEdited).parameterMetaType(0).id() == QMetaType::QString);
-}
-
-TEST_CASE("TagBridge and SharedFeedBridge expose exactly the surface BookmarkListView.qml binds against",
-          "[bookmarks][gui][qml-bridges]") {
-    DbFixture fixture;
-    auto rig = makeAuthedRig("alice");
-    bookmarks::gui::TagBridge tags{rig->bridge(0), rig->executor()};
-    bookmarks::gui::SharedFeedBridge feed{rig->bridge(0), rig->executor()};
-
-    // `page.tagController.refresh()` (BookmarkListView.qml:74) and
-    // `function onBound()` / `onListed(rows)` / `onFailed(message)` (:149,
-    // :153, :157).
-    const QMetaObject* tagMeta = tags.metaObject();
-    REQUIRE(tagMeta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(tagMeta->indexOfSignal("bound()") >= 0);
-    REQUIRE(tagMeta->indexOfSignal("listed(QVariantList)") >= 0);
-    REQUIRE(tagMeta->indexOfSignal("failed(QString)") >= 0);
-    CHECK(ownMethodCount(tagMeta) == 4);
-
-    // `page.feedController.refresh()` (:76) and the same three signals (:165,
-    // :169, :173). Same surface, deliberately: the feed pane is the bookmark
-    // list's read-only twin.
-    const QMetaObject* feedMeta = feed.metaObject();
-    REQUIRE(feedMeta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(feedMeta->indexOfSignal("bound()") >= 0);
-    REQUIRE(feedMeta->indexOfSignal("listed(QVariantList)") >= 0);
-    REQUIRE(feedMeta->indexOfSignal("failed(QString)") >= 0);
-    CHECK(ownMethodCount(feedMeta) == 4);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
