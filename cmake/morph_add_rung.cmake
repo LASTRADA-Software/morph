@@ -19,11 +19,13 @@
 #   tests/*.cpp                                     -> ladder_<rung>_tests    EXE    (Catch2; skipped under Emscripten)
 #   src/headless/*.cpp                              -> ladder_<rung>_headless EXE    (QProcess test-client binary, rung 4+)
 #
-# Every ctest case discovered from ladder_<rung>_tests gets labels "ladder"
-# and "ladder-<rung>" (the CI path-filter unit — see .github/workflows/ci.yml,
-# job ladder-tests) via the same two-step catch_discover_tests + file(GENERATE)
-# shape examples/common/CMakeLists.txt uses (catch_discover_tests cannot carry
-# a multi-value LABELS directly — see that file's own comment on why).
+# Every ctest case discovered from ladder_<rung>_tests gets the single label
+# "ladder-<rung>", applied by catch_discover_tests itself. CI selects with
+# `ctest -L ladder` (.github/workflows/ci.yml, job ladder-tests), which still
+# matches: ctest's -L takes a regex, not an exact label. End-to-end journeys
+# additionally get "journey" from a small generated post-pass. See the
+# catch_discover_tests call below for why the label cannot be a two-value
+# LABELS, and why the rung label is not applied by the post-pass (morph#173).
 #
 # RESOURCE_LOCK is the literal string "morph_ladder_test_db" for every rung's
 # tests, matching examples/common's own ladder_common_tests — deliberately
@@ -496,27 +498,68 @@ function(morph_add_rung)
             catch_discover_tests(ladder_${_rung}_tests
                 DISCOVERY_MODE POST_BUILD
                 DL_PATHS "${_qt_bin_dir}"
-                PROPERTIES LABELS ladder TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
+                # One label, not two, and the *rung* one. catch_discover_tests
+                # forwards PROPERTIES as a flat CMake list through a
+                # `-D VAR=a;b;c` command line, where a list separator and a
+                # literal semicolon are indistinguishable and no escaping
+                # survives, so a multi-value `LABELS "ladder;ladder-${_rung}"`
+                # does not produce a two-label test — it shifts every following
+                # name/value pair by one (examples/common/CMakeLists.txt
+                # documents the same trap at length).
+                #
+                # Nothing is lost by dropping the generic `ladder` label:
+                # ctest's `-L` is a *regex*, not an exact match, so `-L ladder`
+                # matches `ladder-${_rung}` by prefix and CI's
+                # `ctest -L ladder -LE stress` selects exactly what it did.
+                #
+                # Applying the rung label *here* rather than in a post-pass is
+                # what makes per-rung selection correct for every test name.
+                # A post-pass cannot do it: Catch2's discovery script appends
+                # the plain test name to `<target>_TESTS`
+                # (`list(APPEND tests "${prefix}${plain_name}${suffix}")`), so
+                # a TEST_CASE whose name contains a `;` is flattened into two
+                # fragments that name no test, and set_tests_properties then
+                # silently applies to nothing. That was morph#173: the case
+                # kept `ladder` and never gained `ladder-<rung>`, so
+                # `ctest -L ladder-<rung>` under-selected without saying so.
+                PROPERTIES LABELS ladder-${_rung} TIMEOUT 120 RESOURCE_LOCK morph_ladder_test_db
             )
+            # `journey` still needs a post-pass: it applies to some cases and
+            # not others, which catch_discover_tests' uniform PROPERTIES cannot
+            # express. It therefore inherits the flattening limitation
+            # described above — a journey case whose name contained a `;` would
+            # keep its rung label but never gain `journey`. Rather than let
+            # that go quiet the way morph#173 did, it is rejected at configure
+            # time by the guard below.
+            #
+            # set_tests_properties *replaces* LABELS rather than appending, so
+            # the journey branch restates the rung label alongside `journey`.
+            foreach(_journey_src IN LISTS _test_sources)
+                file(STRINGS "${_journey_src}" _bad_journey_names
+                     REGEX "TEST_CASE\\(\"Journey: [^\"]*;")
+                if(_bad_journey_names)
+                    message(FATAL_ERROR
+                        "morph_add_rung(${_rung}): a \"Journey: \" TEST_CASE name contains a "
+                        "semicolon. CMake cannot round-trip that through Catch2's discovered "
+                        "test list, so the case would silently never gain its `journey` label "
+                        "(morph#173). Rename it.\n  File: ${_journey_src}\n  Name: ${_bad_journey_names}")
+                endif()
+            endforeach()
             file(GENERATE
-                OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_rung_label.cmake"
+                OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_journey_label.cmake"
                 CONTENT "foreach(_ladder_test IN LISTS ladder_${_rung}_tests_TESTS)
-    if(NOT _ladder_test MATCHES \"\\\"class-name\\\"\")
-        # End-to-end user journeys carry an extra `journey` label so they can
-        # be selected (ctest -L journey) or excluded the way `stress` is.
-        # Keyed off the test name's own \"Journey: \" prefix rather than a
-        # separate source-file list, so adding a journey needs no CMake edit.
-        if(_ladder_test MATCHES \"Journey: \")
-            set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder;ladder-${_rung};journey\")
-        else()
-            set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder;ladder-${_rung}\")
-        endif()
+    # End-to-end user journeys carry an extra `journey` label so they can be
+    # selected (ctest -L journey) or excluded the way `stress` is. Keyed off
+    # the test name's own \"Journey: \" prefix rather than a separate source
+    # list, so adding a journey needs no CMake edit.
+    if(_ladder_test MATCHES \"Journey: \")
+        set_tests_properties(\"\${_ladder_test}\" PROPERTIES LABELS \"ladder-${_rung};journey\")
     endif()
 endforeach()
 "
             )
             set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
-                "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_rung_label.cmake")
+                "${CMAKE_CURRENT_BINARY_DIR}/ladder_${_rung}_tests_journey_label.cmake")
         endif()
     endif()
 
