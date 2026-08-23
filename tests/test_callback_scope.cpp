@@ -13,7 +13,6 @@
 
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
-#include <chrono>
 #include <cstdint>
 #include <exception>
 #include <functional>
@@ -374,61 +373,134 @@ TEST_CASE("BridgeHandler::subscribe(scope, cb): delivery stops when the scope do
     REQUIRE(hits->load() == 2);
 }
 
-// ── A stop racing a dispatch ────────────────────────────────────────────────
+// ── A stop racing a dispatch: deterministically forced ─────────────────────
+//
+// "The stop landed while a dispatch was in flight" is the case that matters,
+// and it does not need threads to reproduce. A `StepExecutor` holds a posted
+// task in its queue until the test says otherwise, so the stop provably lands
+// *after* the dispatch was scheduled and *before* it is delivered. That is the
+// whole window, forced, on every schedule and every platform.
+
+TEST_CASE("CallbackScope: a stop landing between dispatch and delivery refuses the delivery",
+          "[callback-scope][issue-138]") {
+    StepExecutor exec;
+    CallbackScope scope;
+    auto hits = makeCounter();
+
+    for (int i = 0; i < 3; ++i) {
+        exec.post(scope.guard([hits] { hits->fetch_add(1); }));
+    }
+    REQUIRE(exec.pending() == 3U);
+
+    // In flight: posted, queued, not yet delivered.
+    scope.requestStop();
+
+    REQUIRE(exec.runAll() == 3U);
+    REQUIRE(hits->load() == 0);
+}
+
+TEST_CASE("CallbackScope: a stop issued from inside one delivery refuses the deliveries behind it",
+          "[callback-scope][issue-138]") {
+    // The tightest interleaving there is: the stop happens *during* dispatch,
+    // between two queued callbacks, with no thread involved.
+    StepExecutor exec;
+    CallbackScope scope;
+    auto hits = makeCounter();
+
+    exec.post(scope.guard([hits, &scope] {
+        hits->fetch_add(1);
+        scope.requestStop();
+    }));
+    exec.post(scope.guard([hits] { hits->fetch_add(1); }));
+    exec.post(scope.guard([hits] { hits->fetch_add(1); }));
+
+    REQUIRE(exec.runAll() == 3U);
+    REQUIRE(hits->load() == 1);
+}
+
+TEST_CASE("CallbackScope: destroying the scope between dispatch and delivery refuses the delivery",
+          "[callback-scope][issue-138]") {
+    StepExecutor exec;
+    auto hits = makeCounter();
+    {
+        CallbackScope scope;
+        for (int i = 0; i < 3; ++i) {
+            exec.post(scope.guard([hits] { hits->fetch_add(1); }));
+        }
+        REQUIRE(exec.pending() == 3U);
+    }
+    // The owner is gone; the tasks are still queued. `hits` outlives it, so the
+    // question "did the body run" is still answerable.
+    REQUIRE(exec.runAll() == 3U);
+    REQUIRE(hits->load() == 0);
+}
+
+TEST_CASE("CallbackScope: reset() between dispatch and delivery refuses only the old generation",
+          "[callback-scope][issue-138]") {
+    StepExecutor exec;
+    CallbackScope scope;
+    auto hits = makeCounter();
+
+    exec.post(scope.guard([hits] { hits->fetch_add(1); }));  // old generation
+    scope.reset();
+    exec.post(scope.guard([hits] { hits->fetch_add(1); }));  // new generation
+
+    REQUIRE(exec.runAll() == 2U);
+    REQUIRE(hits->load() == 1);
+}
+
+// ── The same, under real thread contention ─────────────────────────────────
+//
+// These are stress drivers, not schedule assertions. Nothing here REQUIREs
+// that the race interleaved a particular way -- an instrumented or loaded
+// runner (Valgrind serialises threads outright) is free to run the whole
+// dispatch loop before the stop lands, or the stop before the loop starts, and
+// both are legal schedules. What *is* asserted holds on every one of them:
+//
+//   - monotonicity: no delivery after this thread observed a refusal;
+//   - the deterministic post-condition, checked on the main thread after the
+//     join: the gate is shut and stays shut.
+//
+// Whether the interleaving actually happened is recorded as information.
 
 namespace {
 
-/// Result of one race round: how the dispatching thread saw the gate flip.
+/// What the dispatching thread observed while hammering a guarded callback.
 struct RaceOutcome {
-    bool refusalObserved = false;     ///< The gate refused at least once.
+    bool refusalObserved = false;     ///< The gate refused at least once (informational).
     int deliveriesAfterRefusal = 0;   ///< Deliveries seen *after* the first refusal.
     int deliveriesBeforeRefusal = 0;  ///< Deliveries seen before it.
 };
 
-/// Spins @p guarded on this thread until it is refused (or the budget runs out),
-/// recording whether the gate ever flipped back to delivering afterwards.
-///
-/// Asserting monotonicity rather than a count is what makes this a real race
-/// test: the exact number of deliveries before the stop lands is scheduler
-/// noise, but "once refused, never delivered again within this generation" is
-/// an invariant the type owes, and it is checked on the thread that observes it.
+/// Invokes @p guarded @p iterations times, yielding between calls, and records
+/// how the gate behaved. Bounded by a call count, never by wall-clock time, and
+/// cooperative so a serialising scheduler can still run the other thread.
 template <typename G>
-RaceOutcome spinUntilRefused(G guarded, const std::shared_ptr<std::atomic<bool>>& ran) {
+RaceOutcome hammer(G guarded, const std::shared_ptr<std::atomic<bool>>& ran, int iterations) {
     RaceOutcome outcome;
-    auto const deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
-    while (std::chrono::steady_clock::now() < deadline) {
+    for (int i = 0; i < iterations; ++i) {
         ran->store(false, std::memory_order_release);
         guarded();
-        bool const delivered = ran->load(std::memory_order_acquire);
-        if (delivered) {
+        if (ran->load(std::memory_order_acquire)) {
             if (outcome.refusalObserved) {
                 ++outcome.deliveriesAfterRefusal;
             } else {
                 ++outcome.deliveriesBeforeRefusal;
             }
-        } else if (!outcome.refusalObserved) {
+        } else {
             outcome.refusalObserved = true;
-            // Keep spinning a little past the flip so a gate that oscillates
-            // would be caught rather than missed by stopping at the first
-            // refusal.
-            for (int i = 0; i < 1000; ++i) {
-                ran->store(false, std::memory_order_release);
-                guarded();
-                if (ran->load(std::memory_order_acquire)) {
-                    ++outcome.deliveriesAfterRefusal;
-                }
-            }
-            return outcome;
         }
+        std::this_thread::yield();
     }
     return outcome;
 }
 
 }  // namespace
 
-TEST_CASE("CallbackScope: requestStop() from another thread stops delivery and never un-stops",
+TEST_CASE("CallbackScope: requestStop() from another thread shuts the gate and never un-shuts it",
           "[callback-scope][issue-138][thread]") {
-    constexpr int kRounds = 50;
+    constexpr int kRounds = 20;
+    constexpr int kIterations = 200;
 
     for (int round = 0; round < kRounds; ++round) {
         CallbackScope scope;
@@ -440,29 +512,38 @@ TEST_CASE("CallbackScope: requestStop() from another thread stops delivery and n
         });
 
         auto outcome = std::make_shared<RaceOutcome>();
-        std::thread dispatcher{[guarded, ran, outcome]() mutable { *outcome = spinUntilRefused(guarded, ran); }};
+        std::thread dispatcher{[guarded, ran, outcome]() mutable { *outcome = hammer(guarded, ran, kIterations); }};
 
-        // The stop lands somewhere inside the dispatcher's spin. Where exactly
-        // is scheduler-dependent; that it eventually lands is not.
         std::this_thread::yield();
         scope.requestStop();
 
         dispatcher.join();
 
-        REQUIRE(outcome->refusalObserved);
+        INFO("round " << round << ": refusalObserved=" << outcome->refusalObserved
+                      << " before=" << outcome->deliveriesBeforeRefusal);
+        // Holds on every schedule, including the ones where the stop landed
+        // entirely before or entirely after the loop.
         REQUIRE(outcome->deliveriesAfterRefusal == 0);
-        // The gate stays shut for this generation once the stop is visible.
+
+        // Deterministic post-condition: the stop has definitely happened and
+        // the dispatcher has definitely finished, so the gate must be shut --
+        // and one more delivery attempt must change nothing.
+        REQUIRE(scope.stopRequested());
         REQUIRE_FALSE(scope.token().active());
+        auto const settled = hits->load();
+        guarded();
+        REQUIRE(hits->load() == settled);
     }
 }
 
-TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop stops delivery",
+TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop shuts the gate",
           "[callback-scope][issue-138][thread]") {
-    // The destroyed-owner half of the same race. `hits` and `ran` are held by
-    // the wrapper and the test, so they outlive the scope: "did the body run"
-    // stays answerable after the owner is gone, instead of depending on a
-    // sanitizer noticing a freed `this`.
-    constexpr int kRounds = 50;
+    // The destroyed-owner half. `hits` and `ran` are held by the wrapper and by
+    // the test, so they outlive the scope: "did the body run" stays answerable
+    // after the owner is gone, instead of depending on a sanitizer noticing a
+    // freed `this`.
+    constexpr int kRounds = 20;
+    constexpr int kIterations = 200;
 
     for (int round = 0; round < kRounds; ++round) {
         auto scope = std::make_unique<CallbackScope>();
@@ -474,14 +555,21 @@ TEST_CASE("CallbackScope: destroying the scope under a concurrent dispatch loop 
         });
 
         auto outcome = std::make_shared<RaceOutcome>();
-        std::thread dispatcher{[guarded, ran, outcome]() mutable { *outcome = spinUntilRefused(guarded, ran); }};
+        std::thread dispatcher{[guarded, ran, outcome]() mutable { *outcome = hammer(guarded, ran, kIterations); }};
 
         std::this_thread::yield();
         scope.reset();
 
         dispatcher.join();
 
-        REQUIRE(outcome->refusalObserved);
+        INFO("round " << round << ": refusalObserved=" << outcome->refusalObserved
+                      << " before=" << outcome->deliveriesBeforeRefusal);
         REQUIRE(outcome->deliveriesAfterRefusal == 0);
+
+        // The owner is gone and the dispatcher has finished: another attempt
+        // delivers nothing.
+        auto const settled = hits->load();
+        guarded();
+        REQUIRE(hits->load() == settled);
     }
 }
