@@ -227,6 +227,48 @@ target_sources(morph
 if(MORPH_BUILD_OFFLINE_SQLITE)
     find_package(SQLite3 REQUIRED)
 
+    # CMake's FindSQLite3 locates the header by searching for sqlite3.h, and on
+    # macOS finds it in the SDK's *bare* /usr/include -- the whole C library's
+    # include directory, not a SQLite-specific prefix. Propagating that through
+    # an imported target's INTERFACE_INCLUDE_DIRECTORIES turns it into
+    # `-isystem <sdk>/usr/include`, which puts it *ahead of libc++* in the
+    # search order. Every translation unit that reaches a SQLite header then
+    # compiles the C library's own headers without their prerequisites:
+    #
+    #     .../MacOSX.sdk/usr/include/_types.h:46:9:
+    #         error: unknown type name '__uint32_t'
+    #
+    # AppleClang is unaffected, because that directory is already where it
+    # looks; only a non-Apple clang breaks -- which is the compiler this
+    # project's own -Weverything guidance points at, so `morph_offline_sqlite`
+    # could not be built by the developers most likely to build it (morph#172).
+    #
+    # The repair is to *drop* the directory, not to relocate it: sqlite3.h is
+    # already on the compiler's default search path via -isysroot, at the
+    # correct position, so it resolves with no flag at all. Measured both ways
+    # on Homebrew clang 22 -- the same TU compiles clean with no flag and
+    # produces 20 errors with the -isystem.
+    #
+    # Scoped to a directory that is a C-library catch-all (detected by stdio.h
+    # living in it), so a real SQLite prefix -- Homebrew's, MacPorts', or one
+    # given explicitly via -DSQLite3_INCLUDE_DIR -- is still honoured.
+    function(_morph_strip_catchall_includes in_var out_var)
+        set(_kept "")
+        foreach(_dir IN LISTS ${in_var})
+            if(APPLE AND EXISTS "${_dir}/stdio.h" AND EXISTS "${_dir}/sqlite3.h")
+                message(STATUS
+                    "morph: dropping catch-all SQLite3 include dir '${_dir}' -- it is the C library's own "
+                    "include directory, and forcing it ahead of libc++ breaks every TU that reaches a "
+                    "SQLite header (morph#172). sqlite3.h still resolves via the SDK default search path.")
+            else()
+                list(APPEND _kept "${_dir}")
+            endif()
+        endforeach()
+        set(${out_var} "${_kept}" PARENT_SCOPE)
+    endfunction()
+
+    _morph_strip_catchall_includes(SQLite3_INCLUDE_DIRS _morph_sqlite_includes)
+
     # FindSQLite3 reports success but does not always leave `SQLite3::SQLite3`
     # resolvable at generate time (observed on the ubuntu-24.04 runner, which
     # fails with "the link interface ... contains SQLite3::SQLite3 but the
@@ -238,9 +280,18 @@ if(MORPH_BUILD_OFFLINE_SQLITE)
         add_library(SQLite3::SQLite3 UNKNOWN IMPORTED GLOBAL)
         set_target_properties(SQLite3::SQLite3 PROPERTIES
             IMPORTED_LOCATION "${SQLite3_LIBRARIES}"
-            INTERFACE_INCLUDE_DIRECTORIES "${SQLite3_INCLUDE_DIRS}")
+            INTERFACE_INCLUDE_DIRECTORIES "${_morph_sqlite_includes}")
     else()
         set_target_properties(SQLite3::SQLite3 PROPERTIES IMPORTED_GLOBAL TRUE)
+        # The module built the target itself, so strip the same directory from
+        # the interface it populated -- otherwise the filter above only covers
+        # the branch where we synthesise the target.
+        get_target_property(_morph_sqlite_target_includes SQLite3::SQLite3 INTERFACE_INCLUDE_DIRECTORIES)
+        if(_morph_sqlite_target_includes)
+            _morph_strip_catchall_includes(_morph_sqlite_target_includes _morph_sqlite_target_kept)
+            set_target_properties(SQLite3::SQLite3 PROPERTIES
+                INTERFACE_INCLUDE_DIRECTORIES "${_morph_sqlite_target_kept}")
+        endif()
     endif()
 
     add_library(morph_offline_sqlite INTERFACE)
