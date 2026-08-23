@@ -108,4 +108,60 @@ struct VerificationRecord {
     Light::Field<std::int64_t, Light::SqlRealName{"verified_at"}> verifiedAt{0};                           // 3
 };
 
+/// @brief A queued field update replay could not apply, held for a human.
+///
+/// The README's ODK answer: a stale-base update is **flagged**, never silently
+/// merged and never silently dropped. The row keeps the queued payload
+/// verbatim so the resolver can see exactly what the field client meant, and
+/// both versions so they can see exactly how far it had drifted.
+struct OfflineConflictRecord {
+    static constexpr std::string_view TableName = "lims_offline_conflicts";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    Light::BelongsTo<&SampleRecord::id, Light::SqlRealName{"sample_id"}> sample;                           // 1
+    /// @brief The sample version the queued update was prepared against.
+    Light::Field<std::int32_t, Light::SqlRealName{"base_version"}> baseVersion{0};  // 2
+    /// @brief The sample version the server actually held at replay time.
+    Light::Field<std::int32_t, Light::SqlRealName{"server_version"}> serverVersion{0};  // 3
+    /// @brief `ConflictReason` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"reason"}> reason{0};  // 4
+    /// @brief `ConflictStatus` as its underlying integer.
+    Light::Field<int, Light::SqlRealName{"status"}> status{0};  // 5
+    /// @brief The queued payload, verbatim, as the field client serialised it.
+    ///
+    /// Deliberately stored as text rather than re-encoded from a decoded
+    /// struct: re-encoding would silently normalise away anything the current
+    /// action struct no longer understands, which is the exact journal-payload
+    /// evolution failure the rung README warns about.
+    Light::Field<Light::SqlDynamicAnsiString<4096>, Light::SqlRealName{"payload"}> payload;  // 6
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"detected_by"}> detectedBy;    // 7
+    Light::Field<std::int64_t, Light::SqlRealName{"detected_at"}> detectedAt{0};             // 8
+    /// @brief Who resolved it, empty while the conflict is still open.
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"resolved_by"}> resolvedBy;  // 9
+    Light::Field<std::int64_t, Light::SqlRealName{"resolved_at"}> resolvedAt{0};           // 10
+    /// @brief The resolver's stated rationale, empty while still open.
+    Light::Field<Light::SqlAnsiString<255>, Light::SqlRealName{"resolution_note"}> resolutionNote;  // 11
+};
+
+/// @brief One queued operation this server has already *decided*.
+///
+/// `docs/spec/offline/offline.md` puts idempotency-key enforcement on the
+/// **replay consumer**, not on the queue ("The queue stores the key verbatim
+/// and never interprets, requires, or enforces uniqueness on it"). This table
+/// is that enforcement, made durable: a second delivery of the same logical
+/// field update is skipped rather than acted on again — which matters because
+/// the shipped queues disagree about whether they dedup at enqueue time (see
+/// docs/findings/007).
+///
+/// A row is written once the operation reaches a *terminal* decision, which is
+/// applied **or** flagged as a conflict — not only applied. A flagged item is
+/// owned by its conflict row from then on, so redelivering it must not raise a
+/// second conflict about the same edit.
+struct ReplayedOpRecord {
+    static constexpr std::string_view TableName = "lims_replayed_ops";
+    Light::Field<std::uint64_t, Light::PrimaryKey::ServerSideAutoIncrement, Light::SqlRealName{"id"}> id;  // 0
+    /// @brief The queued item's `idempotencyKey`, verbatim. Unique.
+    Light::Field<Light::SqlAnsiString<128>, Light::SqlRealName{"op_key"}> opKey;  // 1
+    Light::Field<std::int64_t, Light::SqlRealName{"decided_at"}> decidedAt{0};    // 2
+};
+
 }  // namespace lims::db

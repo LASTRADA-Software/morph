@@ -108,3 +108,35 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000006, "Create lims_verifications table") {
         .RequiredColumn("verified_by", Varchar(64))
         .RequiredColumn("verified_at", Bigint());
 }
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000007, "Create lims_offline_conflicts table") {
+    // A stale-base field update is flagged for a human, never silently merged
+    // and never silently dropped (README build order §7). The queued payload
+    // is kept verbatim so the resolver sees what the field client actually
+    // sent, not a re-encoding of it.
+    plan.CreateTableIfNotExists("lims_offline_conflicts")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredForeignKey("sample_id", Bigint(), limsSamplesRef())
+        .RequiredColumn("base_version", Integer())
+        .RequiredColumn("server_version", Integer())
+        .RequiredColumn("reason", Integer())
+        .RequiredColumn("status", Integer())
+        .RequiredColumn("payload", Text(4096))
+        .RequiredColumn("detected_by", Varchar(64))
+        .RequiredColumn("detected_at", Bigint())
+        .RequiredColumn("resolved_by", Varchar(64))
+        .RequiredColumn("resolved_at", Bigint())
+        .RequiredColumn("resolution_note", Varchar(255));
+}
+
+LIGHTWEIGHT_SQL_MIGRATION(20260823000008, "Create lims_replayed_ops table") {
+    // Idempotency-key enforcement is the replay consumer's job, not the
+    // queue's (docs/spec/offline/offline.md). This is where this consumer
+    // keeps it, durably: a redelivered field update is skipped, not acted on
+    // twice. A row is written once the operation is *decided* -- applied or
+    // flagged -- not only when it is applied.
+    plan.CreateTableIfNotExists("lims_replayed_ops")
+        .PrimaryKeyWithAutoIncrement("id", Bigint())
+        .RequiredColumn("op_key", Varchar(128))
+        .RequiredColumn("decided_at", Bigint());
+}

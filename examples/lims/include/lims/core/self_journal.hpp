@@ -99,6 +99,37 @@ public:
         append(std::move(entry));
     }
 
+    /// @brief Appends a payload this build could not act on at all.
+    ///
+    /// The decode-failure case has no `Action` to encode, which is exactly why
+    /// it needs recording: a queued lab reading the current binary cannot read
+    /// is the journal-payload-evolution failure mode, and dropping it silently
+    /// is what makes "reconstructible from the journal alone" false.
+    /// @tparam Model Model type the payload was addressed to.
+    /// @param actionType The action id the payload claimed to be.
+    /// @param payload The undecodable payload, verbatim.
+    /// @param error Why it could not be acted on.
+    /// @param timestampMs Wall-clock instant, epoch milliseconds.
+    template <typename Model>
+    void recordRejectedPayload(std::string actionType, std::string payload, const std::string& error,
+                               std::int64_t timestampMs) const {
+        if (!_log) {
+            return;
+        }
+        ::morph::journal::LogEntry entry;
+        entry.modelType = std::string{::morph::model::ModelTraits<Model>::typeId()};
+        entry.entityKey = _entityKey;
+        entry.actionType = std::move(actionType);
+        entry.payload = std::move(payload);
+        entry.error = error;
+        entry.outcome = ::morph::journal::Outcome::Failed;
+        if (const auto* ctx = ::morph::session::current()) {
+            entry.principal = ctx->principal;
+        }
+        entry.timestampMs = timestampMs;
+        append(std::move(entry));
+    }
+
 private:
     /// @brief Fills the fields both outcomes share.
     /// @tparam Model Model type the action ran against.

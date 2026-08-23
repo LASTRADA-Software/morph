@@ -52,6 +52,25 @@ namespace {
     };
 }
 
+/// @brief Maps a conflict row to its wire view.
+/// @param row The conflict row.
+/// @return The view a resolver sees.
+[[nodiscard]] ConflictView toConflictView(const db::OfflineConflictRecord& row) {
+    return ConflictView{
+        .id = ConflictId{static_cast<std::int64_t>(row.id.Value())},
+        .sampleId = SampleId{static_cast<std::int64_t>(row.sample.Value())},
+        .baseVersion = SampleVersion{static_cast<std::int64_t>(row.baseVersion.Value())},
+        .serverVersion = SampleVersion{static_cast<std::int64_t>(row.serverVersion.Value())},
+        .reason = static_cast<ConflictReason>(row.reason.Value()),
+        .status = static_cast<ConflictStatus>(row.status.Value()),
+        .payload = std::string{row.payload.Value().ToStringView()},
+        .detectedBy = std::string{row.detectedBy.Value().ToStringView()},
+        .detectedAt = timestampFromMillis(row.detectedAt.Value()),
+        .resolvedBy = std::string{row.resolvedBy.Value().ToStringView()},
+        .resolutionNote = std::string{row.resolutionNote.Value().ToStringView()},
+    };
+}
+
 /// @brief 10^@p places, for the precision check below.
 ///
 /// `Rational` bounds its own `decimalPlaces` to `kMaxDecimalPlaces` (18, the
@@ -249,96 +268,103 @@ ListResultQualifiersResult SampleModel::execute(const ListResultQualifiers& acti
                                       }};
 }
 
+ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentration& capture,
+                                     const std::string& author) {
+    if (!capture.validate()) {
+        // `exactlyOneOf` failing is the interesting half: it is what makes
+        // "a number *and* a below-LOD flag" unrepresentable rather than
+        // merely discouraged.
+        throw ValidationError{"CaptureConcentration: name a version and exactly one of value / qualifier"};
+    }
+
+    Lightweight::DataMapper mapper;
+    const auto sample = toView(loadSample(mapper, *sampleId));
+    if (sample.state != SampleState::InProgress) {
+        throw IllegalTransition{
+            std::string{"results can only be captured while a sample is in-progress; this one is "} +
+            std::string{stateName(sample.state)}};
+    }
+
+    auto versions = mapper.Query<db::AnalysisVersionRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::id>, "=",
+                               *capture.analysisVersionId)
+                        .All();
+    if (versions.empty()) {
+        throw NotFound{"CaptureConcentration: no such analysis version"};
+    }
+    const auto& version = versions.front();
+
+    // The action's unit is a *compile-time* template parameter, so the only
+    // way a concentration action can be wrong about its unit is if the
+    // definition it names is not a concentration. Checked rather than
+    // assumed: storing an amps reading in the mg/L column would be
+    // undetectable afterwards.
+    const auto canonicalUnit = std::string{version.canonicalUnit.Value().ToStringView()};
+    if (canonicalUnit != std::string{Concentration::unitMeta().id}) {
+        throw ValidationError{"CaptureConcentration: analysis version " + std::to_string(*capture.analysisVersionId) +
+                              " is denominated in " + canonicalUnit + ", not " +
+                              std::string{Concentration::unitMeta().id}};
+    }
+
+    auto qualifier = ResultQualifier::Measured;
+    std::optional<::morph::math::Rational> stored;
+    if (capture.value.hasValue()) {
+        const auto& reading = *capture.value;
+        if (!isExactAtDecimals(reading, version.decimalPlaces.Value())) {
+            throw ValidationError{"CaptureConcentration: the reading carries more precision than analysis version " +
+                                  std::to_string(*capture.analysisVersionId) + " declares"};
+        }
+        stored = reading;
+    } else {
+        const auto decoded = qualifierFromCode(*capture.qualifier);
+        if (!decoded.has_value()) {
+            // Fail-closed: an unknown code must not resolve to "we did not
+            // look", which is a claim nobody made.
+            throw ValidationError{"CaptureConcentration: unknown qualifier code '" + *capture.qualifier + "'"};
+        }
+        qualifier = *decoded;
+    }
+
+    Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+
+    // Re-capturing one analysis version replaces its previous answer; the
+    // journal, not a second row, is where the superseded value lives.
+    for (auto& existing : mapper.Query<db::ResultRecord>()
+                              .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *sampleId)
+                              .Where(::Lightweight::FieldNameOf<&db::ResultRecord::analysisVersion>, "=",
+                                     *capture.analysisVersionId)
+                              .All()) {
+        mapper.Delete(existing);
+    }
+
+    db::ResultRecord row;
+    row.sample = static_cast<std::uint64_t>(*sampleId);
+    row.analysisVersion = static_cast<std::uint64_t>(*capture.analysisVersionId);
+    row.qualifier = static_cast<int>(qualifier);
+    row.valueNum = stored ? std::optional{stored->numerator} : std::nullopt;
+    row.valueDen = stored ? std::optional{stored->denominator} : std::nullopt;
+    row.valueDp = stored ? static_cast<int>(stored->decimalPlaces.value) : 0;
+    row.capturedBy = Lightweight::SqlAnsiString<64>{author};
+    row.capturedAt = nowMillis();
+    mapper.Create(row);
+
+    // A new result changes what the sample says, so it moves the base version
+    // an offline update targets — same reason a transition does.
+    auto sampleRow = loadSample(mapper, *sampleId);
+    sampleRow.version = sampleRow.version.Value() + 1;
+    mapper.Update(sampleRow);
+
+    sqlTxn.Commit();
+    return toResultView(row);
+}
+
 ResultView SampleModel::execute(const CaptureConcentration& action) {
     requirePrincipal();
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
     try {
-        if (!action.validate()) {
-            // `exactlyOneOf` failing is the interesting half: it is what makes
-            // "a number *and* a below-LOD flag" unrepresentable rather than
-            // merely discouraged.
-            throw ValidationError{
-                "CaptureConcentration: name a version and exactly one of value / qualifier"};
-        }
-
-        const auto sample = loadAttached();
-        if (sample.state != SampleState::InProgress) {
-            throw IllegalTransition{std::string{"results can only be captured while a sample is in-progress; this one is "} +
-                                    std::string{stateName(sample.state)}};
-        }
-
-        Lightweight::DataMapper mapper;
-        auto versions = mapper.Query<db::AnalysisVersionRecord>()
-                            .Where(::Lightweight::FieldNameOf<&db::AnalysisVersionRecord::id>, "=",
-                                   *action.analysisVersionId)
-                            .All();
-        if (versions.empty()) {
-            throw NotFound{"CaptureConcentration: no such analysis version"};
-        }
-        const auto& version = versions.front();
-
-        // The action's unit is a *compile-time* template parameter, so the
-        // only way a concentration action can be wrong about its unit is if
-        // the definition it names is not a concentration. Checked rather than
-        // assumed: storing an amps reading in the mg/L column would be
-        // undetectable afterwards.
-        const auto canonicalUnit = std::string{version.canonicalUnit.Value().ToStringView()};
-        if (canonicalUnit != std::string{Concentration::unitMeta().id}) {
-            throw ValidationError{"CaptureConcentration: analysis version " + std::to_string(*action.analysisVersionId) +
-                                  " is denominated in " + canonicalUnit + ", not " +
-                                  std::string{Concentration::unitMeta().id}};
-        }
-
-        auto qualifier = ResultQualifier::Measured;
-        std::optional<::morph::math::Rational> stored;
-        if (action.value.hasValue()) {
-            const auto& reading = *action.value;
-            if (!isExactAtDecimals(reading, version.decimalPlaces.Value())) {
-                throw ValidationError{"CaptureConcentration: the reading carries more precision than analysis version " +
-                                      std::to_string(*action.analysisVersionId) + " declares"};
-            }
-            stored = reading;
-        } else {
-            const auto decoded = qualifierFromCode(*action.qualifier);
-            if (!decoded.has_value()) {
-                // Fail-closed: an unknown code must not resolve to "we did not
-                // look", which is a claim nobody made.
-                throw ValidationError{"CaptureConcentration: unknown qualifier code '" + *action.qualifier + "'"};
-            }
-            qualifier = *decoded;
-        }
-
-        Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
-
-        // Re-capturing one analysis version replaces its previous answer; the
-        // journal, not a second row, is where the superseded value lives.
-        for (auto& existing : mapper.Query<db::ResultRecord>()
-                                  .Where(::Lightweight::FieldNameOf<&db::ResultRecord::sample>, "=", *_sampleId)
-                                  .Where(::Lightweight::FieldNameOf<&db::ResultRecord::analysisVersion>, "=",
-                                         *action.analysisVersionId)
-                                  .All()) {
-            mapper.Delete(existing);
-        }
-
-        db::ResultRecord row;
-        row.sample = static_cast<std::uint64_t>(*_sampleId);
-        row.analysisVersion = static_cast<std::uint64_t>(*action.analysisVersionId);
-        row.qualifier = static_cast<int>(qualifier);
-        row.valueNum = stored ? std::optional{stored->numerator} : std::nullopt;
-        row.valueDen = stored ? std::optional{stored->denominator} : std::nullopt;
-        row.valueDp = stored ? static_cast<int>(stored->decimalPlaces.value) : 0;
-        row.capturedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
-        row.capturedAt = nowMillis();
-        mapper.Create(row);
-
-        // A new result changes what the sample says, so it moves the base
-        // version an offline update targets — same reason a transition does.
-        auto sampleRow = loadSample(mapper, *_sampleId);
-        sampleRow.version = sampleRow.version.Value() + 1;
-        mapper.Update(sampleRow);
-
-        sqlTxn.Commit();
-
-        auto view = toResultView(row);
+        auto view = applyCapture(SampleId{*_sampleId}, action, ::morph::session::current()->principal);
         _journal.recordSuccess<SampleModel>(action, view, nowMillis());
         return view;
     } catch (const LimsError& error) {
@@ -362,6 +388,209 @@ ListResultsResult SampleModel::execute(const ListResults& action) {
         result.results.push_back(toResultView(row));
     }
     return result;
+}
+
+
+bool SampleModel::alreadyDecided(const std::string& opKey) {
+    if (opKey.empty()) {
+        return false;
+    }
+    Lightweight::DataMapper mapper;
+    return !mapper.Query<db::ReplayedOpRecord>()
+                .Where(::Lightweight::FieldNameOf<&db::ReplayedOpRecord::opKey>, "=", opKey)
+                .All()
+                .empty();
+}
+
+void SampleModel::markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
+    db::ReplayedOpRecord row;
+    row.opKey = Lightweight::SqlAnsiString<128>{opKey};
+    row.decidedAt = nowMillis();
+    mapper.Create(row);
+}
+
+ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"QueuedCapture: a sample, an author, an operation key and a usable capture are required"};
+        }
+        const auto& principal = ::morph::session::current()->principal;
+        if (action.capturedBy != principal) {
+            // A queued reading is replayed *as* the operator who took it, and
+            // nobody else. Without this, any client able to reach the server
+            // could file a lab result under a colleague's name -- which is the
+            // one thing a 21 CFR Part 11-style trail exists to prevent.
+            throw Forbidden{"QueuedCapture: replay must run as the capturing operator ('" + action.capturedBy +
+                            "'), not '" + principal + "'"};
+        }
+
+        // At-most-once, enforced here because the queue is documented not to
+        // enforce it -- and because the shipped queues disagree about whether
+        // they do anyway (docs/findings/007).
+        if (alreadyDecided(*action.operationKey)) {
+            return ReplayCaptureResult{.outcome = ReplayOutcome::Skipped, .sampleId = action.sampleId};
+        }
+
+        Lightweight::DataMapper mapper;
+        const auto sample = toView(loadSample(mapper, *action.sampleId));
+        const auto serverVersion = SampleVersion{*sample.version};
+
+        // The two ways a queued update can be out of date, in the order that
+        // makes the flagged reason the *most specific* true one: a sample that
+        // has moved on in the lifecycle has also moved on in version, and
+        // "somebody published this while you were away" is a more actionable
+        // thing to tell a human than "your base was stale".
+        std::optional<ConflictReason> reason;
+        if (sample.state != SampleState::InProgress) {
+            reason = ConflictReason::LifecycleClosed;
+        } else if (*action.baseVersion != *serverVersion) {
+            reason = ConflictReason::StaleBase;
+        }
+
+        if (reason.has_value()) {
+            Lightweight::SqlTransaction sqlTxn{mapper.Connection(), Lightweight::SqlTransactionMode::ROLLBACK};
+            db::OfflineConflictRecord row;
+            row.sample = static_cast<std::uint64_t>(*action.sampleId);
+            row.baseVersion = static_cast<std::int32_t>(*action.baseVersion);
+            row.serverVersion = static_cast<std::int32_t>(*serverVersion);
+            row.reason = static_cast<int>(*reason);
+            row.status = static_cast<int>(ConflictStatus::Open);
+            // Verbatim, not re-encoded from the decoded struct: re-encoding
+            // would normalise away anything this build no longer understands,
+            // which is exactly the journal-payload-evolution failure the rung
+            // README warns about.
+            row.payload = Lightweight::SqlDynamicAnsiString<4096>{
+                ::morph::model::ActionTraits<QueuedCapture>::toJson(action)};
+            row.detectedBy = Lightweight::SqlAnsiString<64>{principal};
+            row.detectedAt = nowMillis();
+            row.resolvedBy = Lightweight::SqlAnsiString<64>{std::string{}};
+            row.resolvedAt = 0;
+            row.resolutionNote = Lightweight::SqlAnsiString<255>{std::string{}};
+            mapper.Create(row);
+            // Flagging is terminal for the queued item: the conflict row owns
+            // it now, so a redelivery must not raise a second flag about the
+            // same edit.
+            markDecided(mapper, *action.operationKey);
+            sqlTxn.Commit();
+
+            ReplayCaptureResult flagged{
+                .outcome = ReplayOutcome::Conflicted,
+                .sampleId = action.sampleId,
+                .baseVersion = action.baseVersion,
+                .serverVersion = serverVersion,
+                .conflictId = ConflictId{static_cast<std::int64_t>(row.id.Value())},
+                .reason = *reason,
+            };
+            _journal.recordSuccess<SampleModel>(action, flagged, nowMillis());
+            return flagged;
+        }
+
+        static_cast<void>(applyCapture(action.sampleId, action.capture, action.capturedBy));
+        Lightweight::DataMapper keyMapper;
+        markDecided(keyMapper, *action.operationKey);
+
+        ReplayCaptureResult applied{
+            .outcome = ReplayOutcome::Applied,
+            .sampleId = action.sampleId,
+            .baseVersion = action.baseVersion,
+            .serverVersion = SampleVersion{*serverVersion + 1},
+        };
+        _journal.recordSuccess<SampleModel>(action, applied, nowMillis());
+        return applied;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+ListConflictsResult SampleModel::execute(const ListConflicts& action) {
+    static_cast<void>(action);
+    if (!_sampleId.has_value()) {
+        throw NotFound{"this handler is not attached to a sample (execute OpenSample first)"};
+    }
+    Lightweight::DataMapper mapper;
+    auto rows = mapper.Query<db::OfflineConflictRecord>()
+                    .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::sample>, "=", *_sampleId)
+                    .All();
+    ListConflictsResult result;
+    result.conflicts.reserve(rows.size());
+    for (const auto& row : rows) {
+        result.conflicts.push_back(toConflictView(row));
+    }
+    return result;
+}
+
+ConflictView SampleModel::execute(const ResolveConflict& action) {
+    requirePrincipal();
+    try {
+        if (!action.validate()) {
+            throw ValidationError{"ResolveConflict: a conflict and a stated reason are required"};
+        }
+        Lightweight::DataMapper mapper;
+        auto rows = mapper.Query<db::OfflineConflictRecord>()
+                        .Where(::Lightweight::FieldNameOf<&db::OfflineConflictRecord::id>, "=", *action.conflictId)
+                        .All();
+        if (rows.empty()) {
+            throw NotFound{"ResolveConflict: no such conflict"};
+        }
+        auto row = rows.front();
+        if (static_cast<ConflictStatus>(row.status.Value()) != ConflictStatus::Open) {
+            throw Conflict{"ResolveConflict: conflict " + std::to_string(*action.conflictId) +
+                           " has already been resolved"};
+        }
+
+        if (action.resolution == ConflictResolution::ApplyAnyway) {
+            // Rebase: apply the queued capture against whatever the sample
+            // holds *now*. The reading's author stays the field operator who
+            // took it; the resolver is recorded separately, just below. Any
+            // rejection (the sample has since been published, say) propagates
+            // and leaves the conflict open rather than half-resolved.
+            const auto queued = ::morph::model::ActionTraits<QueuedCapture>::fromJson(
+                std::string{row.payload.Value().ToStringView()});
+            static_cast<void>(applyCapture(SampleId{static_cast<std::int64_t>(row.sample.Value())}, queued.capture,
+                                           queued.capturedBy));
+        }
+
+        row.status = static_cast<int>(action.resolution == ConflictResolution::ApplyAnyway ? ConflictStatus::Applied
+                                                                                           : ConflictStatus::Discarded);
+        row.resolvedBy = Lightweight::SqlAnsiString<64>{::morph::session::current()->principal};
+        row.resolvedAt = nowMillis();
+        row.resolutionNote = Lightweight::SqlAnsiString<255>{action.note};
+        mapper.Update(row);
+
+        auto view = toConflictView(row);
+        _journal.recordSuccess<SampleModel>(action, view, nowMillis());
+        return view;
+    } catch (const LimsError& error) {
+        _journal.recordFailure<SampleModel>(action, error.what(), nowMillis());
+        throw;
+    }
+}
+
+void SampleModel::attachOfflineQueue(std::shared_ptr<::morph::offline::IOfflineQueue> queue) {
+    _queue = std::move(queue);
+}
+
+void SampleModel::onBackendChanged() {
+    if (!_queue) {
+        return;
+    }
+    for (const auto& item : _queue->drain()) {
+        try {
+            static_cast<void>(execute(::morph::model::ActionTraits<QueuedCapture>::fromJson(item.payload)));
+        } catch (const std::exception& error) {
+            // Unresolvable by definition: the payload does not decode, or it
+            // names a sample this server has never heard of, or it claims an
+            // author the replaying session is not. None of those get better by
+            // waiting, and leaving the item queued would block every later
+            // item behind it forever -- so it is journaled and dropped.
+            _journal.recordRejectedPayload<SampleModel>("QueuedCapture", item.payload, error.what(), nowMillis());
+        }
+        // Every drained item is markDone()d whatever the outcome: this path
+        // has no retry budget (docs/spec/offline/offline.md).
+        _queue->markDone(item.id);
+    }
 }
 
 void SampleModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {

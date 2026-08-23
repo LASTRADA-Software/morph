@@ -3,14 +3,17 @@
 
 #include <cstdint>
 #include <memory>
+#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
+#include <morph/offline/offline_queue.hpp>
 #include <optional>
 #include <string>
 
 #include "lims/core/self_journal.hpp"
+#include "lims/dto/offline_dto.hpp"
 #include "lims/dto/result_dto.hpp"
 #include "lims/dto/sample_dto.hpp"
 
@@ -141,6 +144,69 @@ public:
     /// @return The three "no number" codes, with display text.
     ListResultQualifiersResult execute(const ListResultQualifiers& action);
 
+    /// @brief Applies one queued field update, or flags it as a conflict.
+    ///
+    /// The heart of §7. Applies @p action only if the server still holds the
+    /// version the update was prepared against; otherwise records an
+    /// `OfflineConflictRecord` for a human and leaves the sample untouched.
+    /// A conflict is a returned **outcome**, not a thrown error — throwing
+    /// would abort the replay of every later item in the queue and lose the
+    /// flag the run exists to raise.
+    ///
+    /// Redelivery is idempotent: an @p opKey this server has already applied
+    /// is skipped. That enforcement belongs here, not in the queue
+    /// (`docs/spec/offline/offline.md`), and it is what makes replay correct
+    /// against every shipped `IOfflineQueue` regardless of whether that
+    /// implementation happens to dedup at enqueue time (`docs/findings/007`).
+    /// @param action The queued update, with the base version it assumed.
+    /// @return What replay did, and the conflict id if it flagged one.
+    /// @throws ValidationError if the envelope is not well-formed.
+    /// @throws Forbidden if `capturedBy` is not the authenticated principal.
+    /// @throws NotFound if the sample or the analysis version does not exist.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ReplayCaptureResult execute(const QueuedCapture& action);
+
+    /// @brief Lists the conflicts flagged against the attached sample.
+    /// @param action Carries no fields of its own.
+    /// @return Every conflict for the sample, oldest first, resolved or not.
+    /// @throws NotFound if this handler is not attached to a sample.
+    ListConflictsResult execute(const ListConflicts& action);
+
+    /// @brief Records a human's decision about one flagged conflict.
+    ///
+    /// `DiscardStale` closes it and leaves the server's value standing;
+    /// `ApplyAnyway` **rebases** the queued capture onto the sample's current
+    /// version and applies it. Either way the decision, its author and its
+    /// stated reason are journaled — a discarded lab reading with no recorded
+    /// rationale is not an auditable decision.
+    /// @param action The conflict, the decision, and why.
+    /// @return The conflict in its resolved state.
+    /// @throws ValidationError if no conflict is named or no reason is given.
+    /// @throws NotFound if the conflict does not exist.
+    /// @throws Conflict if it has already been resolved.
+    /// @throws EmptyPrincipalError if no principal is authenticated.
+    ConflictView execute(const ResolveConflict& action);
+
+    /// @brief Drains the attached offline queue and replays every item.
+    ///
+    /// The framework's own hook for this (`docs/spec/offline/offline.md`,
+    /// "Conflict resolution on replay"): `Bridge::switchBackend` posts this
+    /// onto the model's own strand when a client reconnects, so it never
+    /// overlaps an `execute()` on the same instance and needs no locking.
+    ///
+    /// Every drained item is `markDone()`d whatever the outcome — applied,
+    /// flagged, skipped, or rejected outright — because this path has no
+    /// retry budget and must not leave an item needing a later attempt. An
+    /// item that cannot even be decoded, or that names a sample this server
+    /// does not have, is journaled as a failure and dropped; it is
+    /// unresolvable by definition, and leaving it in the queue would block
+    /// every later item behind it forever.
+    void onBackendChanged();
+
+    /// @brief Attaches the offline queue `onBackendChanged()` drains.
+    /// @param queue The queue field clients enqueue into. Null detaches.
+    void attachOfflineQueue(std::shared_ptr<::morph::offline::IOfflineQueue> queue);
+
     /// @brief Attaches a durable action log, so every mutating `execute()`
     ///        records a `LogEntry`.
     ///
@@ -175,12 +241,39 @@ private:
     /// @return The sample's state after the write.
     [[nodiscard]] SampleView writeState(SampleState target) const;
 
+    /// @brief Shared body of `execute(QueuedCapture)` and the `ApplyAnyway`
+    ///        half of `execute(ResolveConflict)`.
+    ///
+    /// Applies @p capture to the sample named by @p sampleId, on behalf of
+    /// @p author, without consulting the base version — the caller has already
+    /// decided the write is legitimate.
+    /// @param sampleId The sample to write against.
+    /// @param capture What to record.
+    /// @param author The principal the stored result is attributed to.
+    /// @return The stored result.
+    ResultView applyCapture(SampleId sampleId, const CaptureConcentration& capture, const std::string& author);
+
+    /// @brief Whether @p opKey names an operation this server already decided.
+    /// @param opKey The operation's dedup token; empty is never a match.
+    /// @return `true` when the key is recorded in `lims_replayed_ops`.
+    [[nodiscard]] static bool alreadyDecided(const std::string& opKey);
+
+    /// @brief Records @p opKey as decided, so a redelivery is skipped.
+    /// @param mapper The open data mapper (the caller's transaction).
+    /// @param opKey The operation's dedup token.
+    static void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey);
+
     /// @brief The sample this handler is attached to, set by `RegisterSample`
     ///        or `OpenSample`. Unset until then.
     std::optional<std::int64_t> _sampleId;
 
     /// @brief This instance's own journal (inert until `attachActionLog`).
     SelfJournal _journal;
+
+    /// @brief The offline queue `onBackendChanged()` drains; null until
+    ///        `attachOfflineQueue`, and then this instance records nothing new
+    ///        of its own — the queue is shared with the field clients' outboxes.
+    std::shared_ptr<::morph::offline::IOfflineQueue> _queue;
 };
 
 }  // namespace lims
@@ -200,6 +293,9 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::CaptureConcentration, "CaptureCo
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResults, "ListResults", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListResultQualifiers, "ListResultQualifiers",
                        ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::QueuedCapture, "QueuedCapture")
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListConflicts, "ListConflicts", ::morph::model::Loggable::No)
+BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ResolveConflict, "ResolveConflict")
 
 // Hand-written ModelKeyTraits/ActionKeyTraits rather than
 // BRIDGE_MODEL_KEY/BRIDGE_KEY_FROM: those macros deduce the model's
@@ -238,6 +334,28 @@ template <>
 struct morph::model::ModelKeyTraits<lims::SampleModel> {
     /// @brief The key type, in its unwrapped wire-canonical form.
     using PrimaryKey = std::int64_t;
+};
+
+// A queued update names its own sample: it was prepared on a device that was
+// not attached to anything, and by the time it replays the handler draining
+// the queue may be attached to a different sample entirely.
+template <>
+struct morph::model::ActionKeyTraits<lims::QueuedCapture> {
+    /// @brief This action carries its model's key.
+    static constexpr bool hasKey = true;
+
+    /// @brief The key is in the payload, not the result.
+    static constexpr bool fromResult = false;
+
+    /// @brief Unwraps `QueuedCapture::sampleId` to the wire-canonical integer.
+    /// @param action The action carrying the key.
+    /// @return The key's canonical string form.
+    /// @throws std::bad_optional_access if the id is disengaged — see
+    ///         `ActionKeyTraits<lims::OpenSample>` for why throwing here is the
+    ///         sanctioned rejection point.
+    static std::string key(const lims::QueuedCapture& action) {
+        return morph::model::keyToString(*action.sampleId);
+    }
 };
 
 template <>

@@ -313,6 +313,69 @@ version row.
 compiled result-entry action, rather than serving the mg/L form for an amps
 analysis.
 
+### 11. Offline replay is the model's job; the write path could not be (§7)
+
+The read half uses the seam the framework provides:
+`SampleModel::onBackendChanged()` drains the attached `IOfflineQueue`,
+classifies each item, and applies or flags it — all inside the model, exactly
+as `docs/spec/offline/offline.md`'s "Model `onBackendChanged()` path"
+prescribes. Every drained item is `markDone()`d whatever the outcome, because
+that path has no retry budget.
+
+The write half could not be: the framework supplies no enqueue-on-failure
+seam, and the machine that must make the decision (a disconnected field
+client) has no model on it at all. `include/lims/offline/field_outbox.hpp` is
+the app-layer answer, and `docs/findings/008` is the finding.
+
+### 12. A conflict is a returned outcome, not a thrown error (§7)
+
+`execute(QueuedCapture)` returns `ReplayOutcome::Conflicted` rather than
+throwing. Throwing would abort the replay of every later item in the queue
+and lose the very flag the run exists to raise. `IMPLEMENTATION.md`'s "never
+encode failure as a magic value in a result DTO" is about *failures*; a
+stale-base update is a legitimate business outcome that a human must see, and
+the two-enumerator result enum is the same shape as `polls::Restored`.
+
+Genuine errors still throw: an envelope that does not validate, an author who
+is not the authenticated principal, a sample or analysis version that does not
+exist.
+
+### 13. Replay runs as the operator who captured the reading (§7)
+
+`QueuedCapture::capturedBy` must equal the authenticated principal, or replay
+refuses with `Forbidden`. A queued reading is replayed *as* the operator who
+took it and nobody else — in a 21 CFR Part 11-style trail the author of a
+reading is not a field a client may assert freely. `ApplyAnyway` resolution
+keeps that attribution: the stored result names the field operator, the
+conflict row names the resolver, and the journal has both.
+
+### 14. Conflict reasons are ordered most-specific-first (§7)
+
+A sample that has left `InProgress` has also moved on in version, so both
+`LifecycleClosed` and `StaleBase` are true. The flag says `LifecycleClosed`,
+because "somebody submitted this for verification while you were away" is a
+more actionable thing to tell a human than "your base was stale".
+
+### 15. At-most-once is enforced by the consumer, in a durable table (§7)
+
+`lims_replayed_ops` records every operation key this server has *decided* —
+applied **or** flagged — so a redelivery is skipped rather than acted on
+twice. Without it, a second delivery would bump the version again and then
+start flagging the client's own later updates as stale.
+
+This is where `docs/spec/offline/offline.md` puts the enforcement ("the queue
+… never interprets, requires, or enforces uniqueness on it — enforcement is
+the replay consumer's job"), and it is also the only way to be correct on all
+three shipped queues, which disagree about whether they dedup at enqueue time
+(`docs/findings/007`).
+
+The operation key is a minted random 128-bit id, per the spec's own
+recommendation. A counter was tried first and was wrong: `FieldOutbox` holds
+it in memory, so a device switched off at the end of a shift restarts the
+count at zero and mints keys colliding with genuinely different earlier
+edits — replay would then silently *skip* a real reading. The rung's own
+self-conflict test caught it.
+
 ## Findings raised by this rung
 
 - **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
@@ -346,6 +409,26 @@ analysis.
   to fail loudly. `docs/spec/forms/forms.md` documents the two features in
   separate sections and never mentions their interaction. Guarded here by a
   test asserting `required` is exactly `["analysisVersionId"]`.
+- **[`docs/findings/007`](../../docs/findings/007-offline-queue-idempotency-dedup-divergence.md)
+  — the three shipped `IOfflineQueue`s disagree about repeated idempotency
+  keys.** `InMemoryOfflineQueue` admits the duplicate; `FileOfflineQueue` and
+  `SqliteOfflineQueue` dedup; the interface contract says none of them should,
+  and the spec's `SqliteOfflineQueue` section claims a parity with
+  `InMemoryOfflineQueue` that does not exist. Three-implementation repro in the
+  finding.
+- **[`docs/findings/008`](../../docs/findings/008-no-model-seam-for-the-offline-write-path.md)
+  — the offline write path has no model-side seam.** Rule 1 says all domain
+  logic lives in models; the offline spec says enqueue-on-failure is the
+  application's job at the dispatch site; and a disconnected field client has
+  no model to put it in anyway. `FieldOutbox` is this rung's app-layer answer,
+  and it carries a real invariant (a client's own successive offline edits must
+  chain), not glue.
+- **[`docs/findings/009`](../../docs/findings/009-offline-sqlite-option-breaks-non-apple-clang-on-macos.md)
+  — `MORPH_BUILD_OFFLINE_SQLITE=ON` breaks the build on macOS with a non-Apple
+  clang.** `FindSQLite3` resolves the SDK's whole `/usr/include`, which is then
+  injected as `-isystem` ahead of libc++'s own headers. The repo's own
+  `morph_offline_sqlite_tests` target fails identically, which is why the
+  durable queue had never been built here before.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

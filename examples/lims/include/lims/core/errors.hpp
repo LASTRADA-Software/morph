@@ -27,6 +27,16 @@ class Forbidden : public LimsError {
     explicit Forbidden(std::string message) : LimsError{std::move(message)} {}
 };
 
+/// @brief Thrown when an action collides with a decision already taken —
+///        resolving a conflict that somebody else has already resolved.
+///
+/// Distinct from `IllegalTransition`, which is about the sample's lifecycle:
+/// this one is about a *record* that has already reached a terminal state.
+class Conflict : public LimsError {
+  public:
+    explicit Conflict(std::string message) : LimsError{std::move(message)} {}
+};
+
 /// @brief Thrown when a sample is asked to make a transition its current
 ///        state does not allow.
 ///
