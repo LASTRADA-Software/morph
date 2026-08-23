@@ -538,12 +538,25 @@ bool SampleModel::alreadyDecided(const std::string& opKey) {
                 .empty();
 }
 
-void SampleModel::markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
+namespace {
+
+/// @brief Records @p opKey as decided, so a redelivery is skipped.
+///
+/// A free function rather than a member: it touches no state of its own, and
+/// keeping `Lightweight::DataMapper` out of `sample_model.hpp` is what lets
+/// the client link. `ladder_lims_gui_lib` includes that header (through the
+/// presenters) and is built for wasm under `MORPH_CLIENT_ONLY`, where the ORM
+/// does not exist -- so a single mapper-typed declaration in the header broke
+/// the WASM client build for the whole rung. Every other rung's model header
+/// is ORM-free for the same reason.
+void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey) {
     db::ReplayedOpRecord row;
     row.opKey = Lightweight::SqlAnsiString<128>{opKey};
     row.decidedAt = nowMillis();
     mapper.Create(row);
 }
+
+}  // namespace
 
 ReplayCaptureResult SampleModel::execute(const QueuedCapture& action) {
     requirePrincipal();

@@ -5,7 +5,6 @@
 #include <memory>
 #include <string_view>
 #include <vector>
-#include <Lightweight/DataMapper/DataMapper.hpp>
 #include <morph/core/bridge.hpp>
 #include <morph/core/model_key.hpp>
 #include <morph/core/registry.hpp>
@@ -340,11 +339,6 @@ private:
     /// @param opKey The operation's dedup token; empty is never a match.
     /// @return `true` when the key is recorded in `lims_replayed_ops`.
     [[nodiscard]] static bool alreadyDecided(const std::string& opKey);
-
-    /// @brief Records @p opKey as decided, so a redelivery is skipped.
-    /// @param mapper The open data mapper (the caller's transaction).
-    /// @param opKey The operation's dedup token.
-    static void markDecided(Lightweight::DataMapper& mapper, const std::string& opKey);
 
     /// @brief The sample this handler is attached to, set by `RegisterSample`
     ///        or `OpenSample`. Unset until then.
