@@ -96,12 +96,16 @@ namespace {
 /// overflow, is needed to decide it.
 ///
 /// This is the app-level answer to the README's D1 (retag-vs-round,
-/// upstream issue #159): `x-decimalPlaces` "enforcement" retags a value's
-/// precision tag without changing the value, so a hand-built over-precise
-/// payload would be *stored* as 1.23456 while every display of it said 1.235.
-/// Display disagreeing with storage is disqualifying in a LIMS, so this rung
-/// rejects the payload instead of retagging it. Rejecting is the one option
-/// that cannot produce a stored number nobody ever sees.
+/// upstream issue #159). The framework now *rounds* on its wire dispatch
+/// paths rather than retagging, so display and storage can no longer disagree
+/// there. This rung keeps the stricter rule for two reasons the framework's
+/// normalisation does not cover: the precision that matters here is the
+/// **analysis version's** runtime `decimalPlaces`, not the compile-time
+/// `Quantity` declared precision the framework reconciles against; and a
+/// clinical reading submitted at a precision the method cannot support is a
+/// claim about the instrument, so silently reducing it would record a
+/// measurement the analyst never made. Rejecting is the one option that
+/// neither hides digits nor invents them.
 /// @param value The decoded reading.
 /// @param places The analysis version's declared decimal places.
 /// @return `true` when the value needs no rounding at that precision.

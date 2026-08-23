@@ -267,8 +267,15 @@ surface layers three separate policies:
   raises, and it escapes *out of* the call rather than resolving a completion.
 - *Silent precision clamp.* The compile-time `DeclaredDecimals` is a
   `static_assert` (a code bug fails the build); the runtime `withDecimalPlaces`
-  reuses `Rational`'s `clampWireDecimalPlaces` and clamps silently, matching the
-  `Rational` two-tier rule.
+  and `roundedToDecimalPlaces` reuse `Rational`'s `clampWireDecimalPlaces` and
+  clamp silently, matching the `Rational` two-tier rule.
+- *Silent rounding saturation.* `math::roundToDecimalPlaces` (and so
+  `Quantity::roundedToDecimalPlaces` / `atDeclaredPrecision`, and the dispatch
+  path's `reconcileDeclaredPrecision`) scales by `10^places` through the
+  saturating multiply. A value already representable at the target scale takes an
+  exact fast path and cannot saturate; anything else clamps and logs at `error`
+  like every other `Rational` overflow, with no error channel. There is no
+  `checkedRound`.
 
 ## Other typed failures
 

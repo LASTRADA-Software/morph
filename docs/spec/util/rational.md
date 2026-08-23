@@ -62,6 +62,7 @@ floating-point input, overflow during decimal scaling) return
 | `Numerator` | Strong type for a Rational numerator. Prevents numerator/denominator argument swapping at construction sites. Explicit construction. |
 | `Denominator` | Strong type for a Rational denominator. Explicit construction; must never be zero after canonicalisation. |
 | `RationalError` | `enum class : std::uint8_t` with three values: `DivisionByZero`, `NotFinite` (non-finite float input), `Overflow` (scaled magnitude exceeds `int64_t`). |
+| `RoundingMode` | `enum class : std::uint8_t` with two values: `HalfAwayFromZero` (the default everywhere) and `HalfEven`. Selects how `roundToDecimalPlaces` resolves an exact tie. See [Rounding helpers](#rounding-helpers-free-functions). |
 | `kMaxDecimalPlaces` | `constexpr std::uint32_t = 18` — largest decimal precision supported. |
 
 ## Construction
@@ -301,6 +302,51 @@ Free functions in `morph::math`, found by ADL:
 | `ceil` | `constexpr int64_t ceil(Rational) noexcept` | Rounds toward positive infinity. |
 | `floor` | `constexpr int64_t floor(Rational) noexcept` | Rounds toward negative infinity. |
 | `trunc` | `constexpr int64_t trunc(Rational) noexcept` | Truncates toward zero. |
+| `roundToDecimalPlaces` | `constexpr Rational roundToDecimalPlaces(Rational, DecimalPlaces, RoundingMode = HalfAwayFromZero) noexcept` | Rounds to a decimal scale **without leaving the `Rational` domain**. Changes the value, and tags the result at the requested precision. Saturates like the arithmetic operators. |
+
+### `roundToDecimalPlaces` — the one helper that stays in the domain
+
+`ceil`/`floor`/`trunc` all return `std::int64_t`: they round to *zero* decimal
+places and hand back an integer, so none of them can express "reduce this value
+to two decimals and keep it a `Rational`". `roundToDecimalPlaces` is that
+operation, and it is what makes a declared precision *enforceable* rather than
+merely displayable — see
+[forms.md, "Advertised precision is enforced on dispatch"](../forms/forms.md#advertised-precision-is-enforced-on-dispatch),
+whose whole contract rests on it.
+
+The result is the multiple of `10^-places` nearest the input, tagged at
+`places`. Mechanically:
+
+1. `places` is clamped into `[0, kMaxDecimalPlaces]` (runtime data, silently
+   clamped, like every other runtime-precision entry point).
+2. If `10^places % denominator == 0` the value is *already* exactly
+   representable at that scale, so only the tag moves. This is the common path,
+   it is allocation- and overflow-free, and it subsumes every integer-valued
+   `Rational` — which is what stops a large `n/1` from saturating in step 3.
+3. Otherwise the value is scaled by `10^places`, split into its truncated
+   integer part and the leftover fraction, and the fraction is compared exactly
+   against `1/2` (through `Rational::operator<=>`, i.e. in 128 bits — never a
+   `double`). A fraction greater than a half steps the magnitude away from zero;
+   an exact half is resolved by the `RoundingMode`.
+
+**The default is `HalfAwayFromZero`, and that is a deliberate choice against the
+prevailing standards default.** IEEE 754-2008 decimal, Python `decimal` and
+JSR-354 all default to banker's rounding, because half-away-from-zero biases a
+long sum upward. morph defaults the other way because its *display* path —
+`morph::units::detail::formatRationalDecimal`, the only decimal renderer in the
+framework — is hard-wired to round half away from zero. A stored value reconciled
+with `HalfEven` would disagree with the digits the submitter's form had already
+shown them for every tie, which is the exact display-vs-storage split the
+enforcement contract exists to eliminate. `HalfEven` is offered as a parameter so
+a caller bound by a jurisdiction that mandates it can opt in, knowingly trading
+that agreement away; changing the *default* would require making the formatter
+mode-aware first.
+
+**Saturation.** Step 3 multiplies by `10^places` through the saturating
+`operator*=`, so a value whose scaled form leaves `int64` range clamps to
+`±INT64_MAX` and logs at `error`, exactly like `+`/`-`/`*`. There is no
+`checkedRound`; a caller who must detect it range-checks first. Step 2 means
+this cannot happen for a value already representable at the target scale.
 
 ## Comparison
 
@@ -441,6 +487,8 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Canonicalisation on `setWire` | **Silently clamps hostile input** | Untrusted wire data (den==0, out-of-range dp, INT64_MIN) always produces a valid reduced value rather than asserting or propagating UB. |
 | Comparison ignores precision | **Value-only `<=>` and `==`** | Two values equal in magnitude should compare equal regardless of how many decimals they claim. Precision is a display/rounding concern, not a value property. |
 | Max-precision propagation | **Result precision = max of operands** | A computation is never less precise than its most precise input. There is no in-place retag helper; a caller needing a different tag constructs a fresh `Rational` with the desired `DecimalPlaces`. |
+| Rounding mode is a parameter, defaulting to half away from zero | **`RoundingMode{HalfAwayFromZero, HalfEven}`, `HalfAwayFromZero` default** | A mode had to become visible once rounding became a *storage* operation rather than an implementation detail of display. The default follows morph's own formatter rather than the standards' `HALF_EVEN`, because the point of rounding on the dispatch path is that the stored value equals the displayed one; a `HalfEven` default would break that for every tie until the formatter learned the same mode. |
+| No `checkedRound` | **`roundToDecimalPlaces` saturates and logs** | Consistent with `+`/`-`/`*`: the `checked*` family covers the operations a caller is likely to drive with unbounded inputs. Rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. |
 | 128-bit cross-product comparison | **`detail::mulU64`** | Exact ordering over the full int64 range without overflow. Uses `unsigned __int128` when available (GCC/Clang), portable 32-bit limb decomposition on MSVC. |
 | Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
 | `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
@@ -477,6 +525,13 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
   malformed input outright (cross-ref [`datetime.md`](datetime.md)); a caller
   that needs "reject, don't guess" semantics for amounts must validate before
   decode.
+- **`roundToDecimalPlaces` saturates instead of reporting.** Reducing a very
+  large value to a fine scale requires scaling by `10^places` first, and a
+  scaled form past `int64` clamps to `±INT64_MAX` with an `error` log rather
+  than returning `std::expected`. There is no `checkedRound` counterpart. The
+  exact fast path (denominator already divides `10^places`) means this cannot
+  fire for a value that is already representable at the target scale, so in
+  practice it needs both a large magnitude *and* a genuine reduction.
 - **`==` and `<=>` ignore precision, so equality is not substitutability.**
   Comparison is purely value-based on the canonical `(numerator, denominator)`
   pair. Two `Rational`s can therefore satisfy `a == b` while

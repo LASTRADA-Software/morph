@@ -923,3 +923,89 @@ TEST_CASE("Rational::Wire::NullableComposition", "[rational]")
     REQUIRE(written.has_value());
     CHECK(*written == R"({"num":1,"den":3,"dp":9})");
 }
+
+// ---------------------------------------------------------------------------
+// roundToDecimalPlaces — the exact scale-rounding primitive (morph#159).
+//
+// `ceil`/`floor`/`trunc` all leave the Rational domain (they return int64_t),
+// so before this existed there was no way to *reduce a value* to N decimal
+// places at all — only to relabel it, which is exactly the display-vs-storage
+// split morph#159 reports.
+// ---------------------------------------------------------------------------
+
+using morph::math::RoundingMode;
+using morph::math::roundToDecimalPlaces;
+
+// The primitive is usable in constant expressions, like the rest of Rational's
+// arithmetic. These are morph#159's own reproduction value: 1.23456 at dp=5,
+// reduced to the dp=1 its field declares.
+static_assert(roundToDecimalPlaces(Rational { Numerator{123456}, Denominator{100000}, DecimalPlaces{5} },
+                                   dp1) == Rational { Numerator{6}, Denominator{5}, dp1 });
+static_assert(roundToDecimalPlaces(Rational { Numerator{123456}, Denominator{100000}, DecimalPlaces{5} },
+                                   dp1).getDecimalPlaces() == dp1);
+
+TEST_CASE("Rational::RoundToDecimalPlaces::ReducesTheValueNotJustTheTag", "[rational]")
+{
+    // morph#159's payload: 1.23456 canonicalises to 3858/3125.
+    Rational const submitted { Numerator{123456}, Denominator{100000}, DecimalPlaces{5} };
+    REQUIRE(submitted.numerator == 3858);
+    REQUIRE(submitted.denominator == 3125);
+
+    auto const reduced = roundToDecimalPlaces(submitted, dp1);
+    CHECK(reduced == Rational { Numerator{6}, Denominator{5}, dp1 });   // exactly 1.2
+    CHECK(reduced.getDecimalPlaces() == dp1);
+
+    CHECK(roundToDecimalPlaces(submitted, dp2) == Rational { Numerator{123}, Denominator{100}, dp2 });
+    CHECK(roundToDecimalPlaces(submitted, dp3) == Rational { Numerator{1235}, Denominator{1000}, dp3 });
+    CHECK(roundToDecimalPlaces(submitted, DecimalPlaces{0}) == Rational { 1, DecimalPlaces{0} });
+    // Rounding to at least the value's own scale is exact — nothing is lost.
+    CHECK(roundToDecimalPlaces(submitted, dp6) == submitted);
+}
+
+TEST_CASE("Rational::RoundToDecimalPlaces::TieBreaking", "[rational]")
+{
+    Rational const quarterUp { Numerator{125}, Denominator{100}, dp2 };    // 1.25
+    Rational const quarterOdd { Numerator{135}, Denominator{100}, dp2 };   // 1.35
+
+    // Default: half away from zero — the rule the decimal formatter uses, so
+    // the stored value renders as the digits the submitter was shown.
+    CHECK(roundToDecimalPlaces(quarterUp, dp1) == Rational { Numerator{13}, Denominator{10}, dp1 });
+    CHECK(roundToDecimalPlaces(-quarterUp, dp1) == Rational { Numerator{-13}, Denominator{10}, dp1 });
+
+    // Opt-in banker's rounding: ties go to the even last digit, symmetric in sign.
+    CHECK(roundToDecimalPlaces(quarterUp, dp1, RoundingMode::HalfEven) ==
+          Rational { Numerator{12}, Denominator{10}, dp1 });
+    CHECK(roundToDecimalPlaces(-quarterUp, dp1, RoundingMode::HalfEven) ==
+          Rational { Numerator{-12}, Denominator{10}, dp1 });
+    CHECK(roundToDecimalPlaces(quarterOdd, dp1, RoundingMode::HalfEven) ==
+          Rational { Numerator{14}, Denominator{10}, dp1 });
+
+    // Non-ties are unaffected by the mode.
+    Rational const justUnder { Numerator{124}, Denominator{100}, dp2 };
+    CHECK(roundToDecimalPlaces(justUnder, dp1) == roundToDecimalPlaces(justUnder, dp1, RoundingMode::HalfEven));
+}
+
+TEST_CASE("Rational::RoundToDecimalPlaces::NonTerminatingAndIntegers", "[rational]")
+{
+    // A repeating value has no exact decimal form at any scale; rounding is the
+    // only way to reach one, and it is exact once reached.
+    Rational const third { Numerator{1}, Denominator{3}, dp9 };
+    CHECK(roundToDecimalPlaces(third, dp3) == Rational { Numerator{333}, Denominator{1000}, dp3 });
+    CHECK(roundToDecimalPlaces(-third, dp3) == Rational { Numerator{-333}, Denominator{1000}, dp3 });
+    Rational const twoThirds { Numerator{2}, Denominator{3}, dp9 };
+    CHECK(roundToDecimalPlaces(twoThirds, dp3) == Rational { Numerator{667}, Denominator{1000}, dp3 });
+
+    // Integers take the exact fast path: no scale-up, so no saturation even at
+    // the widest precision and the largest representable numerator.
+    Rational const huge { std::numeric_limits<std::int64_t>::max(), DecimalPlaces{0} };
+    auto const widened = roundToDecimalPlaces(huge, DecimalPlaces{kMaxDecimalPlaces});
+    CHECK(widened == huge);
+    CHECK(widened.getDecimalPlaces() == DecimalPlaces{kMaxDecimalPlaces});
+
+    CHECK(roundToDecimalPlaces(Rational::zero(dp9), dp2) == Rational::zero(dp2));
+
+    // Out-of-range precision clamps silently, like every other runtime-precision
+    // entry point (this is wire data, not a code bug).
+    CHECK(roundToDecimalPlaces(third, DecimalPlaces{99}).getDecimalPlaces() ==
+          DecimalPlaces{kMaxDecimalPlaces});
+}

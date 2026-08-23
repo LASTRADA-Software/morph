@@ -249,10 +249,11 @@ struct ValidationError : std::runtime_error {
 
 `ActionDispatcher::registerAction`'s runner additionally reconciles every
 `Quantity` field of the decoded action to its declared precision
-(`morph::forms::reconcileDeclaredPrecision`) before the `ready()` check, so a
-hand-built wire payload's `Quantity` values match the schema's advertised
-`x-decimalPlaces` the same way the client bridge dispatch path already
-normalises them (see [forms.md](../forms/forms.md)). Immediately after
+(`morph::forms::reconcileDeclaredPrecision`, an exact re-rounding of the value
+and not just a retag) before the `ready()` check, so a hand-built wire payload's
+`Quantity` values match the schema's advertised `x-decimalPlaces` the same way
+the client bridge dispatch path already normalises them (see
+[forms.md](../forms/forms.md)). Immediately after
 reconciliation, `morph::forms::enforceQuantityBounds` rejects any `Quantity`
 field whose engaged value falls outside its unit's declared bounds
 (`UnitTraits<E>::bounds`), throwing `QuantityDecodeError` before the `ready()`

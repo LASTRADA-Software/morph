@@ -392,11 +392,14 @@ TEST_CASE("An over-precise reading is rejected, not silently retagged", "[lims][
     const auto nitrate = defineNitrate(catalog);  // 3 decimal places
     sampleAtWork(model);
 
-    // 1.23456 needs five decimals. morph's own `x-decimalPlaces` enforcement
-    // *retags* the precision tag without changing the value (issue #159), so
-    // accepting this would store 1.23456 while every display of it read
-    // 1.235. Storage disagreeing with display is disqualifying in a LIMS, so
-    // this rung rejects the payload instead.
+    // 1.23456 needs five decimals. Issue #159 made morph's `x-decimalPlaces`
+    // enforcement *round* on its wire dispatch paths rather than retag, so
+    // storage and display no longer disagree there. This rung is still
+    // stricter: the governing precision is the analysis version's runtime
+    // decimalPlaces (schema-versioned data, not the compile-time
+    // Quantity<mg_per_L, 3>), and rounding a reading the method cannot support
+    // would record a measurement the analyst never made. The model is called
+    // directly here, so no framework reconciliation runs in between.
     CHECK_THROWS_AS(model.execute(lims::CaptureConcentration{.analysisVersionId = nitrate.versionId,
                                                              .value = lims::Concentration{exact(123456, 100000, 5)}}),
                     lims::ValidationError);

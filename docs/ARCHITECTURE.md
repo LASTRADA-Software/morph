@@ -562,10 +562,12 @@ Design decisions, in order:
   decimal count — defaulted from `UnitTraits`, overridable per field
   (`Quantity<Unit::m3, 4>`) — and feeds `x-decimalPlaces` and `fromDouble`.
   The value's actual precision is the Rational's runtime tag: it
-  max-propagates through arithmetic and is adjustable at run time
-  (`withDecimalPlaces` / `atDeclaredPrecision`). Same-unit quantities
-  convert freely across declared precisions; computed temporaries carry the
-  unit default.
+  max-propagates through arithmetic and is adjustable at run time —
+  `withDecimalPlaces` retags for display and leaves the value alone, while
+  `roundedToDecimalPlaces` / `atDeclaredPrecision` re-round the value exactly
+  (`math::roundToDecimalPlaces`, half away from zero by default) so storage and
+  display agree. Same-unit quantities convert freely across declared precisions;
+  computed temporaries carry the unit default.
 
 ### `morph::forms` — schemas for auto-built GUIs
 

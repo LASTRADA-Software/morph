@@ -93,7 +93,35 @@ Two precisions exist by design and must not be conflated:
   `atDeclaredPrecision`.
 - **Actual precision** — a property of the *value*: the runtime `DecimalPlaces`
   tag inside the `Rational`. It max-propagates through arithmetic and can be
-  retagged at run time (`withDecimalPlaces`, `atDeclaredPrecision`).
+  retagged at run time (`withDecimalPlaces`) or reduced to at run time
+  (`roundedToDecimalPlaces`, `atDeclaredPrecision`).
+
+**Retag versus round — the distinction the API turns on.** These are two
+different operations and the type offers both, deliberately named apart:
+
+| | Changes the tag | Changes the value | Use for |
+|---|---|---|---|
+| `withDecimalPlaces(p)` | yes | **no** | Presentation only: show this value to `p` decimals while keeping every digit that was measured. |
+| `roundedToDecimalPlaces(p, mode)` | yes | **yes** | Storage: make the stored value *be* the value that renders at `p` decimals. |
+| `atDeclaredPrecision()` | yes | **yes** | The same, at the field's declared precision — the `x-decimalPlaces` the schema advertises. |
+
+A retag alone leaves display and storage free to disagree: a value tagged `dp=1`
+that is exactly `1.23456` renders as `1.2` while the database holds `1.23456`,
+and no layer can say which number an operator actually saw. That is why the
+dispatch-path reconciliation rounds (see
+[forms.md](../forms/forms.md#advertised-precision-is-enforced-on-dispatch)) and
+why `atDeclaredPrecision()` is defined in terms of `roundedToDecimalPlaces`, not
+`withDecimalPlaces`. `withDecimalPlaces` keeps its retag-only meaning for the
+cases that genuinely are presentation — a per-currency display width, a report
+column narrower than the stored figure.
+
+`roundedToDecimalPlaces` delegates to `math::roundToDecimalPlaces` and inherits
+its contract in full: ties resolve half away from zero by default (matching the
+decimal formatter, so the reconciled value is the one the form was already
+showing), a `math::RoundingMode` parameter opts into banker's rounding, a value
+already representable at the target scale is untouched apart from its tag, and
+an out-of-envelope scale-up saturates and logs rather than overflowing. See
+[rational.md](rational.md#roundtodecimalplaces--the-one-helper-that-stays-in-the-domain).
 
 **Max-propagation, precisely.** During a calculation the actual precision of a
 result is the **maximum `DecimalPlaces` among the engaged (non-empty) operands** —
@@ -101,9 +129,10 @@ the widest declared value wins, so a computation is never *less* precise than it
 most-precise input. (Empty operands make the whole result empty and so
 contribute no precision.) A computed *temporary* has no field of its own to draw
 a declared precision from, so its **declared** precision is the deduced result
-unit's `UnitTraits` default; call `atDeclaredPrecision()` to retag the actual
-precision back to that default before display when max-propagation has widened
-it past what the field is specified to show.
+unit's `UnitTraits` default; call `atDeclaredPrecision()` to reduce the actual
+value back to that default when max-propagation has widened it past what the
+field is specified to hold — that rounds, so use `withDecimalPlaces()` instead
+when the extra digits must survive and only the rendering should narrow.
 
 **Magnitude is bounded by `int64`.** The exact payload is a ratio of 64-bit
 integers, so `+`, `-`, `*`, and ratio composition can overflow when a reduced
@@ -197,9 +226,10 @@ quantity of the same unit — no history node is created, and the name is
 discarded. (With tracing compiled out this is the normal path for all
 quantities; with tracing enabled it is the empty-specific path.)
 
-**`withDecimalPlaces()` and `atDeclaredPrecision()`.** Applied to an empty
-quantity, both are no-ops that return the same empty quantity unchanged.
-There is no `Rational` to retag.
+**`withDecimalPlaces()`, `roundedToDecimalPlaces()` and
+`atDeclaredPrecision()`.** Applied to an empty quantity, all three are no-ops
+that return the same empty quantity unchanged. There is no `Rational` to retag
+or round, and an absent value never becomes a rounded zero.
 
 **Wire serialization.** On the morph JSON wire a quantity *is* its
 `std::optional<Rational>` payload (`glz::meta` maps the instance to `payload`
@@ -325,8 +355,11 @@ form flows through a calculation deterministically:
 4. **Formatting.** `formatRationalDecimal` renders at that tag, as above; nothing
    else in `Quantity` re-implements number formatting.
 
-`atDeclaredPrecision()` / `withDecimalPlaces()` retag a value between steps if a
-caller wants a specific width; they change only the tag, never the exact value.
+`withDecimalPlaces()` retags a value between steps when a caller wants a
+specific display width; it changes only the tag, never the exact value.
+`roundedToDecimalPlaces()` / `atDeclaredPrecision()` change the value as well,
+using the same half-away-from-zero rule this formatter uses — so a rounded value
+and its rendering agree digit for digit, and re-rendering it is a no-op.
 
 ## Provenance — a build-time toggle, on by default
 
@@ -833,8 +866,9 @@ readability).
 | `value()` | `const std::optional<Rational>& value() const noexcept` | The payload; pattern-match or `->` it. |
 | `value_or(fallback)` | `Rational value_or(Rational const&) const` | Payload if engaged, else the fallback. |
 | `operator*` | `const Rational& operator*() const` | Unchecked access to the engaged value (UB when empty, like `std::optional`). |
-| `withDecimalPlaces(p)` | `Quantity withDecimalPlaces(DecimalPlaces) const` | Retags actual precision (silently clamped to `[0, kMaxDecimalPlaces]`); no-op on empty. Value unchanged. |
-| `atDeclaredPrecision()` | `Quantity atDeclaredPrecision() const` | Retags actual precision to the declared one; no-op on empty. |
+| `withDecimalPlaces(p)` | `Quantity withDecimalPlaces(DecimalPlaces) const` | Retags actual precision (silently clamped to `[0, kMaxDecimalPlaces]`); no-op on empty. **Value unchanged** — presentation only. |
+| `roundedToDecimalPlaces(p, mode)` | `Quantity roundedToDecimalPlaces(DecimalPlaces, math::RoundingMode = HalfAwayFromZero) const` | **Rounds the exact value** to `p` decimals and tags it there (`math::roundToDecimalPlaces`); no-op on empty. Precision silently clamped; saturates and logs if the scale-up leaves `int64`. |
+| `atDeclaredPrecision()` | `Quantity atDeclaredPrecision() const` | `roundedToDecimalPlaces(declaredPrecision())` — **rounds** the value to the field's declared precision, the one the schema advertises as `x-decimalPlaces`; no-op on empty. |
 | `named(label)` | `Quantity named(std::string label) const` | Returns a same-unit quantity marked as the symbol `label`; builds a fresh history node (no-op returning empty on empty, or with tracing off). |
 | `equation()` | `std::vector<std::string> equation() const` | The worked formula as print-ready lines (see *Provenance*). Single-element (the formatted value) when empty or tracing off. |
 | `operator Quantity<To>()` | `operator Quantity<To>() const` | Implicit same-dimension conversion; delegates to `convert`, propagates empty, records a provenance step. |
@@ -883,7 +917,8 @@ and `unitAlternatives()`.
 | Display units | **Derived from `UnitRelation`** | The schema's `x-unitAlternatives` selector comes from the same `relations` that drive `convert` — one source, no second list to keep in sync. |
 | History structure | **Shared, unit-erased DAG (`ASTUnit` / `ASTNode` / `Context`)** | `ASTNode` (step + optional name + `shared_ptr` children) linked into a DAG; each `Quantity` holds a `Context` (a `shared_ptr<ASTNode>` root). Cheap copies; reused subexpressions deduped by node identity; shareable across units. |
 | Placeholders | **Reuse, not leaf-vs-computed, mints a `cN`** | A value used once inlines (leaf → its number, computed → its expression); only a value reused across the expression earns one shared placeholder, so shared work is written once. |
-| Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reset). |
+| Precision | **Actual = max of engaged operands; declared from `UnitTraits`** | Max-propagation keeps a result no less precise than its widest input; the declared tag stays a field property (`fromDouble` origin, `atDeclaredPrecision` to reduce back to it). |
+| Retag and round are separate operations | **`withDecimalPlaces` retags, `roundedToDecimalPlaces`/`atDeclaredPrecision` round** | Both are legitimate needs — a narrower *display* of a fully-precise measurement, and a value *stored* at the precision its field declares — but conflating them lets display and storage disagree silently, which for a lab or financial record is disqualifying. Keeping two names means a call site has to say which one it meant. |
 | Formatting | **`std::formatter` → `toString` → `toDecimalString` → the shared `formatRationalDecimal` renderer** | One chain, each link a thin wrapper over the next, so there is never a second implementation to drift. `toString` exists as a direct call target because `std::format`'s compile-time formattability check fails to see this formatter's `auto`-NTTP specialisation on Emscripten's bundled libc++ — see the symbol table above. No `operator<<`; the runtime `DecimalPlaces` tag is the sole authority on printed decimals. |
 | Decimal without the unit | **Public `toDecimalString`, empty renders `"N/A"`** | The number/unit split is a real requirement (unit in a column header, right-aligned suffix, label beside an editable field), and the alternatives were stripping the suffix off `toString` or formatting the payload through `double`. `"N/A"` rather than `""` for empty is what makes `toString == toDecimalString + display` total, so `toString` is *defined* as that concatenation instead of being a parallel path; blank-for-absent stays a presentation policy for the view layer. |
 | Wire | **Payload only** | Units and history never travel; the wire stays a nullable `Rational`. |

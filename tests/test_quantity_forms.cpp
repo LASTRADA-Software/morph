@@ -940,3 +940,71 @@ TEST_CASE("Forms::FieldMeta::DescribeSugarDistinguishesSameTypedMembersByAddress
     CHECK(schema.contains(R"("first":{"$ref":"#/$defs/int64_t","x-order":0,"title":"First"})"));
     CHECK(schema.contains(R"("second":{"$ref":"#/$defs/int64_t","x-order":1,"title":"Second"})"));
 }
+
+// ---------------------------------------------------------------------------
+// morph#159: `x-decimalPlaces` is an *enforced* contract, so
+// reconcileDeclaredPrecision has to re-round the stored value, not just move
+// the precision tag. Before the fix the reproduction below left the payload at
+// exactly 1.23456 while tagging it dp=1 — the form rendered "1.2" over a stored
+// 1.23456, and no layer could say which number the operator had actually seen.
+// ---------------------------------------------------------------------------
+
+struct QFEnforcedPrecision {
+    std::int64_t sampleId = 0;
+    Q<QFUnit::percent> moisture;  // declaredDecimals == 1
+    std::optional<std::string> note;
+};
+
+TEST_CASE("Forms::ReconcileDeclaredPrecision::RoundsTheStoredValue", "[forms][quantity]") {
+    // The issue's own payload: a dp = 1 field handed 1.23456 at dp = 5.
+    QFEnforcedPrecision action{
+        .sampleId = 7,
+        .moisture = Q<QFUnit::percent>{Rational{Numerator{123456}, Denominator{100000}, DecimalPlaces{5}}},
+        .note = std::nullopt};
+
+    REQUIRE(*action.moisture == Rational{Numerator{3858}, Denominator{3125}, DecimalPlaces{5}});
+    REQUIRE((*action.moisture).getDecimalPlaces() == DecimalPlaces{5});
+
+    morph::forms::reconcileDeclaredPrecision(action);
+
+    // The tag moved *and* so did the value: 3858/3125 -> 6/5, exactly 1.2.
+    CHECK((*action.moisture).getDecimalPlaces() == dp1);
+    CHECK(*action.moisture == Rational{Numerator{6}, Denominator{5}, dp1});
+    CHECK((*action.moisture).numerator == 6);
+    CHECK((*action.moisture).denominator == 5);
+
+    // Storage now agrees with display, which is the whole point of the contract.
+    CHECK(morph::units::toDecimalString(action.moisture) == "1.2");
+
+    // Non-Quantity members are untouched.
+    CHECK(action.sampleId == 7);
+    CHECK_FALSE(action.note.has_value());
+}
+
+TEST_CASE("Forms::ReconcileDeclaredPrecision::ExactAndEmptyValuesSurvive", "[forms][quantity]") {
+    // A value already representable at the declared precision is not perturbed:
+    // enforcement discards excess precision, it does not introduce error.
+    QFEnforcedPrecision exact{
+        .sampleId = 1,
+        .moisture = Q<QFUnit::percent>{Rational{Numerator{7}, Denominator{2}, DecimalPlaces{9}}},  // 3.5
+        .note = std::nullopt};
+    morph::forms::reconcileDeclaredPrecision(exact);
+    CHECK(*exact.moisture == Rational{Numerator{7}, Denominator{2}, dp1});
+    CHECK((*exact.moisture).getDecimalPlaces() == dp1);
+
+    // An empty Quantity stays empty rather than becoming a rounded zero.
+    QFEnforcedPrecision empty{};
+    morph::forms::reconcileDeclaredPrecision(empty);
+    CHECK_FALSE(empty.moisture.hasValue());
+
+    // Ties round half away from zero, matching the decimal formatter, so the
+    // reconciled value is the one the submitter's form was already showing.
+    QFEnforcedPrecision tie{
+        .sampleId = 2,
+        .moisture = Q<QFUnit::percent>{Rational{Numerator{125}, Denominator{100}, DecimalPlaces{2}}},  // 1.25
+        .note = std::nullopt};
+    CHECK(morph::units::toDecimalString(tie.moisture.withDecimalPlaces(dp1)) == "1.3");
+    morph::forms::reconcileDeclaredPrecision(tie);
+    CHECK(*tie.moisture == Rational{Numerator{13}, Denominator{10}, dp1});
+    CHECK(morph::units::toDecimalString(tie.moisture) == "1.3");
+}

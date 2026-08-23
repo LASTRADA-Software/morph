@@ -169,6 +169,21 @@ enum class RationalError : std::uint8_t {
                      ///< (`fromFloat`, and the `checked*` arithmetic helpers).
 };
 
+/// @brief Rule for resolving a value sitting exactly halfway between the two
+///        nearest results when rounding to a decimal scale.
+///
+/// morph's decimal *display* path (`morph::units::detail::formatRationalDecimal`)
+/// rounds half away from zero, and that is why it is the default here: a value
+/// reconciled to its declared precision with `HalfAwayFromZero` renders as the
+/// same digits the submitter was shown before sending it. `HalfEven` exists for
+/// a caller bound to banker's rounding (the default in IEEE 754-2008 decimal,
+/// Python `decimal` and JSR-354, because half-away-from-zero biases a long sum
+/// upward) and knowingly trades that agreement away.
+enum class RoundingMode : std::uint8_t {
+    HalfAwayFromZero,  ///< Ties go to the neighbour of larger magnitude: `1.25 -> 1.3`, `-1.25 -> -1.3`.
+    HalfEven,          ///< Ties go to the neighbour whose last kept digit is even: `1.25 -> 1.2`, `1.35 -> 1.4`.
+};
+
 namespace detail {
 
 /// @brief Per-thread clamp counter, scoped by `WireClampScope`.
@@ -923,6 +938,32 @@ static_assert(std::is_standard_layout_v<Rational>);
     return value.numerator / value.denominator;
 }
 
+/// @brief Rounds to a fixed number of decimal places **exactly, without leaving
+///        the `Rational` domain** -- the operation `ceil`/`floor`/`trunc` do not
+///        offer, since those return `std::int64_t` and so only ever round to
+///        zero decimal places.
+///
+/// This changes the **value**, not merely the `decimalPlaces` tag: the result is
+/// the multiple of `10^-places` nearest @p value, ties resolved by @p mode, and
+/// it is tagged at @p places so display and storage agree digit for digit. A
+/// value already representable at @p places decimals is returned unchanged
+/// except for that tag, so the common case is exact and cannot overflow.
+///
+/// **Saturates rather than overflowing**, like every other `Rational`
+/// arithmetic path: rounding scales by `10^places`, so a value whose scaled form
+/// exceeds `int64` range clamps to `+/-INT64_MAX` and logs at `error` (see
+/// `operator*=`). A caller who must detect that has to range-check first --
+/// there is no `checkedRound`.
+///
+/// @param value  Value to round.
+/// @param places Target decimal places; silently clamped to `[0, kMaxDecimalPlaces]`.
+/// @param mode   Tie-breaking rule. Defaults to half away from zero, matching
+///               morph's display path.
+/// @return The rounded value, tagged at @p places.
+[[nodiscard]] constexpr Rational roundToDecimalPlaces(
+    const Rational& value, DecimalPlaces places,
+    RoundingMode mode = RoundingMode::HalfAwayFromZero) noexcept;
+
 // ---------------------------------------------------------------------------
 // Plain Rational arithmetic (max-precision propagation).
 // ---------------------------------------------------------------------------
@@ -1224,6 +1265,47 @@ template <std::floating_point Float>
 }
 
 }  // namespace detail
+
+constexpr Rational roundToDecimalPlaces(const Rational& value, DecimalPlaces places,
+                                        RoundingMode mode) noexcept {
+    auto const wanted = detail::clampWireDecimalPlaces(places.value);
+    // `wanted <= kMaxDecimalPlaces` after the clamp, so this never returns the
+    // overflow sentinel and `scale >= 1`.
+    auto const scale = detail::powerOfTen(wanted);
+
+    // Fast, exact, overflow-free path: `value * 10^wanted` is an integer exactly
+    // when the canonical denominator divides `10^wanted`. Nothing to round --
+    // only the tag moves. This also covers every integer-valued Rational, which
+    // is what keeps a large `n/1` from saturating on the scale-up below.
+    if (scale % value.denominator == 0) {
+        auto exact = value;
+        exact.decimalPlaces = DecimalPlaces{wanted};
+        return exact;
+    }
+
+    auto const scaled = value * Rational{Numerator{scale}, Denominator{1}, DecimalPlaces{wanted}};
+    auto const whole = trunc(scaled);
+    auto const fraction = abs(scaled - Rational{whole, DecimalPlaces{wanted}});
+    auto const tie = fraction <=> Rational{Numerator{1}, Denominator{2}, DecimalPlaces{wanted}};
+
+    bool roundAway = std::is_gt(tie);
+    if (std::is_eq(tie)) {
+        // `whole` is the scaled integer, so its parity is the parity of the last
+        // digit that survives the rounding.
+        roundAway = mode == RoundingMode::HalfAwayFromZero || (whole % 2) != 0;
+    }
+
+    auto stepped = whole;
+    if (roundAway) {
+        auto const step = scaled.numerator < 0 ? std::int64_t{-1} : std::int64_t{1};
+        // Unreachable unless the scale-up already saturated; stepping past
+        // INT64_MAX would be UB, so decline rather than commit it.
+        if (!detail::addOverflows(whole, step)) {
+            stepped = whole + step;
+        }
+    }
+    return Rational{Numerator{stepped}, Denominator{scale}, DecimalPlaces{wanted}};
+}
 
 inline std::expected<Rational, RationalError> Rational::fromFloat(double value,
                                                                   DecimalPlaces wantedPrecision) noexcept {

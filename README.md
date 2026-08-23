@@ -312,7 +312,10 @@ struct LabModel {
 - Each field *declares* its precision in the type — the unit's default unless
   overridden (`Quantity<Unit::m3, 4>`) — which becomes the form's input step
   (`x-decimalPlaces`); the value's actual precision stays runtime data that
-  propagates through arithmetic and can be retagged (`withDecimalPlaces`).
+  propagates through arithmetic and can be retagged for display
+  (`withDecimalPlaces`) or exactly re-rounded (`roundedToDecimalPlaces`). On the
+  wire dispatch paths the declared precision is *enforced*: a submitted value is
+  re-rounded to it, so the stored number is the number the form displays.
 - `morph::time::Timestamp` fields travel as strict ISO-8601 UTC strings and
   render as date-time inputs (`"format": "date-time"`); malformed timestamps are
   wire *errors*, not clamped values.
