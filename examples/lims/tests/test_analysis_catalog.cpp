@@ -6,6 +6,7 @@
 #include "lims/core/errors.hpp"
 #include "lims/db/lims_entity.hpp"
 #include "lims/models/analysis_catalog_model.hpp"
+#include "lims_test_support.hpp"
 #include "testkit/db_fixture.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
@@ -14,26 +15,10 @@
 
 #include <string>
 
+using lims::test::ScopedPrincipal;
 using morph::ladder::testkit::DbFixture;
 
 namespace {
-
-[[nodiscard]] morph::session::Context contextFor(std::string principal) {
-    morph::session::Context ctx;
-    ctx.principal = std::move(principal);
-    return ctx;
-}
-
-/// @brief Installs @p principal for this scope. `_ctx` is declared before
-///        `_scope` because `ScopedContext` holds a reference to it.
-class ScopedPrincipal {
-  public:
-    explicit ScopedPrincipal(std::string principal) : _ctx{contextFor(std::move(principal))}, _scope{_ctx} {}
-
-  private:
-    morph::session::Context _ctx;
-    morph::session::detail::ScopedContext _scope;
-};
 
 [[nodiscard]] lims::DefineAnalysis nitrate() {
     return lims::DefineAnalysis{

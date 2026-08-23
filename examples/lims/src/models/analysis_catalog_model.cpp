@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "lims/models/analysis_catalog_model.hpp"
 
-#include "clock.hpp"
 #include "lims/core/errors.hpp"
+#include "lims/core/model_support.hpp"
 #include "lims/db/lims_entity.hpp"
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
@@ -17,23 +17,6 @@
 namespace lims {
 
 namespace {
-
-/// @brief The authenticated principal, or `EmptyPrincipalError`.
-///
-/// Checked on every mutating action rather than assumed: the README names
-/// empty-principal audit entries as disqualifying for this rung, and an
-/// authorizer that ran is not the same fact as a principal that is present.
-[[nodiscard]] const std::string& requirePrincipal() {
-    const auto* ctx = ::morph::session::current();
-    if (ctx == nullptr || ctx->principal.empty()) {
-        throw EmptyPrincipalError{};
-    }
-    return ctx->principal;
-}
-
-[[nodiscard]] std::int64_t nowMs() {
-    return (*morph::ladder::now().value).value.time_since_epoch().count();
-}
 
 /// @brief Copies the optional rational bounds off an action onto a row.
 template <typename Action>
@@ -93,7 +76,7 @@ DefineAnalysisResult AnalysisCatalogModel::execute(const DefineAnalysis& action)
     versionRow.canonicalUnit = Lightweight::SqlAnsiString<32>{action.canonicalUnit};
     versionRow.decimalPlaces = static_cast<int>(action.decimalPlaces);
     applyBounds(versionRow, action);
-    versionRow.createdAt = nowMs();
+    versionRow.createdAt = nowMillis();
     mapper.Create(versionRow);
 
     sqlTxn.Commit();
@@ -103,7 +86,7 @@ DefineAnalysisResult AnalysisCatalogModel::execute(const DefineAnalysis& action)
         .versionId = AnalysisVersionId{static_cast<std::int64_t>(versionRow.id.Value())},
         .version = 1,
     };
-    logAction(action, result);
+    _journal.recordSuccess<AnalysisCatalogModel>(action, result, nowMillis());
     return result;
 }
 
@@ -140,7 +123,7 @@ DefineAnalysisResult AnalysisCatalogModel::execute(const ReviseAnalysis& action)
     versionRow.canonicalUnit = Lightweight::SqlAnsiString<32>{action.canonicalUnit};
     versionRow.decimalPlaces = static_cast<int>(action.decimalPlaces);
     applyBounds(versionRow, action);
-    versionRow.createdAt = nowMs();
+    versionRow.createdAt = nowMillis();
     mapper.Create(versionRow);
     sqlTxn.Commit();
 
@@ -149,7 +132,7 @@ DefineAnalysisResult AnalysisCatalogModel::execute(const ReviseAnalysis& action)
         .versionId = AnalysisVersionId{static_cast<std::int64_t>(versionRow.id.Value())},
         .version = highest + 1,
     };
-    logAction(action, result);
+    _journal.recordSuccess<AnalysisCatalogModel>(action, result, nowMillis());
     return result;
 }
 
@@ -201,28 +184,7 @@ AnalysisVersionView AnalysisCatalogModel::execute(const GetAnalysisVersion& acti
 }
 
 void AnalysisCatalogModel::attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey) {
-    _log = std::move(log);
-    _entityKeyStr = std::move(entityKey);
-}
-
-template <typename Action, typename Result>
-void AnalysisCatalogModel::logAction(const Action& action, const Result& result) const {
-    if (!_log) {
-        return;
-    }
-    ::morph::journal::LogEntry entry;
-    entry.modelType = "AnalysisCatalogModel";
-    entry.entityKey = _entityKeyStr.value_or(std::string{});
-    entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
-    entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
-    entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
-    entry.outcome = ::morph::journal::Outcome::Succeeded;
-    if (const auto* ctx = ::morph::session::current()) {
-        entry.principal = ctx->principal;
-    }
-    entry.timestampMs = nowMs();
-    _log->append(std::move(entry));
-    _log->flush();
+    _journal.attach(std::move(log), std::move(entityKey));
 }
 
 }  // namespace lims

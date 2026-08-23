@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
+#include "lims/core/self_journal.hpp"
 #include "lims/dto/analysis_dto.hpp"
 
 #include <morph/core/bridge.hpp>
@@ -42,16 +43,14 @@ class AnalysisCatalogModel {
     void attachActionLog(std::shared_ptr<::morph::journal::IActionLog> log, std::string entityKey);
 
   private:
-    /// @brief Records @p action/@p result as a `LogEntry` if a log is attached.
-    /// @tparam Action Concrete action type.
-    /// @tparam Result Concrete result type.
-    /// @param action The executed action.
-    /// @param result The action's result.
-    template <typename Action, typename Result>
-    void logAction(const Action& action, const Result& result) const;
+    /// @brief This instance's own journal (inert until `attachActionLog`).
+    ///
+    /// A shared helper rather than a fourth hand-rolled copy of the
+    /// `logAction` shape ledger and kanban each carry — see
+    /// `lims::SelfJournal`'s file comment for why models have to do this
+    /// themselves at all.
+    SelfJournal _journal;
 
-    std::optional<std::string> _entityKeyStr;
-    std::shared_ptr<::morph::journal::IActionLog> _log;
 };
 
 }  // namespace lims
