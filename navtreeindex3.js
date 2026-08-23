@@ -1,5 +1,11 @@
 var NAVTREEINDEX3 =
 {
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353":[2,0,0,9,4,6],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a9ca4bf6f47ab3438eebbabde2fb9807a":[2,0,0,9,4,11],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07":[2,0,0,9,4,9],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e":[2,0,0,9,4,5],
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[2,0,0,9,4,0],
+"de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html":[2,0,0,17,0,0],
 "de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#a189724b1bcf426227de6c8894cd41073":[2,0,0,17,0,0,0],
 "de/d45/conceptmorph_1_1model_1_1ModelKey.html":[1,0,1,0],
 "de/d49/views_8hpp.html":[3,0,0,2,6],

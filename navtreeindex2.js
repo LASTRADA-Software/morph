@@ -1,5 +1,11 @@
 var NAVTREEINDEX2 =
 {
+"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html#aad7cc68f6dfeb636b309b94c2888f90d":[2,0,0,9,7,0],
+"d8/dab/structmorph_1_1units_1_1UnitMeta.html":[2,0,0,19,0],
+"d8/dab/structmorph_1_1units_1_1UnitMeta.html#a203bee57f41561c4ff8881cd64fda9f0":[2,0,0,19,0,2],
+"d8/dab/structmorph_1_1units_1_1UnitMeta.html#a3b276e041fdefe30b6105e3835f9573f":[2,0,0,19,0,1],
+"d8/dab/structmorph_1_1units_1_1UnitMeta.html#a51de17c1e98aead641cc7e08d576c7d0":[2,0,0,19,0,0],
+"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html":[2,0,0,14,2],
 "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d":[2,0,0,14,2,1],
 "d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#aeb75413a91143b4543503d59adb8553d":[2,0,0,14,2,0],
 "d8/dc3/qt__websocket__backend_8hpp_source.html":[3,0,0,6,3],
@@ -243,11 +249,5 @@ var NAVTREEINDEX2 =
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a3f6645af9ccf2dd75508e1771ef1e1e5":[2,0,0,9,4,12],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a455b9e155aca28cd310650e73b2a7b24":[2,0,0,9,4,10],
 "de/d2a/structmorph_1_1journal_1_1LogEntry.html#a646cb97e461dcd84d20260cecab748a8":[2,0,0,9,4,7],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae":[2,0,0,9,4,3],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353":[2,0,0,9,4,6],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a9ca4bf6f47ab3438eebbabde2fb9807a":[2,0,0,9,4,11],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ab965e19dcd3a6526e4d17e898bd69a07":[2,0,0,9,4,9],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#ada474537fac0bac3b932d4fde686f42e":[2,0,0,9,4,5],
-"de/d2a/structmorph_1_1journal_1_1LogEntry.html#af622c4dbb839692d172057ecaec56a2d":[2,0,0,9,4,0],
-"de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html":[2,0,0,17,0,0]
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a64eb9f5a32f498759160e5e2697cdfae":[2,0,0,9,4,3]
 };

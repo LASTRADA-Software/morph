@@ -37,9 +37,11 @@ var searchData=
   ['step_34',['step',['../d7/d6d/structmorph_1_1forms_1_1Ranged.html#a4d88424172dd545c11b7e9ce3e2ec2a0',1,'morph::forms::Ranged']]],
   ['stepcount_35',['stepCount',['../d1/d5c/classmorph_1_1flows_1_1FlowSession.html#a4e085a94c542b5a20df8afb4f06ebb49',1,'morph::flows::FlowSession']]],
   ['stop_36',['stop',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45',1,'morph::offline::NetworkMonitor::stop()'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68',1,'morph::offline::SyncWorker::stop()']]],
-  ['submitifvalid_37',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
-  ['subscribe_38',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
-  ['switchbackend_39',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
-  ['syncworker_40',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker']]],
-  ['systemclockms_41',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]
+  ['subassignchecked_37',['subAssignChecked',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3485b333f3ebde4dc1a8585fcfa60d89',1,'morph::math::Rational']]],
+  ['submitifvalid_38',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
+  ['subscribe_39',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
+  ['subwouldoverflow_40',['subWouldOverflow',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ac04f8b3f23a7594b31117af5502fdd14',1,'morph::math::Rational']]],
+  ['switchbackend_41',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
+  ['syncworker_42',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker']]],
+  ['systemclockms_43',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]
 ];

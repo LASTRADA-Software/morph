@@ -52,9 +52,9 @@ var NAVTREE =
 var NAVTREEINDEX =
 [
 "annotated.html",
-"d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html#a99914bc40b056f11484ec271746ec237",
-"d8/dbe/classmorph_1_1observe_1_1ScopedObserveOverride.html#abf6616cc1ba3b370dbf3e7aef055254d",
-"de/d41/structmorph_1_1session_1_1detail_1_1EscapingWriteOpts.html#a189724b1bcf426227de6c8894cd41073"
+"d4/d10/classmorph_1_1backend_1_1SimulatedRemoteBackend.html",
+"d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html#aad7cc68f6dfeb636b309b94c2888f90d",
+"de/d2a/structmorph_1_1journal_1_1LogEntry.html#a65b1a905d7736eaf3cb6ae8f112de353"
 ];
 
 const SYNCONMSG = 'click to disable panel synchronization';

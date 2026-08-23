@@ -62,12 +62,14 @@ var searchData=
   ['steps_59',['steps',['../d6/d94/structmorph_1_1flows_1_1Wizard.html#a0934ffb865cabd73e624f3b77e3a902f',1,'morph::flows::Wizard']]],
   ['stop_60',['stop',['../db/dee/classmorph_1_1offline_1_1NetworkMonitor.html#ac4251df7c4776d6cd0c68f4751952d45',1,'morph::offline::NetworkMonitor::stop()'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#abacf4b05a156d5e2664a4fd25bc2cf68',1,'morph::offline::SyncWorker::stop()']]],
   ['strandexecutor_61',['StrandExecutor',['../index.html#strandexecutor',1,'']]],
-  ['submitifvalid_62',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
-  ['subscribe_63',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
-  ['subscriptions_64',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
-  ['successful_65',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]],
-  ['switchbackend_66',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
-  ['syncresult_67',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
-  ['syncworker_68',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline::SyncWorker'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker::SyncWorker()'],['../index.html#syncworker',1,'SyncWorker']]],
-  ['systemclockms_69',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]
+  ['subassignchecked_62',['subAssignChecked',['../d2/d5c/structmorph_1_1math_1_1Rational.html#a3485b333f3ebde4dc1a8585fcfa60d89',1,'morph::math::Rational']]],
+  ['submitifvalid_63',['submitIfValid',['../d0/d26/classmorph_1_1qt_1_1forms_1_1FormsControllerCore.html#ad015e78d8fa026c904b8157d0e6f8a57',1,'morph::qt::forms::FormsControllerCore']]],
+  ['subscribe_64',['subscribe',['../d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940',1,'morph::bridge::BridgeHandler']]],
+  ['subscriptions_65',['Instance subscriptions',['../index.html#instance-subscriptions',1,'']]],
+  ['subwouldoverflow_66',['subWouldOverflow',['../d2/d5c/structmorph_1_1math_1_1Rational.html#ac04f8b3f23a7594b31117af5502fdd14',1,'morph::math::Rational']]],
+  ['successful_67',['successful',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html#abad0b8cf702ce8d6266cebfb3ab16cfc',1,'morph::offline::SyncResult']]],
+  ['switchbackend_68',['switchBackend',['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a743d9a146b92a58adfd4f993a655a3db',1,'morph::bridge::Bridge::switchBackend(std::unique_ptr&lt; Backend &gt; newBackend)'],['../d0/ddc/classmorph_1_1bridge_1_1Bridge.html#a583733e2db78c8315b672e0f59a37bbe',1,'morph::bridge::Bridge::switchBackend(std::shared_ptr&lt;::morph::backend::detail::IBackend &gt; newBackend)']]],
+  ['syncresult_69',['SyncResult',['../de/d6e/structmorph_1_1offline_1_1SyncResult.html',1,'morph::offline']]],
+  ['syncworker_70',['SyncWorker',['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html',1,'morph::offline::SyncWorker'],['../d3/d55/classmorph_1_1offline_1_1SyncWorker.html#a78d2ec58a641c51dbb4c3e8ff3263cbd',1,'morph::offline::SyncWorker::SyncWorker()'],['../index.html#syncworker',1,'SyncWorker']]],
+  ['systemclockms_71',['systemClockMs',['../d3/d6a/session__auth_8hpp.html#a1464d95168cbb3fa09ffc995c9868f24',1,'morph::session']]]
 ];

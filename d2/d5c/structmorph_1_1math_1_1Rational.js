@@ -20,6 +20,12 @@ var structmorph_1_1math_1_1Rational =
     [ "dividedBy", "d2/d5c/structmorph_1_1math_1_1Rational.html#a4f0257fbb8ad768df0d2c16ea4f9fabf", null ],
     [ "setWire", "d2/d5c/structmorph_1_1math_1_1Rational.html#accfa4dfaaa11bd421cc62f0941d71d31", null ],
     [ "getWire", "d2/d5c/structmorph_1_1math_1_1Rational.html#a7338c559da93d37a286f222ce825931c", null ],
+    [ "addAssignChecked", "d2/d5c/structmorph_1_1math_1_1Rational.html#a8a83e92772a48f91ca907964ca737a2e", null ],
+    [ "subAssignChecked", "d2/d5c/structmorph_1_1math_1_1Rational.html#a3485b333f3ebde4dc1a8585fcfa60d89", null ],
+    [ "mulAssignChecked", "d2/d5c/structmorph_1_1math_1_1Rational.html#adadc2f3ea8383373abbf421f1ab4aa1f", null ],
+    [ "addWouldOverflow", "d2/d5c/structmorph_1_1math_1_1Rational.html#a66020f6610fa0dfb334141d802b92c5e", null ],
+    [ "subWouldOverflow", "d2/d5c/structmorph_1_1math_1_1Rational.html#ac04f8b3f23a7594b31117af5502fdd14", null ],
+    [ "mulWouldOverflow", "d2/d5c/structmorph_1_1math_1_1Rational.html#a5271c12d684226846877348e90f27318", null ],
     [ "numerator", "d2/d5c/structmorph_1_1math_1_1Rational.html#ad1bcb1d07772209d36c32e43b7baa9fd", null ],
     [ "denominator", "d2/d5c/structmorph_1_1math_1_1Rational.html#ad6c59c25744a54b8f27699e4c3c43800", null ],
     [ "decimalPlaces", "d2/d5c/structmorph_1_1math_1_1Rational.html#a75fabddd91c6c69a9707e0ba9ef067c2", null ]
