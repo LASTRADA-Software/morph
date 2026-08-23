@@ -78,6 +78,36 @@ enum class ReplayOutcome : std::uint8_t {
     Skipped,     ///< This operation had already been applied (idempotency key).
 };
 
+/// @brief The stable ascii name of @p reason, for display and logging.
+/// @param reason The conflict reason.
+/// @return Its name.
+[[nodiscard]] constexpr std::string_view conflictReasonName(ConflictReason reason) noexcept {
+    switch (reason) {
+        case ConflictReason::StaleBase:
+            return "staleBase";
+        case ConflictReason::LifecycleClosed:
+            return "lifecycleClosed";
+        default:
+            return "unknown";
+    }
+}
+
+/// @brief The stable ascii name of @p status, for display and logging.
+/// @param status The conflict's status.
+/// @return Its name.
+[[nodiscard]] constexpr std::string_view conflictStatusName(ConflictStatus status) noexcept {
+    switch (status) {
+        case ConflictStatus::Open:
+            return "open";
+        case ConflictStatus::Discarded:
+            return "discarded";
+        case ConflictStatus::Applied:
+            return "applied";
+        default:
+            return "unknown";
+    }
+}
+
 /// @brief One capture prepared in the field, with the sample version it was
 ///        prepared against.
 ///

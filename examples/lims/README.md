@@ -473,6 +473,80 @@ unknown rule could not talk to a newer server at all.
 That evaluator is the third implementation of one closed vocabulary the
 framework owns, which is `docs/findings/011`.
 
+## The client
+
+Two surfaces, one shell (`gui/qml/Main.qml`): the sample lifecycle and result
+entry, side by side as tabs rather than stacked, because both act on the
+*same* attached sample at once — a bench operator captures a reading while the
+office watches the state move. Attaching the lifecycle surface points the
+result surface at the same sample, and both handlers are `AllowShared` over a
+keyed model, so they land on one instance. That is the shared-instance design
+made visible rather than asserted.
+
+`gui_lib/` holds two presenter/QML-bridge pairs (`SamplePresenter`/
+`SampleBridge`, `ResultPresenter`/`ResultBridge`) plus one shared conversion
+header. Presenters link `Qt6::Core` only and instantiate under a plain
+`QCoreApplication` (presenter rule 1); they track completions through the
+common `Presenter` base so tests wait on `busy()` rather than sleeping (rule
+3); QML is bindings-only (rule 6); and the offscreen engine-load smoke test
+is registered in ctest.
+
+### Every typed field is schema-driven; nothing is hand-built
+
+`examples/IMPLEMENTATION.md` rule 2 permits no hand-built input widgets, and
+this rung has none. The rule that decides which actions get a form:
+
+> **A field a person types is rendered from the served schema. A value the
+> model already supplied is a typed call.**
+
+So `RegisterClient`, `RegisterSample`, `RejectSample`, `ReturnForRework`,
+`CaptureConcentration` and `ResolveConflict` are all rendered through the
+shipped `DynamicForm` from `gui_lib/lims_schemas.hpp`'s document. The
+zero-field transitions (`ReceiveSample`, `StartWork`,
+`SubmitForVerification`, `PublishSample`) are plain buttons, because an
+action with no fields has no form to generate. `VerifyResult` and
+`OpenSample` are typed calls: their one field is an id the table or spinbox
+already holds, and asking somebody to retype an id they are looking at would
+be worse, not more conformant.
+
+The capture form is the one that earns its keep. Rendering
+`schemaJson<CaptureConcentration>()` through the shipped renderer is what puts
+this rung's own cross-field rules in front of the **framework's** evaluator
+rather than only the one `test_conditional_logic.cpp` writes:
+`exactlyOneOf(value, qualifier)` becomes the submit gate that makes "a number
+*and* a below-LOD flag" unsubmittable; the `requiredWhen`/`visibleWhen` pair
+makes the dilution factor appear and become required exactly when the
+preparation says diluted; and `x-decimalPlaces`/`x-unitAlternatives` drive the
+entry-unit machinery. None of that is written in QML.
+
+Every `DynamicForm` here is left **unbound** (`controller: null`) and
+submitted by an explicit button, following bookmarks' and pastebin's
+precedent: a bound form auto-submits the moment its required fields are
+engaged, which for a lab reading would file a result mid-keystroke.
+
+### Two handlers on the lifecycle surface, and why
+
+`SampleModel` is keyed, so the handler every attached action runs on is
+`AllowShared`. But an `AllowShared` handler is **not bound until it attaches
+to a key**, and `RegisterClient`/`RegisterSample` carry none — dispatching
+either on it fails with "handler not bound". This was confirmed empirically
+here before `SamplePresenter` grew a second, plain handler for exactly those
+two actions; `polls::gui::PollPresenter` reached the same conclusion for
+`CreatePoll`. `registerSample` therefore does two dispatches: create on the
+plain handler, then attach the shared one to the id that came back. `busy()`
+never dips between them.
+
+### What the smoke test does not prove, and what covers it instead
+
+The offscreen engine-load test proves every QML file parses and every type it
+names resolves. It cannot prove a `Connections` handler is bound to a signal
+that exists, or that a delegate reads a key the model supplies — both are
+resolved dynamically against objects that test never supplies.
+`test_lims_qml_bridges.cpp` covers that from the other side: it asserts
+against the real bridges' metaobjects that every signal the QML connects to
+exists, and against their real property bags that every key a delegate reads
+is present.
+
 ## Findings raised by this rung
 
 - **[`docs/findings/005`](../../docs/findings/005-modelkey-rejects-strong-id-types.md)
@@ -550,6 +624,13 @@ framework owns, which is `docs/findings/011`.
   nothing and nothing warns. Found here the hard way: `ctest -L ladder-lims`
   reported 85 cases while the binary reported 87. Two lims cases were renamed;
   12 pre-existing ones repo-wide are still affected.
+- **[`docs/findings/013`](../../docs/findings/013-no-public-decimal-only-quantity-renderer.md)
+  — a `Quantity`'s exact decimal can only be rendered with its unit appended.**
+  `morph::units::toString` always concatenates the unit; the decimal-only
+  formatter is in `morph::units::detail`, and `std::format("{}", rational)`
+  prints the *fraction* (`"12/5"`), not the decimal. A table that places the
+  number and the unit separately has to take the suffix back off a string that
+  just had it put on.
 - **Models cannot self-journal without the registry/dispatcher path.**
   `IModelHolder::recordIfAttached` fires only for holder-constructed models,
   so a plain-constructed one — the only kind a unit test has, and what

@@ -91,6 +91,28 @@ inline constexpr std::string_view kQualifierAboveUdl = "aboveUDL";
     }
 }
 
+/// @brief The stable ascii name of @p qualifier, for display and logging.
+///
+/// Distinct from `qualifierCode`, which is the *wire* code and is empty for
+/// `Measured` (a reading is encoded as an engaged value, not as a code). A
+/// display needs a word for every case, including that one.
+/// @param qualifier The stored qualifier.
+/// @return Its name.
+[[nodiscard]] constexpr std::string_view qualifierName(ResultQualifier qualifier) noexcept {
+    switch (qualifier) {
+        case ResultQualifier::Measured:
+            return "measured";
+        case ResultQualifier::NotMeasured:
+            return kQualifierNotMeasured;
+        case ResultQualifier::BelowLOD:
+            return kQualifierBelowLod;
+        case ResultQualifier::AboveUDL:
+            return kQualifierAboveUdl;
+        default:
+            return "unknown";
+    }
+}
+
 /// @brief One row of the qualifier picklist a `QualifierChoice` renders from.
 struct QualifierOption {
     /// @brief The wire code submitted as the field's value.
