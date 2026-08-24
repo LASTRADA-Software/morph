@@ -158,6 +158,15 @@ private:
         entry.entityKey = _entityKey;
         entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
         entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+        // Stamp the payload's shape fingerprint, the same value morph's own
+        // dispatcher stamps on the entries it appends. Without it every entry
+        // this rung records is *unstamped*, and a later replay against a
+        // renamed field would decode it to a default and report the wrong
+        // state confidently -- the failure this rung's README names as the
+        // ladder's open question (issue #174). Empty for an action whose
+        // ActionTraits is hand-written; see docs/spec/journal/journal.md,
+        // "Payload schema fingerprint".
+        entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
         if (const auto* ctx = ::morph::session::current()) {
             entry.principal = ctx->principal;
         }

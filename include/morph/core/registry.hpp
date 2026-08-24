@@ -18,6 +18,7 @@
 
 #include "../forms/forms.hpp"
 #include "model.hpp"
+#include "payload_schema.hpp"
 
 namespace morph::model {
 
@@ -188,6 +189,46 @@ constexpr Loggable actionLoggable() {
     }
 }
 
+/// @brief Concept satisfied by `ActionTraits<A>` specialisations that expose a
+///        `payloadSchema()` static member.
+///
+/// Both `BRIDGE_REGISTER_ACTION` and `BRIDGE_REGISTER_ACTION_FOR_CLIENT`
+/// generate one; a hand-written `ActionTraits` does not have to.
+template <typename A>
+concept HasPayloadSchema = requires {
+    { ActionTraits<A>::payloadSchema() } -> std::convertible_to<std::string_view>;
+};
+
+/// @brief Returns `ActionTraits<A>::payloadSchema()` if the specialisation
+///        provides one, otherwise the empty string.
+///
+/// **The fingerprint is a property of the codec, not of the action type.** The
+/// macro-generated codecs read and write through Glaze's reflection, so their
+/// JSON shape *is* the struct's reflected shape and
+/// `morph::model::payloadFingerprint` describes it exactly. A hand-written
+/// `ActionTraits` may map its struct to entirely different JSON -- it may not
+/// even be a reflectable type (`test_client_execute_deadline.cpp` registers an
+/// anonymous-namespace struct, which Glaze's traditional reflection cannot name
+/// at all) -- so deriving a "shape" from the struct would describe something
+/// that never reaches the journal.
+///
+/// Empty means *unstamped*: entries for such an action are recorded without a
+/// fingerprint and replay treats them exactly as every build before the
+/// fingerprint existed did (see `journal::UnstampedPayloadPolicy`). A
+/// hand-written specialisation that wants the guarantee opts in by defining its
+/// own `payloadSchema()`.
+///
+/// @tparam A Action type.
+/// @return The fingerprint, or `""` when the specialisation provides none.
+template <typename A>
+inline std::string actionPayloadSchema() {
+    if constexpr (HasPayloadSchema<A>) {
+        return std::string{ActionTraits<A>::payloadSchema()};
+    } else {
+        return {};
+    }
+}
+
 /// @brief Exception thrown when JSON serialisation or deserialisation fails.
 struct ParseError : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -251,6 +292,13 @@ public:
     /// failure, a rejected write) with `outcome = Outcome::Failed` and
     /// `error = what()`, `result` empty. Either way the exception (if any)
     /// propagates unchanged after the entry is recorded.
+    ///
+    /// Every recorded entry is stamped with `payloadFingerprint<Action>()` in
+    /// `LogEntry::schema`, and the same fingerprint is filed under
+    /// `(modelId, actionId)` for `schemaFor()` to hand back to the type-erased
+    /// replay path. That pair is what lets `journal::replay()` notice that the
+    /// shape which wrote an entry is not the shape it is about to decode it
+    /// with -- see `docs/spec/journal/journal.md`, "Payload schema fingerprint".
     /// @throws ValidationError if the decoded action fails `ActionValidator<Action>::ready`.
     template <typename Model, typename Action>
     void registerAction(std::string_view modelId, std::string_view actionId) {
@@ -313,6 +361,7 @@ public:
                             .entityKey = {},
                             .actionType = std::string{ActionTraits<Action>::typeId()},
                             .payload = std::string{payloadJson},
+                            .schema = detail::actionPayloadSchema<Action>(),
                             .result = resultJson,
                             .outcome = ::morph::journal::Outcome::Succeeded,
                             .error = {},
@@ -331,6 +380,7 @@ public:
                             .entityKey = {},
                             .actionType = std::string{ActionTraits<Action>::typeId()},
                             .payload = std::string{payloadJson},
+                            .schema = detail::actionPayloadSchema<Action>(),
                             .result = {},
                             .outcome = ::morph::journal::Outcome::Failed,
                             .error = exc.what(),
@@ -343,6 +393,7 @@ public:
             }
         };
         _coalesce[key] = ActionLogPolicy<Action>::coalesce;
+        _schema[key] = detail::actionPayloadSchema<Action>();
     }
 
     /// @brief Dispatches an action against @p holder and returns the JSON-encoded result.
@@ -367,6 +418,25 @@ public:
         return iter != _coalesce.end() && iter->second;
     }
 
+    /// @brief Returns the payload fingerprint `(modelId, actionId)` was
+    ///        registered with, or an empty string if the pair is unregistered.
+    ///
+    /// This is the type-erased half of the journal's payload-evolution check:
+    /// `registerAction` knows the concrete `Action` and can compute
+    /// `payloadFingerprint<Action>()`; `journal::replay()` sees only strings on
+    /// a `LogEntry` and needs to ask for the current build's fingerprint by id.
+    /// The empty return is not an error -- an entry naming an unregistered
+    /// action fails at `dispatch()` with "unknown action" a moment later, which
+    /// is the better diagnostic for that case.
+    ///
+    /// @param modelId  Model type-id.
+    /// @param actionId Action type-id.
+    /// @return The registered fingerprint, or `""` if the pair is unregistered.
+    [[nodiscard]] std::string schemaFor(std::string_view modelId, std::string_view actionId) const {
+        auto iter = _schema.find(Key{std::string{modelId}, std::string{actionId}});
+        return iter == _schema.end() ? std::string{} : iter->second;
+    }
+
     /// @brief Returns the process-level singleton dispatcher.
     static ActionDispatcher& instance() { return defaultDispatcher(); }
 
@@ -374,6 +444,7 @@ private:
     using Key = std::pair<std::string, std::string>;
     std::unordered_map<Key, Runner, PairKeyHash> _runners;
     std::unordered_map<Key, bool, PairKeyHash> _coalesce;
+    std::unordered_map<Key, std::string, PairKeyHash> _schema;
 };
 
 /// @brief Registry that creates `IModelHolder` instances by string type-id.
@@ -671,6 +742,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         using Result = RESULT;                                                                                 \
         static constexpr std::string_view typeId() { return NAME; }                                            \
         static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
+        /* Structural fingerprint of the JSON shape the codecs below read and write.  */                       \
+        /* Stamped on every journal entry and checked on replay -- see                */                       \
+        /* morph::model::payloadFingerprint and docs/spec/journal/journal.md.          */                      \
+        static const std::string& payloadSchema() { return ::morph::model::payloadFingerprint<A>(); }          \
         static std::string toJson(const A& action) {                                                           \
             std::string out;                                                                                   \
             /* EscapingWriteOpts, not write_json: a raw control byte in any     */                             \
@@ -743,6 +818,10 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
         using Result = decltype(std::declval<M&>().execute(std::declval<A>()));                                \
         static constexpr std::string_view typeId() { return NAME; }                                            \
         static constexpr ::morph::model::Loggable loggable = (LOGGABLE);                                       \
+        /* Structural fingerprint of the JSON shape the codecs below read and write.  */                       \
+        /* Stamped on every journal entry and checked on replay -- see                */                       \
+        /* morph::model::payloadFingerprint and docs/spec/journal/journal.md.          */                      \
+        static const std::string& payloadSchema() { return ::morph::model::payloadFingerprint<A>(); }          \
         static std::string toJson(const A& action) {                                                           \
             std::string out;                                                                                   \
             /* EscapingWriteOpts, not write_json: a raw control byte in any     */                             \

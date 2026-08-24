@@ -69,6 +69,7 @@ add_executable(morph_tests
     test_action_log.cpp
     test_action_log_phase2.cpp
     test_journal_format_versioning.cpp
+    test_journal_payload_evolution.cpp
     test_outbox.cpp
     test_rational_checked.cpp
     test_rational_wire_policy.cpp

@@ -27,6 +27,7 @@ by `contextKey`; see [Attaching a log to remote instances](#attaching-a-log-to-r
 - [LogEntry — one recorded action execution](#logentry--one-recorded-action-execution)
 - [Serialization](#serialization)
 - [Line-format version (`v`)](#line-format-version-v)
+- [Payload schema fingerprint](#payload-schema-fingerprint)
 - [Data-at-rest contract](#data-at-rest-contract)
 - [IActionLog — the storage interface](#iactionlog--the-storage-interface)
 - [InMemoryActionLog](#inmemoryactionlog)
@@ -61,6 +62,7 @@ construct or append these directly.
 | `entityKey` | `std::string` | Stable identity of the model instance (e.g. account id), stamped from `attachActionLog()`. Empty if none was set. |
 | `actionType` | `std::string` | String type-id of the action (`ActionTraits<A>::typeId()`). |
 | `payload` | `std::string` | JSON-encoded request (`ActionTraits<A>::toJson`). Always present, regardless of `outcome`. |
+| `schema` | `std::string` | Structural fingerprint of the payload's JSON shape at the moment `payload` was encoded (`morph::model::payloadFingerprint<A>()`). Stamped automatically at both execution sites. **Empty means unstamped** — written before this field existed, appended directly by application code, or produced by an action whose `ActionTraits` is hand-written. See [Payload schema fingerprint](#payload-schema-fingerprint). |
 | `result` | `std::string` | JSON-encoded result (`ActionTraits<A>::resultToJson`). Populated when `outcome == Outcome::Succeeded`; empty when `Failed`. |
 | `outcome` | `Outcome` | `Succeeded` or `Failed`. Defaults to `Succeeded` so a pre-existing on-disk entry (written before this field existed) decodes unchanged — an absent key is indistinguishable from an explicit `Succeeded`. Serialises as the string `"Succeeded"`/`"Failed"` via a `glz::meta<Outcome>` specialisation (the one exception to "`LogEntry` needs no `glz::meta`" below). |
 | `error` | `std::string` | `std::exception::what()` from the exception that rejected the action. Empty unless `outcome == Outcome::Failed`. |
@@ -155,6 +157,199 @@ format wrote a persisted entry.
   additive keys (tolerated by leniency) do not bump it — the same discipline
   applied to protocol-version bumps elsewhere in the wire layer.
 
+## Payload schema fingerprint
+
+`LogEntry::v` versions the **line format**. `LogEntry::schema` versions the
+**payload** — the shape of the action struct whose JSON is in `payload`.
+
+The problem it solves is the one the [Data-at-rest
+contract](#data-at-rest-contract) below states as a rule but had no way to
+enforce. Replay decodes a stored payload with the *current* action struct,
+through `ActionTraits<A>::fromJson`'s lenient reader. Rename a field and both
+halves of the rename are invisible: the old key is an unknown key, silently
+ignored; the new one is an absent key, silently default-constructed. The entry
+decodes, the model reconstructs, `replay()` returns normally — and reports a
+state that was never recorded. Nothing in the entry said which shape wrote it,
+so nothing *could* notice. For rungs 5 and 6, whose definition of done is
+"every state X was ever in is reconstructible from the journal alone", that
+is the disqualifying case: not a reconstruction that fails, but one that
+succeeds and is wrong.
+
+### The decision
+
+**Detect the violation; refuse rather than guess; provide a seam for the
+change that has to happen anyway.**
+
+- Every recorded entry carries a fingerprint of the payload shape that wrote
+  it (`morph::model::payloadFingerprint<A>()`, `core/payload_schema.hpp`).
+- `replay()` compares it against the fingerprint *this* build computes for the
+  same action, and **throws `SchemaMismatchError`** when they differ.
+- An application can register a migration for a `(actionType, fromSchema)`
+  pair, which rewrites the recorded payload JSON in memory before dispatch.
+  The stored journal is never rewritten: reading never mutates history.
+
+This does not replace the additive-only rule below — it makes the rule
+checkable. The rule stays the recommendation; the fingerprint is what happens
+when the recommendation was not followed.
+
+### The fingerprint
+
+`payloadFingerprint<A>()` returns `"<scheme>:<16 hex digits>"` — 18 bytes,
+computed once per type per process, stamped by value on each entry.
+
+It is the FNV-1a digest of a **shape rendering** (`payloadShapeString<A>()`),
+which is deliberately portable: every tag comes from a `std::` type trait or
+from Glaze's reflected key strings, never from a compiler-spelled type name.
+Two builds of the same sources on different compilers, standard libraries, or
+platforms therefore agree, which a `glz::name_v`-derived fingerprint would
+not — and a journal that only its own compiler can read is not a durable
+record.
+
+| C++ type | Rendering |
+|---|---|
+| `bool` | `b` |
+| `char` | `c` |
+| signed / unsigned integral | `i`/`u` + `sizeof` (e.g. `i4`) |
+| enumeration | `e` + `sizeof` of the underlying type |
+| floating point | `f` + `sizeof` |
+| string-like | `s` |
+| `std::optional<T>` | `?` + T's rendering |
+| map | `{` key `>` mapped `}` |
+| other range | `[` element `]` |
+| reflected object | `(` key-sorted `key:shape` list `)` |
+| anything else | `x` |
+
+So `struct { std::string state; std::int32_t count; }` renders as
+`(count:i4,state:s)`, and renaming `state` to `stateCode` renders as
+`(count:i4,stateCode:s)` — a different digest.
+
+**Members are sorted, so reordering a struct is not a schema change.** JSON
+objects are unordered and the decode matches by name, so moving a field
+changes nothing about which bytes decode where; an order-sensitive fingerprint
+would turn a cosmetic edit into a replay break for every retained journal.
+
+### What the fingerprint does not catch
+
+Stated plainly, because the guarantee is only as good as its boundary:
+
+- **A retype between two custom-codec types.** Any type with its own
+  `glz::meta` — `Rational`, `Quantity`, `DateTime`, `Tagged` — renders as the
+  opaque `x`, so swapping one for another is invisible to the fingerprint. (A
+  custom-codec type swapped for a plain one *is* caught: `x` versus `s`.) The
+  alternative was a `glz::name_v`-derived tag, which is compiler-dependent;
+  a journal readable only by the compiler that wrote it is the worse failure.
+- **A retype that changes nothing about the JSON shape** at a nesting depth
+  past `detail::kPayloadShapeMaxDepth` (8), where recursion stops and `x` is
+  emitted.
+- **Anything about an action with a hand-written `ActionTraits`.** The
+  fingerprint describes the *reflected* shape, which is what the
+  macro-generated codecs read and write. A hand-written codec may map its
+  struct to entirely different JSON, so no fingerprint is derived for it and
+  its entries are recorded unstamped. Such a specialisation opts in by
+  defining its own `static const std::string& payloadSchema()`.
+- **Anything an application journals by hand.** `LogEntry::schema` is stamped
+  by `ActionDispatcher::registerAction`'s runner and `Bridge::executeVia`'s
+  `localOp` — the two sites that execute an action. Code that constructs a
+  `LogEntry` itself and appends it to a sink stamps nothing unless it sets the
+  field, and its entries replay unverified.
+
+### Unstamped entries — what happens to journals already written
+
+An entry written before this field existed has no `schema` key. Under
+`fromJson`'s leniency that is just an absent key, so it decodes with the
+member's default: the empty string. Empty is therefore not "verified as
+unchanged" — it is **unverifiable**, and no check can be performed on it at
+all.
+
+`replay()`'s `UnstampedPayloadPolicy` parameter decides what to do:
+
+| Value | Behaviour |
+|---|---|
+| `Replay` (default) | Replay it, exactly as every build before this check did. |
+| `Refuse` | Throw `SchemaMismatchError` on the first unstamped entry. |
+
+`Replay` is the default because it is the only choice that keeps existing
+journals replayable at all: refusing them would make an upgrade a data-loss
+event for every retained journal, which is this feature's own failure mode
+inverted. Choosing it accepts the *pre-existing* silent-default risk for
+*pre-existing* entries and grants no leniency to anything written after the
+stamp exists. **This feature is forward-looking by construction** — it protects
+entries written by a build that has it, and it cannot retroactively protect
+one that was written without it. A caller whose correctness claim is "this
+reconstruction is faithful" passes `Refuse` and accepts that pre-fingerprint
+entries are outside what it can claim.
+
+### `SchemaMismatchError` — the signal, and who handles it
+
+```cpp
+struct SchemaMismatchError : std::runtime_error;  // journal.hpp
+```
+
+Thrown out of `replay()` (and therefore out of `SessionLog::undoLast()`,
+though that path cannot reach it — see below). The message names the
+`modelType/actionType` pair and both fingerprints, so the failure is
+actionable without a debugger.
+
+It throws rather than warning or flagging because there is no partially-correct
+reconstruction to hand back: the decode gives no signal about how much of the
+entry survived it, and a `replay()` that returned a suspect holder alongside a
+warning would put the burden of noticing on exactly the code path that
+demonstrably did not notice for as long as this defect existed.
+
+The handler is **the caller** — application-level reconstruction code, not the
+framework. Its three answers are: register a migration, replay with a build
+whose fingerprint matches, or surface the failure. There is deliberately no
+fourth.
+
+`SessionLog::undoLast()` replays with the default settings and cannot trip the
+gate in practice: the entries it replays were appended by the same process, so
+their fingerprints are this build's by construction. Undo is not a
+cross-version path.
+
+### Migrations
+
+```cpp
+class PayloadMigrationRegistry {
+    using Migration = std::function<std::string(std::string_view)>;
+    void add(std::string_view actionType, std::string_view fromSchema, Migration);
+    const Migration* find(std::string_view actionType, std::string_view fromSchema) const;
+    void clear();
+    std::size_t size() const noexcept;
+};
+PayloadMigrationRegistry& defaultPayloadMigrations();
+```
+
+A migration is a pure function over the recorded payload JSON: given the bytes
+the older build wrote, return the bytes this build's `fromJson` should see. It
+is applied in memory, per replayed entry; the sink is untouched. Not
+thread-safe (matching `ActionDispatcher`) — register during start-up, before
+any `replay()` runs. `replay()` takes the registry as a parameter, so a test or
+a one-off reconstruction can pass its own instead of mutating the process-wide
+one.
+
+This is what makes "refuse" a livable contract rather than a one-way door: the
+breaking change stays possible, it just has to be *written down as code* before
+the journal that needs it can be read again.
+
+### Alternatives considered
+
+| Option | Why not chosen |
+|---|---|
+| **Strict decode on the journal path** (`error_on_unknown_keys = true`) | Catches the rename, but also rejects an *additive* field — the one evolution the [Data-at-rest contract](#data-at-rest-contract) explicitly permits. It would turn every journal written by a newer build into an error for an older reader, and it still cannot see a field that was renamed *away* (the key is simply absent). Cheap, but it breaks the contract it was meant to defend. |
+| **Freeze payloads by contract only** (lint / conformance corpus) | This is already the published contract, and its enforcement is the gap. A lint sees one repository at one commit; the journal outlives the deployment that wrote it, and the rename may be years and several builds away from the reader. Useful as a second layer, not as the answer. |
+| **Warn and reconstruct anyway** | The failure mode being fixed is *confident wrongness*. Handing back a suspect holder plus a log line reproduces it with extra steps. |
+| **Full per-action version numbers with a registered decoder per version** | Strictly more expressive, and strictly more machinery: an author must remember to bump the version, which is the same discipline the additive-only rule already asks for and does not get. A fingerprint is derived, so it cannot be forgotten. Migrations recover the expressiveness where it is actually needed. |
+
+### Relationship to the wire path (#207)
+
+The identical leniency exists on the live wire path, and is **not** addressed
+here. It is a different decision with a different answer: `docs/spec/core/wire.md`
+publishes an "Action-evolution policy" whose first bullet is additive-only
+*within* a deployment window, and the handshake (`kProtocolVersion`) is its
+designed defence. The journal's scope is retention, not deployment — a journal
+can outlive every peer that ever wrote to it — which is why the two paths get
+different mechanisms. See issue #207.
+
 ## Data-at-rest contract
 
 One rule with teeth: **an action recorded in a retained journal must stay
@@ -172,6 +367,13 @@ that ever wrote to it:
 - Replay and dispatch share one codec — `ActionTraits<A>::fromJson` — so there
   is exactly one compatibility surface to keep honest; there is no separate
   "archive format" that can drift from the live one.
+- **The rule is now checked, not merely stated.** Every recorded entry carries
+  a fingerprint of the payload shape that wrote it, and `replay()` refuses an
+  entry whose fingerprint disagrees with this build's. Before that, a violation
+  of the two rules above produced a confident, wrong reconstruction rather than
+  an error. See [Payload schema fingerprint](#payload-schema-fingerprint) —
+  including what it cannot see, and what happens to entries already written
+  without one.
 
 ### The migration recipe (not shipped)
 
@@ -182,6 +384,12 @@ using `entries()` or plain NDJSON tooling); write the result as new segments
 stamped with the current `v`. morph guarantees the decode rules above and
 ships no transformer — reading never mutates history, and there is no
 upgrade-on-read.
+
+For the in-memory alternative — leaving the sealed segments exactly as
+recorded and adapting each payload as it is replayed — see
+[Migrations](#migrations). That seam does not rewrite anything either; it is
+the same "reading never mutates history" rule, applied to a rename that has
+already happened.
 
 ## IActionLog — the storage interface
 
@@ -461,11 +669,14 @@ std::unique_ptr<IModelHolder> replay(
     std::string_view modelTypeId,
     const std::vector<LogEntry>& entries,
     ModelRegistryFactory& registry = defaultRegistry(),
-    ActionDispatcher& dispatcher = defaultDispatcher());
+    ActionDispatcher& dispatcher = defaultDispatcher(),
+    const PayloadMigrationRegistry& migrations = defaultPayloadMigrations(),
+    UnstampedPayloadPolicy unstamped = UnstampedPayloadPolicy::Replay);
 ```
 
 Throws `std::runtime_error` if `modelTypeId` or any entry's action type is
-unregistered.
+unregistered, and `SchemaMismatchError` if an entry's payload fingerprint
+disagrees with this build's (see below).
 
 **`Failed` entries are skipped, not replayed.** A rejected/thrown action never
 mutated model state, so there is nothing to reconstruct from it — and
@@ -493,6 +704,14 @@ typically obtained by filtering a log with `entries(entityKey)` and by matching
 `modelType`. Mixing entries from several instances (or several model types) into
 one `replay()` call replays them all onto a single object and produces a
 meaningless state. This is a precondition, not something `replay()` validates.
+
+**Every entry is checked against this build's payload shape before it is
+dispatched.** Equal fingerprints dispatch unchanged; a mismatch consults
+`migrations` and otherwise throws `SchemaMismatchError`; an unstamped entry is
+governed by `unstamped`. An entry naming an *unregistered* action is not
+rejected here — `schemaFor` returns empty for it and it falls through to
+`dispatch()`'s "unknown action", the more precise of the two diagnostics. See
+[Payload schema fingerprint](#payload-schema-fingerprint).
 
 **`replay()` signals replay mode to executing code for its whole dispatch
 loop.** See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling)
@@ -820,13 +1039,17 @@ All symbols live in `namespace morph::journal`.
 
 | Symbol | Kind | Signature / Notes |
 |---|---|---|
-| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`), `causalParentId` (identity of the triggering entry, empty by default). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
+| `LogEntry` | struct | Flat aggregate: `seq`, `modelType`, `entityKey`, `actionType`, `payload`, `schema` (payload fingerprint, empty when unstamped), `result`, `outcome`, `error`, `principal`, `timestampMs`, `idempotencyKey`, `v` (line-format version, default `kLogFormatVersion`), `causalParentId` (identity of the triggering entry, empty by default). Glaze-reflected (no `glz::meta` of its own; `outcome`'s type `Outcome` has one). |
 | `Outcome` | `enum class : std::uint8_t` | `Succeeded` (default) or `Failed`. Has a `glz::meta` specialisation so it (de)serialises as the string, not the underlying int. |
 | `kLogFormatVersion` | `inline constexpr std::uint32_t` | Current line-format version (`1`). Bumped only on a breaking change to `LogEntry`'s shape. See [Line-format version (`v`)](#line-format-version-v). |
 | `toJson` | free function | `std::string toJson(const LogEntry&)` — encodes as JSON with `detail::EscapingWriteOpts` (control-byte escaping). Throws `SerializationError`. |
 | `fromJson` | free function | `LogEntry fromJson(std::string_view)` — decodes from JSON leniently (`error_on_unknown_keys = false`). Throws `SerializationError` on malformed JSON or if the decoded `v` exceeds `kLogFormatVersion`. |
 | `SerializationError` | struct | `: std::runtime_error`. Thrown by `toJson`/`fromJson`. |
 | `detail::throwOnGlazeError` | inline function | `void throwOnGlazeError(const glz::error_ctx&, std::string_view)` — shared error path for `toJson`/`fromJson`. |
+| `SchemaMismatchError` | struct | `: std::runtime_error`. Thrown by `replay()` on a payload-fingerprint mismatch with no migration, or on an unstamped entry under `UnstampedPayloadPolicy::Refuse`. Message names the `modelType/actionType` pair and both fingerprints. |
+| `UnstampedPayloadPolicy` | `enum class : std::uint8_t` | `Replay` (default) or `Refuse` — what `replay()` does with an entry carrying no fingerprint. |
+| `PayloadMigrationRegistry` | class | `(actionType, fromSchema) -> std::function<std::string(std::string_view)>`. `add`/`find`/`clear`/`size`. Not thread-safe; populate at start-up. |
+| `defaultPayloadMigrations` | free function | `[[nodiscard]] PayloadMigrationRegistry& defaultPayloadMigrations()` — the process-level registry `replay()` uses by default. |
 
 ### IActionLog and implementations
 
@@ -854,7 +1077,7 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 
 | Symbol | Kind | Notes |
 |---|---|---|
-| `replay` | free function | `std::unique_ptr<IModelHolder> replay(modelTypeId, entries, registry, dispatcher)`. Sets `isReplaying()` to `true` for its dispatch loop — see below. |
+| `replay` | free function | `std::unique_ptr<IModelHolder> replay(modelTypeId, entries, registry, dispatcher, migrations, unstamped)`. Verifies each entry's payload fingerprint before dispatching it. Sets `isReplaying()` to `true` for its dispatch loop — see below. |
 | `isReplaying` | free function | `[[nodiscard]] bool isReplaying() noexcept` — `true` while the calling thread is inside `replay()`'s dispatch loop, `false` otherwise. See [Causal links and replay-mode signaling](#causal-links-and-replay-mode-signaling). |
 | `detail::tlsIsReplaying` | inline function | `bool& tlsIsReplaying()` — thread-local slot backing `isReplaying()`. Not part of the public API; installed/restored only by `detail::ScopedReplayFlag`. |
 | `detail::ScopedReplayFlag` | class | RAII: sets the thread-local replay flag `true`, restores the previous value on destruction. Copy/move deleted. |
@@ -875,6 +1098,11 @@ and `RemoteServer::setLogProvider(LogProvider)`, declared in `remote.hpp`. See
 | `FileActionLog` uses C stdio + `fsync` | **`fopen`/`fwrite`/`fflush`/`fsync`** | `fwrite` is buffered; `flush()` calls `fflush` then `fsync` (or `_commit` on Windows) for real durability. POSIX `write`/`fsync` would bypass stdio buffering entirely; C stdio gives buffering by default with explicit flush control. |
 | `FileActionLog::entries` tolerates a torn trailing line | **Skip + warn on the last line only; re-throw mid-file** | A crash between `append`'s `fwrite` and the next flush can truncate the final line. Skipping it keeps the log readable after a crash; re-throwing on interior damage refuses to silently hide real corruption. |
 | `InMemoryActionLog`/`FileActionLog` dedup on `idempotencyKey` | **Non-empty key only; `SessionLog` excluded** | Makes both safe default choices for `OutboxRelay::sink` without changing behavior for callers that never set the key (empty key never dedups). `SessionLog` is excluded because its contract is full fidelity — nothing coalesced or dropped. |
+| Payload evolution is **detected**, not prevented | **Fingerprint stamped per entry; `replay()` refuses a mismatch** | The additive-only [data-at-rest contract](#data-at-rest-contract) was already published and already unenforced. Strict decode would reject the additive change the contract permits; a lint sees one commit while a journal outlives the deployment that wrote it. A derived fingerprint cannot be forgotten the way a hand-maintained version number can. |
+| A mismatch throws rather than warning | **`SchemaMismatchError` out of `replay()`** | The defect is confident wrongness. A suspect holder plus a log line reproduces it with extra steps, and puts the burden of noticing on the code path that demonstrably did not notice. |
+| The fingerprint is order-insensitive and compiler-independent | **Key-sorted shape rendering from `std::` traits and reflected key strings** | Reordering members changes nothing about which JSON bytes decode where, so an order-sensitive digest would break replay for a cosmetic edit. A `glz::name_v`-derived tag would be compiler-spelled, making a journal readable only by the compiler that wrote it. |
+| Unstamped entries replay by default | **`UnstampedPayloadPolicy::Replay`** | Refusing them would make an upgrade a data-loss event for every retained journal — this feature's own failure mode, inverted. `Refuse` exists for callers who would rather have no answer than an unverifiable one. |
+| Migrations rewrite in memory, never on disk | **`PayloadMigrationRegistry`, applied per replayed entry** | Reading never mutates history — the same rule the [migration recipe](#the-migration-recipe-not-shipped) states for the offline path. It also keeps the migration reviewable as code rather than as a one-time script someone ran. |
 | `fromJson` reads leniently | **`glz::read<{.error_on_unknown_keys = false}>`, not `glz::read_json`** | Matches `wire::decode`'s forward-compatibility contract; without it, adding the `v` key itself (or any future key) would be a reader flag-day for every already-deployed reader. |
 | `LogEntry::v` defaults to `kLogFormatVersion` | **Default member initializer, not a `toJson`-time stamp** | A freshly constructed entry (every entry `toJson` ever encodes for a new action) already carries the current version for free; a legacy line missing the key decodes with the same default, so "legacy is v1" falls out of the type rather than being special-cased in code. |
 | `v` newer than `kLogFormatVersion` throws | **Fail loud, not guess** | A reader has no way to know the shape a future breaking change introduces; refusing to decode is safer than guessing a superset/subset shape. |
@@ -942,6 +1170,13 @@ These hold for every sink and are relied on by `replay()`/`undoLast()`:
   its whole body under a dedicated forwarding mutex, so no two checkpoints
   interleave their `append()` calls at the durable sink; entries reach the sink
   in strictly nondecreasing append order even under concurrent checkpointing.
+- **A stamped entry never reconstructs under a shape other than the one that
+  wrote it.** If `LogEntry::schema` is non-empty and disagrees with this
+  build's fingerprint for that action, `replay()` either applies a registered
+  migration or throws — it never decodes the payload with the mismatched
+  shape. The converse is *not* an invariant: an empty `schema` carries no
+  evidence either way, and under the default `UnstampedPayloadPolicy::Replay`
+  such an entry decodes exactly as it did before this check existed.
 
 ## Failure modes / durability
 
@@ -1011,6 +1246,21 @@ Honest boundaries of the current design:
 - **No compaction of sealed history.** `checkpoint()` is the only reducer, and
   it runs *before* entries become durable; once a segment is sealed or
   written, morph never rewrites or drops entries from it.
+- **The payload fingerprint is forward-looking, and partial.** It protects
+  entries written by a build that stamps them; an entry already on disk without
+  one is unverifiable and stays that way (see [Unstamped
+  entries](#unstamped-entries--what-happens-to-journals-already-written)). It
+  describes the *reflected* shape, so it says nothing about an action with a
+  hand-written `ActionTraits`, nothing about a swap between two custom-codec
+  types, and nothing about entries an application journals by hand rather than
+  through the two framework execution sites. The full boundary is in [What the
+  fingerprint does not catch](#what-the-fingerprint-does-not-catch).
+- **The binary-skew test is still unwritten.** The executable form of the
+  data-at-rest contract — build a client with `MORPH_CLIENT_ONLY`, run it
+  against a newer server, and assert that an additive field works while a
+  renamed one fails loudly — does not exist. The fingerprint gives that test
+  something to assert *on the journal path*; the wire path it also covers is
+  issue #207's, not this one's.
 
 ## Cross-references
 

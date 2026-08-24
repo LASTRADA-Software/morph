@@ -13,6 +13,7 @@ without knowing their concrete types.
   - [ModelTraits](#modeltraits)
   - [ActionTraits](#actiontraits)
     - [Control bytes in action and result bodies](#control-bytes-in-action-and-result-bodies)
+    - [`payload_schema.hpp` — the payload fingerprint](#payload_schemahpp--the-payload-fingerprint)
 - [Validation and logging policy](#validation-and-logging-policy)
   - [ActionValidator](#actionvalidator)
   - [ValidationError](#validationerror)
@@ -173,6 +174,50 @@ struct ActionTraits;  // forward — specialize or use BRIDGE_REGISTER_ACTION
 
 All four JSON functions throw `detail::ParseError` (a `std::runtime_error`
 subclass) on glaze encode/decode failure.
+
+Both macros also generate a fifth member, `static const std::string&
+payloadSchema()`, returning `morph::model::payloadFingerprint<A>()` — a
+structural fingerprint of the JSON shape the four codec functions read and
+write. It is stamped on every journal entry recorded for the action and
+compared on replay, which is what lets `journal::replay()` notice that the
+shape which wrote an entry is not the shape it is about to decode it with. See
+[payload_schema.hpp](#payload_schemahpp--the-payload-fingerprint) below and
+[journal.md, "Payload schema fingerprint"](../journal/journal.md#payload-schema-fingerprint).
+
+A **hand-written** `ActionTraits` need not provide it. Such a specialisation
+may map its struct to entirely different JSON than reflection would — or may
+name a type Glaze cannot reflect at all (`tests/test_client_execute_deadline.cpp`
+registers an anonymous-namespace struct, which has no linkage and so cannot be
+reflected traditionally) — so deriving a shape from the struct would describe
+something that never reaches the journal. `detail::actionPayloadSchema<A>()`
+returns the empty string for it, entries are recorded unstamped, and replay
+treats them exactly as every build before the fingerprint existed did. Opting
+in is a matter of defining the member.
+
+### `payload_schema.hpp` — the payload fingerprint
+
+```cpp
+namespace morph::model {
+inline constexpr std::uint32_t kPayloadFingerprintScheme = 1;
+template <typename A> const std::string& payloadShapeString();  // "(count:i4,state:s)"
+template <typename A> const std::string& payloadFingerprint();  // "1:8c38bd160c0cf832"
+}
+```
+
+`payloadShapeString<A>()` renders `A`'s JSON shape as a compact string — one
+tag per member, key-sorted, recursing into reflected aggregates.
+`payloadFingerprint<A>()` is the FNV-1a digest of that rendering, prefixed with
+the scheme version so a future build that computes fingerprints differently can
+tell a scheme change from a payload change. Both are memoised per type in a
+function-local static.
+
+Every tag is derived from a `std::` type trait or from Glaze's reflected key
+strings — never from a compiler-spelled type name — so builds of the same
+sources on different compilers, standard libraries, or platforms agree on the
+digest. The grammar, the deliberate order-insensitivity, and the full list of
+what the fingerprint cannot see are documented once, in
+[journal.md](../journal/journal.md#payload-schema-fingerprint), where the
+consequences live.
 
 #### Control bytes in action and result bodies
 
@@ -456,6 +501,7 @@ class ActionDispatcher {
     std::string dispatch(std::string_view modelId, std::string_view actionId,
                          IModelHolder& holder, std::string_view payload);
     bool coalesce(std::string_view modelId, std::string_view actionId) const;
+    std::string schemaFor(std::string_view modelId, std::string_view actionId) const;
     static ActionDispatcher& instance();
 };
 ```
@@ -479,11 +525,23 @@ class ActionDispatcher {
   journal entry is a side effect, not a change to error propagation. Mirrors
   `Bridge::executeVia`'s `localOp` (`bridge.md`) for `LocalBackend`. See
   [journal.md, "Outcome"](../journal/journal.md#logentry--one-recorded-action-execution)
-  for the full field/replay semantics.
+  for the full field/replay semantics. Every recorded entry — success or
+  failure — is stamped with `detail::actionPayloadSchema<Action>()` in
+  `LogEntry::schema`, and the same value is filed under `(modelId, actionId)`
+  for `schemaFor()`.
 - `dispatch` looks up the runner and invokes it; throws `std::runtime_error` for
   unknown pairs.
 - `coalesce` returns the `ActionLogPolicy<Action>::coalesce` value for the pair;
   unknown pairs default to `false`.
+- `schemaFor` returns the payload fingerprint the pair was registered with, or
+  the empty string for an unregistered pair (or one whose `ActionTraits` is
+  hand-written and supplies no `payloadSchema()`). This is the type-erased half
+  of the journal's payload-evolution check: `registerAction` knows the concrete
+  `Action` and can compute the fingerprint, while `journal::replay()` sees only
+  the strings on a `LogEntry` and has to ask for it by id. The empty return is
+  not an error — an entry naming an unregistered action fails at `dispatch()`
+  with "unknown action" a moment later, which is the better diagnostic for that
+  case.
 
 ### `ModelRegistryFactory`
 
@@ -865,10 +923,11 @@ correctly under `MORPH_CLIENT_ONLY`.
 | Symbol | Kind | Purpose |
 |---|---|---|
 | `ModelTraits<M>` | class template | **Customisation point.** Maps model type to `std::string_view typeId()`. |
-| `ActionTraits<A>` | class template | **Customisation point.** Maps action type to id, JSON codec, result type, and `Loggable`. |
+| `ActionTraits<A>` | class template | **Customisation point.** Maps action type to id, JSON codec, result type, `Loggable`, and (macro-generated only) `payloadSchema()`. |
 | `ActionValidator<A>` | class template | **Customisation point.** `static bool ready(const A&)` — built-in detection of `bool validate() const`, overridable via specialisation. |
 | `ValidationError` | exception type | Thrown by `ActionDispatcher::registerAction`'s runner and `Bridge::executeVia`'s `localOp` when `ActionValidator<A>::ready` returns `false`. `std::runtime_error` subclass carrying `"action failed validation: <modelType>/<actionType>"`. |
 | `ActionLogPolicy<A>` | class template | **Customisation point.** `static constexpr bool coalesce = false` — checkpoint coalescing policy. |
+| `payloadFingerprint<A>()` | function template | `payload_schema.hpp`. Structural fingerprint of `A`'s JSON shape, `"<scheme>:<16 hex digits>"`. Companion: `payloadShapeString<A>()`, the human-readable rendering behind it. |
 | `Loggable` | enum | `{ No, Yes }` — strong boolean for action loggability. |
 
 ### Concepts (detail)
@@ -877,6 +936,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 |---|---|
 | `HasValidate<A>` | `true` when `A` exposes `bool validate() const`. |
 | `HasLoggableFlag<A>` | `true` when `ActionTraits<A>` exposes `static constexpr Loggable loggable`. |
+| `HasPayloadSchema<A>` | `true` when `ActionTraits<A>` exposes `payloadSchema()`. Both registration macros generate one; a hand-written specialisation need not. |
 | `BackendChangedNotifiable<M>` | `true` when `M` exposes `void onBackendChanged()`. |
 
 ### Type-erased model infrastructure
@@ -912,6 +972,7 @@ correctly under `MORPH_CLIENT_ONLY`.
 |---|---|
 | `PairKeyHash` | Hash functor for `std::pair<std::string, std::string>` keys used by `ActionDispatcher` and `ActionExecuteRegistry`. |
 | `actionLoggable<A>()` | Returns `ActionTraits<A>::loggable` if present, else `Loggable::Yes`. |
+| `actionPayloadSchema<A>()` | Returns `ActionTraits<A>::payloadSchema()` if present, else `""` (unstamped). |
 | `ParseError` | `std::runtime_error` subclass thrown on JSON codec failure. |
 | `registerModelOnce<M>(id)` | Static-init helper; returns `true`. |
 | `registerActionOnce<M, A>(modelId, actionId)` | Static-init helper; returns `true`. |
