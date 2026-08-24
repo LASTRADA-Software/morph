@@ -40,6 +40,21 @@ if [ -z "${RUNNER_TOKEN:-}" ]; then
     exit 1
 fi
 
+# A Docker/host restart re-runs this entrypoint against the SAME container
+# filesystem (this is a long-lived container, --restart unless-stopped, not a
+# fresh one per docker run) -- .runner/.credentials from the previous
+# registration are still on disk, but RUNNER_TOKEN is a new value this
+# process was started with, already past the ~1h TTL of whatever token
+# registered the *stale* config. config.sh --replace still refuses to
+# reconfigure over that leftover state ("Cannot configure the runner because
+# it is already configured"), which used to fail here, fire the cleanup
+# trap, and fail *that* too (the old registration is already gone
+# server-side), restart-looping forever under --restart unless-stopped.
+# Removing the stale local files first -- not calling the GitHub API, which
+# is exactly what's failing -- lets --replace do its job on the next line
+# instead of refusing before it even tries.
+rm -f .runner .credentials .credentials_rsaparams
+
 ./config.sh \
     --url "${REPO_URL}" \
     --token "${RUNNER_TOKEN}" \

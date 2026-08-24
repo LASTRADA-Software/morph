@@ -120,6 +120,23 @@ left registered but shows as offline; remove it manually via **Settings →
 Actions → Runners** or `gh api -X DELETE
 repos/LASTRADA-Software/morph/actions/runners/<id>`.
 
+### Docker Desktop / host restarts
+
+These are long-lived containers (`--restart unless-stopped`), not
+recreated from scratch on every start — a Docker Desktop restart (or a
+host reboot) re-runs `entrypoint.sh` against the **same** container
+filesystem, with `.runner`/`.credentials` from the previous registration
+still on disk. `entrypoint.sh` removes those files unconditionally before
+calling `config.sh`, so the container always re-registers cleanly on
+restart rather than restart-looping — confirmed live: before this fix, a
+Docker Desktop restart left all 4 containers stuck in `Restarting (1)`,
+each printing "Cannot configure the runner because it is already
+configured" followed by a failed cleanup attempt (the old registration
+was already gone server-side, so removing it 404's), forever, because
+`--replace` alone did not get past that stale local state. If a container
+is ever seen restart-looping despite this, `docker logs <name>` is the
+first thing to check.
+
 ## Environment variables (`entrypoint.sh`)
 
 | Variable        | Required | Default                                | Notes |
