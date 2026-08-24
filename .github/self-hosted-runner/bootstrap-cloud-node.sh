@@ -140,6 +140,14 @@ $SUDO docker rm -f fastcached 2>/dev/null || true
 FASTCACHED_STORAGE_DIR="${FASTCACHED_STORAGE_DIR:-/var/lib/fastcached}"
 $SUDO mkdir -p "$FASTCACHED_STORAGE_DIR"
 
+# --metrics: the image's own HEALTHCHECK is `fastcached --healthcheck`,
+# which needs the running daemon to answer on its metrics endpoint --
+# omitting this here means `docker ps` reports the container "(unhealthy)"
+# forever even though the daemon itself is fine (confirmed live: dropping
+# --metrics while overriding every other default CMD arg left the daemon
+# genuinely serving requests but Docker's own health probe failing with
+# exit 1 on every check). --metrics-bind=0.0.0.0 so the healthcheck can
+# reach it the same way the daemon's cache port is reachable.
 $SUDO docker run -d \
     --name fastcached \
     --restart unless-stopped \
@@ -149,6 +157,8 @@ $SUDO docker run -d \
     -v "${FASTCACHED_STORAGE_DIR}:/data" \
     fastcached:latest \
     --bind=0.0.0.0 \
+    --metrics \
+    --metrics-bind=0.0.0.0 \
     --max-memory="${FASTCACHED_MEMORY_GB}g" \
     --storage=/data \
     --storage-max-disk="${FASTCACHED_DISK_GB}g" \
