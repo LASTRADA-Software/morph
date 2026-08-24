@@ -5,11 +5,19 @@ Docker containers. Used by `ci.yml`'s `linux-compilers`, `linux-sanitizers`,
 and `linux-all-features` jobs whenever a runner is online and idle (see
 **ci.yml integration** below).
 
-Currently running as 4 containers on one host (the maintainer's Windows
-machine, Docker Desktop, Linux containers), each capped at 6 CPUs
-(`docker run --cpus=6`) on a 32-logical-processor box — 24 cores committed,
-8 left as headroom for the host OS and Docker Desktop itself. A Hetzner
-Cloud VM briefly ran a fifth registration but was torn down.
+Currently running across two hosts:
+
+- the maintainer's Windows machine (Docker Desktop, Linux containers): 4
+  containers, each capped at 6 CPUs (`docker run --cpus=6`) on a
+  32-logical-processor box — 24 cores committed, 8 left as headroom for the
+  host OS and Docker Desktop itself.
+- a Hetzner Cloud VM (8 CPU / 15 GiB): 3 workers at 2 CPU/4 GiB each plus
+  its own `fastcached` daemon (1 CPU/2 GiB/10 GiB-disk), all sized by
+  `bootstrap-cloud-node.sh` from the box's actual resources — see
+  **Bootstrapping a cloud node with its own fastcached** below.
+
+Both hosts' runners register to the same repo and are indistinguishable to
+`ci.yml` — a job lands on whichever is online and idle.
 
 Multiple runners exist so a multi-leg matrix (`linux-compilers` has 4,
 `linux-sanitizers` has 3) actually runs its legs in parallel instead of
@@ -308,19 +316,34 @@ where `host.docker.internal` does not resolve (it isn't a Docker
 container) and morph's `cmake/CompileCache.cmake` has no daemon to reach
 anyway.
 
-`host.docker.internal:6674` is a Windows/Docker-Desktop-specific address:
-it resolves, from inside a Linux container, to whatever the Docker Desktop
-host's `127.0.0.1` would mean — i.e. this same Windows machine's own
-`fastcached` service (see `D:\caching` on that machine; **not** part of
-this repository). That service must be **running** and its
-`fastcached.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
-or a container cannot reach it at all (`127.0.0.1` inside a container
-means the container itself). Moving this runner setup to a different host
-means either running a `fastcached` daemon reachable from that host's
-containers the same way, or leaving `FASTCACHE_ADDR` unset there — the
-module falls back to `sccache` (already installed by every job) with zero
-other changes needed; see `cmake/CompileCache.cmake`'s own header comment
-for the full fastcache-cc → sccache → ccache → none preference order.
+`host.docker.internal:6674` is the same literal address on every host --
+`ci.yml` hardcodes it, it does not vary by which runner picks up the job --
+which means **every host running these runners needs its own `fastcached`
+daemon reachable at that address from inside its containers**. There is
+no single shared cache across hosts; each host caches its own compiles.
+How `host.docker.internal` resolves differs by platform:
+
+- **Docker Desktop (the Windows machine)**: resolves automatically to
+  whatever the host's `127.0.0.1` means — i.e. that machine's own
+  `fastcached` service (see `D:\caching` on that machine; **not** part of
+  this repository). That service must be **running** and its
+  `fastcached.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
+  or a container cannot reach it at all (`127.0.0.1` inside a container
+  means the container itself).
+- **Plain Linux Docker Engine (the Hetzner box, or any cloud VM)**: does
+  **not** provide `host.docker.internal` automatically the way Docker
+  Desktop does. `bootstrap-cloud-node.sh` adds it explicitly via
+  `--add-host=host.docker.internal:host-gateway` on each worker
+  container — confirmed live (`REACHABLE` from inside a worker to
+  `fastcached` on the same box). A worker started without that flag on a
+  Linux host would fail to resolve the address and fall through to
+  `sccache` instead (never a hard failure, just a slower cache).
+
+If a host has no `fastcached` reachable at all (or `FASTCACHE_ADDR` is
+left unset there), the module falls back to `sccache` (already installed
+by every job) with zero other changes needed; see
+`cmake/CompileCache.cmake`'s own header comment for the full
+fastcache-cc → sccache → ccache → none preference order.
 
 `FASTCACHE_AUTO_INSTALL=ON` is what lets this work without prebaking
 `fastcache-cc` into the runner image: on first configure, CMake downloads
