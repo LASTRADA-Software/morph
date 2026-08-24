@@ -223,8 +223,33 @@ normally; only subsequent calls go to the new instance.
 
 The directory lives **server-side**, in `RemoteServer`, so instances are
 reusable across clients. Two connections that attach to key 42 reach the same
-instance and see each other's state — that is the point of (a), and it is what
-distinguishes this from a client-side handle cache.
+instance — that is the point of (a), and it is what distinguishes this from a
+client-side handle cache.
+
+**"The same instance" means shared state, not shared notifications.** Both
+handlers are pointed at one underlying instance, so each read/write round trip
+observes the same durable state, and a write by one client is visible to the
+other *on that other client's next action*. There is no push: `subscribe<R>`
+fans out only to handlers on the same `Bridge` (in-process), never across
+connections or processes, so a change one client causes is not observed by
+another until that other client asks again. This is the same limitation the
+repository README states under "Instance subscriptions are best-effort and
+in-process"; an earlier revision of this section said shared attachers "see each
+other's state", which read as a promise of propagation the framework does not
+make.
+
+**The directory is per-process, and that is load-bearing for the claim above.**
+`_directory`, `_models`, `_owners`, `_attachCount`, `_connectionScopes` and
+`_nextId` are ordinary non-static members of a single `RemoteServer` object.
+There is no membership protocol, no shared store, and no placement layer, so
+**two `RemoteServer` processes behind one logical endpoint have independent,
+non-communicating directories**: a client attaching to key 42 on server A and a
+client attaching to key 42 on server B get two divergent instances — the exact
+divergence keyed sharing exists to prevent, reintroduced one layer up, and
+silently (no crash and no error, just two copies of "the same" entity). Keys are
+not deduplicated across processes. A deployment that needs one instance per key
+across replicas has to provide that itself, by routing every key to a fixed
+process.
 
 The directory maps `(modelTypeId, primaryKey) → ModelId`, held under the same
 `_regMtx` that guards `_models`/`_owners`, so directory membership can never
