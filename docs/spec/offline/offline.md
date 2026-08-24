@@ -443,6 +443,35 @@ being **double-applied** across the queue and journal replay paths;
 Neither is enforced by the queue itself — `SyncWorker` and the replay
 consumer act on them.
 
+## Consistency model
+
+The offline path publishes **no consistency guarantee stronger than the three
+properties below**. Stating them is not flattering — comparable sync engines
+publish causal+ or eventual consistency — but every one is already implied by
+the rest of this document, and leaving them unstated invites a host to assume
+more.
+
+1. **Per-queue FIFO, best-effort.** `SyncWorker::run()` drains in enqueue order
+   and attempts every item in the batch. A failure does **not** stop the run:
+   the failed item is left queued for a later attempt and the loop continues to
+   the next one (`sync_worker.hpp`). So there is no head-of-line blocking — and
+   equally no guarantee that the order items *land* on the server matches the
+   order they were enqueued, once any item has failed.
+2. **No read-your-writes for a queued write.** An enqueued write is invisible to
+   a subsequent read until it actually reaches the server. The queue holds an
+   opaque payload; nothing replays it into the local model's state or shadows
+   the read path with pending writes.
+3. **No cross-client visibility without a re-read.** `subscribe<R>` fans out
+   only to handlers on the same `Bridge` (one client process), so a result
+   another client produced does not reach this client's subscribers — it is
+   observed on this client's next read. See the README's "Instance
+   subscriptions are best-effort and in-process".
+
+None of these is a defect to fix; they are the shape of a queue that stores
+opaque payloads and replays them through an ordinary action path. A host needing
+stronger guarantees builds them above this layer — for instance by making writes
+idempotent (see `idempotencyKey` above) and re-reading once a replay completes.
+
 ## Conflict resolution on replay
 
 `morph::offline` has **no conflict-resolution machinery of its own.** Neither
@@ -464,10 +493,40 @@ and a host picks one:
 - **Model `onBackendChanged()` path** — when the backend switches, `Bridge`
   reconstructs each model on the new backend and fires `onBackendChanged()` on
   that fresh instance (see `bridge.md`). A model that holds a reference to the
-  shared `IOfflineQueue` can `drain()` it inside `onBackendChanged()`, classify
-  each item against the now-reachable backend, and `markDone()` it. This is the
-  path that supports **clean-replay / merge / discard** outcomes, because the
-  model — not an opaque `bool` callback — decides what each item becomes.
+  shared `IOfflineQueue` can `drain()` it inside `onBackendChanged()`, decide
+  what each item becomes, and `markDone()` it. This is the path that supports
+  **clean-replay / merge / discard** outcomes, because the model — not an
+  opaque `bool` callback — decides.
+
+  **Two limits on this seam, both structural.** They do not stop the path
+  working, but they decide *when* it can run and what it can consult:
+
+  1. **It fires on the switch, and only `LocalBackend` implements it.**
+     `Bridge::switchBackend` calls `notifyBackendChanged()` on the **new**
+     backend, and `LocalBackend` (`backend.hpp`) is the only `IBackend` that
+     implements it — `SimulatedRemoteBackend` (`remote.hpp`), `SocketBackend`
+     (`net/socket_backend.hpp`) and `QtWebSocketBackend`
+     (`qt/qt_websocket_backend.hpp`) are all `override {}`. So the hook runs
+     when a client switches **to** the local backend — going *offline* — and
+     does **not** run on reconnect to a remote backend. A host that wants
+     replay to happen on reconnect cannot get it from this hook alone as the
+     backends stand; it drains at a moment of its own choosing, or uses the
+     `SyncWorker` path.
+
+     This also means "classify each item against the now-reachable backend"
+     would be the wrong instruction: at the moment the hook fires, the
+     now-reachable backend is the local one.
+  2. **It runs with no session.** `LocalBackend::notifyBackendChanged` posts
+     the call without a `ScopedContext`, so `session::current()` is `nullptr`
+     inside `onBackendChanged()` — see
+     [session.hpp](../../../include/morph/session/session.hpp)'s note that a
+     `Context` exists only during a dispatch. The model cannot identify who is
+     replaying, and no code change to this hook would give it a *verified*
+     principal: `LocalBackend` never consults an `IAuthorizer` at all, so the
+     most it could ever carry is the client-asserted `Bridge::_defaultSession`.
+     Replay on this path is therefore unauthenticated by construction; a host
+     that needs an authenticated replay must perform it through an action on a
+     remote backend, where `RemoteServer` authenticates.
 
 A model on the `onBackendChanged()` path typically drives each drained item
 through two caller-supplied hooks (as the conflict-resolution tests do):

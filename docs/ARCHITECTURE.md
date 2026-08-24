@@ -42,9 +42,9 @@ The public surface is split per topic so callers always know whether a name is p
 | `morph::model` | Model & action traits | `ModelTraits<>`, `ActionTraits<>`, `ActionValidator<>`, `ActionLogPolicy<>`, `Loggable` |
 | `morph::backend` | Pluggable backends | `LocalBackend`, `RemoteServer`, `SimulatedRemoteBackend` |
 | `morph::bridge` | Bridge between handler and backend | `Bridge`, `BridgeHandler<M>` |
-| `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `InMemoryOfflineQueue`, `SyncWorker`, `SyncResult`, `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` |
+| `morph::offline` | Connectivity + replay | `NetworkMonitor`, `NetworkMonitorConfig`, `IOfflineQueue`, `QueueItem`, `OfflineQueueFullError`, `InMemoryOfflineQueue`, `FileOfflineQueue`, `FileOfflineQueueError`, `SqliteOfflineQueue`, `SqliteOfflineQueueError`, `SyncWorker` (incl. `DeadLetterSink`), `SyncResult`, `ReconnectCoordinator`, `ReconnectOutcome`, `ReconnectCoordinatorConfig` |
 | `morph::session` | Per-call session context + authentication | `Context`, `IAuthorizer`, `AllowAllAuthorizer`, `allowAllAuthorizer`, `current`; authenticated sessions (`session_auth.hpp`): `SessionToken`, `TokenIssuer`, `TokenVerifier`, `SigningAuthorizer`, `MacFunction`, `hmacSha256`, `AuthError` |
-| `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
+| `morph::journal` | Ordered, replayable action log (issue #3) | `LogEntry`, `IActionLog`, `InMemoryActionLog`, `FileActionLog`, `SessionLog`, `OutboxRelay`, `OutboxRelayResult`, `PayloadMigrationRegistry`, `SchemaMismatchError`, `SerializationError`, `NullSinkError`, `replay()`, `toJson`/`fromJson`, `setActionLog`, `defaultActionLog`, `ScopedActionLog` |
 | `morph::math` | Exact numeric values for actions | `Rational`, `DecimalPlaces`, `RationalError`, `kMaxDecimalPlaces`, `abs`/`ceil`/`floor`/`trunc` |
 | `morph::units` | Unit-tagged, optionally-empty values | `Quantity<U>`, `UnitMeta`, `UnitTraits<E>` (app-specialised), `UnitAlternative<E>`, `HasUnitAlternatives`, `UnitEnum`, `isQuantity` |
 | `morph::time` | UTC timestamps for actions | `DateTime`, `Timestamp` |
@@ -131,7 +131,7 @@ morph::offline::NetworkMonitor            (detects connectivity; probe is caller
   │ onOffline ──► app calls Bridge::switchBackend(local fallback)
   │               app/enqueuer writes pending actions into IOfflineQueue
   │                 (InMemoryOfflineQueue ships with the framework;
-  │                  a durable SQL-backed queue is the app's to provide)
+  │                  SqliteOfflineQueue/FileOfflineQueue ship; the app picks)
   │ onOnline  ──► morph::offline::ReconnectCoordinator  (sequences:)
   │                 1. tryReconnect()      → probe the primary backend
   │                 2. activatePrimary()   → Bridge::switchBackend(primary)
