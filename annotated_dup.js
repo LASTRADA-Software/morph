@@ -93,6 +93,8 @@ var annotated_dup =
         [ "NullSinkError", "d6/d55/structmorph_1_1journal_1_1NullSinkError.html", null ],
         [ "OutboxRelay", "d9/d67/structmorph_1_1journal_1_1OutboxRelay.html", "d9/d67/structmorph_1_1journal_1_1OutboxRelay" ],
         [ "OutboxRelayResult", "d8/da5/structmorph_1_1journal_1_1OutboxRelayResult.html", "d8/da5/structmorph_1_1journal_1_1OutboxRelayResult" ],
+        [ "PayloadMigrationRegistry", "dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry.html", "dc/d13/classmorph_1_1journal_1_1PayloadMigrationRegistry" ],
+        [ "SchemaMismatchError", "d6/dc8/structmorph_1_1journal_1_1SchemaMismatchError.html", "d6/dc8/structmorph_1_1journal_1_1SchemaMismatchError" ],
         [ "ScopedActionLog", "de/d66/classmorph_1_1journal_1_1ScopedActionLog.html", "de/d66/classmorph_1_1journal_1_1ScopedActionLog" ],
         [ "SerializationError", "d6/d23/structmorph_1_1journal_1_1SerializationError.html", null ],
         [ "SessionLog", "da/d23/classmorph_1_1journal_1_1SessionLog.html", "da/d23/classmorph_1_1journal_1_1SessionLog" ]

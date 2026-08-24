@@ -174,7 +174,7 @@ var NAVTREEINDEX1 =
 "d5/df5/file__offline__queue_8hpp_source.html":[3,0,0,5,0],
 "d6/d0e/structmorph_1_1app_1_1FormScreen.html":[2,0,0,0,1],
 "d6/d1e/bridge_8hpp_source.html":[3,0,0,0,1],
-"d6/d23/structmorph_1_1journal_1_1SerializationError.html":[2,0,0,9,9],
+"d6/d23/structmorph_1_1journal_1_1SerializationError.html":[2,0,0,9,11],
 "d6/d2c/app_8hpp.html":[3,0,0,2,0],
 "d6/d2c/app_8hpp.html#a510c4a33b970c608e8705e6b0b8703c3":[3,0,0,2,0,4],
 "d6/d2c/app_8hpp_source.html":[3,0,0,2,0],
@@ -200,6 +200,8 @@ var NAVTREEINDEX1 =
 "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#a6a9d011a636bb3a8ac4f2e78ffb229ab":[2,0,0,8,21,2],
 "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html#a9ccf3a42d64f4e99551eaf849449eb67":[2,0,0,8,21,0],
 "d6/db7/conceptmorph_1_1units_1_1UnitEnum.html":[1,0,2,0],
+"d6/dc8/structmorph_1_1journal_1_1SchemaMismatchError.html":[2,0,0,9,9],
+"d6/dc8/structmorph_1_1journal_1_1SchemaMismatchError.html#a20d86b985dd153dbbebe4072deef93b2":[2,0,0,9,9,0],
 "d6/ddd/widget__hints_8hpp.html":[3,0,0,2,7],
 "d6/ddd/widget__hints_8hpp_source.html":[3,0,0,2,7],
 "d7/d1a/structmorph_1_1model_1_1ValidationError.html":[2,0,0,12,6],
@@ -247,7 +249,5 @@ var NAVTREEINDEX1 =
 "d7/dbe/structmorph_1_1math_1_1Rational_1_1Wire.html#a97edbe8a574d7eb2c5e077cac6d75f36":[2,0,0,11,4,0,1],
 "d7/dd6/structmorph_1_1views_1_1MasterDetailView.html":[2,0,0,21,4],
 "d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html":[2,0,0,15,6],
-"d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a3760c09e60ede47950926f204599a968":[2,0,0,15,6,0],
-"d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a60c641ccf2f22727411075649e34bdc0":[2,0,0,15,6,2],
-"d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#abf129bfddab9cb88e41db5472407c49b":[2,0,0,15,6,1]
+"d7/dd9/structmorph_1_1offline_1_1OfflineQueueFullError.html#a3760c09e60ede47950926f204599a968":[2,0,0,15,6,0]
 };

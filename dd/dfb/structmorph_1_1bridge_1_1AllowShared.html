@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dd/dfb/structm
 <p>A shared handler registers <b>nothing</b> at construction. It acquires an instance the first time a keyed action or an explicit <span class="tt">attach()</span> names a primary key, and every other <span class="tt"><a class="el" href="../../dd/dfb/structmorph_1_1bridge_1_1AllowShared.html" title="BridgeHandler sharing policy: joins the shared instance directory.">AllowShared</a></span> handler naming that same key — in this process or, for a remote backend, in any other client — reaches the same instance. Releasing the last such handler destroys it.</p>
 <p>A shared handler that only ever runs <em>keyless</em> actions never attaches, and its <span class="tt">execute</span> fails fast with "handler not bound": there is no instance to run against and inventing a private one would silently defeat the sharing the caller asked for. Attach first — see docs/planned/shared_model_instances.md. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01882">1882</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d6/d1e/bridge_8hpp_source.html#l01884">1884</a> of file <a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a>.</p>
 </div><hr/>The documentation for this struct was generated from the following file:<ul>
 <li>morph/core/<a class="el" href="../../d6/d1e/bridge_8hpp_source.html">bridge.hpp</a></li>
 </ul>

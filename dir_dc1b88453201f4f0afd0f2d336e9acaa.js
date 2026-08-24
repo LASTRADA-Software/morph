@@ -10,6 +10,7 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
     [ "model.hpp", "dc/ddc/model_8hpp_source.html", null ],
     [ "model_key.hpp", "d1/dd8/model__key_8hpp.html", "d1/dd8/model__key_8hpp" ],
     [ "observability.hpp", "d2/dfd/observability_8hpp_source.html", null ],
+    [ "payload_schema.hpp", "dc/d50/payload__schema_8hpp.html", "dc/d50/payload__schema_8hpp" ],
     [ "registry.hpp", "d1/da2/registry_8hpp_source.html", null ],
     [ "remote.hpp", "d0/dfc/remote_8hpp_source.html", null ],
     [ "strand.hpp", "de/dc1/strand_8hpp_source.html", null ],
