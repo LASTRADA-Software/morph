@@ -248,6 +248,7 @@ target_sources(morph
         include/morph/offline/reconnect_coordinator.hpp
         include/morph/session/session_auth.hpp
         include/morph/util/tagged.hpp
+        include/morph/forms/instance_constraints.hpp
 )
 
 # ── Guard: every public header must belong to some target's FILE_SET ─────────
