@@ -236,7 +236,102 @@ target_sources(morph
         include/morph/util/datetime.hpp
         include/morph/render/i18n.hpp
         include/morph/render/locale_format.hpp
+        include/morph/core/file_io_ops.hpp
+        include/morph/core/model_key.hpp
+        include/morph/core/payload_schema.hpp
+        include/morph/forms/app.hpp
+        include/morph/forms/flows.hpp
+        include/morph/forms/layout.hpp
+        include/morph/forms/views.hpp
+        include/morph/forms/widget_hints.hpp
+        include/morph/journal/outbox.hpp
+        include/morph/offline/reconnect_coordinator.hpp
+        include/morph/session/session_auth.hpp
+        include/morph/util/tagged.hpp
 )
+
+# ── Guard: every public header must belong to some target's FILE_SET ─────────
+#
+# VERIFY_INTERFACE_HEADER_SETS compiles each *listed* header standalone and is
+# silent about the rest, so a header omitted from a FILE_SET is not checked
+# loosely -- it is not checked at all, while the target keeps reporting success.
+# That is the "control that reports success while measuring nothing" shape
+# AGENTS.md names, and it had already happened here: 13 public headers were
+# unlisted when morph#230 was filed, and a 14th (payload_schema.hpp) was added
+# and left unlisted before the issue was worked. A hand-maintained list drifts;
+# this turns the drift into a configure error.
+#
+# Two kinds of header are deliberately out of scope:
+#   * anything under a detail/ directory -- not public surface;
+#   * headers owned by an optional component whose target this configuration
+#     did not create (morph::net, morph::qt, morph::qt_forms,
+#     morph::offline_sqlite). Those have their own FILE_SETs and now carry
+#     VERIFY_INTERFACE_HEADER_SETS themselves, so they are genuinely checked
+#     whenever their option is ON -- they were not before morph#230, which is
+#     the same blindness one level down. The mapping below is by *component*,
+#     not by header,
+#     so adding a header to an existing component still gets caught -- which is
+#     the drift that actually happens.
+set(_morph_optional_components
+    "include/morph/net/:morph_net"
+    "include/morph/qt/forms/:morph_qt_forms"
+    "include/morph/qt/:morph_qt"
+    "include/morph/offline/sqlite_offline_queue.hpp:morph_offline_sqlite")
+
+file(GLOB_RECURSE _morph_public_headers
+     RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
+     CONFIGURE_DEPENDS "include/morph/*.hpp")
+
+# Union of every header set this configuration actually created.
+set(_morph_listed_headers "")
+foreach(_morph_target IN ITEMS morph morph_net morph_qt morph_qt_forms morph_offline_sqlite)
+    if(TARGET ${_morph_target})
+        get_target_property(_morph_target_headers ${_morph_target} HEADER_SET)
+        if(_morph_target_headers)
+            list(APPEND _morph_listed_headers ${_morph_target_headers})
+        endif()
+    endif()
+endforeach()
+
+set(_morph_unlisted_headers "")
+foreach(_morph_header IN LISTS _morph_public_headers)
+    if(_morph_header MATCHES "(^|/)detail/")
+        continue()
+    endif()
+    # Skip a header whose optional component was not configured.
+    set(_morph_skip FALSE)
+    foreach(_morph_entry IN LISTS _morph_optional_components)
+        string(REGEX REPLACE "^(.*):([^:]+)$" "\\1" _morph_prefix "${_morph_entry}")
+        string(REGEX REPLACE "^(.*):([^:]+)$" "\\2" _morph_owner "${_morph_entry}")
+        if(_morph_header MATCHES "^${_morph_prefix}" AND NOT TARGET ${_morph_owner})
+            set(_morph_skip TRUE)
+            break()
+        endif()
+    endforeach()
+    if(_morph_skip)
+        continue()
+    endif()
+    if(NOT "${CMAKE_CURRENT_SOURCE_DIR}/${_morph_header}" IN_LIST _morph_listed_headers)
+        list(APPEND _morph_unlisted_headers "${_morph_header}")
+    endif()
+endforeach()
+
+if(_morph_unlisted_headers)
+    string(REPLACE ";" "\n    " _morph_unlisted_pretty "${_morph_unlisted_headers}")
+    message(FATAL_ERROR
+        "morph: these public headers belong to no target's FILE_SET HEADERS, so "
+        "VERIFY_INTERFACE_HEADER_SETS never compiles them standalone and would keep "
+        "passing if they stopped being self-contained (morph#230):\n    "
+        "${_morph_unlisted_pretty}\n"
+        "Add each to the FILES list of the target that owns it, or move it under a "
+        "detail/ directory if it is not public surface.")
+endif()
+
+unset(_morph_public_headers)
+unset(_morph_listed_headers)
+unset(_morph_unlisted_headers)
+unset(_morph_target_headers)
+unset(_morph_optional_components)
 
 # ── SQLite-backed durable offline queue: library target (optional) ──────────
 # Only the morph::offline_sqlite target itself is created here, deliberately
@@ -321,6 +416,9 @@ if(MORPH_BUILD_OFFLINE_SQLITE)
 
     add_library(morph_offline_sqlite INTERFACE)
     add_library(morph::offline_sqlite ALIAS morph_offline_sqlite)
+    # Same standalone-compile check the core target gets: a listed header that
+    # stops being self-contained must fail here, not silently pass (morph#230).
+    set_target_properties(morph_offline_sqlite PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
     target_link_libraries(morph_offline_sqlite INTERFACE morph SQLite3::SQLite3)
     target_sources(morph_offline_sqlite
         INTERFACE
@@ -371,6 +469,9 @@ if(MORPH_BUILD_FORMS_QML)
     # include/morph/qt/forms/forms_controller_core.hpp.
     add_library(morph_qt_forms INTERFACE)
     add_library(morph::qt_forms ALIAS morph_qt_forms)
+    # Same standalone-compile check the core target gets: a listed header that
+    # stops being self-contained must fail here, not silently pass (morph#230).
+    set_target_properties(morph_qt_forms PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
     target_link_libraries(morph_qt_forms INTERFACE morph Qt6::Core)
     target_sources(morph_qt_forms
         INTERFACE
@@ -476,6 +577,9 @@ if(MORPH_BUILD_QT)
     # Header-only interface for consumers
     add_library(morph_qt INTERFACE)
     add_library(morph::qt ALIAS morph_qt)
+    # Same standalone-compile check the core target gets: a listed header that
+    # stops being self-contained must fail here, not silently pass (morph#230).
+    set_target_properties(morph_qt PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
     target_link_libraries(morph_qt INTERFACE morph Qt6::WebSockets)
     target_sources(morph_qt
         INTERFACE
@@ -514,6 +618,9 @@ if(MORPH_BUILD_NET)
     else()
         add_library(morph_net INTERFACE)
         add_library(morph::net ALIAS morph_net)
+        # Same standalone-compile check the core target gets: a listed header that
+        # stops being self-contained must fail here, not silently pass (morph#230).
+        set_target_properties(morph_net PROPERTIES VERIFY_INTERFACE_HEADER_SETS ON)
         target_link_libraries(morph_net INTERFACE morph)
         target_sources(morph_net
             INTERFACE
