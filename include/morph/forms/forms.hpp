@@ -2228,6 +2228,11 @@ inline void annotateExactNumericBounds(glz::generic_u64& node) {
     } else if (node.is_array()) {
         for (auto& child : node.get_array()) {
             annotateExactNumericBounds(child);
+        }
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief Stamps `x-submitMode` on @p dom when `A` opts out of auto-submit.
 ///
 /// A top-level key sourced from a declaration on the action type, exactly as
