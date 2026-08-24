@@ -1539,10 +1539,12 @@ concept HasFormRules = requires { A::formRules; };
 /// that leaves the form valid, so a `CreatePaste` bound directly to a live
 /// controller stores one paste per typed character.
 ///
-/// (No `@tparam`: clang's -Wdocumentation does not consider a concept a
-/// template declaration, so documenting the parameter is an error under
-/// -Weverything -Werror -- the WASM ladder build compiles with exactly that.
-/// `HasFormRules` above omits it for the same reason.)
+/// (The template parameter is intentionally left undocumented: clang's
+/// -Wdocumentation does not consider a concept a template declaration, so a
+/// parameter-doc command here is an error under -Weverything -Werror, which is
+/// how the WASM ladder builds. `HasFormRules` above omits it for the same
+/// reason. Note the command cannot even be *named* in this comment -- clang
+/// parses it inside backticks too.)
 template <typename A>
 concept HasExplicitSubmit = requires {
     { A::explicitSubmit } -> std::convertible_to<bool>;
