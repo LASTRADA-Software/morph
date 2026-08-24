@@ -401,6 +401,36 @@ Journeys live in `examples/<rung>/tests/journeys/` and carry a `journey`
 ctest label (from the test name's `Journey: ` prefix), so they can be
 selected with `ctest -L journey` or excluded the way `stress` is.
 
+## Scenario files against a running server
+
+A journey is the right *idea* but it is C++: compiled into the test binary,
+driving the model through a `Bridge`, with the server started by the fixture.
+`scripts/scenario/` is the same idea as data — a plain-text file of steps and
+expected outcomes, run by a Python client that connects to a
+`ladder_<rung>_server` somebody already started, speaks the wire protocol from
+`docs/spec/core/wire.md`, and links against nothing:
+
+```
+model PasteModel
+client alice
+do CreatePaste content="hello world" syntax=plaintext
+expect ok capture id=$.id
+do GetPaste id=$id
+expect ok field content == "hello world"
+```
+
+What it adds that neither journeys nor `process_pool.hpp` do: the client's
+behaviour is not fixed at build time, so a bug report can arrive *as a file*;
+and the protocol is implemented independently of morph's C++, so a defect
+symmetric on both sides of morph's own client/server pair is visible to it.
+Envelopes can also be hand-built (`send`), which is how a wrong
+`protocolVersion` or somebody else's `modelId` gets exercised at all — a typed
+C++ client cannot express them.
+
+What it is not: a replacement for any of the above. Model behaviour stays
+in-process, and this runs no server lifecycle of its own — see
+`scripts/scenario/README.md` for the format and the deliberate omissions.
+
 ## WASM reality
 
 Honest position: **WASM GUIs cannot be unit-tested in CI today.** The

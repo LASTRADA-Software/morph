@@ -1,0 +1,19 @@
+# A scenario that is MEANT to fail, kept so the failure report is a thing you
+# can look at rather than a claim in a README.
+#
+#   morph_scenario.py --server ws://127.0.0.1:<port> \
+#       scripts/scenario/scenarios/pastebin_broken.scenario   # exits 1
+#
+# Step 2 creates a paste, step 3 reads it back and asserts content the paste
+# was never created with. Everything else here is correct, so the report has
+# to name the one step and clause that is not.
+
+model PasteModel
+
+client alice
+
+do CreatePaste content="the content it actually has" syntax=plaintext
+expect ok capture id=$.id
+
+do GetPaste id=$id
+expect ok field content == "the content the scenario wrongly expects"
