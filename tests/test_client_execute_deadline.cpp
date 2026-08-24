@@ -2,9 +2,14 @@
 //
 // Coverage for the client-side execute deadline (examples/LADDER.md's
 // "Framework prerequisites" #2): Bridge::setExecuteDeadline races the real
-// reply against a client-owned timeout, so a frame silently dropped by
-// QtWebSocketServerConfig::messagesPerSecond, or a genuinely hung server,
-// no longer blocks the calling Completion forever.
+// reply against a client-owned timeout, so a connection that dropped between
+// send and reply, or a genuinely hung server, no longer blocks the calling
+// Completion forever.
+//
+// A frame refused by QtWebSocketServerConfig::messagesPerSecond used to belong
+// on that list too; it no longer does, since the transport now answers it with
+// an `err "rate limited"` (morph#225). The deadline still covers the cases no
+// reply can.
 
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>

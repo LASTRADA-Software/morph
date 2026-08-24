@@ -43,8 +43,12 @@ struct QtWebSocketServerConfig {
     ///
     /// The bucket capacity equals `messagesPerSecond` (an immediate one-second
     /// burst is allowed right after connecting), refilling continuously at that
-    /// rate. A frame that arrives with an empty bucket is dropped — not queued,
-    /// not replied to. See `docs/spec/core/backend.md`.
+    /// rate. A frame that arrives with an empty bucket is **refused, not
+    /// queued**: it never reaches `RemoteServer`, and the sender is answered
+    /// with an `err "rate limited"` addressed to that frame's own `callId`, so
+    /// a caller's `Completion` fails rather than waiting forever. The
+    /// connection stays open — throttling slows a client down, it does not
+    /// evict one. See `docs/spec/core/backend.md`.
     std::size_t messagesPerSecond = 0;
 
     /// @brief Time allowed for a newly-accepted connection to send its first text

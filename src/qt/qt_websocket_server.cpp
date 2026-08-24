@@ -223,7 +223,10 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         state.handshakeTimer = nullptr;
     }
 
-    if (const auto utf8 = message.toUtf8(); std::cmp_greater(utf8.size(), _cfg.maxMessageBytes)) {
+    // Hoisted: both rejection branches below address their reply to the call it
+    // answers, and neither decodes the frame to do it.
+    const auto utf8 = message.toUtf8();
+    const auto peekedCallId = [&utf8] {
         // Address the rejection to the call it answers. The frame is never
         // decoded (that is the point of the cap), so the id is recovered by a
         // bounded prefix scan. Replying with a zeroed callId would be worse
@@ -231,19 +234,28 @@ void QtWebSocketServer::onTextMessage(const QString& message) {
         // discriminator, so the error would resume some unrelated parked
         // register/deregister with a reply meant for an execute, while the
         // execute that triggered it still never resolves.
-        const auto callId = ::morph::wire::detail::peekCallId(
+        return ::morph::wire::detail::peekCallId(
             std::string_view{utf8.constData(), static_cast<std::size_t>(utf8.size())});
+    };
+
+    if (std::cmp_greater(utf8.size(), _cfg.maxMessageBytes)) {
         socket->sendTextMessage(QString::fromStdString(
-            ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", callId))));
+            ::morph::wire::encode(::morph::wire::makeErr("message exceeds maxMessageBytes", peekedCallId()))));
         return;
     }
 
     if (!consumeToken(state)) {
-        // Over the per-connection rate limit: drop the frame silently rather
-        // than reply or close the connection (see docs/spec/core/backend.md,
-        // QtWebSocketServerConfig::messagesPerSecond). A pending client
-        // Completion for a dropped `execute` will not resolve on its own; pair
-        // messagesPerSecond with LimitPolicy::executeTimeout for a bounded wait.
+        // Over the per-connection rate limit. The frame is not executed, but it
+        // *is* answered: dropping it silently left a pending client Completion
+        // for an `execute` with nothing to resolve it, so the caller hung
+        // unless it had armed `LimitPolicy::executeTimeout` (off by default).
+        // A reply costs nothing at the protocol level and turns that hang into
+        // an ordinary error the caller's `.onError(...)` already handles --
+        // the same reply-without-full-decode pattern the maxMessageBytes
+        // branch above uses. The connection stays open: rate limiting throttles
+        // a client, it does not evict one (morph#225).
+        socket->sendTextMessage(QString::fromStdString(
+            ::morph::wire::encode(::morph::wire::makeErr("rate limited", peekedCallId()))));
         return;
     }
 

@@ -269,11 +269,15 @@ throw — they are silent by construction.
 Nothing in `Completion<T>` itself imposes a time limit: a state that no producer
 ever settles simply stays pending forever, and its handle's callbacks never
 fire. For an in-process `LocalBackend` that is unreachable, but across a wire a
-request can genuinely disappear — a frame silently discarded by
-`QtWebSocketServerConfig::messagesPerSecond`'s rate limiter, a connection that
-dropped between send and reply, or a server that hangs. In every one of those
-cases *no reply of any kind* comes back, so no layer below the caller has
-anything to resolve the `Completion` with.
+request can genuinely disappear — a connection that dropped between send and
+reply, or a server that hangs. In those cases *no reply of any kind* comes back,
+so no layer below the caller has anything to resolve the `Completion` with.
+
+(A frame refused by `QtWebSocketServerConfig::messagesPerSecond`'s rate limiter
+used to belong on that list. It no longer does: the transport answers it with an
+`err "rate limited"` addressed to the frame's own `callId`, so the caller's
+`Completion` fails rather than hanging. A deadline is still worth arming for the
+two cases above, which no reply can cover.)
 
 `Bridge::setExecuteDeadline(std::chrono::milliseconds)` closes that hole.
 

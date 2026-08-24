@@ -177,8 +177,10 @@ the current framework source (not assumed from the ladder doc alone):
   caller falls back to the synchronous path unaffected) so every backend
   that has not opted in keeps its current behavior.
 - **Client-side execute deadline.** No timeout exists anywhere on a
-  `Completion` today — a frame silently dropped by `messagesPerSecond`, or
-  a genuinely hung server, blocks the calling `Completion` forever.
+  `Completion` today — a genuinely hung server blocks the calling `Completion`
+  forever. (A frame refused by `messagesPerSecond` used to belong here too; it
+  no longer does, since the transport now answers it with an `err "rate
+  limited"` — morph#225.)
   `Completion<T>::state()` already exposes the underlying
   `CompletionState`, and `CompletionState::setException` is
   idempotent-guarded (`if (ready) return;`), so the fix needs no
