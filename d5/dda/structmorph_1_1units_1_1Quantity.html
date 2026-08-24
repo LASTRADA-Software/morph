@@ -151,8 +151,10 @@ requires (OtherDecimals != DeclaredDecimals)</td></tr>
 <tr class="memdesc:afe4db91f7aa2e40274ba8f34b7680845"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unchecked access to the engaged value (UB when empty, exactly like <span class="tt">std::optional::operator*</span>).  <br /></td></tr>
 <tr class="memitem:ad7d272b726f815feba425a6c56ecafea" id="r_ad7d272b726f815feba425a6c56ecafea"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#ad7d272b726f815feba425a6c56ecafea">withDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision) const</td></tr>
 <tr class="memdesc:ad7d272b726f815feba425a6c56ecafea"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's <em>runtime</em> precision (the exact value itself is unchanged — precision only affects rounding and formatting).  <br /></td></tr>
+<tr class="memitem:af19ad973981224caceb822181204afaf" id="r_af19ad973981224caceb822181204afaf"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#af19ad973981224caceb822181204afaf">roundedToDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision, <a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a> mode=<a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e">math::RoundingMode::HalfAwayFromZero</a>) const</td></tr>
+<tr class="memdesc:af19ad973981224caceb822181204afaf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to a runtime precision, <b>changing the exact value</b> as well as the tag — unlike <span class="tt"><a class="el" href="#ad7d272b726f815feba425a6c56ecafea" title="Retags the value&#39;s runtime precision (the exact value itself is unchanged — precision only affects ro...">withDecimalPlaces</a></span>, which retags only and leaves display and storage free to disagree.  <br /></td></tr>
 <tr class="memitem:a71c5b40c2b3ee9b1dea894405b837ff6" id="r_a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#a71c5b40c2b3ee9b1dea894405b837ff6">atDeclaredPrecision</a> () const</td></tr>
-<tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's runtime precision to the declared one.  <br /></td></tr>
+<tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to this field's <b>declared</b> precision — the one the generated schema advertises as <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
 <tr class="memitem:a161651d7fca578b928901cdac557051a" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
 <tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/quantity_type.md).">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
 <tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
@@ -682,7 +684,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </div><div class="memdoc">
 
 <p>Retags the value's <em>runtime</em> precision (the exact value itself is unchanged — precision only affects rounding and formatting). </p>
-<dl class="params"><dt>Parameters</dt><dd>
+<p>This is the <b>display-hint</b> half of the pair: after it, the value shown at <code class="param">newPrecision</code> and the value stored may differ. Use <span class="tt"><a class="el" href="#af19ad973981224caceb822181204afaf" title="Rounds the value to a runtime precision, changing the exact value as well as the tag — unlike withDec...">roundedToDecimalPlaces</a></span> when the stored value must be the one displayed. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">newPrecision</td><td>Runtime precision; silently clamped to the valid range. </td></tr>
   </table>
@@ -690,7 +692,50 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The retagged quantity, or empty if this is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00704">704</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00708">708</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+
+</div>
+</div>
+<a id="af19ad973981224caceb822181204afaf" name="af19ad973981224caceb822181204afaf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#af19ad973981224caceb822181204afaf">&#9670;&#160;</a></span>roundedToDecimalPlaces()</h2>
+
+<div class="memitem">
+<div class="memproto">
+<div class="memtemplate">
+template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
+<table class="mlabels">
+  <tr>
+  <td class="mlabels-left">
+      <table class="memname">
+        <tr>
+          <td class="memname"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a> <a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html">morph::units::Quantity</a>&lt; U, DeclaredDecimals &gt;::roundedToDecimalPlaces </td>
+          <td>(</td>
+          <td class="paramtype"><a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a></td>          <td class="paramname"><span class="paramname"><em>newPrecision</em></span>, </td>
+        </tr>
+        <tr>
+          <td class="paramkey"></td>
+          <td></td>
+          <td class="paramtype"><a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a></td>          <td class="paramname"><span class="paramname"><em>mode</em></span><span class="paramdefsep"> = </span><span class="paramdefval"><a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e">math::RoundingMode::HalfAwayFromZero</a></span>&#160;) const</td>
+        </tr>
+      </table>
+  </td>
+  <td class="mlabels-right">
+<span class="mlabels"><span class="mlabel inline">inline</span><span class="mlabel nodiscard">nodiscard</span></span>  </td>
+  </tr>
+</table>
+</div><div class="memdoc">
+
+<p>Rounds the value to a runtime precision, <b>changing the exact value</b> as well as the tag — unlike <span class="tt"><a class="el" href="#ad7d272b726f815feba425a6c56ecafea" title="Retags the value&#39;s runtime precision (the exact value itself is unchanged — precision only affects ro...">withDecimalPlaces</a></span>, which retags only and leaves display and storage free to disagree. </p>
+<p>Delegates to <span class="tt"><a class="el" href="../../d1/de8/rational_8hpp.html#a4ccb9f13703cac09d8fc1db8b42a41b7" title="Rounds to a fixed number of decimal places exactly, without leaving the Rational domain – the operati...">math::roundToDecimalPlaces</a></span>, and so shares its saturation behaviour: a value whose scaled form leaves <span class="tt">int64</span> range clamps and logs instead of overflowing. A value already representable at <code class="param">newPrecision</code> is unchanged apart from its tag. </p><dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">newPrecision</td><td>Runtime precision; silently clamped to the valid range. </td></tr>
+    <tr><td class="paramname">mode</td><td>Tie-breaking rule; defaults to half away from zero, matching the decimal display path. </td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section return"><dt>Returns</dt><dd>The rounded quantity, or empty if this is empty. </dd></dl>
+
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00734">734</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -719,10 +764,10 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Retags the value's runtime precision to the declared one. </p>
-<dl class="section return"><dt>Returns</dt><dd>The retagged quantity, or empty if this is empty. </dd></dl>
+<p>Rounds the value to this field's <b>declared</b> precision — the one the generated schema advertises as <span class="tt">x-decimalPlaces</span>. </p>
+<p>The enforcement half of the <span class="tt">x-decimalPlaces</span> contract: the stored value becomes the value that renders at the declared precision, so a handler never persists digits the form does not show. Rounds half away from zero, the rule the decimal formatter uses. </p><dl class="section return"><dt>Returns</dt><dd>The rounded quantity, or empty if this is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00720">720</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00756">756</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -760,7 +805,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A same-unit quantity carrying the name. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00727">727</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00763">763</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -834,7 +879,7 @@ requires Convertible&lt;U, To&gt;</div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The converted quantity in unit <span class="tt">To</span>. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00762">762</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l00798">798</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

@@ -10,6 +10,7 @@ var structmorph_1_1units_1_1Quantity =
     [ "value_or", "d5/dda/structmorph_1_1units_1_1Quantity.html#a30ae1b871898af3e6ff7c204c9cd2834", null ],
     [ "operator*", "d5/dda/structmorph_1_1units_1_1Quantity.html#afe4db91f7aa2e40274ba8f34b7680845", null ],
     [ "withDecimalPlaces", "d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea", null ],
+    [ "roundedToDecimalPlaces", "d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf", null ],
     [ "atDeclaredPrecision", "d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6", null ],
     [ "named", "d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a", null ],
     [ "equation", "d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73", null ],

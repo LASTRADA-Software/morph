@@ -2,6 +2,7 @@ var dir_dc1b88453201f4f0afd0f2d336e9acaa =
 [
     [ "backend.hpp", "d6/d5e/backend_8hpp_source.html", null ],
     [ "bridge.hpp", "d6/d1e/bridge_8hpp_source.html", null ],
+    [ "callback_scope.hpp", "de/d2a/callback__scope_8hpp_source.html", null ],
     [ "completion.hpp", "d1/d76/completion_8hpp_source.html", null ],
     [ "executor.hpp", "d7/d76/executor_8hpp_source.html", null ],
     [ "file_io_ops.hpp", "d3/d58/file__io__ops_8hpp_source.html", null ],

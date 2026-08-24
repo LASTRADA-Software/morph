@@ -5,6 +5,8 @@ var hierarchy =
     [ "morph::app::FormScreen&lt; Id, Action &gt;", "d6/d0e/structmorph_1_1app_1_1FormScreen.html", null ],
     [ "morph::app::MenuEntry&lt; Label, ScreenId &gt;", "dc/d5e/structmorph_1_1app_1_1MenuEntry.html", null ],
     [ "morph::app::WizardScreen&lt; Id, Wizard &gt;", "dc/d11/structmorph_1_1app_1_1WizardScreen.html", null ],
+    [ "morph::async::CallbackScope", "d7/d9f/classmorph_1_1async_1_1CallbackScope.html", null ],
+    [ "morph::async::CallbackToken", "de/d0d/classmorph_1_1async_1_1CallbackToken.html", null ],
     [ "morph::async::Completion&lt; T &gt;", "dd/de7/classmorph_1_1async_1_1Completion.html", null ],
     [ "morph::async::Completion&lt; T &gt;::Promise", "d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html", null ],
     [ "morph::backend::detail::IBackend", null, [
@@ -142,6 +144,9 @@ var hierarchy =
     [ "morph::wire::ProtocolRange", "da/d37/structmorph_1_1wire_1_1ProtocolRange.html", null ],
     [ "morph::wire::WireCodecOps", "d7/d4f/structmorph_1_1wire_1_1WireCodecOps.html", null ],
     [ "std::exception", null, [
+      [ "std::logic_error", null, [
+        [ "morph::forms::UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", null ]
+      ] ],
       [ "std::runtime_error", null, [
         [ "morph::backend::BackendChangedError", "dd/ddc/structmorph_1_1backend_1_1BackendChangedError.html", null ],
         [ "morph::backend::BridgeDestroyedError", "db/d09/structmorph_1_1backend_1_1BridgeDestroyedError.html", null ],

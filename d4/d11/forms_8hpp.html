@@ -185,6 +185,8 @@ Classes</h2></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Compound condition: the nested condition does <b>not</b> hold. Nests to any depth, and is usable directly as a top-level <span class="tt">formRules</span> entry, exactly like <span class="tt"><a class="el" href="../../d3/d81/structmorph_1_1forms_1_1And.html" title="Compound condition: all of Conds... hold. Nests to any depth — each Cond may itself be a leaf (Engage...">And</a></span>/<span class="tt"><a class="el" href="../../d4/d8d/structmorph_1_1forms_1_1Or.html" title="Compound condition: at least one of Conds... holds. Nests to any depth, and is usable directly as a t...">Or</a></span>.  <a href="../../d1/db1/structmorph_1_1forms_1_1Not.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3ARuleList_3C_20Rules_20_3E" id="r_morph_3A_3Aforms_3A_3ARuleList_3C_20Rules_20_3E"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d3/d8b/structmorph_1_1forms_1_1RuleList.html">morph::forms::RuleList&lt; Rules &gt;</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Composed list of an action's declared cross-field rules — the value of <span class="tt">A::formRules</span>. Built by <span class="tt">ruleList(...)</span>; never constructed directly.  <a href="../../d3/d8b/structmorph_1_1forms_1_1RuleList.html#details">More...</a><br /></td></tr>
+<tr class="memitem:morph_3A_3Aforms_3A_3AUnsatisfiableFormError" id="r_morph_3A_3Aforms_3A_3AUnsatisfiableFormError"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html">morph::forms::UnsatisfiableFormError</a></td></tr>
+<tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown by <span class="tt"><a class="el" href="#a0a0fb2658d155464d4688af38f09a25e" title="Generates the JSON Schema for action type A, ready for a client-side form renderer.">schemaJson</a>&lt;A&gt;()</span> when <span class="tt">A</span>'s declared <span class="tt">formRules</span> contradict <span class="tt">A</span>'s own derived <span class="tt">required</span> array so completely that no submission could satisfy both.  <a href="../../d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html#details">More...</a><br /></td></tr>
 <tr class="memitem:morph_3A_3Aforms_3A_3AQuantityDecodeError" id="r_morph_3A_3Aforms_3A_3AQuantityDecodeError"><td class="memItemLeft">struct &#160;</td><td class="memItemRight"><a class="el" href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html">morph::forms::QuantityDecodeError</a></td></tr>
 <tr class="memdesc:"><td class="mdescLeft">&#160;</td><td class="mdescRight">Thrown when a decoded action has a <span class="tt">Quantity</span> field whose engaged value falls outside its unit's declared bounds (<span class="tt">UnitTraits&lt;E&gt;::bounds</span>).  <a href="../../d9/d1c/structmorph_1_1forms_1_1QuantityDecodeError.html#details">More...</a><br /></td></tr>
 </table><table class="memberdecls">
@@ -282,7 +284,7 @@ requires (EngageableField&lt;Vs&gt; &amp;&amp; ...)</td></tr>
 <tr class="memdesc:a3b81894e5b0752e560c4d21726af2731"><td class="mdescLeft">&#160;</td><td class="mdescRight">Builds a <span class="tt"><a class="el" href="../../df/db5/structmorph_1_1forms_1_1FieldMeta.html" title="Per-field presentation overrides: label, help, placeholder, read-only, hidden (docs/spec/forms/forms....">FieldMeta</a></span> for the member named by <code class="param">MemberPtr</code>, so the wire key is never restated as a string.  <br /></td></tr>
 <tr class="memitem:a6a9c6b0f07868b9478b18542088f5003" id="r_a6a9c6b0f07868b9478b18542088f5003"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
 <tr class="memitem:a6a9c6b0f07868b9478b18542088f5003 template"><td class="memItemLeft">constexpr void&#160;</td><td class="memItemRight"><a class="el" href="#a6a9c6b0f07868b9478b18542088f5003">morph::forms::reconcileDeclaredPrecision</a> (A &amp;action)</td></tr>
-<tr class="memdesc:a6a9c6b0f07868b9478b18542088f5003"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags every <span class="tt">Quantity</span> member of <code class="param">action</code> to its <b>declared</b> precision, so a stored value matches the precision the schema advertises via <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
+<tr class="memdesc:a6a9c6b0f07868b9478b18542088f5003"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds every <span class="tt">Quantity</span> member of <code class="param">action</code> to its <b>declared</b> precision, so the stored value matches the precision the schema advertises via <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
 <tr class="memitem:a85e1fc53438e4be699176ce06cb74cdf" id="r_a85e1fc53438e4be699176ce06cb74cdf"><td class="memTemplParams" colspan="2">template&lt;typename A&gt; </td></tr>
 <tr class="memitem:a85e1fc53438e4be699176ce06cb74cdf template"><td class="memItemLeft">std::optional&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#a85e1fc53438e4be699176ce06cb74cdf">morph::forms::checkQuantityBounds</a> (const A &amp;action)</td></tr>
 <tr class="memdesc:a85e1fc53438e4be699176ce06cb74cdf"><td class="mdescLeft">&#160;</td><td class="mdescRight">Checks every <span class="tt">Quantity</span> member of <code class="param">action</code> against its unit's declared bounds (<span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a64cf21ec870fa8929edf4942421666f4" title="Pre-decode validation seam: whether the current payload falls within this field&#39;s unit-declared bound...">morph::units::Quantity::withinDeclaredBounds</a></span>, driven by the optional <span class="tt">UnitTraits&lt;E&gt;::bounds(E)</span> customisation point).  <br /></td></tr>
@@ -324,7 +326,7 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">    <span class="keyword">static</span> <span class="keyword">constexpr</span> std::array optionalFields{std::string_view{<span class="stringliteral">&quot;moisture&quot;</span>}};</div>
 <div class="line">    [[nodiscard]] <span class="keywordtype">bool</span> validate()<span class="keyword"> const </span>{ <span class="keywordflow">return</span> <a class="code hl_function" href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a>(*<span class="keyword">this</span>); }</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02409">forms.hpp:2409</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a189f23031917866a3f217aa288506601"><div class="ttname"><a href="#a189f23031917866a3f217aa288506601">morph::forms::allRequiredEngaged</a></div><div class="ttdeci">constexpr bool allRequiredEngaged(const A &amp;action) noexcept</div><div class="ttdoc">Whether every required empty-capable member of action is engaged (has a value).</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02555">forms.hpp:2555</a></div></div>
 </div><!-- fragment --></dd></dl>
 <dl class="section user"><dt>Declaring computed fields</dt><dd>A derived, read-only field is declared with a <span class="tt">static constexpr</span> map from a destination member to its declared input members and a pure derivation: <div class="fragment"><div class="line"><span class="keyword">struct </span>LineItem {</div>
 <div class="line">    Quantity&lt;Units, 2&gt; qty;</div>
@@ -338,8 +340,8 @@ cycle-guarded)", and <span class="tt">detail::annotateNestedAggregateRef</span>.
 <div class="line">        <a class="code hl_function" href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed&lt;&amp;LineItem::total, &amp;LineItem::qty, &amp;LineItem::price&gt;</a>(</div>
 <div class="line">            [](<span class="keyword">const</span> <span class="keyword">auto</span>&amp; s) { <span class="keywordflow">return</span> s.qty * s.price; }));</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02202">forms.hpp:2202</a></div></div>
-<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02215">forms.hpp:2215</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a04c972217f11f853d00b73780cb78f2f"><div class="ttname"><a href="#a04c972217f11f853d00b73780cb78f2f">morph::forms::computed</a></div><div class="ttdeci">consteval auto computed(Fn fn) noexcept</div><div class="ttdoc">Builds one computed-field declaration binding a destination member to its declared input members and ...</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02342">forms.hpp:2342</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a0d45e4d3d8a0f1f02298bdbe65d417ed"><div class="ttname"><a href="#a0d45e4d3d8a0f1f02298bdbe65d417ed">morph::forms::computeList</a></div><div class="ttdeci">consteval auto computeList(Fields... fields) noexcept</div><div class="ttdoc">Builds a ComputeList from one or more computed(...) declarations.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02355">forms.hpp:2355</a></div></div>
 </div><!-- fragment --> <span class="tt">schemaJson&lt;A&gt;()</span> then emits <span class="tt">x-computed</span>/<span class="tt">x-readonly</span> on <span class="tt">total</span> and excludes it from <span class="tt">required</span>; <span class="tt">recomputeAll&lt;A&gt;(action)</span> is the single evaluator the reactive <span class="tt">set&lt;&gt;</span> path and every dispatch path call to overwrite it authoritatively &ndash; see <span class="tt">bridge.md</span>/<span class="tt">registry.md</span>.</dd></dl>
 <dl class="section user"><dt>Readiness helper</dt><dd><span class="tt">allRequiredEngaged(action)</span> returns <span class="tt">true</span> when every <em>required</em> empty-capable member (<span class="tt">Quantity</span>, <span class="tt">Choice</span>, <span class="tt">Timestamp</span> — anything with a <span class="tt">hasValue()</span>) is engaged. Wire it up as the action's <span class="tt">validate()</span> (the existing <span class="tt">ActionValidator</span> machinery picks that method up automatically) so the same declaration drives the schema's <span class="tt">required</span> array, the client-side submit gate, and the fielded-action readiness check. Non-quantity members are not checked — a plain <span class="tt">int64_t</span> cannot express "not filled in"; use a <span class="tt">Quantity</span> (or a custom <span class="tt">validate()</span>) when that distinction matters. </dd></dl>
 
@@ -1313,7 +1315,7 @@ template&lt;auto Dst, auto... Inputs, typename Fn&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputedField&lt;Dst, Fn, Inputs...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02202">2202</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02342">2342</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1357,7 +1359,7 @@ template&lt;typename... Fields&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">detail::ComputeList&lt;Fields...&gt;</span> value. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02215">2215</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02355">2355</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1400,7 +1402,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02233">2233</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02373">2373</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1445,7 +1447,7 @@ template&lt;auto MemberPtr&gt; </div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::sampleId&gt;</a>(<span class="stringliteral">&quot;Sample&quot;</span>, <span class="stringliteral">&quot;Which logged sample…&quot;</span>),</div>
 <div class="line">    <a class="code hl_function" href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe&lt;&amp;RecordMeasurement::moisture&gt;</a>().withReadOnly(),</div>
 <div class="line">};</div>
-<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02272">forms.hpp:2272</a></div></div>
+<div class="ttc" id="aforms_8hpp_html_a3b81894e5b0752e560c4d21726af2731"><div class="ttname"><a href="#a3b81894e5b0752e560c4d21726af2731">morph::forms::describe</a></div><div class="ttdeci">FieldMeta describe(std::string_view label={}, std::string_view help={}) noexcept</div><div class="ttdoc">Builds a FieldMeta for the member named by MemberPtr, so the wire key is never restated as a string.</div><div class="ttdef"><b>Definition</b> <a href="../../d4/d11/forms_8hpp_source.html#l02412">forms.hpp:2412</a></div></div>
 </div><!-- fragment --> The plain <span class="tt">FieldMeta{.field = "sampleId", ...}</span> literal form has no such restriction and stays a single in-class <span class="tt">static constexpr</span> array. </dd></dl>
 <dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
@@ -1462,7 +1464,7 @@ template&lt;auto MemberPtr&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>A <span class="tt">FieldMeta</span> naming <code class="param">MemberPtr's</code> wire key, with <code class="param">label</code> and <code class="param">help</code> set. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02272">2272</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02412">2412</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1491,9 +1493,9 @@ template&lt;typename A&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Retags every <span class="tt">Quantity</span> member of <code class="param">action</code> to its <b>declared</b> precision, so a stored value matches the precision the schema advertises via <span class="tt">x-decimalPlaces</span>. </p>
-<p>A wire payload carries each <span class="tt">Quantity</span> with its own runtime <span class="tt">dp</span>, which a client may set to anything. Left alone, the field is stored at the client's <span class="tt">dp</span>, silently contradicting the schema's <span class="tt">x-decimalPlaces</span> (which is the field's compile-time <em>declared</em> precision, <span class="tt">Quantity&lt;U, Dec&gt;::declaredDecimals</span>). Calling this on the decode path — right after <span class="tt">ActionTraits&lt;A&gt;::fromJson</span> and before dispatch — re-tags each <span class="tt">Quantity</span> to <span class="tt">declaredPrecision()</span> so the two agree. <span class="tt">atDeclaredPrecision()</span> only changes the value's precision tag (an exact <span class="tt">Rational</span> re-rounding to the declared decimals); an empty <span class="tt">Quantity</span> is left empty. Non-<span class="tt">Quantity</span> members are untouched.</p>
-<p>This is the enforcement half of the <span class="tt">x-decimalPlaces</span> contract: the schema advertises the declared precision and the dispatch path now stores at that precision, rather than honouring whatever <span class="tt">dp</span> the client sent. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>Rounds every <span class="tt">Quantity</span> member of <code class="param">action</code> to its <b>declared</b> precision, so the stored value matches the precision the schema advertises via <span class="tt">x-decimalPlaces</span>. </p>
+<p>A wire payload carries each <span class="tt">Quantity</span> with its own runtime <span class="tt">dp</span>, which a client may set to anything. Left alone, the field is stored at the client's <span class="tt">dp</span>, silently contradicting the schema's <span class="tt">x-decimalPlaces</span> (which is the field's compile-time <em>declared</em> precision, <span class="tt">Quantity&lt;U, Dec&gt;::declaredDecimals</span>). Calling this on the decode path — right after <span class="tt">ActionTraits&lt;A&gt;::fromJson</span> and before dispatch — rounds each <span class="tt">Quantity</span> to <span class="tt">declaredPrecision()</span> so the two agree. <span class="tt">atDeclaredPrecision()</span> performs an <b>exact <span class="tt">Rational</span> re-rounding</b> (half away from zero, the rule the decimal formatter uses), so the value a handler stores is the value the form displays — not a finer one hidden behind a coarser tag. An empty <span class="tt">Quantity</span> is left empty; non-<span class="tt">Quantity</span> members are untouched.</p>
+<p>This is the enforcement half of the <span class="tt">x-decimalPlaces</span> contract: the schema advertises the declared precision and the dispatch path stores at that precision, rather than honouring whatever <span class="tt">dp</span> the client sent. Precision beyond the declared amount is therefore <b>discarded, not hidden</b> — that is the point, and it is why the operation normalises rather than rejects: the same call also lands on server-derived <span class="tt">Quantity</span> values (see <span class="tt">recomputeOne</span>), which routinely carry more decimals than the destination field declares. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">A</td><td>Action type (a reflectable aggregate). </td></tr>
   </table>
@@ -1501,12 +1503,12 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
-    <tr><td class="paramname">action</td><td>Draft action whose <span class="tt">Quantity</span> members are retagged in place. </td></tr>
+    <tr><td class="paramname">action</td><td>Draft action whose <span class="tt">Quantity</span> members are rounded in place. </td></tr>
   </table>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02296">2296</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02442">2442</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1550,7 +1552,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The wire name of the first out-of-bounds <span class="tt">Quantity</span> member encountered (in declaration order), or <span class="tt">std::nullopt</span> when every <span class="tt">Quantity</span> member is within its declared bounds (or the unit declares none). </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02358">2358</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02504">2504</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1599,7 +1601,7 @@ template&lt;typename A&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02390">2390</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02536">2536</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1643,7 +1645,7 @@ template&lt;typename A&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">true</span> when no required empty-capable field is empty. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02409">2409</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02555">2555</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>
@@ -1678,15 +1680,22 @@ template&lt;typename A&gt; </div>
 <li><span class="tt">x-decimalPlaces</span> on every <span class="tt">Quantity</span> property (the unit's default),</li>
 <li><span class="tt">x-order</span> (declaration index) on every property.</li>
 </ul>
-<p>The result is fixed per type, so it is computed once and cached. On any internal failure the unmerged glaze schema (or an empty string if even that failed) is returned rather than throwing — schema generation is a description facility, never worth crashing a server over. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
+<p>The result is fixed per type, so it is computed once and cached. On any internal failure the unmerged glaze schema (or an empty string if even that failed) is returned rather than throwing — schema generation is a description facility, never worth crashing a server over.</p>
+<p>The single exception is a <b>self-contradicting declaration</b>. When an <span class="tt">A::formRules</span> entry caps engagement over two or more fields that <span class="tt">A</span> also makes <span class="tt">required</span>, the pair describes a form no submission can satisfy, and <span class="tt">UnsatisfiableFormError</span> is thrown. That is an author error in <span class="tt">A</span>, decidable at generation time, and every client would otherwise inherit an unsubmittable form (see <span class="tt">detail::rejectUnsatisfiableRules</span>). Because the cache is a function-local <span class="tt">static</span>, the throw leaves it uninitialised and a later call re-runs the check rather than serving a half-built schema. </p><dl class="tparams"><dt>Template Parameters</dt><dd>
   <table class="tparams">
     <tr><td class="paramname">A</td><td>Action type (a reflectable aggregate). </td></tr>
   </table>
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The merged schema JSON. </dd></dl>
+<dl class="exception"><dt>Exceptions</dt><dd>
+  <table class="exception">
+    <tr><td class="paramname">UnsatisfiableFormError</td><td>if <span class="tt">A::formRules</span> declares a capping rule (<span class="tt">exactlyOneOf</span> / <span class="tt">mutuallyExclusive</span>) over two or more fields that are also in <span class="tt">A</span>'s derived <span class="tt">required</span> array. </td></tr>
+  </table>
+  </dd>
+</dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02442">2442</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d4/d11/forms_8hpp_source.html#l02600">2600</a> of file <a class="el" href="../../d4/d11/forms_8hpp_source.html">forms.hpp</a>.</p>
 
 </div>
 </div>

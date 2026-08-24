@@ -148,7 +148,7 @@ class morph::async::Completion&lt; T &gt;::Promise</div><p>Producer-side handle 
 <p><span class="tt"><a class="el" href="../../d7/d95/classmorph_1_1async_1_1Completion_1_1Promise.html" title="Producer-side handle paired with a Completion&lt;T&gt; by makeSettleable().">Promise</a>&lt;T&gt;</span> is the public settling counterpart to <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span>: it exposes exactly <span class="tt"><a class="el" href="#ae001b18cfa29c76490d13960af9ae513" title="Resolves the paired Completion&lt;T&gt; with val.">resolve()</a></span>/<span class="tt"><a class="el" href="#a57b2616ec889b0e9e39a4882f048705d" title="Rejects the paired Completion&lt;T&gt; with exc.">reject()</a></span> against the same shared state a paired <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> observes via <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a60f4fe2dac5ce113b346c73b9f7fce03" title="Registers a success callback.">then()</a></span>/<span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html#a3becd6006babdc54444b20d0b5b074a8" title="Registers an error callback.">onError()</a></span>, without ever naming <span class="tt">morph::async::detail::CompletionState&lt;T&gt;</span>. Intended for test code that needs to construct a <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span> it can settle on demand — e.g. standing in for a <span class="tt">Bridge</span>/<span class="tt">IBackend</span> round trip — instead of reaching into <span class="tt">detail::CompletionState&lt;T&gt;</span> directly (see docs/spec/core/completion.md, "Settleable promise seam").</p>
 <p>Move-only, mirroring <span class="tt"><a class="el" href="../../dd/de7/classmorph_1_1async_1_1Completion.html" title="Move-only handle representing the eventual result of an asynchronous operation.">Completion</a>&lt;T&gt;</span>: exactly one producer settles a given operation. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00261">261</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00356">356</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a27d430854b8213e721931451949f99b0" name="a27d430854b8213e721931451949f99b0"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a27d430854b8213e721931451949f99b0">&#9670;&#160;</a></span>operator=()</h2>
@@ -213,7 +213,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00279">279</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00374">374</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>
@@ -250,7 +250,7 @@ template&lt;typename T&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00293">293</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/d76/completion_8hpp_source.html#l00388">388</a> of file <a class="el" href="../../d1/d76/completion_8hpp_source.html">completion.hpp</a>.</p>
 
 </div>
 </div>

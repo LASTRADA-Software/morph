@@ -11,10 +11,15 @@ var rational_8hpp =
       [ "NotFinite", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9eaff6e97b110349dae9c6e8be0ff7a85c3", null ],
       [ "Overflow", "d1/de8/rational_8hpp.html#aaab92e6347c545ba2cda8c030bd7bb9ea129e8109f319870e328cc7a1d5b5cae3", null ]
     ] ],
+    [ "morph::math::RoundingMode", "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a", [
+      [ "HalfAwayFromZero", "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e", null ],
+      [ "HalfEven", "d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aabad9b3dd7a0a67346f338fe63a79bc7e", null ]
+    ] ],
     [ "morph::math::abs", "d1/de8/rational_8hpp.html#af1e7cc7878d964ed33d0029aee1ee207", null ],
     [ "morph::math::ceil", "d1/de8/rational_8hpp.html#a53c6cd86826582ff412b528c27606cad", null ],
     [ "morph::math::floor", "d1/de8/rational_8hpp.html#acf63c62e20e1cc574fdb06368288181f", null ],
     [ "morph::math::trunc", "d1/de8/rational_8hpp.html#a2c086e223626364d5e089a3531322641", null ],
+    [ "morph::math::roundToDecimalPlaces", "d1/de8/rational_8hpp.html#a4ccb9f13703cac09d8fc1db8b42a41b7", null ],
     [ "morph::math::operator+", "d1/de8/rational_8hpp.html#af0d41c05831644f512afa74a2f9c91f3", null ],
     [ "morph::math::operator-", "d1/de8/rational_8hpp.html#a8c6b0bcd3e79e32d15373ca26d6762dc", null ],
     [ "morph::math::operator*", "d1/de8/rational_8hpp.html#a227b692087b810d3171565a1c1e145bb", null ],

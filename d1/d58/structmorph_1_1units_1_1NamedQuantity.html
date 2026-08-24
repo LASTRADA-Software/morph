@@ -170,8 +170,10 @@ constexpr&#160;</td><td class="memItemRight"><b>Quantity</b> () noexcept=default
 <tr class="memdesc:afe4db91f7aa2e40274ba8f34b7680845 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Unchecked access to the engaged value (UB when empty, exactly like <span class="tt">std::optional::operator*</span>).  <br /></td></tr>
 <tr class="memitem:ad7d272b726f815feba425a6c56ecafea pub_methods_structmorph_1_1units_1_1Quantity" id="r_ad7d272b726f815feba425a6c56ecafea"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea">withDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision) const</td></tr>
 <tr class="memdesc:ad7d272b726f815feba425a6c56ecafea pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's <em>runtime</em> precision (the exact value itself is unchanged — precision only affects rounding and formatting).  <br /></td></tr>
+<tr class="memitem:af19ad973981224caceb822181204afaf pub_methods_structmorph_1_1units_1_1Quantity" id="r_af19ad973981224caceb822181204afaf"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#af19ad973981224caceb822181204afaf">roundedToDecimalPlaces</a> (<a class="el" href="../../da/d03/structmorph_1_1math_1_1DecimalPlaces.html">math::DecimalPlaces</a> newPrecision, <a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6a">math::RoundingMode</a> mode=<a class="el" href="../../d1/de8/rational_8hpp.html#a824b8a6635d9b1f288255215a100df6aadfbdb759b170ad5fa4d71c7b9190464e">math::RoundingMode::HalfAwayFromZero</a>) const</td></tr>
+<tr class="memdesc:af19ad973981224caceb822181204afaf pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to a runtime precision, <b>changing the exact value</b> as well as the tag — unlike <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ad7d272b726f815feba425a6c56ecafea">withDecimalPlaces</a></span>, which retags only and leaves display and storage free to disagree.  <br /></td></tr>
 <tr class="memitem:a71c5b40c2b3ee9b1dea894405b837ff6 pub_methods_structmorph_1_1units_1_1Quantity" id="r_a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a71c5b40c2b3ee9b1dea894405b837ff6">atDeclaredPrecision</a> () const</td></tr>
-<tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Retags the value's runtime precision to the declared one.  <br /></td></tr>
+<tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6 pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to this field's <b>declared</b> precision — the one the generated schema advertises as <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
 <tr class="memitem:a161651d7fca578b928901cdac557051a pub_methods_structmorph_1_1units_1_1Quantity" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
 <tr class="memdesc:a161651d7fca578b928901cdac557051a pub_methods_structmorph_1_1units_1_1Quantity"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
 <tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73 pub_methods_structmorph_1_1units_1_1Quantity" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="../../d5/dda/structmorph_1_1units_1_1Quantity.html#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
@@ -219,7 +221,7 @@ struct morph::units::NamedQuantity&lt; Name, U &gt;</div><p>A <span class="tt"><
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01010">1010</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01046">1046</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="af067a9bec5485a0e395856980ee0f598" name="af067a9bec5485a0e395856980ee0f598"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#af067a9bec5485a0e395856980ee0f598">&#9670;&#160;</a></span>Base</h2>
@@ -237,7 +239,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>The plain base quantity type. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01012">1012</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01048">1048</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -269,7 +271,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 
 <p>Constructs empty, then names. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01015">1015</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01051">1051</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -306,7 +308,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01019">1019</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01055">1055</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -343,7 +345,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
   </dd>
 </dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01023">1023</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01059">1059</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>
@@ -382,7 +384,7 @@ template&lt;detail::FixedString Name, auto U&gt; </div>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>The named quantity. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01033">1033</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d9/db8/quantity_8hpp_source.html#l01069">1069</a> of file <a class="el" href="../../d9/db8/quantity_8hpp_source.html">quantity.hpp</a>.</p>
 
 </div>
 </div>

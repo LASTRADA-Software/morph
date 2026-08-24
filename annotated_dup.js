@@ -9,6 +9,8 @@ var annotated_dup =
         [ "AppTraits", "d9/dfd/structmorph_1_1app_1_1AppTraits.html", null ]
       ] ],
       [ "async", null, [
+        [ "CallbackScope", "d7/d9f/classmorph_1_1async_1_1CallbackScope.html", "d7/d9f/classmorph_1_1async_1_1CallbackScope" ],
+        [ "CallbackToken", "de/d0d/classmorph_1_1async_1_1CallbackToken.html", "de/d0d/classmorph_1_1async_1_1CallbackToken" ],
         [ "Completion", "dd/de7/classmorph_1_1async_1_1Completion.html", "dd/de7/classmorph_1_1async_1_1Completion" ]
       ] ],
       [ "backend", null, [
@@ -76,6 +78,7 @@ var annotated_dup =
         [ "ReadonlyWhen", "dd/d29/structmorph_1_1forms_1_1ReadonlyWhen.html", "dd/d29/structmorph_1_1forms_1_1ReadonlyWhen" ],
         [ "RequiredWhen", "d6/da7/structmorph_1_1forms_1_1RequiredWhen.html", "d6/da7/structmorph_1_1forms_1_1RequiredWhen" ],
         [ "RuleList", "d3/d8b/structmorph_1_1forms_1_1RuleList.html", "d3/d8b/structmorph_1_1forms_1_1RuleList" ],
+        [ "UnsatisfiableFormError", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError.html", "d0/d10/structmorph_1_1forms_1_1UnsatisfiableFormError" ],
         [ "VisibleWhen", "d8/d10/structmorph_1_1forms_1_1VisibleWhen.html", "d8/d10/structmorph_1_1forms_1_1VisibleWhen" ]
       ] ],
       [ "journal", null, [

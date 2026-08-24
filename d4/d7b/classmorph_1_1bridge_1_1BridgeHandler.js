@@ -12,6 +12,8 @@ var classmorph_1_1bridge_1_1BridgeHandler =
     [ "isBound", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a585623f5455bba799db2e7ca0c22a947", null ],
     [ "whenBound", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ad28c2d2bf1f14ac08f51340fb7f3f07c", null ],
     [ "subscribe", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a0bd97352408cfd46af1ad547676d1940", null ],
+    [ "subscribe", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#ac5cef1ee0699d0fe7fddede90b0e9738", null ],
+    [ "subscribe", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a8ba5a1b0041cfa1d47974856a83a4078", null ],
     [ "unsubscribe", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#aec8bdef725857e4a58d733ce13ea9028", null ],
     [ "binding", "d4/d7b/classmorph_1_1bridge_1_1BridgeHandler.html#a24d6eae36421f68e51d54b24f6d2d087", null ]
 ];
