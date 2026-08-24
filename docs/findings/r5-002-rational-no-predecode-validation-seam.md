@@ -1,5 +1,5 @@
 ---
-id: 002
+id: r5-002
 title: No pre-decode validation seam for Rational -- setWire clamps hostile wire input to a plausible value instead of rejecting
 subsystem: wire
 severity: minor

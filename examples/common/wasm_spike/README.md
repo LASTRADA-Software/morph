@@ -49,17 +49,19 @@ prerequisites, the two most likely failure modes and their owning findings:
 
 - **Page aborts before "connected" logs.** Something in the registration path
   still nests a synchronous event loop despite `asyncRegistrationEnabled =
-  true` — re-open finding `001` (async shared/keyed attach) even though this
+  true` — re-open the *async shared/keyed attach* finding even though this
   spike deliberately avoids the *shared* path; if the *plain* async path also
   aborts, that is a new, more severe finding (the plain path was supposed to
-  already be WASM-safe per `[issue26]`'s native tests) — file it as the next
-  available id in `docs/findings/` (017 as of this writing; check the
-  highest-numbered file currently present)
-  with a name like `NNN-plain-async-registration-aborts-wasm.md`,
+  already be WASM-safe per `[issue26]`'s native tests) — file it under the
+  `core` namespace this spike allocates in, taking the next unused number in
+  that namespace only (`ls docs/findings/core-*`), per
+  [`examples/FINDINGS.md`](../../FINDINGS.md)'s "Allocating an id" —
+  with a name like `core-NNN-plain-async-registration-aborts-wasm.md`,
   `severity: blocker`, and this rung's exit criteria (per
   `examples/FINDINGS.md`) are **not met** until it is at least triaged.
 - **"connected" logs but no "result=" ever appears.** The action dispatch
-  itself is hanging — check whether `Completion` needs finding `002`'s
+  itself is hanging — check whether `Completion` needs the
+  *client-side execute deadline* finding's
   execute-deadline fix to surface the failure at all (today it would just
   hang silently, matching `002`'s description exactly).
 
