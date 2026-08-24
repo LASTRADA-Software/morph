@@ -43,11 +43,15 @@
 //    must not let its holder finalize poll B. Written explicitly (rather
 //    than assumed from the per-instance keying alone) because a bug in
 //    requireAdmin()'s poll-row lookup could silently pass.
-// 2. Bridge::setExecuteDeadline recovers a call the real rate limiter
-//    (QtWebSocketServerConfig::messagesPerSecond) silently drops -- the
-//    DoD's "run this rung's harness with messagesPerSecond configured ON"
-//    requirement, proven end to end (not merely at the framework-prereqs
-//    plan's own unit-test level) for the first time in this rung.
+// 2. The real rate limiter (QtWebSocketServerConfig::messagesPerSecond)
+//    refuses an over-budget call without hanging it -- the DoD's "run this
+//    rung's harness with messagesPerSecond configured ON" requirement, proven
+//    end to end (not merely at the framework-prereqs plan's own unit-test
+//    level) for the first time in this rung. This case used to prove that
+//    setExecuteDeadline *recovered* such a call, because the transport dropped
+//    the frame silently and only the deadline could settle it; since morph#225
+//    the transport answers it, so the call settles on its own and the deadline
+//    is no longer what saves it.
 // 3. The cross-model rename-race analogue (rung 2's TagModel-renames-while-
 //    BookmarkModel-writes race): this rung's README does not name an exact
 //    analogue -- there is only one model type here (PollModel), so that
@@ -68,6 +72,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using morph::bridge::AllowShared;
@@ -279,7 +284,7 @@ TEST_CASE("A poll's admin token does not finalize a different poll", "[polls][mo
     REQUIRE(pumpUntil([&failed] { return failed; }));
 }
 
-TEST_CASE("Bridge::setExecuteDeadline recovers a call the real rate limiter silently drops",
+TEST_CASE("The real rate limiter refuses an over-budget call without hanging it",
           "[polls][model][shared-instances]") {
     // BackendRig's Mode::Socket constructor takes an optional
     // QtWebSocketServerConfig (Task 11's own README-named
@@ -288,8 +293,10 @@ TEST_CASE("Bridge::setExecuteDeadline recovers a call the real rate limiter sile
     // second server) -- messagesPerSecond set here is the real per-connection
     // token bucket documented in qt_websocket_server.hpp: capacity equals
     // messagesPerSecond, one token per incoming frame of any kind, refilling
-    // continuously; a frame that finds an empty bucket is dropped silently,
-    // no reply of any kind (mirrors tests/qt/test_qt_websocket.cpp's own
+    // continuously; a frame that finds an empty bucket is refused -- it never
+    // reaches RemoteServer, and the sender is answered with an
+    // `err "rate limited"` addressed to that frame's own callId (morph#225)
+    // (mirrors tests/qt/test_qt_websocket.cpp's own
     // "messagesPerSecond throttles a burst on one connection" construction
     // pattern -- ThreadPoolExecutor -> RemoteServer -> QtWebSocketServer with
     // a low-messagesPerSecond cfg -- except BackendRig already threads that
@@ -321,26 +328,34 @@ TEST_CASE("Bridge::setExecuteDeadline recovers a call the real rate limiter sile
     // and this loop issues all 20 sends in a single native call stack with no
     // real wall-clock time between them, so refill-during-the-burst is
     // negligible: at least 15 of these 20 frames are guaranteed to find an
-    // empty bucket and be dropped at the transport, never reaching
-    // RemoteServer, with no reply of any kind. Distinct participant names so
-    // any call that *does* get through always succeeds -- never a business
-    // -logic Conflict -- keeping "no real reply" the only way a call can end
-    // up in `errors` without also being a ClientTimeoutError.
+    // empty bucket and be refused at the transport, never reaching
+    // RemoteServer, each answered with an `err "rate limited"`. Distinct
+    // participant names so any call that *does* get through always succeeds --
+    // never a business-logic Conflict -- keeping the rate-limit refusal the
+    // only way a call can end up in `errors`.
     constexpr int kBurstSize = 20;
     int successes = 0;
     int errors = 0;
     int clientTimeouts = 0;
+    int rateLimited = 0;
     for (int i = 0; i < kBurstSize; ++i) {
         handler
             .execute(SubmitVotes{.participantName = "voter-" + std::to_string(i),
                                   .votes = {{.optionId = opened.options[0].id, .choice = VoteChoice::Yes}}})
             .then([&successes](polls::GetPollStateResult) { ++successes; })
-            .onError([&errors, &clientTimeouts](const std::exception_ptr& err) {
+            .onError([&errors, &clientTimeouts, &rateLimited](const std::exception_ptr& err) {
                 ++errors;
                 try {
                     std::rethrow_exception(err);
                 } catch (const morph::backend::ClientTimeoutError&) {
                     ++clientTimeouts;
+                } catch (const std::exception& ex) {
+                    // A refused frame comes back as an `err` envelope, which
+                    // the client surfaces as a std::runtime_error carrying the
+                    // server's message (wire.hpp).
+                    if (std::string_view{ex.what()}.find("rate limited") != std::string_view::npos) {
+                        ++rateLimited;
+                    }
                 } catch (...) {
                 }
             });
@@ -351,11 +366,18 @@ TEST_CASE("Bridge::setExecuteDeadline recovers a call the real rate limiter sile
     REQUIRE(pumpUntil([&] { return successes + errors >= kBurstSize; }, std::chrono::milliseconds{3000}));
     CHECK(successes + errors == kBurstSize);
 
-    // Proof the drop was real, not merely that the deadline fired for some
-    // unrelated reason: strictly fewer real replies than calls sent (the
+    // Proof the refusal was real, not merely that something errored for an
+    // unrelated reason: strictly fewer successes than calls sent (the
     // "observing more calls than replies" confirmation the brief calls for),
-    // and at least one of the shortfall was specifically recovered via
-    // ClientTimeoutError rather than some other error.
+    // and at least one of the shortfall carried the transport's own
+    // rate-limit refusal rather than some other error.
     CHECK(successes < kBurstSize);
-    CHECK(clientTimeouts >= 1);
+    CHECK(rateLimited >= 1);
+
+    // The deadline is armed above and is deliberately *not* what settles these
+    // calls any more: before morph#225 a refused frame was dropped silently and
+    // only setExecuteDeadline could end the wait, so this case asserted
+    // clientTimeouts >= 1. Now the transport answers, so a timeout here would
+    // mean a call really did go unanswered -- the regression this guards.
+    CHECK(clientTimeouts == 0);
 }
