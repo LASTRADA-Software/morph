@@ -6,15 +6,15 @@ a Docker container. Used by `.github/workflows/self-hosted-smoke.yml`
 `linux-compilers` job whenever one is online and idle (see **ci.yml
 integration** below).
 
-Currently running on two hosts, each a separate registration of the same
-image:
+Currently running on one host: the maintainer's Windows machine (Docker
+Desktop, Linux containers). A second registration briefly ran on a
+Hetzner Cloud VM (`morph-hetzner-hel1`) but that machine was torn down.
 
-- the maintainer's Windows machine (Docker Desktop, Linux containers)
-- a Hetzner Cloud VM (`morph-hetzner-hel1`)
-
-Having more than one matters for `linux-compilers`: it's a 4-leg matrix,
-and a single runner can only execute one job at a time, so with just one
-box the legs queue behind each other instead of running in parallel.
+A single runner can only execute one job at a time, so with just one box
+a matrix's legs queue behind each other on it instead of running in
+parallel the way separate GitHub-hosted VMs would. Adding a second host
+back (see **Running more than one runner** below) restores that
+parallelism; nothing else needs to change to support it.
 
 The image is plain Ubuntu 24.04 with just the runner binary and enough
 packages (`sudo`, `curl`, `git`, build-essential-adjacent tooling) to
