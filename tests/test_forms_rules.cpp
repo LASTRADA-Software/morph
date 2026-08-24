@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <array>
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
@@ -12,6 +13,7 @@
 #include <morph/util/rational.hpp>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "test_support.hpp"
 
@@ -291,6 +293,150 @@ TEST_CASE("Forms::Rules::EmitNode::KindStringsNeverExercisedViaSchemaJson", "[fo
     CHECK(morph::forms::mutuallyExclusive(&CFRContactForm::email, &CFRContactForm::phone)
               .emitNode()["kind"]
               .get<std::string>() == "mutuallyExclusive");
+}
+
+// ---------------------------------------------------------------------------
+// Unsatisfiable declarations: a capping rule over fields `required` also
+// demands (issue #165). Every fixture below uses CFRMoney -- an
+// EmptyCapableField, hence *required by default* -- rather than
+// std::optional: `isStdOptional` keeps a std::optional member out of
+// `required` on sight, so a std::optional-typed fixture could not produce the
+// contradiction at all and would pass for the wrong reason.
+// ---------------------------------------------------------------------------
+
+/// exactlyOneOf over two fields that are both required by default: `required`
+/// demands both, the rule permits exactly one. Nothing can be submitted.
+struct CFRUnsatisfiableExactlyOne {
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&CFRUnsatisfiableExactlyOne::value, &CFRUnsatisfiableExactlyOne::qualifier));
+};
+
+/// The same contradiction via the other capping kind: "at most one" vs. "both".
+struct CFRUnsatisfiableMutex {
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::mutuallyExclusive(&CFRUnsatisfiableMutex::value, &CFRUnsatisfiableMutex::qualifier));
+};
+
+/// The sanctioned encoding, as rung 6's CaptureConcentration writes it: the
+/// rule is the *only* gate on the pair, so both members opt out of `required`.
+struct CFRSumTypeOptedOut {
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&CFRSumTypeOptedOut::value, &CFRSumTypeOptedOut::qualifier));
+};
+
+/// Exactly ONE required field inside a capping rule is satisfiable -- engage
+/// that one, leave the rest empty -- so it must not be rejected.
+struct CFROneRequiredInRule {
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr std::array optionalFields{std::string_view{"qualifier"}};
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::exactlyOneOf(&CFROneRequiredInRule::value, &CFROneRequiredInRule::qualifier));
+};
+
+/// atLeastOneOf is a floor, never a ceiling: engaging both required fields
+/// satisfies it. Rejecting this would be a false positive.
+struct CFRAtLeastOneAllRequired {
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::atLeastOneOf(&CFRAtLeastOneAllRequired::value, &CFRAtLeastOneAllRequired::qualifier));
+};
+
+/// A capping rule alongside an unrelated required field: only the fields the
+/// rule ranges over count, so this generates.
+struct CFRCappedPairPlusRequiredNeighbour {
+    CFRMoney sampleId;
+    CFRMoney value;
+    CFRMoney qualifier;
+
+    static constexpr std::array optionalFields{std::string_view{"value"}, std::string_view{"qualifier"}};
+    static constexpr auto formRules = morph::forms::ruleList(
+        morph::forms::mutuallyExclusive(&CFRCappedPairPlusRequiredNeighbour::value,
+                                        &CFRCappedPairPlusRequiredNeighbour::qualifier));
+};
+
+TEST_CASE("Forms::Rules::Unsatisfiable::ExactlyOneOfOverTwoRequiredFieldsThrows", "[forms][rules][unsatisfiable]") {
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableExactlyOne>(), morph::forms::UnsatisfiableFormError);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::MutuallyExclusiveOverTwoRequiredFieldsThrows",
+          "[forms][rules][unsatisfiable]") {
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableMutex>(), morph::forms::UnsatisfiableFormError);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::MessageNamesTheActionTheKindAndBothFields", "[forms][rules][unsatisfiable]") {
+    // The whole point of the check is that the diagnostic says what the
+    // debugging session would otherwise have to discover, so assert on it.
+    std::string message{};
+    try {
+        static_cast<void>(morph::forms::schemaJson<CFRUnsatisfiableExactlyOne>());
+    } catch (const morph::forms::UnsatisfiableFormError& error) {
+        message = error.what();
+    }
+    CHECK(message.find("CFRUnsatisfiableExactlyOne") != std::string::npos);
+    CHECK(message.find("exactlyOneOf") != std::string::npos);
+    CHECK(message.find("value") != std::string::npos);
+    CHECK(message.find("qualifier") != std::string::npos);
+    CHECK(message.find("optionalFields") != std::string::npos);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::ThrowIsNotCachedAwayBySchemaJson", "[forms][rules][unsatisfiable]") {
+    // schemaJson memoises into a function-local static; a throw during that
+    // static's initialisation must leave it uninitialised, so a second call
+    // re-runs the check rather than serving a half-built (or empty) schema.
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableExactlyOne>(), morph::forms::UnsatisfiableFormError);
+    CHECK_THROWS_AS(morph::forms::schemaJson<CFRUnsatisfiableExactlyOne>(), morph::forms::UnsatisfiableFormError);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::OptingBothMembersOutOfRequiredGenerates", "[forms][rules][unsatisfiable]") {
+    std::string schema{};
+    CHECK_NOTHROW(schema = morph::forms::schemaJson<CFRSumTypeOptedOut>());
+    CHECK(schema.find(R"("required":[])") != std::string::npos);
+    CHECK(schema.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") != std::string::npos);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::OneRequiredFieldInACappingRuleIsAccepted", "[forms][rules][unsatisfiable]") {
+    // Satisfiable: engage `value`, leave `qualifier` empty. Rejecting this
+    // would be a false positive.
+    std::string schema{};
+    CHECK_NOTHROW(schema = morph::forms::schemaJson<CFROneRequiredInRule>());
+    CHECK(schema.find(R"("required":["value"])") != std::string::npos);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::AtLeastOneOfIsAFloorAndNeverConflicts", "[forms][rules][unsatisfiable]") {
+    std::string schema{};
+    CHECK_NOTHROW(schema = morph::forms::schemaJson<CFRAtLeastOneAllRequired>());
+    CHECK(schema.find(R"({"kind":"atLeastOneOf","fields":["value","qualifier"]})") != std::string::npos);
+    CHECK(schema.find(R"("required":["value","qualifier"])") != std::string::npos);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::RequiredFieldsOutsideTheRuleAreIrrelevant", "[forms][rules][unsatisfiable]") {
+    std::string schema{};
+    CHECK_NOTHROW(schema = morph::forms::schemaJson<CFRCappedPairPlusRequiredNeighbour>());
+    CHECK(schema.find(R"("required":["sampleId"])") != std::string::npos);
+}
+
+TEST_CASE("Forms::Rules::Unsatisfiable::StdOptionalMembersCanNeverConflict", "[forms][rules][unsatisfiable]") {
+    // CFRContactForm's exactlyOneOf ranges over two std::optional members,
+    // which isStdOptional keeps out of `required` on sight -- so the
+    // contradiction is unreachable for them, with or without the check. Pinned
+    // because a fixture like this one is the easy wrong way to test #165.
+    std::string schema{};
+    CHECK_NOTHROW(schema = morph::forms::schemaJson<CFRContactForm>());
+    CHECK(schema.find(R"("required":[])") != std::string::npos);
 }
 
 TEST_CASE("Forms::Rules::Equals::EngagedComparesLiteralUnengagedIsFalse", "[forms][rules]") {

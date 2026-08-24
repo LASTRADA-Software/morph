@@ -1563,6 +1563,42 @@ template <typename A>
     }
 }
 
+/// @brief Thrown by `schemaJson<A>()` when `A`'s declared `formRules`
+///        contradict `A`'s own derived `required` array so completely that no
+///        submission could satisfy both.
+///
+/// The one contradiction that is decidable from the two halves alone: a rule
+/// that **caps** how many of the fields it ranges over may be engaged at once
+/// (`exactlyOneOf`, `mutuallyExclusive` — never `atLeastOneOf`, which is a
+/// floor and can always be met by engaging everything) ranging over two or
+/// more fields that `required` also demands. `required` says "fill in both";
+/// the rule says "at most one"; the form is dead on arrival.
+///
+/// This is a **programming error in the action's declaration**, not a runtime
+/// condition — hence `std::logic_error`, and hence a throw rather than the
+/// silent tolerance schema generation extends to a `formLayout` entry naming
+/// an unknown field. The fix is to name the rule's fields in
+/// `A::optionalFields` (the rule is then the only gate on them) or to drop
+/// the rule.
+struct UnsatisfiableFormError : std::logic_error {
+    /// @brief Constructs the error with a message naming the action type, the
+    ///        offending rule kind, and the fields that are both required and
+    ///        capped by it.
+    /// @param actionName    The action type's name (`glz::name_v<A>`).
+    /// @param ruleKind      The offending rule's wire `"kind"` string, e.g.
+    ///                      `"exactlyOneOf"`.
+    /// @param requiredFields Comma-separated wire names of the fields that are
+    ///                      in `required` *and* ranged over by the rule.
+    UnsatisfiableFormError(std::string_view actionName, std::string_view ruleKind, std::string_view requiredFields)
+        : std::logic_error("morph::forms: unsatisfiable form for action '" + std::string{actionName} + "': rule '" +
+                           std::string{ruleKind} +
+                           "' caps how many of its fields may be engaged, but these are also "
+                           "in the schema's required array: " +
+                           std::string{requiredFields} +
+                           ". No submission can satisfy both. List them in the action's optionalFields, or drop the "
+                           "rule.") {}
+};
+
 namespace detail {
 
 /// @brief One computed-field declaration: binds a destination member to the
@@ -2012,12 +2048,104 @@ void annotateNestedAggregateRef(glz::generic_u64& dom, glz::generic_u64& propert
     }
 }
 
+/// @brief Whether an emitted rule's wire `"kind"` *caps* how many of the
+///        fields it ranges over may be engaged at once.
+///
+/// This is the single place the capping kinds are named. A future rule kind
+/// with a ceiling ("at most two of these") joins this list and is then covered
+/// by `rejectUnsatisfiableRules` with no other change.
+///
+/// `atLeastOneOf` is deliberately absent: it is a *floor*, not a ceiling, and
+/// is satisfied by engaging every field it names — so it can never contradict
+/// `required`, and rejecting it would be a false positive. `requiredWhen` is
+/// likewise absent: it only ever *adds* required-ness.
+/// @param kind The rule node's emitted `"kind"` string.
+/// @return `true` for `"exactlyOneOf"` and `"mutuallyExclusive"`.
+[[nodiscard]] inline bool capsEngagedCount(std::string_view kind) noexcept {
+    return kind == ruleKindName(RuleKind::ExactlyOneOf) || kind == ruleKindName(RuleKind::MutuallyExclusive);
+}
+
+/// @brief Throws when any emitted rule node caps engagement over two or more
+///        fields that the emitted `required` array also demands.
+///
+/// Called from `mergeSchemaExtras`, which is the one place both halves are in
+/// hand: `required` is derived from field required-ness and `x-rules` from
+/// `A::formRules`, entirely independently, so until here neither half can see
+/// that it contradicts the other. Checking the *emitted* nodes (rather than
+/// the compile-time rule tuple) means the check reads exactly what a renderer
+/// would read, and keys off the same wire names `required` does.
+///
+/// **Why this throws when the rest of schema generation never does.** A
+/// `formLayout` entry naming a field the action does not have is silently
+/// ignored, and that is right: the author loses one layout hint and still
+/// gets a working form. This is different in kind — the result is a form
+/// *nobody can submit*, on any client, with no error naming the reason. The
+/// failure is already certain at generation time and belongs to the author's
+/// own build, so it is raised there rather than left to surface as a user who
+/// cannot press Save.
+///
+/// One required field inside a capping rule is fine and is left alone: the
+/// author engages that one and leaves the rest empty, which satisfies both
+/// `exactlyOneOf` and `mutuallyExclusive`. Only two or more conflict.
+///
+/// Note that `std::optional` members can never appear here: `isStdOptional`
+/// keeps them out of `required` on sight. The reachable case is an
+/// `EmptyCapableField` (a `Quantity`, a `Choice`, a strong id) — required by
+/// default, and rangeable by a membership rule.
+/// @tparam A Action type (a reflectable aggregate), used only to name the
+///           offending type in the diagnostic.
+/// @param xRules       The rule nodes just emitted from `A::formRules`.
+/// @param requiredNames Wire names of every member that landed in `required`.
+/// @throws UnsatisfiableFormError naming the first offending rule.
+template <typename A>
+void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
+                              const std::vector<std::string_view>& requiredNames) {
+    for (auto const& rule : xRules) {
+        auto const* node = rule.get_if<glz::generic_u64::object_t>();
+        if (node == nullptr) {
+            continue;
+        }
+        auto const kindEntry = node->find("kind");
+        auto const fieldsEntry = node->find("fields");
+        if (kindEntry == node->end() || fieldsEntry == node->end()) {
+            continue;
+        }
+        auto const* kind = kindEntry->second.get_if<std::string>();
+        auto const* fields = fieldsEntry->second.get_if<glz::generic_u64::array_t>();
+        if (kind == nullptr || fields == nullptr || !capsEngagedCount(*kind)) {
+            continue;
+        }
+        std::string offenders{};
+        std::size_t offenderCount = 0;
+        for (auto const& fieldNode : *fields) {
+            auto const* fieldName = fieldNode.get_if<std::string>();
+            if (fieldName == nullptr || std::find(requiredNames.begin(), requiredNames.end(),
+                                                  std::string_view{*fieldName}) == requiredNames.end()) {
+                continue;
+            }
+            if (offenderCount > 0) {
+                offenders += ", ";
+            }
+            ++offenderCount;
+            offenders += *fieldName;
+        }
+        if (offenderCount >= 2) {
+            throw UnsatisfiableFormError{glz::name_v<A>, *kind, offenders};
+        }
+    }
+}
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
 ///
 /// Separated from `schemaJson` so the fallback path (malformed input passes
 /// through unchanged) is directly testable.
+///
+/// Also the one place `required` and `x-rules` are both in hand, and so the
+/// one place their mutual contradiction is visible: see
+/// `rejectUnsatisfiableRules`, the sole path by which schema generation
+/// throws.
 // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
 template <typename A>
 [[nodiscard]] std::string mergeSchemaExtras(std::string rawSchema) {
@@ -2031,9 +2159,14 @@ template <typename A>
     glz::generic_u64::array_t requiredNames{};
     // Wire keys of every reflected member, in declaration order — reused
     // below to silently ignore a formLayout/fieldSpans entry that names a
-    // field the action does not actually have (schema generation never
-    // throws over an author's declaration mistake).
+    // field the action does not actually have (a tolerated unknown field
+    // still yields a working form, so it is never worth throwing over --
+    // unlike the one case rejectUnsatisfiableRules catches below).
     std::vector<std::string_view> memberNames{};
+    // The subset of `memberNames` that lands in `required`, kept as wire names
+    // so `rejectUnsatisfiableRules` can match the emitted rule nodes' `fields`
+    // against it without re-reading the DOM array it just built.
+    std::vector<std::string_view> requiredMemberNames{};
     A probe{};
 
     // Computed-field destination names -> their declared input wire names,
@@ -2056,6 +2189,7 @@ template <typename A>
         const bool isOptional = isStdOptional<Member> || declaredOptional<A>(name) || isComputed;
         if (!isOptional) {
             requiredNames.emplace_back(std::string{name});
+            requiredMemberNames.push_back(name);
         }
         auto& property = dom["properties"][std::string{name}];
         property["x-order"] = std::uint64_t{I};
@@ -2100,8 +2234,8 @@ template <typename A>
         glz::generic_u64::array_t groupsJson{};
         // wire key -> 0-based index into A::formLayout; a field claimed by
         // two groups keeps the first (declaration order wins, silently —
-        // schema generation never throws over an author's declaration
-        // mistake).
+        // the author still gets a working form, so this is not worth
+        // throwing over).
         std::vector<std::pair<std::string_view, std::size_t>> sectionOf{};
         std::size_t groupIndex = 0;
         for (auto const& group : A::formLayout) {
@@ -2170,6 +2304,10 @@ template <typename A>
     if constexpr (HasFormRules<A>) {
         glz::generic_u64::array_t xRules{};
         std::apply([&](const auto&... rule) { (xRules.emplace_back(rule.emitNode()), ...); }, A::formRules.rules);
+        // The one point where the two independently derived halves are both
+        // in hand -- see rejectUnsatisfiableRules for why this is the one
+        // author mistake schema generation refuses to tolerate silently.
+        rejectUnsatisfiableRules<A>(xRules, requiredMemberNames);
         dom["x-rules"] = xRules;
     }
 
@@ -2444,8 +2582,20 @@ template <typename A>
 /// internal failure the unmerged glaze schema (or an empty string if even
 /// that failed) is returned rather than throwing — schema generation is a
 /// description facility, never worth crashing a server over.
+///
+/// The single exception is a **self-contradicting declaration**. When an
+/// `A::formRules` entry caps engagement over two or more fields that `A` also
+/// makes `required`, the pair describes a form no submission can satisfy, and
+/// `UnsatisfiableFormError` is thrown. That is an author error in `A`, decidable
+/// at generation time, and every client would otherwise inherit an
+/// unsubmittable form (see `detail::rejectUnsatisfiableRules`). Because the
+/// cache is a function-local `static`, the throw leaves it uninitialised and a
+/// later call re-runs the check rather than serving a half-built schema.
 /// @tparam A Action type (a reflectable aggregate).
 /// @return The merged schema JSON.
+/// @throws UnsatisfiableFormError if `A::formRules` declares a capping rule
+///         (`exactlyOneOf` / `mutuallyExclusive`) over two or more fields that
+///         are also in `A`'s derived `required` array.
 template <typename A>
 [[nodiscard]] std::string schemaJson() {
     static const std::string cached =
