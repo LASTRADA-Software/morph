@@ -63,6 +63,30 @@ Key consequences:
 - **A model author writes single-threaded code.** For a given `ModelId`, the
   strand guarantees `execute()` is never re-entered concurrently, so per-model
   state needs no locking. Different models run in parallel across pool threads.
+- **A model cannot reach the framework that runs it.** No framework seam hands a
+  model a handle to its own `Bridge` or `BridgeHandler`: construction is nullary
+  (`ModelFactory::create<Model>()`), dispatch passes only the action
+  (`registry.hpp`'s `model.execute(action)`), and the two optional hooks —
+  `onBackendChanged()` and `attachActionLog(...)` — pass no handle either. The
+  one other thing an `execute()` body can read mid-dispatch, `session::current()`,
+  is plain data (`principal`, `token`, `requestId`, `locale`, `metadata`).
+
+  The enforcement is uneven, and the difference is worth knowing:
+
+  - A **reference** member is impossible *by construction*. Declaring
+    `BridgeHandler<Self>& handler;` fails to compile through
+    `ModelFactory::create<Self>()` — "reference member … uninitialized",
+    `model.hpp`'s `ModelHolder` value-initialises the model with no arguments to
+    bind it to.
+  - A **pointer** member compiles cleanly. Nothing forbids *declaring*
+    `BridgeHandler<Self>* handler{nullptr};`. What keeps it inert is that no
+    framework-owned path ever assigns a live value into it, so it stays null
+    forever unless a caller hand-wires one in — which is itself the violation,
+    not a gap in this guarantee.
+
+  So "a model cannot observe its own bridge" is compile-time enforced for a
+  reference and true-in-practice for a pointer. Anything stronger for the
+  pointer case would need a check the framework does not have.
 - **The GUI thread is never blocked by dispatch.** `executeVia` returns a
   `Completion` immediately; the actual work runs on the pool and the result is
   marshalled back to the GUI executor.
