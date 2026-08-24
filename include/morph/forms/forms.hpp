@@ -1538,7 +1538,11 @@ concept HasFormRules = requires { A::formRules; };
 /// A side-effectful action wants this. Auto-submit fires on *every* keystroke
 /// that leaves the form valid, so a `CreatePaste` bound directly to a live
 /// controller stores one paste per typed character.
-/// @tparam A Action type to test.
+///
+/// (No `@tparam`: clang's -Wdocumentation does not consider a concept a
+/// template declaration, so documenting the parameter is an error under
+/// -Weverything -Werror -- the WASM ladder build compiles with exactly that.
+/// `HasFormRules` above omits it for the same reason.)
 template <typename A>
 concept HasExplicitSubmit = requires {
     { A::explicitSubmit } -> std::convertible_to<bool>;
