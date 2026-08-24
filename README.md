@@ -458,8 +458,10 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
   so two separate clients sharing an instance do not see each other's results
   until they ask again. No replay, no durability, no coalescing.
 - **Exact numbers are fixed-width.** `Rational` is an `int64` pair; `+`/`-`/`*`
-  can overflow (undefined behaviour) rather than returning an error, and high
-  decimal precision shrinks the representable magnitude. Wire input is *clamped*,
+  *saturate* at `±INT64_MAX/1` and log at `error` rather than returning an error
+  value, so an out-of-envelope result is clamped and inexact rather than exact —
+  use `checkedAdd`/`checkedSub`/`checkedMul` to detect it. High decimal precision
+  shrinks the representable magnitude. Wire input is *clamped*,
   not rejected, on malformed values.
 - **Journal replay re-executes actions**, so undo/reconstruction is only exact
   for pure, in-memory models. A model with its own transactional store can close
