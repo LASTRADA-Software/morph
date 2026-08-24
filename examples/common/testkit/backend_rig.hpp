@@ -437,9 +437,13 @@ private:
     // exactly how it presented (intermittent SIGSEGVs scattered across
     // pastebin's socket cases). Destroying `_workerPool` — which joins its
     // threads, so every in-flight completion has resolved — before the
-    // executors closes that window. `QtExecutor` is stateless and queues onto
-    // `QCoreApplication`, so callbacks it has already posted stay safe after
-    // the rig is gone.
+    // executors closes that window. That ordering remains load-bearing: `QtExecutor`'s
+    // `_alive` token guards *delivery of an already-queued event*, not a
+    // `post()` call on a freed `IExecutor*` -- which is exactly the hazard
+    // described above, and is a member call on destroyed memory that no token
+    // can catch. (`QtExecutor` is also not stateless: it holds that token
+    // besides the context pointer.) A callback still queued when the executor
+    // dies is dropped, not run.
     std::unique_ptr<::morph::qt::QtExecutor> _qtExecutor;                     // Local / Socket
     std::unique_ptr<detail::QtDrivenMainThreadExecutor> _mainThreadExecutor;  // LocalSingleThread
     std::unique_ptr<::morph::exec::ThreadPoolExecutor> _workerPool;           // Local / Socket

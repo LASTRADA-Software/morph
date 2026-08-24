@@ -60,8 +60,10 @@ extern "C" void onStopSignal(int /*signum*/) { gStopRequested = 1; }
 ///
 /// `pastebin::app::App::sweepInFlight()` is observe-only: `~App` does *not*
 /// wait for the `ExpirePaste` calls a sweep dispatched to settle before
-/// destroying the bridge they complete against, so a callback delivered after
-/// `~App` is a use-after-free. The header states the contract — "pump on this
+/// destroying the bridge they complete against. Such a callback is not
+/// delivered at all — `~App` destroys the `QtExecutor` it was queued on, and a
+/// queued task whose executor is gone is dropped — so this is not a
+/// use-after-free; it is a sweep whose result is silently never observed. The header states the contract — "pump on this
 /// until it is `false`, then destroy" — and this is the production consumer
 /// honouring it. Bounded by @p budget so a wedged dispatch cannot hang
 /// shutdown forever; overrunning it is strictly better than the alternative of
