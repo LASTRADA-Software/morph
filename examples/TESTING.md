@@ -216,6 +216,28 @@ A `sleep_for` outside `pump.hpp` is a review-rejectable defect. The test
 binary uses the Qt-owning `main()` (QCoreApplication + `Catch::Session` +
 DeferredDelete drain) copied from `tests/qt/test_qt_websocket.cpp`.
 
+`pump.hpp` covers waiting on the *Qt loop*. Waiting on a **background job**
+has its own answer, and it is not a wait at all:
+
+- `step_executor.hpp` — `StepExecutor`, an `IExecutor` that queues posted
+  tasks and runs them only on `runOne()`/`runAll()`. Substituted for the
+  `ThreadPoolExecutor` a model or App would otherwise own, it turns
+  submit-then-poll into an exact sequence: submit, `CHECK(pending() == 1)`,
+  `runOne()`, assert done. The negative half — "the worker has **not** run
+  yet" — is assertable only this way; against a real pool it can only be
+  sampled. `runAll()` picks up tasks a running task posts, so a chained job
+  runs to completion instead of stranding its own continuation, and is
+  bounded so a self-reposting task fails loudly rather than hanging.
+  It mirrors `morph::testing::StepExecutor` (`tests/test_support.hpp`), which
+  the framework's own suite has always had; the ladder copy exists because
+  that header has no reachable include path from `examples/`.
+
+A test that keeps a real `ThreadPoolExecutor` under an async job — because it
+is covering the production wiring, or the fact that the worker runs on a
+genuinely different thread with no session context — says so at the test case
+and pays the retry loop knowingly. `examples/ledger/tests/test_ledger_reports.cpp`
+keeps exactly one such case and converts the rest.
+
 ## Multi-client stress harness
 
 Testkit components, with the rung that **first needs** each (this ordering
@@ -227,6 +249,7 @@ DoD):
 | `testkit_main.cpp`, `pump.hpp`, `backend_rig.hpp`, `db_fixture.hpp`, `db_fault_fixture.hpp`, **fault proxy + strand interleaver** (pulled forward, round-7) | rung 0/1 |
 | `client_pool.hpp`, `convergence.hpp` | rung 3 |
 | `action_driver.hpp`, `process_pool.hpp`, `offline_rig.hpp` | rung 4 |
+| `step_executor.hpp` | rung 5 |
 
 - `db_fault_fixture.hpp` — holds a real `Lightweight::SqlScopedLock` on a
   second, independent `SqlConnection` to the shared test database, producing

@@ -160,7 +160,8 @@ if(NOT Catch2_FOUND)
 endif()
 
 # ── morph_ladder_testkit: pump/fixtures/rig/fault-proxy/interleaver ─────────
-# strand_interleaver.hpp (DeterministicExecutor), db_fixture.hpp and
+# strand_interleaver.hpp (DeterministicExecutor), step_executor.hpp
+# (StepExecutor), db_fixture.hpp and
 # db_fault_fixture.hpp are fully header-defined and have no .cpp: none is a
 # QObject, none needs MOC, and the library already links non-empty TUs
 # (fault_proxy.cpp, qml_surface.cpp), so content-free placeholder TUs would be
@@ -210,6 +211,7 @@ add_executable(ladder_common_tests
     testkit/test_event_poller.cpp
     testkit/test_fault_proxy.cpp
     testkit/test_strand_interleaver.cpp
+    testkit/test_step_executor.cpp
     testkit/test_wasm_registration_path_native.cpp
     testkit/test_action_driver.cpp
     testkit/test_offline_rig.cpp

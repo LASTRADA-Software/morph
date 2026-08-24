@@ -21,7 +21,9 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -457,6 +459,16 @@ void LedgerModel::logAction(const Action& action, const Result& result, std::str
     // unflushed bytes. InMemoryActionLog::flush() is a no-op, so this
     // costs nothing for the log type most tests attach.
     _log->flush();
+}
+
+LedgerModel::LedgerModel(std::shared_ptr<::morph::exec::IExecutor> reportExecutor)
+    : _reportExecutor{std::move(reportExecutor)} {
+    // Checked rather than left to a later null dereference inside
+    // execute(SubmitReport): the crash would happen on whichever call first
+    // submits a report, arbitrarily far from the construction that caused it.
+    if (_reportExecutor == nullptr) {
+        throw std::invalid_argument{"LedgerModel: reportExecutor must not be null"};
+    }
 }
 
 AccountInfo LedgerModel::execute(const OpenAccount& action) {
