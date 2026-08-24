@@ -31,6 +31,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <mutex>
 #include <vector>
 
 // ── Shared QCoreApplication ──────────────────────────────────────────────────
@@ -1535,6 +1536,7 @@ TEST_CASE("morph::qt::QtWebSocketServer: default config behaves exactly as befor
     REQUIRE(result.load() == 5);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on one connection", "[qt][ws][limits]") {
     ensureApp();
     morph::exec::ThreadPoolExecutor serverPool{2};
@@ -1556,12 +1558,28 @@ TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on 
     REQUIRE(regReply.kind == "ok");
 
     // Fire 20 execute frames back-to-back. The bucket started at capacity 5 and
-    // lost 1 token to the register above, so at most ~4 of these should be
-    // admitted before the bucket empties; the rest are dropped at the transport,
-    // never reaching RemoteServer, so no reply arrives for them.
-    std::atomic<int> replies{0};
-    auto conn =
-        QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString&) { replies.fetch_add(1); });
+    // lost 1 token to the register above, so only a few are admitted and reach
+    // RemoteServer; the rest are refused at the transport.
+    //
+    // Refused is not the same as ignored: an over-budget frame is answered with
+    // an `err "rate limited"` addressed to its own callId (morph#225). Before
+    // that, it was dropped silently and the caller's Completion had nothing to
+    // resolve it -- an execute that hung unless LimitPolicy::executeTimeout was
+    // armed, which is off by default.
+    std::atomic<int> okReplies{0};
+    std::atomic<int> rateLimited{0};
+    std::vector<std::uint64_t> rateLimitedCallIds;
+    std::mutex callIdMutex;
+    auto conn = QObject::connect(&sock, &QWebSocket::textMessageReceived, [&](const QString& text) {
+        auto const env = morph::wire::decode(text.toStdString());
+        if (env.kind == "err" && env.message.contains("rate limited")) {
+            rateLimited.fetch_add(1);
+            std::scoped_lock const lock{callIdMutex};
+            rateLimitedCallIds.push_back(env.callId);
+        } else if (env.kind == "ok") {
+            okReplies.fetch_add(1);
+        }
+    });
     for (int idx = 0; idx < 20; ++idx) {
         morph::wire::Envelope req;
         req.kind = "execute";
@@ -1572,14 +1590,32 @@ TEST_CASE("morph::qt::QtWebSocketServer: messagesPerSecond throttles a burst on 
         req.body = R"({"value":1})";
         sock.sendTextMessage(QString::fromStdString(morph::wire::encode(req)));
     }
-    // Give the admitted replies a moment to arrive, then a further moment to
-    // confirm no additional (wrongly-admitted) replies trickle in.
-    pumpUntil([&] { return replies.load() >= 1; }, 100);
+    pumpUntil([&] { return okReplies.load() + rateLimited.load() >= 20; }, 200);
     pumpUntil([] { return false; }, 30);
     QObject::disconnect(conn);
 
-    REQUIRE(replies.load() >= 1);
-    REQUIRE(replies.load() < 20);
+    // The throttle still throttles: not everything was executed.
+    REQUIRE(okReplies.load() >= 1);
+    REQUIRE(rateLimited.load() >= 1);
+    REQUIRE(okReplies.load() < 20);
+    // And nothing is left unanswered -- this is the assertion that would fail
+    // if the frame were dropped silently again.
+    CHECK(okReplies.load() + rateLimited.load() == 20);
+
+    // Each refusal is addressed to the call it answers. A zeroed callId would
+    // be worse than no reply: callId == 0 is the client's synchronous-reply
+    // discriminator, so it would resume an unrelated parked call while the
+    // execute that triggered it still hung.
+    {
+        std::scoped_lock const lock{callIdMutex};
+        for (std::uint64_t const callId : rateLimitedCallIds) {
+            CHECK(callId >= 1);
+            CHECK(callId <= 20);
+        }
+    }
+
+    // Throttling slows a client down; it does not evict one.
+    CHECK(sock.state() == QAbstractSocket::ConnectedState);
 
     sock.close();
     pumpUntil([&] { return sock.state() == QAbstractSocket::UnconnectedState; }, 50);
