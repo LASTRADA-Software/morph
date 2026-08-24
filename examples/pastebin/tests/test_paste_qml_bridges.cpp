@@ -34,6 +34,7 @@
 #include "testkit/backend_rig.hpp"
 #include "testkit/db_fixture.hpp"
 #include "testkit/pump.hpp"
+#include "testkit/qml_surface.hpp"
 
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -41,6 +42,7 @@
 #include <QMetaProperty>
 #include <QMetaType>
 #include <QString>
+#include <QStringList>
 #include <QVariant>
 #include <QVariantList>
 #include <QVariantMap>
@@ -54,6 +56,7 @@ using morph::ladder::testkit::BackendRig;
 using morph::ladder::testkit::DbFixture;
 using morph::ladder::testkit::Mode;
 using morph::ladder::testkit::pumpUntil;
+using morph::ladder::testkit::QmlSurfaceAudit;
 
 /// @brief A `CreatePaste` body in the shape `DynamicForm.previewLine` hands
 ///        `FormsBridge::submitIfValid` — a fully-assembled JSON object, with
@@ -109,52 +112,47 @@ using morph::ladder::testkit::pumpUntil;
 // The QML-visible surface: names and signatures QML binds by string
 // ═════════════════════════════════════════════════════════════════════════
 
-TEST_CASE("FormsBridge exposes exactly the surface DynamicForm and Main.qml bind against",
+TEST_CASE("Both pastebin bridges expose exactly the surface gui/qml binds, and nothing more",
           "[pastebin][gui][qml-bridges]") {
+    // Was two cases of hand-written `indexOfMethod`/`indexOfSignal` REQUIREs,
+    // each carrying a `Main.qml:169`-style citation in a comment. Those
+    // proved only that every name a human had transcribed was still present:
+    // the QML was never read, so a `Connections` handler bound to a signal
+    // that no longer exists — or one that never existed — passed. (The rung's
+    // engine-load smoke test cannot see it either; it loads Main.qml with
+    // both controllers null, so no handler name is ever resolved.) There was
+    // also no count assertion here at all, so a bridge member with no binding
+    // site was not checked in the other direction either.
+    //
+    // `QmlSurfaceAudit` (testkit/qml_surface.hpp) reads gui/qml/ as the
+    // expectation and covers both directions. See that header for its limits.
     DbFixture fixture;
     BackendRig rig{Mode::Local, 1};
     pastebin::gui::FormsBridge forms{rig.bridge(0), rig.executor()};
+    pastebin::gui::PasteBridge pastes{rig.bridge(0), rig.executor()};
 
+    // The two `setInitialProperties` keys gui/main.cpp supplies.
+    QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/pastebin/gui/qml")};
+    audit.bind(QStringLiteral("formsController"), forms);
+    audit.bind(QStringLiteral("pasteController"), pastes);
+
+    const QStringList findings = audit.run();
+    INFO(findings.join(QStringLiteral("\n")).toStdString());
+    CHECK(findings.isEmpty());
+    CHECK(audit.scannedFiles() == QStringList{QStringLiteral("Main.qml"), QStringLiteral("PasteView.qml")});
+
+    // What the audit cannot see, because QML's text does not record it:
+    // `schemasJson` is CONSTANT, which is why Main.qml parses it exactly once.
     const QMetaObject* meta = forms.metaObject();
-
-    // `root.formsController.schemasJson` — Main.qml:35.
-    REQUIRE(meta->indexOfProperty("schemasJson") >= 0);
-    CHECK(meta->property(meta->indexOfProperty("schemasJson")).isConstant());
-
-    // `root.formsController.submitIfValid("CreatePaste", createForm.previewLine)`
-    // — Main.qml:169. Two QString arguments, invokable from QML.
-    REQUIRE(meta->indexOfMethod("submitIfValid(QString,QString)") >= 0);
-
-    // `function onReplyReceived(actionType, ok, payload)` — Main.qml:113.
-    REQUIRE(meta->indexOfSignal("replyReceived(QString,bool,QString)") >= 0);
+    const int schemasJson = meta->indexOfProperty("schemasJson");
+    REQUIRE(schemasJson >= 0);
+    CHECK(meta->property(schemasJson).isConstant());
 
     // The property's value is the shared schema document, verbatim — the same
     // one both shells build (paste_schemas.hpp exists so they cannot diverge),
     // and `JSON.parse`-able, since Main.qml does exactly that to it.
     CHECK(forms.schemasJson().toStdString() == pastebin::gui::pasteSchemasJson());
     CHECK(forms.schemasJson().contains(QStringLiteral("\"CreatePaste\"")));
-}
-
-TEST_CASE("PasteBridge exposes exactly the surface Main.qml and PasteView.qml bind against",
-          "[pastebin][gui][qml-bridges]") {
-    DbFixture fixture;
-    BackendRig rig{Mode::Local, 1};
-    pastebin::gui::PasteBridge pastes{rig.bridge(0), rig.executor()};
-
-    const QMetaObject* meta = pastes.metaObject();
-
-    // `root.pasteController.refresh()` (Main.qml:69, :93, :99, :121, :178),
-    // `.open(modelData.id)` (Main.qml:201), `.remove(pasteId)` (Main.qml:213).
-    REQUIRE(meta->indexOfMethod("refresh()") >= 0);
-    REQUIRE(meta->indexOfMethod("open(QString)") >= 0);
-    REQUIRE(meta->indexOfMethod("remove(QString)") >= 0);
-
-    // `function onListed(rows)` / `onLoaded(paste)` / `onRemoved()` /
-    // `onFailed(message)` — Main.qml:75, :86, :96, :102.
-    REQUIRE(meta->indexOfSignal("listed(QVariantList)") >= 0);
-    REQUIRE(meta->indexOfSignal("loaded(QVariantMap)") >= 0);
-    REQUIRE(meta->indexOfSignal("removed()") >= 0);
-    REQUIRE(meta->indexOfSignal("failed(QString)") >= 0);
 }
 
 // ═════════════════════════════════════════════════════════════════════════

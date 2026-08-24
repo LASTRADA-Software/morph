@@ -86,6 +86,66 @@ QProcess client harness, the Qt-owning Catch2 `main()`), the pump helpers in
    in the presenter. Per rung: one offscreen engine-load smoke test (engine
    creates root object, no errors) registered in ctest — not Qt Quick Test,
    and no synthesized-mouse-event flows.
+7. **One QML-surface audit per rung** (below). The smoke test in rule 6 loads
+   every root with its controller properties null, so it resolves no handler
+   name and no delegate key against a real object; the audit is what covers
+   that.
+
+## The QML-surface drift guard
+
+`examples/common/testkit/qml_surface.hpp` — `QmlSurfaceAudit`.
+
+QML binds a bridge **by string**. `page.tagController.refresh()` and
+`function onListed(rows)` inside a `Connections` block both resolve at run
+time, against an object the compiler never sees. A renamed `Q_INVOKABLE`, a
+`Q_PROPERTY` whose name changed while its getter did not, a handler for a
+signal that no longer exists: none is a compile error, none is a QML warning,
+and none is visible to the rule-6 smoke test, which supplies no controllers at
+all. The failure is a pane that quietly stays empty.
+
+The audit reads the rung's own `gui/qml/*.qml` from the source tree
+(`MORPH_LADDER_SOURCE_ROOT`, already compiled into every rung's test binary)
+and makes those files the expectation. It needs no QML engine and no
+`Qt6::Quick`, so it runs even in configures built without
+`MORPH_BUILD_FORMS_QML`.
+
+```cpp
+QmlSurfaceAudit audit{QStringLiteral(MORPH_LADDER_SOURCE_ROOT "/examples/<rung>/gui/qml")};
+audit.bind(QStringLiteral("tagController"), tags);          // every file
+audit.bindIn(QStringLiteral("LedgerView.qml"),              // one file only
+             QStringLiteral("bridge"), ledgerBridge);
+const QStringList findings = audit.run();
+INFO(findings.join(QStringLiteral("\n")).toStdString());
+CHECK(findings.isEmpty());
+```
+
+**Covers**, in both directions at once:
+
+- a name QML binds that the bridge does not have — the direction a
+  hand-written metaobject checklist structurally *cannot* cover, since its
+  expectation is a transcription of the same QML;
+- a bridge member no QML binds;
+- argument-count disagreement at a call site, and a handler declaring more
+  parameters than its signal carries;
+- a `Connections` block whose target alias was never bound — i.e. a bridge
+  the audit was silently not handed.
+
+**Does not cover:** argument *types* (QML is dynamically typed there);
+property-bag keys inside an emitted `QVariantMap` (no metaobject exists for
+them — the per-rung "bag shape" cases remain the only guard); QML the rung
+does not own, such as the shipped `MorphForms` renderer's; dynamic member
+access; and whether the shell wires an alias to the class the test bound.
+
+`allowUnbound(alias, member, reason)` exempts one member, with a required
+reason. The exemption list is itself audited — a member that has since been
+deleted, an alias nobody bound, or a member QML does bind is a finding — so it
+can only shrink deliberately.
+
+Adopted by `bookmarks`, `pastebin`, `polls` and `ledger`; `lims`, `kanban`
+and `bank` are tracked in morph#240. The audit's own
+mutation suite is `examples/common/testkit/test_qml_surface.cpp`: every case
+there drives it against a deliberately broken pair and asserts the specific
+finding.
 
 ## The dual-mode fixture
 

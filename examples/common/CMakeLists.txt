@@ -162,10 +162,15 @@ endif()
 # ── morph_ladder_testkit: pump/fixtures/rig/fault-proxy/interleaver ─────────
 # strand_interleaver.hpp (DeterministicExecutor), db_fixture.hpp and
 # db_fault_fixture.hpp are fully header-defined and have no .cpp: none is a
-# QObject, none needs MOC, and the library already links a non-empty TU
-# (fault_proxy.cpp), so content-free placeholder TUs would be dead weight.
+# QObject, none needs MOC, and the library already links non-empty TUs
+# (fault_proxy.cpp, qml_surface.cpp), so content-free placeholder TUs would be
+# dead weight. qml_surface.cpp is a .cpp for the opposite reason: it is a
+# regex/QMetaObject walker with no reason to be inlined into every rung's test
+# TU, and it deliberately stays out of apply_warnings()' reach by living in
+# this target (see the note below on Lightweight).
 add_library(morph_ladder_testkit STATIC
     testkit/fault_proxy.cpp
+    testkit/qml_surface.cpp
 )
 add_library(morph::ladder_testkit ALIAS morph_ladder_testkit)
 target_include_directories(morph_ladder_testkit PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -210,6 +215,7 @@ add_executable(ladder_common_tests
     testkit/test_offline_rig.cpp
     testkit/test_convergence.cpp
     testkit/test_client_pool.cpp
+    testkit/test_qml_surface.cpp
 )
 target_link_libraries(ladder_common_tests PRIVATE morph::ladder_testkit)
 # morph::ladder_testkit links Lightweight::Lightweight PUBLIC (above), and
