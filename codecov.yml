@@ -261,10 +261,18 @@ component_management:
     # being diluted by presenters and QML adapters that have their own suites.
     #
     # NOTE: neither this component nor ledger's could score anything until
-    # rung 6 also fixed scripts/coverage.sh, whose `_MORPH_LADDER_RUNGS` list
-    # had drifted from CMake's and named only rungs 1-4. ledger's component
-    # was matching a set of files no uploaded report contained -- silently
-    # reporting nothing rather than failing. Fixed by rung 6.
+    # rung 6 also fixed scripts/coverage.sh, whose hand-copied rung list had
+    # drifted from CMake's and named only rungs 1-4. ledger's component was
+    # matching a set of files no uploaded report contained -- silently
+    # reporting nothing rather than failing. Fixed by rung 6, and structurally
+    # closed by morph#179: coverage.sh now reads examples/rungs.txt (the single
+    # authoritative rung list) instead of restating it.
+    #
+    # The components in this file are the other half of that pair, and are the
+    # one thing here that still has to be written by hand -- Codecov reads this
+    # file on its own service, so nothing in the repository can generate it.
+    # scripts/check_rung_filters.sh therefore fails the build if any rung in
+    # examples/rungs.txt has no `component_id` here.
     #
     # Measured ceiling, from `llvm-cov export`'s JSON (covered/total, not the
     # rounded report percentage) over the full lims suite:

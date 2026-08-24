@@ -43,25 +43,34 @@ fi
 # forgotten in the same way; a new rung needs its name added here and
 # nowhere else.
 #
-# `_MORPH_LADDER_RUNGS` deliberately mirrors examples/CMakeLists.txt's own
-# `_morph_known_rungs` list. A rung that was not configured in this build
-# contributes nothing, exactly as before, via the `-x` guard.
-# Drift is exactly what this list is for, and it had drifted: ledger (rung 5)
-# and lims (rung 6) were both missing, so neither contributed a single line to
-# any uploaded report -- and codecov.yml's `ledger` component, added with a
-# carefully measured 87% target, was scoring a set of files the report did not
-# contain. A component that matches nothing does not fail; it silently reports
-# nothing, which is the same shape of defect this list's own comment above
-# warns about. Added here at rung 6's close.
-_MORPH_LADDER_RUNGS=(pastebin bookmarks polls kanban ledger lims)
+# The rung names are read from examples/rungs.txt, the ladder's single
+# authoritative list, rather than restated here. This used to be a hand-copy
+# of the list examples/CMakeLists.txt used to hold inline, and it had drifted:
+# ledger (rung 5) and lims (rung 6) were both missing, so neither contributed
+# a single line to any uploaded report -- and codecov.yml's `ledger`
+# component, added with a carefully measured 87% target, was scoring a set of
+# files the report did not contain. A component that matches nothing does not
+# fail; it silently reports nothing, which is the same shape of defect this
+# list's own comment above warns about, and the same one that left CI's ladder
+# path filter a rung behind (morph#179). Reading the list removes the copy.
+#
+# A rung that was not configured in this build contributes nothing, exactly as
+# before, via the `-x` guard.
+#
+# Substituted before the loop, not piped into it: under `set -e` a failing
+# reader inside a process substitution would not abort this script, and a
+# coverage run over an empty rung list is exactly the silently-shrinking
+# figure described above.
+_MORPH_LADDER_RUNGS="$(bash "$(dirname "${BASH_SOURCE[0]}")/ladder_rungs.sh" list)"
 RUNG_TEST_EXES=()
-for _rung in "${_MORPH_LADDER_RUNGS[@]}"; do
+while IFS= read -r _rung; do
+    [ -n "$_rung" ] || continue
     _exe="$OUT/examples/${_rung}/ladder_${_rung}_tests"
     if [ -x "$_exe" ]; then
         OBJECT_ARGS+=(-object "$_exe")
         RUNG_TEST_EXES+=("$_rung")
     fi
-done
+done <<< "$_MORPH_LADDER_RUNGS"
 
 # Positional source-path filters to llvm-cov: include/morph is the library
 # proper; examples/common is the ladder's hand-written GUI/testkit code

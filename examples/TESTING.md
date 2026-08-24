@@ -498,6 +498,49 @@ root `CMakeLists.txt` — don't repeat that eight times):
 - One `examples/CMakeLists.txt`; one `MORPH_BUILD_LADDER` bool plus a
   `MORPH_LADDER_RUNGS` cache list (`"all"` or `"pastebin;kanban"`) — no
   per-rung booleans; the list maps 1:1 to CI path filters.
+- **The rung names themselves live in `examples/rungs.txt`, and nowhere
+  else.** That invariant above — "maps 1:1 to CI path filters" — was
+  documented long before anything enforced it, and it did not hold: the rung
+  list was hand-copied into five places, and every copy that was not
+  load-bearing eventually drifted. CI's `ladder-tests`/`ladder-sanitizers`
+  path filter stopped at `kanban` (rung 4), so a change confined to
+  `examples/ledger/` or `examples/lims/` matched nothing and skipped both
+  jobs — including the only job in the repository that sanitizer-instruments
+  a rung. Nothing reported it: a path filter that matches nothing succeeds
+  exactly as loudly as one that correctly found nothing to do (morph#179;
+  `scripts/coverage.sh` and `codecov.yml` had drifted the same way in
+  morph#141). The list is now structured so it cannot:
+
+  - `examples/rungs.txt` is the single authority: one bare rung name per
+    line, ASCII, whole-line `#` comments. A line that is neither is a hard
+    error in every reader rather than a line quietly skipped.
+  - `examples/CMakeLists.txt` reads it, and **refuses to configure** if any
+    `examples/<dir>/CMakeLists.txt` calls `morph_add_rung(NAME <x>)` for an
+    `<x>` the file does not list. This is what makes the authority
+    load-bearing: a rung cannot exist unlisted.
+  - `scripts/ladder_rungs.sh` is the shared reader. `list` prints the rung
+    names; `ci-path-regex` prints the whole changed-paths regex, rungs plus
+    the non-rung paths that must also trigger the ladder. Both
+    `ladder-tests` and `ladder-sanitizers` call it, so their filters are one
+    expression and cannot diverge from each other or from the list.
+    `scripts/coverage.sh` and `wasm-ladder.yml`'s named-target build loop
+    read it too.
+  - Two consumers cannot read it, and are checked against it from outside by
+    `scripts/check_rung_filters.sh`, run unconditionally by
+    `.github/workflows/drift-guard.yml`: `wasm-ladder.yml`'s
+    `on.push.paths`/`on.pull_request.paths` (GitHub evaluates these to decide
+    whether to start the workflow, before any step exists to generate them)
+    and `codecov.yml`'s per-rung components (read by Codecov, not by us).
+    The checks are behavioural where the semantics can be reproduced — a
+    rung passes only if a real path under its directory actually matches the
+    filter — because a grep for the rung's name would pass on a filter that
+    had been rewritten into one matching nothing. `scripts/test_check_rung_filters.sh`
+    reintroduces each drift into a scratch copy of the tree, one at a time,
+    and asserts the gate catches it for the stated reason.
+
+  Adding a rung is therefore: add the name to `examples/rungs.txt`, and add
+  two lines to `wasm-ladder.yml` plus a component to `codecov.yml` — the two
+  the guard will name explicitly on the same PR if you forget.
 - `examples/common/` declares exactly three consumable targets:
   `morph_ladder_testkit` (morph + Catch2 + Qt), `morph_ladder_gui` (STATIC,
   `Qt6::Core` only, **no Catch2**, **no `Qt6::WebSockets`** — presenter rule
@@ -580,8 +623,12 @@ root `CMakeLists.txt` — don't repeat that eight times):
     asan)` compiles with `-fsanitize=address,undefined`
     (`cmake/compiler_options.cmake`), so a separate ubsan leg for the ladder
     would re-run a strict subset. It shares `ladder-tests`' changed-paths
-    filter verbatim — the two build the same tree and differ only in
-    instrumentation. `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer
+    filter — not a copy of it, but the same generated expression, from
+    `scripts/ladder_rungs.sh ci-path-regex`; the two build the same tree and
+    differ only in instrumentation, so the filters must not be able to
+    diverge. Being the only job here that instruments a rung is also what
+    made this job's share of the drifted filter the costly half: rungs 5 and
+    6 ran uninstrumented everywhere while it was skipping them. `ASAN_OPTIONS=detect_leaks=0` because LeakSanitizer
     reports allocations Qt's platform plugins and QML engine keep for
     process lifetime; the memory-error and UB checks stay on. The job
     asserts (via `nm`) that each `ladder_<rung>_tests` binary really

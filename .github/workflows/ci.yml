@@ -614,11 +614,17 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only "$base" HEAD)
-          # src/qt/: the compiled bodies of morph_qt_impl — the very thing the
-          # testkit exists to conformance-test (and where finding 017's fix
-          # lands). CMakeLists.txt/cmake/ and this workflow itself: a change to
-          # any of them can break or silently skip this job.
-          if echo "$changed" | grep -qE '^(examples/(common|pastebin|bookmarks|polls|kanban)/|examples/CMakeLists\.txt$|include/morph/|src/qt/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|\.github/workflows/ci\.yml$|examples/LADDER\.md|examples/IMPLEMENTATION\.md|examples/TESTING\.md)'; then
+          # The pattern is generated from examples/rungs.txt, never written
+          # here. It used to be a hand-copied rung alternation, and it had
+          # drifted a full rung behind: it stopped at kanban, so a change
+          # confined to examples/ledger/ (rung 5) or examples/lims/ (rung 6)
+          # matched nothing and skipped this job -- silently, because a filter
+          # that matches nothing looks exactly like one that correctly decided
+          # there was nothing to do (morph#179). See scripts/ladder_rungs.sh
+          # for what the non-rung half of the pattern covers and why.
+          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)"
+          echo "ladder path filter: $pattern"
+          if echo "$changed" | grep -qE "$pattern"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
@@ -772,9 +778,13 @@ jobs:
         with:
           fetch-depth: 0  # need history for the changed-paths diff below
 
-      # Same filter, and deliberately the same path list, as ladder-tests: the
-      # two jobs build the identical tree and differ only in instrumentation,
-      # so a change that warrants running one warrants running the other.
+      # Same filter as ladder-tests, and now literally the same generator
+      # rather than a second hand-copy of the same list: the two jobs build the
+      # identical tree and differ only in instrumentation, so a change that
+      # warrants running one warrants running the other, and the two patterns
+      # must not be able to diverge. This job is the only one in the repository
+      # that sanitizer-instruments a rung, which is what the drifted filter
+      # actually cost (morph#179).
       - name: Determine whether the ladder needs to run
         id: filter
         run: |
@@ -788,7 +798,9 @@ jobs:
             exit 0
           fi
           changed=$(git diff --name-only "$base" HEAD)
-          if echo "$changed" | grep -qE '^(examples/(common|pastebin|bookmarks|polls|kanban)/|examples/CMakeLists\.txt$|include/morph/|src/qt/|cmake/|CMakeLists\.txt$|CMakePresets\.json$|\.github/workflows/ci\.yml$|examples/LADDER\.md|examples/IMPLEMENTATION\.md|examples/TESTING\.md)'; then
+          pattern="$(bash scripts/ladder_rungs.sh ci-path-regex)"
+          echo "ladder path filter: $pattern"
+          if echo "$changed" | grep -qE "$pattern"; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
