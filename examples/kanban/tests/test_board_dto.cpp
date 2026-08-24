@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
+#include "kanban/core/errors.hpp"
+#include "kanban/core/types.hpp"
 #include "kanban/dto/board_dto.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -50,3 +52,19 @@ TEST_CASE("AddComment requires an engaged taskId and non-empty body", "[kanban][
     CHECK(kanban::AddComment{.taskId = kanban::TaskId{1}, .body = "hi"}.validate());
 }
 
+
+TEST_CASE("kanban::BoardEventId: fromRowId rejects the one value it cannot represent", "[kanban][types]") {
+    // 0 is BoardEventId's "not entered" sentinel, so an event id of 0 would
+    // arrive as *absent* and a real event would read as "no event"
+    // (morph#215). Row ids start at 1, so this never fires in practice -- it
+    // turns a silent collapse into a loud failure at the boundary.
+    CHECK_THROWS_AS(kanban::BoardEventId::fromRowId(0), kanban::KanbanError);
+}
+
+TEST_CASE("kanban::BoardEventId: fromRowId wraps an ordinary row id unchanged", "[kanban][types]") {
+    // Control case: without it the check above would pass against a factory
+    // that rejected every input.
+    auto const event = kanban::BoardEventId::fromRowId(42);
+    CHECK(event.hasValue());
+    CHECK(*event == 42);
+}
