@@ -39,11 +39,18 @@ struct QueueItem {
     /// queue and the journal replay have no shared identity otherwise — the
     /// queue's `id` is queue-local and the journal's `seq` is journal-local —
     /// so a host that replays through both paths must wire this key (see
-    /// `docs/spec/offline.md`, "Idempotency key: deduping against the journal").
+    /// `docs/spec/offline/offline.md`, "Idempotency key: deduping against the journal").
     /// The value is opaque to the queue; a good choice is a stable content hash
     /// or a client-minted operation id (e.g. a UUID) reused if the same op is
-    /// re-enqueued. The queue does not interpret, require, or enforce
-    /// uniqueness on it — enforcement is the replay consumer's job.
+    /// re-enqueued.
+    ///
+    /// The queue never *interprets* the key, and the interface does not
+    /// **require** an implementation to enforce uniqueness on it — a replay
+    /// consumer must therefore always dedup on the key itself, because a
+    /// conforming queue may hand it the same key twice. An implementation is
+    /// nonetheless **permitted** to dedup a non-empty key at enqueue time as a
+    /// strengthening of that floor; see `IOfflineQueue::enqueue(std::string,
+    /// std::string)` for exactly what a dedup hit does.
     std::string idempotencyKey;
 
     /// @brief Durable retry count for this item, authoritative when the queue
@@ -76,8 +83,9 @@ struct OfflineQueueFullError : std::runtime_error {
     ///                         (equal to maxDepth for a well-behaved implementation).
     OfflineQueueFullError(std::size_t maxDepthValue, std::size_t currentSizeValue)
         : std::runtime_error("IOfflineQueue: enqueue rejected, queue is at capacity (" +
-                              std::to_string(currentSizeValue) + "/" + std::to_string(maxDepthValue) + ")"),
-          maxDepth{maxDepthValue}, currentSize{currentSizeValue} {}
+                             std::to_string(currentSizeValue) + "/" + std::to_string(maxDepthValue) + ")"),
+          maxDepth{maxDepthValue},
+          currentSize{currentSizeValue} {}
 
     /// @brief The configured capacity that was reached.
     std::size_t maxDepth;
@@ -107,8 +115,37 @@ struct IOfflineQueue {
     /// The key is stored on the resulting `QueueItem::idempotencyKey` so a
     /// replay consumer can dedup this op against ones the journal (or a prior
     /// replay) already applied (see `QueueItem::idempotencyKey` and
-    /// `docs/spec/offline.md`). The queue neither interprets nor enforces
-    /// uniqueness on the key.
+    /// `docs/spec/offline/offline.md`).
+    ///
+    /// @par Uniqueness is a floor, not a prohibition
+    /// The queue never interprets the key, and this interface does not
+    /// *require* uniqueness enforcement: a conforming implementation may store
+    /// the same non-empty key twice, so a replay consumer must dedup on the key
+    /// regardless. Enqueue-time dedup is an allowed **strengthening**, not a
+    /// contract violation. Of the implementations morph ships,
+    /// `InMemoryOfflineQueue` never dedups, while `FileOfflineQueue` (linear
+    /// scan) and `SqliteOfflineQueue` (partial unique index) both do.
+    ///
+    /// @par What a dedup hit does, in every implementation that dedups
+    /// - It applies only to a **non-empty** key already carried by a *pending*
+    ///   item. An empty key is never a dedup token — two empty-key enqueues
+    ///   always produce two distinct items, in every implementation.
+    /// - The call **succeeds** and returns the **existing** item's id rather
+    ///   than a fresh one, so the return value is not a reliable signal that
+    ///   anything was stored.
+    /// - It is **first-write-wins with silent payload loss**: @p payload is
+    ///   discarded, the pending item keeps the payload it already had, and no
+    ///   error is raised and nothing is reported to the caller. A caller that
+    ///   re-enqueues a *corrected* payload under an unchanged key therefore
+    ///   loses the correction — mint a new key when the payload changes.
+    /// - `markDone()` releases the key: once the pending item is gone, the same
+    ///   key enqueues normally again.
+    /// - It survives a restart in a durable queue — re-enqueuing a key that a
+    ///   pending persisted item still carries is a hit after a reopen.
+    ///
+    /// These guarantees are pinned for every shipped implementation by
+    /// `tests/offline_queue_conformance.hpp`, which is told which policy each
+    /// implementation has and asserts it.
     ///
     /// The default implementation delegates to `enqueue(std::move(payload))`
     /// and then stamps the key via `setIdempotencyKey`, so existing

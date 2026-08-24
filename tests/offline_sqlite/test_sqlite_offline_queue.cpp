@@ -1,17 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include <sqlite3.h>
+
 #include <atomic>
 #include <catch2/catch_test_macros.hpp>
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <morph/core/observability.hpp>
 #include <morph/offline/sqlite_offline_queue.hpp>
 #include <morph/offline/sync_worker.hpp>
-#include <sqlite3.h>
-
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "../offline_queue_conformance.hpp"
 
 namespace {
 
@@ -158,7 +161,8 @@ TEST_CASE("morph::offline::SqliteOfflineQueue + SyncWorker: poison item dead-let
 
 // ── Coverage: maxDepth / overflow policy (morph#112) ───────────────────────
 
-TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError", "[sqlite][overflow]") {
+TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth throws OfflineQueueFullError",
+          "[sqlite][overflow]") {
     auto dbPath = tempDbPath();
     removeDbFiles(dbPath);
     {
@@ -205,8 +209,7 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: size() matches COUNT(*) against t
         sqlite3* raw = nullptr;
         REQUIRE(sqlite3_open(dbPath.string().c_str(), &raw) == SQLITE_OK);
         sqlite3_stmt* stmt = nullptr;
-        REQUIRE(sqlite3_prepare_v2(raw, "SELECT COUNT(*) FROM morph_offline_queue;", -1, &stmt, nullptr) ==
-                SQLITE_OK);
+        REQUIRE(sqlite3_prepare_v2(raw, "SELECT COUNT(*) FROM morph_offline_queue;", -1, &stmt, nullptr) == SQLITE_OK);
         REQUIRE(sqlite3_step(stmt) == SQLITE_ROW);
         auto const rawCount = static_cast<std::size_t>(sqlite3_column_int64(stmt, 0));
         sqlite3_finalize(stmt);
@@ -254,5 +257,34 @@ TEST_CASE("morph::offline::SqliteOfflineQueue: enqueue at maxDepth emits queueOv
         REQUIRE(samples.size() == 1);
         REQUIRE(samples[0] == 1.0);
     }
+    removeDbFiles(dbPath);
+}
+
+// ── IOfflineQueue conformance ─────────────────────────────────────────────────
+//
+// `SqliteOfflineQueue` deduplicates a non-empty idempotency key via the partial
+// unique index `ix_queue_idem`. That is a permitted strengthening of the
+// `IOfflineQueue` contract, declared here so the shared suite asserts it rather
+// than tolerating either behaviour.
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: IOfflineQueue idempotency-key conformance", "[sqlite]") {
+    std::vector<std::filesystem::path> created;
+    morph::test::checkIdempotencyKeyContract("SqliteOfflineQueue", morph::test::KeyDedup::onPendingItems, [&created] {
+        auto dbPath = tempDbPath();
+        removeDbFiles(dbPath);
+        created.push_back(dbPath);
+        return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath);
+    });
+    for (auto const& dbPath : created) {
+        removeDbFiles(dbPath);
+    }
+}
+
+TEST_CASE("morph::offline::SqliteOfflineQueue: the idempotency-key contract survives a reopen", "[sqlite]") {
+    auto dbPath = tempDbPath();
+    removeDbFiles(dbPath);
+    morph::test::checkIdempotencyKeyContractAcrossReopen(
+        "SqliteOfflineQueue", morph::test::KeyDedup::onPendingItems,
+        [&dbPath] { return std::make_unique<morph::offline::SqliteOfflineQueue>(dbPath); });
     removeDbFiles(dbPath);
 }

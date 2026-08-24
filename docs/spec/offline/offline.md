@@ -143,9 +143,34 @@ Set it by enqueuing through the two-argument overload:
 queue.enqueue(serialise(action), operationId(action));  // payload + idempotency key
 ```
 
-The queue **stores the key verbatim and never interprets, requires, or enforces
-uniqueness on it** — enforcement is the replay consumer's job. The key is opaque
+The queue **stores the key verbatim and never interprets it**. The key is opaque
 to `morph::offline`, just like the payload.
+
+Uniqueness enforcement is a **floor, not a prohibition**. The interface does not
+*require* an implementation to enforce uniqueness, so a replay consumer must
+always dedup on the key itself — a conforming queue may present the same key
+twice. An implementation is nonetheless **permitted** to dedup at enqueue time as
+a deliberate strengthening: `InMemoryOfflineQueue` never dedups, while
+`FileOfflineQueue` (linear scan) and `SqliteOfflineQueue` (partial unique index)
+both do.
+
+Where an implementation does dedup, these are the semantics — identical in both,
+and pinned for every shipped implementation by
+`tests/offline_queue_conformance.hpp`:
+
+- Only a **non-empty** key already carried by a **pending** item is a dedup
+  candidate. An empty key is never a dedup token: two empty-key enqueues always
+  produce two distinct items, in every implementation.
+- The call **succeeds** and returns the **existing** item's id, so the return
+  value does not distinguish a store from a hit.
+- A hit is **first-write-wins with silent payload loss** — the new payload is
+  discarded, the pending item keeps the payload it already had, and no error is
+  raised and nothing is reported to the caller. A caller that re-enqueues a
+  *corrected* payload under an unchanged key loses the correction; mint a new key
+  when the payload changes.
+- `markDone()` releases the key: once the pending item is gone, the same key
+  enqueues normally again.
+- A durable queue still recognises the key after a reopen.
 
 **The dedup contract.** The offline queue replay and the journal replay must be
 wired so a logical op is applied **at most once**. There are two ways to satisfy
