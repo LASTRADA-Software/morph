@@ -12,6 +12,16 @@ ARG TARGETARCH=x64
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# GitHub-hosted ubuntu-24.04 runner images bundle ~500 packages that
+# ci.yml's jobs rely on without installing themselves (cmake, perl,
+# python3, binutils' nm, a base gcc/g++/make toolchain, ...). A bare
+# ubuntu:24.04 Docker image has none of that, so it's listed out
+# explicitly here rather than discovered one "command not found" at a
+# time -- cmake (linux-compilers), python3 (clang-tidy, coverage
+# script), perl (deprecation-lint, test-type-name-lint scripts),
+# binutils' nm (ladder-sanitizers' instrumentation check), build-essential
+# for a base gcc/g++/make (ci.yml still installs its own pinned gcc-15/
+# clang versions on top).
 RUN apt-get update -q && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -24,6 +34,11 @@ RUN apt-get update -q && apt-get install -y --no-install-recommends \
         wget \
         tar \
         gzip \
+        cmake \
+        python3 \
+        perl \
+        binutils \
+        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd -m -s /bin/bash runner \
