@@ -176,7 +176,14 @@ jobs:
       # failing fast -- so this must stay empty on that path, not just
       # "wrong but harmless".
       FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
+      # FASTCACHE_AUTO_INSTALL is a plain CMake option(), not something
+      # CompileCache.cmake reads from the environment the way it does
+      # FASTCACHE_ADDR -- an env var of this name is silently ignored, only
+      # -DFASTCACHE_AUTO_INSTALL=ON on the cmake command line reaches it
+      # (confirmed live: FASTCACHE_ADDR landed in CMakeCache.txt from the
+      # environment, FASTCACHE_AUTO_INSTALL stayed OFF). This is that flag,
+      # precomputed once so every Configure step below can just splice it in.
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -239,14 +246,15 @@ jobs:
       # probes for fastcache-cc (see that file's own comment).
       - name: Configure (gcc)
         if: startsWith(matrix.preset, 'gcc-')
-        run: cmake --preset ${{ matrix.preset }}
+        run: cmake --preset ${{ matrix.preset }} $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       - name: Configure (clang)
         if: startsWith(matrix.preset, 'clang-')
         run: |
           cmake --preset ${{ matrix.preset }} \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -285,10 +293,13 @@ jobs:
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
-      # See linux-compilers' identical env block for why this is conditional
-      # rather than a blanket setting.
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
       FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -342,7 +353,8 @@ jobs:
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -1120,10 +1132,13 @@ jobs:
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     env:
-      # See linux-compilers' identical env block for why this is conditional
-      # rather than a blanket setting.
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
       FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
-      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1237,7 +1252,8 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
-            $EXTRA
+            $EXTRA \
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
