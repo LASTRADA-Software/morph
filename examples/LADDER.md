@@ -120,9 +120,11 @@ afterwards:
    Two hard requirements from review: event sequences must survive
    instance destruction (shared instances die *immediately* at refcount
    zero — persist events or issue epoch tokens forcing full resync), and
-   the client polling helper must wrap **its own timeout** around every
-   call (a rate-limited server drops frames silently and morph has no
-   client-side execute deadline — the completion would hang forever).
+   the client polling helper must bound every call (when this was written a
+   rate-limited server dropped frames silently and morph had no client-side
+   execute deadline, so the completion hung forever; both have since changed —
+   `Bridge::setExecuteDeadline` bounds the wait, and the transport now answers
+   a rate-limited frame instead of dropping it).
 3. **File/blob attachments** (rungs 4 and 8) — payloads that should not travel
    the JSON action protocol; side channel must share the authorizer's token
    discipline.
