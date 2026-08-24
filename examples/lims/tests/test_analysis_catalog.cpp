@@ -179,8 +179,13 @@ TEST_CASE("The served schema carries the version's detection limits too", "[lims
     const auto served = model.execute(lims::GetAnalysisSchema{.versionId = defined.versionId});
     CHECK(served.schemaJson.find("x-limitOfDetection") != std::string::npos);
     CHECK(served.schemaJson.find("x-upperDetectionLimit") != std::string::npos);
-    CHECK(served.schemaJson.find("x-specLow") != std::string::npos);
-    CHECK(served.schemaJson.find("x-specHigh") != std::string::npos);
+    // The specification range, by contrast, rides the framework's own bound
+    // keys, and the document says so: `x-instanceConstraints` names every
+    // field whose keys came from this version's row rather than from the
+    // compiled `CaptureConcentration`.
+    CHECK(served.schemaJson.find("x-minimum") != std::string::npos);
+    CHECK(served.schemaJson.find("x-maximum") != std::string::npos);
+    CHECK(served.schemaJson.find(R"("x-instanceConstraints":["value"])") != std::string::npos);
 }
 
 TEST_CASE("The catalogue journals its edits against the attached identity", "[lims][catalog][audit]") {

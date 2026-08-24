@@ -1,23 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Schema versioning (README build order §4, review D4 — mandatory, no socket
-// needed). The claim under test is deliberately a *split* one:
+// needed). The claim under test is a *split* one, and upstream issue #164
+// moved where the split falls:
 //
-//   rendering is version-bound; validation is not.
+//   values are version-bound; structure is not.
 //
 // A client asking for version N's result-entry form gets version N's own
-// precision, spec range and detection limits, however many revisions have
-// landed since. But everything `morph::forms` itself enforces — the `required`
-// array, the `x-rules` list, the `x-decimalPlaces` the framework checks on
-// dispatch — comes from the compiled `CaptureConcentration` struct and is
-// byte-identical for every version. Every version-specific rule this rung
-// actually enforces had to be re-implemented as a hand-written model check
-// reading the version row.
+// precision and specification range **in the framework's own keys**
+// (`x-decimalPlaces`, `x-minimum`, `x-maximum`), because the model declares
+// them once as `morph::forms::InstanceConstraints` and that same declaration
+// is what `SampleModel` checks the submitted reading against. There is no
+// longer a second, app-private precision key contradicting the framework's.
+//
+// What is still compiled is the form's *shape*: which fields exist, the
+// `required` array and the `x-rules` list all come from the
+// `CaptureConcentration` struct and are byte-identical for every version. A
+// version wanting a different shape cannot be served at all — which is the
+// boundary rung 7's runtime custom fields will run into head-on.
 
 #include <catch2/catch_test_macros.hpp>
 #include <glaze/glaze.hpp>
 #include <morph/forms/forms.hpp>
 #include <morph/util/rational.hpp>
+#include <cstddef>
 #include <string>
 
 #include "lims/core/errors.hpp"
@@ -127,8 +133,8 @@ TEST_CASE("Revising an analysis does not change the form its old version serves"
     const auto v1 = catalog.execute(nitrateV1());
     const auto schemaBefore = catalog.execute(lims::GetAnalysisSchema{.versionId = v1.versionId});
     CHECK(schemaBefore.version == 1);
-    CHECK(valuePropertyInt(schemaBefore.schemaJson, "x-versionDecimalPlaces") == 3);
-    CHECK(boundNumerator(schemaBefore.schemaJson, "x-specHigh") == 50);
+    CHECK(valuePropertyInt(schemaBefore.schemaJson, "x-decimalPlaces") == 3);
+    CHECK(boundNumerator(schemaBefore.schemaJson, "x-maximum") == 50);
 
     const auto v2 = catalog.execute(nitrateV2(v1.analysisId));
 
@@ -141,13 +147,13 @@ TEST_CASE("Revising an analysis does not change the form its old version serves"
     // v2's form is a different one.
     const auto schemaV2 = catalog.execute(lims::GetAnalysisSchema{.versionId = v2.versionId});
     CHECK(schemaV2.version == 2);
-    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-versionDecimalPlaces") == 1);
-    CHECK(boundNumerator(schemaV2.schemaJson, "x-specHigh") == 10);
+    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-decimalPlaces") == 1);
+    CHECK(boundNumerator(schemaV2.schemaJson, "x-maximum") == 10);
     CHECK(schemaV2.schemaJson != schemaBefore.schemaJson);
 }
 
-TEST_CASE("Only the version's own data varies -- the framework-enforced parts are identical",
-          "[lims][schema][versioning][finding]") {
+TEST_CASE("Each version's form carries its own precision, in the framework's own key",
+          "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
@@ -158,35 +164,42 @@ TEST_CASE("Only the version's own data varies -- the framework-enforced parts ar
     const auto schemaV1 = catalog.execute(lims::GetAnalysisSchema{.versionId = v1.versionId});
     const auto schemaV2 = catalog.execute(lims::GetAnalysisSchema{.versionId = v2.versionId});
 
-    // This is review D4, stated as an assertion. `x-decimalPlaces` is the key
-    // the framework itself enforces on dispatch ("Advertised precision is
-    // enforced on dispatch", docs/spec/forms/forms.md) and it is emitted from
-    // `Quantity<mg_per_L, 3>::declaredDecimals` — a *template parameter*. So
-    // both versions advertise 3, including the one whose definition says 1.
+    // Review D4, restated as what it is now. `x-decimalPlaces` is the key the
+    // renderer honours, and each version's form carries that version's own
+    // number — the one the lab actually defined — rather than the compiled
+    // `Quantity<mg_per_L, 3>` template parameter for both.
     CHECK(valuePropertyInt(schemaV1.schemaJson, "x-decimalPlaces") == 3);
-    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-decimalPlaces") == 3);
-    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-versionDecimalPlaces") == 1);
+    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-decimalPlaces") == 1);
 
-    // The two keys disagree, and that disagreement is the finding: a lab that
-    // defines an analysis at 1 dp gets a form whose framework-enforced
-    // precision is 3. Served side by side deliberately — overwriting
-    // `x-decimalPlaces` would advertise a promise no code keeps.
-    CHECK(valuePropertyInt(schemaV2.schemaJson, "x-decimalPlaces") !=
-          valuePropertyInt(schemaV2.schemaJson, "x-versionDecimalPlaces"));
+    // And there is exactly *one* precision key: the second, app-private
+    // `x-versionDecimalPlaces` the rung had to serve beside it is gone. Two
+    // keys for one concept, with no way for a renderer to know which to
+    // believe, was worse than either alone.
+    CHECK(schemaV1.schemaJson.find("x-versionDecimalPlaces") == std::string::npos);
+    CHECK(schemaV2.schemaJson.find("x-versionDecimalPlaces") == std::string::npos);
 
-    // Everything else morph::forms derives is compiled, so it is the same text
-    // in both versions' forms: the rule list and the required array.
+    // Which keys came from the row rather than from the compiled type is
+    // stated in the document, not left to be inferred.
+    CHECK(schemaV2.schemaJson.find(R"("x-instanceConstraints":["value"])") != std::string::npos);
+
+    // The *compiled* schema is untouched by any of this — it is memoised
+    // per type and shared process-wide, and still answers 3 for everyone.
+    // That is the surviving half of the finding: an instance varies the
+    // *values* of keys, never the form's shape.
     const auto compiled = morph::forms::schemaJson<lims::CaptureConcentration>();
+    CHECK(valuePropertyInt(compiled, "x-decimalPlaces") == 3);
+    CHECK(compiled.find("x-instanceConstraints") == std::string::npos);
+
+    // Structure is identical in both versions' forms: the rule list and the
+    // required array come from the compiled struct.
     for (const auto& served : {schemaV1.schemaJson, schemaV2.schemaJson}) {
-        CHECK(served.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") !=
-              std::string::npos);
+        CHECK(served.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") != std::string::npos);
         CHECK(served.find(R"("required":["analysisVersionId"])") != std::string::npos);
     }
     CHECK(compiled.find(R"({"kind":"exactlyOneOf","fields":["value","qualifier"]})") != std::string::npos);
 }
 
-TEST_CASE("The spec range a served schema advertises is enforced by nobody",
-          "[lims][schema][versioning][finding]") {
+TEST_CASE("A reading outside the served spec range is stored, and flagged", "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
     lims::AnalysisCatalogModel catalog;
@@ -196,38 +209,66 @@ TEST_CASE("The spec range a served schema advertises is enforced by nobody",
     const auto v2 = catalog.execute(nitrateV2(v1.analysisId));  // spec 0..10
     sampleAtWork(model);
 
-    // v2's served form says the value may not exceed 10 mg/L.
+    // v2's served form says the value may not exceed 10 mg/L — in `x-maximum`,
+    // a key the framework has a vocabulary for, not an app-private one.
     const auto schemaV2 = catalog.execute(lims::GetAnalysisSchema{.versionId = v2.versionId});
-    REQUIRE(boundNumerator(schemaV2.schemaJson, "x-specHigh") == 10);
+    REQUIRE(boundNumerator(schemaV2.schemaJson, "x-maximum") == 10);
 
-    // 40 mg/L is outside it. The framework's own gate — `validate()`, which
-    // every dispatch path runs before `execute` — accepts it anyway, because
-    // `allRulesSatisfied` evaluates the *compiled* rule list, and that
-    // vocabulary has no notion of a bound living in a database row.
+    // 40 mg/L is outside it. `validate()` still accepts it, and still cannot
+    // see why: `allRulesSatisfied` evaluates the *compiled* rule list, whose
+    // vocabulary has no notion of a bound living in a database row. That has
+    // not changed and is not what the fix is about.
     const lims::CaptureConcentration overSpec{.analysisVersionId = v2.versionId,
                                               .value = lims::Concentration{exact(40, 1, 1)}};
     CHECK(overSpec.validate());
 
-    // And the model stores it: an out-of-specification result is a result to
-    // *flag*, not one to refuse (SENAITE's own model), so refusing here would
-    // be wrong. But nothing computes that flag either — the bound round-trips
-    // to the client and back and is acted on nowhere. This assertion is what
-    // will fail the day someone adds enforcement or flagging, which is the
-    // point of pinning it.
+    // What changed is what happens next. The model stores it — an
+    // out-of-specification result is a result to *flag*, not to refuse — and
+    // now it flags it, against the identical constraint declaration the served
+    // form was decorated from. Previously the bound round-tripped to the
+    // client and back and was acted on nowhere.
     const auto stored = model.execute(overSpec);
     REQUIRE(stored.value.hasValue());
     CHECK((*stored.value).numerator == 40);
-    CHECK((*stored.value).denominator == 1);
+    CHECK(stored.outOfSpec);
 
     // The same payload against v1, whose spec range *does* contain it, is
-    // indistinguishable at every layer that runs: same acceptance, same store.
+    // stored unflagged — the two are no longer indistinguishable.
     const lims::CaptureConcentration inSpec{.analysisVersionId = v1.versionId,
                                             .value = lims::Concentration{exact(40, 1, 1)}};
-    CHECK(inSpec.validate());
-    CHECK((*model.execute(inSpec).value).numerator == 40);
+    const auto within = model.execute(inSpec);
+    CHECK((*within.value).numerator == 40);
+    CHECK(!within.outOfSpec);
+
+    // The flag survives the round trip through storage, so a report built from
+    // the results list sees it too, not just the caller who captured it.
+    const auto listed = model.execute(lims::ListResults{});
+    REQUIRE(listed.results.size() == 2);
+    std::size_t flagged = 0;
+    for (const auto& row : listed.results) {
+        flagged += row.outOfSpec ? 1U : 0U;
+    }
+    CHECK(flagged == 1);
 }
 
-TEST_CASE("Per-version precision is enforced only because the model re-implements it by hand",
+TEST_CASE("A qualifier makes no numeric claim, so it is never out of specification",
+          "[lims][schema][versioning]") {
+    DbFixture fixture;
+    const ScopedPrincipal alice{"alice"};
+    lims::AnalysisCatalogModel catalog;
+    lims::SampleModel model;
+
+    const auto v1 = catalog.execute(nitrateV1());
+    catalog.execute(nitrateV2(v1.analysisId));
+    sampleAtWork(model);
+
+    const auto stored = model.execute(lims::CaptureConcentration{
+        .analysisVersionId = v1.versionId, .qualifier = lims::QualifierChoice{std::string{lims::kQualifierBelowLod}}});
+    CHECK(!stored.value.hasValue());
+    CHECK(!stored.outOfSpec);
+}
+
+TEST_CASE("Per-version precision is refused, from the same declaration that served it",
           "[lims][schema][versioning]") {
     DbFixture fixture;
     const ScopedPrincipal alice{"alice"};
@@ -246,12 +287,14 @@ TEST_CASE("Per-version precision is enforced only because the model re-implement
         model.execute(lims::CaptureConcentration{.analysisVersionId = v1.versionId, .value = threeDecimals});
     CHECK((*stored.value).denominator == 500);
 
-    // ...and refused under v2 (which declares 1) — by `SampleModel`'s own
-    // check against the version row, not by anything morph::forms did. The
-    // served v2 form's `x-decimalPlaces` still says 3, so a renderer honouring
-    // only the framework-enforced key would happily submit this payload and
-    // have it rejected. That gap is the reason `x-versionDecimalPlaces` is
-    // served beside it.
+    // ...and refused under v2 (which declares 1). Refused rather than rounded:
+    // a reading finer than the method supports is a claim about the
+    // instrument. What is new is that the served v2 form's `x-decimalPlaces`
+    // now *says* 1, so a renderer honouring the framework-enforced key would
+    // never have submitted this payload in the first place — the client-side
+    // gate and the server-side one finally read the same number.
+    REQUIRE(valuePropertyInt(catalog.execute(lims::GetAnalysisSchema{.versionId = v2.versionId}).schemaJson,
+                             "x-decimalPlaces") == 1);
     CHECK_THROWS_AS(
         model.execute(lims::CaptureConcentration{.analysisVersionId = v2.versionId, .value = threeDecimals}),
         lims::ValidationError);

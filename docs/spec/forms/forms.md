@@ -67,6 +67,7 @@ terms so a web, ImGui, or other renderer can implement the same contract.
 - [`allRequiredEngaged<A>()` — readiness check](#allrequiredengageda--readiness-check)
 - [Cross-field rules — the `x-rules` vocabulary](#cross-field-rules--the-x-rules-vocabulary)
 - [Computed fields](#computed-fields)
+- [Per-instance constraints — values that live in data](#per-instance-constraints--values-that-live-in-data)
 - [Support traits and helpers](#support-traits-and-helpers)
 - [API reference](#api-reference)
 - [Design decisions](#design-decisions)
@@ -551,7 +552,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 |---|---|---|---|
 | `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
-| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
+| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). A model serving one *instance* of an action may overwrite this with a value from data — see [Per-instance constraints](#per-instance-constraints--values-that-live-in-data); `x-instanceConstraints` (below) says when it did. |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
 | ↳ `id` | alternative entry | string | Stable ascii id of the alternative unit (`UnitMeta::id`). |
 | ↳ `display` | alternative entry | string | Human display text of the alternative unit (`UnitMeta::display`). |
@@ -572,6 +573,9 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound, when present) — `x-min` is the *control track* start and is never enforced. |
 | `x-max` | property node (sibling of `$ref`) | number | Slider upper bound, from `Ranged::max()`. Emitted only for a `Ranged` field. |
 | `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` (above); `x-step` is not emitted for `Quantity`. |
+| `x-minimum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive lower bound for the field's value, from a model's `InstanceConstraints` — an exact `Rational` in the same wire shape as the value it bounds, never a `double`. Emitted only for a decorated instance schema ([Per-instance constraints](#per-instance-constraints--values-that-live-in-data)); never by `schemaJson<A>()`. Distinct from `x-min` (a *slider track* start, which is never checked). |
+| `x-maximum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive upper bound, same source and shape as `x-minimum`. |
+| `x-instanceConstraints` | top-level (object) | array of strings | Wire field names whose keys were written from *instance* data rather than derived from the compiled action type. Present only on a decorated schema. A renderer needing to know whether an `x-decimalPlaces`/`x-minimum`/`x-maximum` is instance-sourced checks membership here rather than guessing. |
 | `format` | `Timestamp` property (or its `$def`) | string, value `"date-time"` | Standard JSON-Schema vocabulary (stamped by glaze, not by morph). The renderer shows a date-time input; the wire value is the ISO-8601 string `Timestamp` serialises to. No `x-*` extension is used for timestamps. |
 | `ExtUnits` | `$def` of the `Quantity`'s unit type (reached via the property's `$ref`) | object | Glaze-stamped block describing the field's **canonical** unit. Two fields: `unitAscii` (the stable ascii id, e.g. `"kg_per_m3"` — sourced from `UnitMeta::id`) and `unitUnicode` (the human display text, e.g. `"kg/m³"` — from `UnitMeta::display`). This is the unit a payload value is always denominated in, and the reference point the `num`/`den` of every `x-unitAlternatives` entry converts *to*. A renderer resolves the property's `$ref` into `$defs` to read `ExtUnits.unitAscii`/`unitUnicode` (it is **not** on the property node next to the `x-*` keys) to label the field and anchor the unit selector. |
 | `x-layout` | top-level (object) | object | The form's group structure: `{ "groups": [ { "title": string, "kind": "section"\|"tab"\|"accordion", "fields": [wire-key,…] }, … ] }`, in `A::formLayout` declaration order. Emitted only when the action declares `formLayout`. The renderer builds the named containers in array order and places each field in its group; fields absent from every group go in a trailing default group. |
@@ -1418,6 +1422,27 @@ that references a computed field evaluates on the server's authoritative
 recomputed value, not the client's, since `recomputeAll` runs before the
 validator check on every dispatch path.
 
+## Per-instance constraints — values that live in data
+
+Everything above derives a schema from the compiled action type. When a form
+*definition* is itself data — a versioned analysis catalogue, a per-tenant
+configuration — the values of some framework-meaningful keys belong to a
+database row rather than to a template parameter, and no amount of reflection
+over `A` can reach them.
+
+`morph::forms::InstanceConstraints` (`forms/instance_constraints.hpp`) is the
+seam for exactly that, and no more than that: **an instance varies the values
+of existing keys; it never varies the form's shape.** One declaration both
+decorates the served schema (`x-decimalPlaces`, `x-minimum`, `x-maximum`, plus
+the document-level `x-instanceConstraints` stamp) and checks a submitted value
+against the same numbers, so the two cannot drift apart — which is what an
+application patching a private key beside the framework's could never promise.
+
+The framework reports violations and the model applies policy; the dispatch
+runners do **not** apply instance constraints, because they have no instance to
+read one from. See [instance_constraints.md](instance_constraints.md) for the
+API, the emitted keys, and the reasoning behind both of those decisions.
+
 ## Support traits and helpers
 
 | Symbol | Kind | Purpose |
@@ -1753,6 +1778,20 @@ The forms vocabulary provides no native sum-type (tagged union, discriminated un
 
 The encoding carries one obligation: every field the capping rule ranges over must be named in `A::optionalFields`, so the rule is the *only* gate on them. Omitting that leaves `required` demanding every alternative at once, which contradicts the rule — `schemaJson<A>()` rejects it rather than serving an unsubmittable form ([Unsatisfiable declarations](#unsatisfiable-declarations--required-contradicting-x-rules)).
 
+### Per-instance variation is limited to key *values*
+
+`schemaJson<A>()` derives every key from the compiled type, so two rows that
+describe the same action differently cannot be told apart by it.
+`InstanceConstraints` (above) lifts that for the keys it covers —
+`x-decimalPlaces` and the exact bounds — but only for their *values*. Which
+fields exist, the `required` array and the `x-rules` list remain functions of
+`A`, so a definition wanting a different *shape* still needs a recompile, and
+an application with per-definition shapes needs one compiled action per family
+of shapes rather than one per definition. Applying an instance constraint also
+stays the model's job rather than the dispatch runner's; see
+[instance_constraints.md](instance_constraints.md), "Why dispatch cannot apply
+these automatically", for why neither of those is an oversight.
+
 ### One cached schema per type — no localisation
 
 Each type's schema is memoised in a function-local `static const std::string`
@@ -1790,6 +1829,7 @@ wrong or un-merged schema rather than fail loudly.
 | Spec | Why |
 |---|---|
 | [choice.md](choice.md) | Full `Choice` API and design (this spec cross-refs rather than duplicates it). |
+| [instance_constraints.md](instance_constraints.md) | `InstanceConstraints` — serving and checking the framework-meaningful keys whose values live in data rather than in the compiled type. |
 | [workflows_navigation.md](workflows_navigation.md) | The wizard/app-shell layer built on this schema — one wizard step or one `kind: "form"` app screen still renders as an ordinary action form. |
 | [views.md](views.md) | The view-schema layer (`morph::views`) that composes query+edit+delete action *sets* into list/table and master-detail screens; reuses `schemaJson<Row>()` unmodified to derive each column's `ExtUnits`/`x-decimalPlaces`. |
 | [widget_hints.md](widget_hints.md) | Full `Multiline`/`Ranged` API and design (this spec cross-refs rather than duplicates it). |

@@ -237,7 +237,7 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     REQUIRE(rows.size() == 1);
     const auto row = rows.front().toMap();
     // ResultEntryView.qml's delegate reads exactly these.
-    for (const auto* key : {"id", "qualifier", "valueText", "unit", "hasValue", "capturedBy"}) {
+    for (const auto* key : {"id", "qualifier", "valueText", "unit", "hasValue", "outOfSpec", "capturedBy"}) {
         INFO("missing key: " << key);
         CHECK(row.contains(QString::fromUtf8(key)));
     }
@@ -248,6 +248,10 @@ TEST_CASE("A result row carries the exact decimal, not a rounded number", "[lims
     CHECK(row.value(QStringLiteral("unit")).toString() == QStringLiteral("mg/L"));
     CHECK(row.value(QStringLiteral("qualifier")).toString() == QStringLiteral("measured"));
     CHECK(row.value(QStringLiteral("capturedBy")).toString() == QStringLiteral("alice"));
+    // 2.4 mg/L is inside the fixture analysis's specification range, so the
+    // row carries the flag as false rather than omitting it — a table cell
+    // that is sometimes absent is a cell a delegate cannot bind to.
+    CHECK_FALSE(row.value(QStringLiteral("outOfSpec")).toBool());
 }
 
 TEST_CASE("A no-number result names which claim it is, rather than showing a blank",

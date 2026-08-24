@@ -140,6 +140,10 @@ template <typename Q>
         {"valueText", valueText(view.value)},
         {"unit", unitText<Concentration>()},
         {"hasValue", view.value.hasValue()},
+        // Out of specification is a property of the reading, not an error, so
+        // it travels with the row rather than as a message the operator has to
+        // have been present for.
+        {"outOfSpec", view.outOfSpec},
         {"capturedBy", QString::fromStdString(view.capturedBy)},
         {"capturedAtMs", millis(view.capturedAt)},
     };

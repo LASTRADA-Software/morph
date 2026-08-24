@@ -43,6 +43,12 @@
 
 namespace lims {
 
+/// @brief Wire (JSON) name of `CaptureConcentration::value` — the field the
+///        analysis version's per-instance constraints are declared against
+///        (`lims::versionConstraints`), so the name is written once rather
+///        than restated at each schema-decoration and check site.
+inline constexpr std::string_view kResultValueField = "value";
+
 /// @brief Wire code for `ResultQualifier::NotMeasured`.
 inline constexpr std::string_view kQualifierNotMeasured = "notMeasured";
 
@@ -263,6 +269,20 @@ struct ResultView {
 
     /// @brief The reading in mg/L, or empty for every non-reading.
     Concentration value;
+
+    /// @brief Whether the reading fell outside the specification range its
+    ///        analysis version declares.
+    ///
+    /// A flag, never a refusal: an out-of-specification result is the finding
+    /// a laboratory exists to report (SENAITE's own model), so rejecting the
+    /// capture would destroy the observation. What it must never be is
+    /// *silent* — before the framework could name a bound living in a version
+    /// row, the range round-tripped to the client and back and was acted on
+    /// nowhere (upstream issue #164).
+    ///
+    /// Always `false` for a non-reading: a qualifier makes no numeric claim to
+    /// be in or out of specification.
+    bool outOfSpec = false;
 
     /// @brief The principal who captured it.
     std::string capturedBy;

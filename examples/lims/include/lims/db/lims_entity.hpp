@@ -91,8 +91,15 @@ struct ResultRecord {
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"value_num"}> valueNum;  // 4
     Light::Field<std::optional<std::int64_t>, Light::SqlRealName{"value_den"}> valueDen;  // 5
     Light::Field<int, Light::SqlRealName{"value_dp"}> valueDp{0};                         // 6
-    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"captured_by"}> capturedBy;  // 7
-    Light::Field<std::int64_t, Light::SqlRealName{"captured_at"}> capturedAt{0};           // 8
+    /// @brief Whether the reading fell outside the specification range its
+    ///        analysis version declared *at capture time*.
+    ///
+    /// Stored rather than recomputed on read: the flag is a statement about
+    /// the definition the result was captured under, and recomputing it later
+    /// would silently re-judge old results against a revised range.
+    Light::Field<int, Light::SqlRealName{"out_of_spec"}> outOfSpec{0};                     // 7
+    Light::Field<Light::SqlAnsiString<64>, Light::SqlRealName{"captured_by"}> capturedBy;  // 8
+    Light::Field<std::int64_t, Light::SqlRealName{"captured_at"}> capturedAt{0};           // 9
 };
 
 /// @brief A four-eyes verification of one result.
