@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "bookmark_qml_bridges.hpp"
 #include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 #include "bookmark_schemas.hpp"
 
@@ -37,18 +38,9 @@ namespace {
     return QString::fromStdString(morph::units::toString(count));
 }
 
-/// @brief A `BookmarkId` as the plain number QML rows carry, or `-1` when
-///        unengaged. `-1` is never a real surrogate key (Lightweight's
-///        `ServerSideAutoIncrement` starts at 1), so it is unambiguous, and a
-///        number — not a string — is what `open`/`archive`/`remove` take.
-[[nodiscard]] qlonglong idNumber(const BookmarkId& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
-
-/// @brief A `TagId` as the plain number tag rows carry. See `idNumber`.
-[[nodiscard]] qlonglong idNumber(const TagId& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
+// A `BookmarkId`/`TagId` as the plain number QML rows carry, `kNoId` when
+// unengaged — a number, not a string, is what `open`/`archive`/`remove` take.
+using ::morph::ladder::gui::idNumber;
 
 /// @brief Tag names as a QML string list.
 [[nodiscard]] QVariantList tagList(const std::vector<std::string>& tags) {

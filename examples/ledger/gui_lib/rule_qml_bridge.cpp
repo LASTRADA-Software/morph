@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "rule_qml_bridge.hpp"
+#include "gui/id_qml.hpp"
 
 #include <string>
 #include <utility>
@@ -8,24 +9,15 @@ namespace ledger::gui {
 
 namespace {
 
-/// @brief Parses a plain-number id string into a strong id.
-/// @tparam IdT The strong-id type to build.
-/// @param text The QML-side id text.
-/// @return The parsed id, or a disengaged one -- refused by the model with a
-///         typed error the presenter relays.
-template <typename IdT>
-[[nodiscard]] IdT idFromText(const QString& text) {
-    bool ok = false;
-    const auto value = text.toLongLong(&ok);
-    return ok ? IdT{value} : IdT{};
-}
+using ::morph::ladder::gui::idFromText;
+using ::morph::ladder::gui::idText;
 
 /// @brief A rule as the map QML binds to.
 /// @param rule The rule to render.
 /// @return The QML-ready map.
 [[nodiscard]] QVariantMap toVariantMap(const RuleInfo& rule) {
     return QVariantMap{
-        {"id", rule.id.hasValue() ? QString::number(*rule.id) : QString{}},
+        {"id", idText(rule.id)},
         {"matchText", QString::fromStdString(rule.matchText)},
         {"actionValue", QString::fromStdString(rule.actionValue)},
         // The version an already-categorised transaction was stamped with. A
@@ -45,7 +37,7 @@ RuleQmlBridge::RuleQmlBridge(::morph::bridge::Bridge& bridge, ::morph::exec::IEx
         // CreateRule returns only the id; the rest of the row is whatever was
         // just submitted, so the map is completed on the next update rather
         // than guessed at here.
-        _lastRule = QVariantMap{{"id", id.hasValue() ? QString::number(*id) : QString{}}};
+        _lastRule = QVariantMap{{"id", idText(id)}};
         emit lastRuleChanged();
         emit ruleCreated();
     });

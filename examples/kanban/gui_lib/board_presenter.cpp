@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_presenter.hpp"
 #include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 #include <utility>
 
@@ -8,15 +9,11 @@ namespace kanban::gui {
 
 namespace {
 
-/// @brief A `TaskId` as the plain-number-shaped `QString` `taskMoved`/
-///        `commentAdded` carry — matches `kanban::gui::idNumber`-family
-///        conventions used at the bridge boundary elsewhere in this rung,
-///        rendered as text here since these two signals are
-///        presenter-level, not bridge-level (the bridge itself further
-///        translates/relays them unchanged).
-[[nodiscard]] QString taskIdText(const TaskId& id) {
-    return id.hasValue() ? QString::number(*id) : QString{};
-}
+// A `TaskId` as the plain-number-shaped `QString` `taskMoved`/`commentAdded`
+// carry — text rather than a number here because these two signals are
+// presenter-level, not bridge-level (the bridge translates/relays them
+// unchanged), and the rung's board invokables are `QString`-shaped throughout.
+using ::morph::ladder::gui::idText;
 
 }  // namespace
 
@@ -84,7 +81,7 @@ void BoardPresenter::moveTask(TaskId taskId, ColumnId columnId, SwimlaneId swiml
                                            .swimlaneId = swimlaneId,
                                            .position = position,
                                            .opId = opId.toStdString()}),
-        [this, taskId](GetBoardResult) { emit taskMoved(taskIdText(taskId)); },
+        [this, taskId](GetBoardResult) { emit taskMoved(idText(taskId)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 
@@ -103,7 +100,7 @@ void BoardPresenter::addComment(TaskId taskId, const QString& body) {
     // with this call's own continuation, not a shared field.
     track<GetBoardResult>(
         _handler.execute(AddComment{.taskId = taskId, .body = body.toStdString()}),
-        [this, taskId](GetBoardResult) { emit commentAdded(taskIdText(taskId)); },
+        [this, taskId](GetBoardResult) { emit commentAdded(idText(taskId)); },
         [this](const std::exception_ptr& err) { reportError(err); });
 }
 

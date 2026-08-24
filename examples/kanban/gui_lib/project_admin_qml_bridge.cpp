@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "project_admin_qml_bridge.hpp"
+#include "gui/id_qml.hpp"
 
 #include <QString>
 #include <QVariant>
@@ -10,13 +11,9 @@ namespace kanban::gui {
 
 namespace {
 
-/// @brief A `ProjectId` as the plain number QML rows and invokables carry.
-///        `-1` when unengaged — never a real surrogate key (Lightweight's
-///        `ServerSideAutoIncrement` starts at 1) — same convention as
-///        `bookmarks::gui::idNumber` (`bookmark_qml_bridges.cpp`).
-[[nodiscard]] qlonglong idNumber(const ProjectId& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
+// A `ProjectId` as the plain number QML rows and invokables carry, `kNoId`
+// when unengaged.
+using ::morph::ladder::gui::idNumber;
 
 /// @brief `roleToString`'s output as a `QString` ("Viewer"/"Member"/"Manager").
 [[nodiscard]] QString roleText(Role role) {

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "board_qml_bridge.hpp"
 #include "gui/error_text.hpp"
+#include "gui/id_qml.hpp"
 
 #include <QByteArray>
 #include <QFile>
@@ -31,14 +32,9 @@ namespace kanban::gui {
 
 namespace {
 
-/// @brief A strong id type (`ColumnId`/`SwimlaneId`/`TaskId`/`ProjectId`) as
-///        the plain number a QML row/invokable carries — `-1` when
-///        unengaged, same convention as `kanban::gui::idNumber`
-///        (`project_admin_qml_bridge.cpp`).
-template <typename IdT>
-[[nodiscard]] qlonglong idNumber(const IdT& id) {
-    return id.hasValue() ? static_cast<qlonglong>(*id) : -1;
-}
+// A strong id (`ColumnId`/`SwimlaneId`/`TaskId`/`ProjectId`) as the plain
+// number a QML row carries, `kNoId` when unengaged.
+using ::morph::ladder::gui::idNumber;
 
 /// @brief Builds an `Authorization: Bearer <token>` header value from
 ///        @p bridge's own currently-installed session -- the same token
@@ -78,18 +74,26 @@ template <typename IdT>
 ///        `QString` ids instead (design spec's own invokable signatures use
 ///        `QString` throughout for board-scoped ids), so the parse has to
 ///        happen here explicitly.
+///
+///        Kept as its own function rather than collapsed into
+///        `morph::ladder::gui::idFromText` (morph#169): the shared helper
+///        maps text to id and stops there, deliberately treating `0` as an
+///        engaged id, because a helper that folded a value into the empty
+///        state would be the inbound half of the unset-vs-zero collapse that
+///        issue exists to prevent. The extra `value <= 0` rejection here is a
+///        *kanban* policy — this is the one rung whose QML holds
+///        `taskId: "-1"` as its own "nothing open" default
+///        (`TaskDetailPopup.qml`) and can echo the `kNoId` sentinel straight
+///        back through an invokable, so this is where the sentinel has to be
+///        recognised on the way in.
 /// @tparam IdT One of `ColumnId`/`SwimlaneId`/`TaskId`/`ProjectId`.
 /// @param text The id, as QML passed it.
 /// @return The parsed id, or a disengaged `IdT{}` if @p text is not a valid
-///         non-negative integer.
+///         positive integer.
 template <typename IdT>
 [[nodiscard]] IdT parseId(const QString& text) {
-    bool ok = false;
-    const qlonglong value = text.toLongLong(&ok);
-    if (!ok || value <= 0) {
-        return IdT{};
-    }
-    return IdT{static_cast<std::int64_t>(value)};
+    const IdT parsed = ::morph::ladder::gui::idFromText<IdT>(text);
+    return (parsed.hasValue() && *parsed > 0) ? parsed : IdT{};
 }
 
 [[nodiscard]] QVariantMap toVariantMap(const ColumnView& column) {

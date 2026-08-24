@@ -43,6 +43,10 @@ add_library(morph_ladder_gui STATIC
     gui/presenter.cpp
     gui/error_text.cpp
     gui/event_poller.cpp
+    # Header-only (templated on the rung's own id type, so there is nothing to
+    # instantiate here), listed so it is visible as part of this target's
+    # surface rather than only as an #include from ten rung files.
+    gui/id_qml.hpp
 )
 add_library(morph::ladder_gui ALIAS morph_ladder_gui)
 target_include_directories(morph_ladder_gui PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
@@ -197,6 +201,7 @@ add_executable(ladder_common_tests
     testkit/test_backend_rig.cpp
     testkit/test_presenter.cpp
     testkit/test_error_text.cpp
+    testkit/test_id_qml.cpp
     testkit/test_event_poller.cpp
     testkit/test_fault_proxy.cpp
     testkit/test_strand_interleaver.cpp
