@@ -27,7 +27,16 @@ permissions:
   contents: read
 
 env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # vcpkg's x-gha binary caching backend has been removed upstream (confirmed
+  # live: every Windows CI run logged "warning: The 'x-gha' binary caching
+  # backend has been removed" and silently cached nothing, rebuilding every
+  # vcpkg dependency from source on every run). Replaced with the officially
+  # documented successor: a NuGet-based provider backed by GitHub Packages'
+  # own NuGet feed, which every repo already has -- no new secret, just the
+  # windows job's own GITHUB_TOKEN and packages: write (see that job's
+  # permissions: block and its "Add NuGet source" step, which is what
+  # actually defines the `github` source this string names).
+  VCPKG_BINARY_SOURCES: "clear;nuget,github,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
   # Caps each leg's on-disk sccache blob. Note the budget arithmetic: there
   # are **16** cache-writing legs once the matrices expand (4 linux-compilers
@@ -52,6 +61,13 @@ jobs:
   windows:
     name: Windows / ${{ matrix.preset }}
     runs-on: windows-latest
+    # packages: write is what lets vcpkg push built binaries to this repo's
+    # GitHub Packages NuGet feed (see "Add NuGet source" below); nothing else
+    # in this job needs more than the default contents: read the workflow
+    # grants at the top level.
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -67,12 +83,20 @@ jobs:
         with:
           vcpkgGitCommitId: c3867e714dd3a51c272826eea77267876517ed99
 
-      - name: Export vcpkg GHA binary cache vars
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      # Defines the `github` source VCPKG_BINARY_SOURCES (top-level env:)
+      # names. GITHUB_TOKEN is scoped to this repo and already carries
+      # packages: write from this job's permissions: block above -- no new
+      # secret needed. `dotnet nuget` rather than `nuget.exe`: it ships with
+      # the .NET SDK already on every GitHub-hosted Windows runner, so
+      # nothing extra needs installing.
+      - name: Add NuGet source (GitHub Packages, for vcpkg binary caching)
+        shell: pwsh
+        run: |
+          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+            --name github `
+            --username "${{ github.repository_owner }}" `
+            --password "${{ secrets.GITHUB_TOKEN }}" `
+            --store-password-in-clear-text
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
@@ -738,7 +762,16 @@ jobs:
 
   ladder-tests:
     name: Application ladder
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -821,8 +854,11 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -830,11 +866,14 @@ jobs:
           restore-keys: sccache-ladder-
 
       - name: Install sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # be selected.
       - name: Configure (gcc-debug, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -842,8 +881,7 @@ jobs:
             -DMORPH_BUILD_QT=ON \
             -DMORPH_BUILD_LADDER=ON \
             -DMORPH_LADDER_RUNGS=all \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
@@ -894,8 +932,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always() && steps.filter.outputs.run == 'true'
+        if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -907,7 +948,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -915,7 +956,16 @@ jobs:
 
   ladder-sanitizers:
     name: Application ladder / ASan+UBSan
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why FASTCACHE_ADDR is
+      # conditional, and why FASTCACHE_AUTO_INSTALL has to be a -D flag
+      # (MORPH_FASTCACHE_AUTO_INSTALL_FLAG) rather than an env var of that
+      # name -- CompileCache.cmake declares it as a plain option(), which
+      # CMake never reads from the environment.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      MORPH_FASTCACHE_AUTO_INSTALL_FLAG: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && '-DFASTCACHE_AUTO_INSTALL=ON' || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -981,8 +1031,11 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -990,11 +1043,14 @@ jobs:
           restore-keys: sccache-ladder-asan-
 
       - name: Install sccache
-        if: steps.filter.outputs.run == 'true'
+        if: "steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+      # Configure steps for why leaving it unset is what lets fastcache-cc
+      # be selected.
       - name: Configure (clang-asan, ladder + Qt on)
         if: steps.filter.outputs.run == 'true'
         run: |
@@ -1004,8 +1060,7 @@ jobs:
             -DMORPH_LADDER_RUNGS=all \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
             -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $MORPH_FASTCACHE_AUTO_INSTALL_FLAG
 
       # QT_QPA_PLATFORM=offscreen at build time as well as test time: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once during the
@@ -1071,8 +1126,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always() && steps.filter.outputs.run == 'true'
+        if: "always() && steps.filter.outputs.run == 'true' && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -1084,7 +1142,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: "steps.filter.outputs.run == 'true' && github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -1426,24 +1484,20 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy-${{ github.sha }}
-          restore-keys: sccache-clang-tidy-
-
-      - name: Install sccache
-        run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
       # Every optional feature is ON here purely so its sources land in
       # compile_commands.json. clang-tidy only ever analyses *changed lines*, so
       # this costs a wider build, not a wider lint. Configured narrowly before,
       # the whole opt-in surface — morph::net, the Qt transport, the QML forms
       # renderer, the SQLite queue, the fuzz harnesses — was invisible to the
       # one gate in this workflow that reads code rather than running it.
+      # No Build step: clang-tidy-diff.py reads compile_commands.json (a
+      # configure-time artifact, CMAKE_EXPORT_COMPILE_COMMANDS=ON in the base
+      # preset) and runs clang-tidy itself per translation unit -- it neither
+      # needs the project actually compiled nor linked. pinned_facts.cmake's
+      # generated header is likewise a configure_file() (configure-time), not
+      # a build-time add_custom_command, so it's already on disk too. Compiler
+      # caching (sccache/fastcache-cc) accordingly has nothing to do in this
+      # job, unlike every other Linux job here.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
@@ -1455,12 +1509,7 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      - name: Build
-        run: cmake --build --preset clang-debug
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
 
       - name: Run clang-tidy-diff on changed lines
         run: |
@@ -1501,25 +1550,6 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy-${{ github.sha }}
-
   deprecation-lint:
     name: Deprecation marker format
     runs-on: ubuntu-24.04
