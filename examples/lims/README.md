@@ -271,14 +271,21 @@ round the value, be redocumented as advisory, or reject an over-precise
 submission. The framework took the first option: `reconcileDeclaredPrecision`
 now re-rounds on its wire dispatch paths, so storage and display agree there.
 
-This rung still takes the third. The precision that governs a reading here is
-the **analysis version's** runtime `decimalPlaces` — schema-versioned data the
-framework's compile-time `Quantity<mg_per_L, 3>` reconciliation knows nothing
-about — and a value submitted finer than the method supports is a claim about
-the instrument, not a formatting preference. Rounding it would record a
-measurement the analyst never made. The check is exact and overflow-free —
-`Rational` keeps `gcd(num, den) == 1`, so a value is representable at `d`
-decimals exactly when `den` divides `10^d`.
+A reading finer than the method supports is a claim about the instrument, so
+rounding it would record a measurement the analyst never made, and storing it
+unrounded would put a number in the database that no display of it ever shows.
+Either way storage and display disagree, which is disqualifying in a LIMS, so
+this rung rejects the payload.
+
+The precision it rejects against is the **analysis version's**, not the
+compiled `Quantity<mg_per_L, 3>`'s. That is now expressed as a
+`morph::forms::InstanceConstraints` (upstream issue #164) rather than a
+hand-written check: the same declaration that decorated the served form's
+`x-decimalPlaces` reports `precisionExceeded` here, so the number the
+operator's renderer honoured and the number the server enforces are one
+number. The check itself is still exact and overflow-free — `Rational` keeps
+`gcd(num, den) == 1`, so a value is representable at `d` decimals exactly
+when `den` divides `10^d`.
 
 ### 8. The action's unit is compile-time, so the definition's unit is checked (§3)
 
@@ -296,25 +303,33 @@ live rows would make "the sample's results" ambiguous. The superseded value
 is not lost — the journal holds every capture, which is exactly where a
 21 CFR-style trail expects to find it.
 
-### 10. Rendering is version-bound; validation is not (§4, review D4)
+### 10. Values are version-bound; structure is not (§4, review D4)
 
 `GetAnalysisSchema{versionId}` serves the result-entry form for one version:
-the compiled `CaptureConcentration` schema with that version's own
-precision, spec range and detection limits merged into the `value` property
-as `x-versionDecimalPlaces` / `x-specLow` / `x-specHigh` /
-`x-limitOfDetection` / `x-upperDetectionLimit`. Revising an analysis leaves
-the old version's served form byte-identical, which is the ODK property the
-README asks for.
+the compiled `CaptureConcentration` schema with that version's own precision
+and specification range written into the framework's own keys
+(`x-decimalPlaces`, `x-minimum`, `x-maximum`) via
+`morph::forms::InstanceConstraints`, plus its detection limits as the
+app-private `x-limitOfDetection` / `x-upperDetectionLimit`. The document
+carries `x-instanceConstraints: ["value"]`, naming which keys came from the
+row rather than from the compiled type. Revising an analysis leaves the old
+version's served form byte-identical, which is the ODK property the README
+asks for.
 
-Everything `morph::forms` itself derives is compiled and therefore identical
-for every version: the `required` array, the `x-rules` list, and
-`x-decimalPlaces` (from `Quantity<mg_per_L, 3>`'s template parameter). The
-per-version precision is served *beside* `x-decimalPlaces` rather than
-overwriting it — `x-decimalPlaces` is a contract the framework enforces on
-dispatch, so rewriting it would advertise a promise no code keeps. The
-disagreement is visible instead of hidden, and every version-specific rule
-this rung actually enforces is a hand-written model check reading the
-version row.
+**Corrected by upstream issue #164.** This rung originally served the
+per-version precision as a *second* key, `x-versionDecimalPlaces`, beside the
+framework's `x-decimalPlaces`, because overwriting the framework's key would
+have advertised a promise no code kept. Two keys for one concept, with no way
+for a renderer to know which to believe, was worse than either alone. The
+framework now has a seam for it: one declaration both decorates the schema and
+checks the submitted reading, so the advertised number and the enforced one
+cannot drift apart. `x-versionDecimalPlaces` is gone.
+
+The form's *shape* is still compiled and therefore identical for every
+version: the `required` array and the `x-rules` list come from
+`CaptureConcentration`, so a version wanting an extra field or a different
+rule still cannot be served without recompiling. That boundary is unchanged,
+and it is what rung 7's runtime custom fields run into head-on.
 
 `GetAnalysisSchema` **refuses** a version whose canonical unit has no
 compiled result-entry action, rather than serving the mg/L form for an amps
@@ -657,12 +672,15 @@ files no uploaded report contained. Fixed here.
   and are specified in `docs/spec/forms/forms.md`.
 - **[morph#164](https://github.com/LASTRADA-Software/morph/issues/164)
   — a forms schema is a pure function of the compiled action type.**
-  Per-instance data cannot reach the keys the framework enforces: two
-  analysis versions declaring 3 and 1 decimal places both serve
-  `"x-decimalPlaces":3`, and a value outside a served spec range passes
-  `validate()` and is stored unflagged, because the rule vocabulary cannot
-  name a bound that lives in a database row. Bridges directly into rung 7's
-  runtime custom fields, which are planned on the opposite assumption.
+  **Partly closed upstream.** Per-instance *values* now reach the framework's
+  own keys through `morph::forms::InstanceConstraints`: the two analysis
+  versions declaring 3 and 1 decimal places serve `"x-decimalPlaces":3` and
+  `"x-decimalPlaces":1`, and a reading outside the served specification range
+  is flagged (`ResultView::outOfSpec`) instead of being stored with nothing
+  recording it. What remains is the structural half — the schema's *shape* is
+  still a function of the compiled type, so a rung whose definitions are data
+  needs one compiled action per unit family rather than per analysis. That is
+  what rung 7's runtime custom fields run into head-on.
 - **[morph#174](https://github.com/LASTRADA-Software/morph/issues/174)
   — a journal entry from an older build decodes leniently to defaults, with no
   signal.** `ActionTraits::fromJson` reads with `error_on_unknown_keys = false`,

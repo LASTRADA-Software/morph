@@ -143,6 +143,14 @@ Item {
                           : modelData.qualifier
                 }
                 Label {
+                    Layout.preferredWidth: 90
+                    // An out-of-specification reading is the finding the lab
+                    // exists to report, so the table says so on the row rather
+                    // than leaving it to a report nobody has open.
+                    text: modelData.outOfSpec ? "out of spec" : ""
+                    color: "#b00020"
+                }
+                Label {
                     Layout.preferredWidth: 120
                     text: modelData.capturedBy
                 }

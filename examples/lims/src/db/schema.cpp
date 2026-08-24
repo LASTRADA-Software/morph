@@ -97,6 +97,9 @@ LIGHTWEIGHT_SQL_MIGRATION(20260823000005, "Create lims_results table") {
         .Column("value_num", Bigint())  // nullable: null for every qualifier
         .Column("value_den", Bigint())  // except Measured
         .RequiredColumn("value_dp", Integer())
+        // Out-of-specification is a flag on the reading, not a refusal of it:
+        // see `ResultView::outOfSpec`.
+        .RequiredColumn("out_of_spec", Integer())
         .RequiredColumn("captured_by", Varchar(64))
         .RequiredColumn("captured_at", Bigint());
 }

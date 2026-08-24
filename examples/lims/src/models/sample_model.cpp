@@ -3,6 +3,7 @@
 
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
+#include <morph/forms/instance_constraints.hpp>
 #include <morph/session/session.hpp>
 #include <algorithm>
 #include <string>
@@ -13,6 +14,7 @@
 #include "lims/core/errors.hpp"
 #include "lims/core/model_support.hpp"
 #include "lims/db/lims_entity.hpp"
+#include "lims/dto/analysis_dto.hpp"
 
 namespace lims {
 
@@ -50,6 +52,7 @@ namespace {
         .analysisVersionId = AnalysisVersionId{static_cast<std::int64_t>(row.analysisVersion.Value())},
         .qualifier = static_cast<ResultQualifier>(row.qualifier.Value()),
         .value = value,
+        .outOfSpec = row.outOfSpec.Value() != 0,
         .capturedBy = std::string{row.capturedBy.Value().ToStringView()},
         .capturedAt = timestampFromMillis(row.capturedAt.Value()),
     };
@@ -72,48 +75,6 @@ namespace {
         .resolvedBy = std::string{row.resolvedBy.Value().ToStringView()},
         .resolutionNote = std::string{row.resolutionNote.Value().ToStringView()},
     };
-}
-
-/// @brief 10^@p places, for the precision check below.
-///
-/// `Rational` bounds its own `decimalPlaces` to `kMaxDecimalPlaces` (18, the
-/// largest power of ten that fits an `int64_t`), so this cannot overflow for
-/// any tag a decoded value can carry.
-/// @param places Decimal places, in `[0, 18]`.
-/// @return `10^places`.
-[[nodiscard]] std::int64_t powerOfTen(std::uint32_t places) noexcept {
-    std::int64_t result = 1;
-    for (std::uint32_t i = 0; i < places; ++i) {
-        result *= 10;
-    }
-    return result;
-}
-
-/// @brief Whether @p value is *exactly* representable at @p places decimals.
-///
-/// `Rational` keeps `gcd(|num|, den) == 1`, so `num * 10^places` is divisible
-/// by `den` exactly when `10^places` is — no multiplication, and therefore no
-/// overflow, is needed to decide it.
-///
-/// This is the app-level answer to the README's D1 (retag-vs-round,
-/// upstream issue #159). The framework now *rounds* on its wire dispatch
-/// paths rather than retagging, so display and storage can no longer disagree
-/// there. This rung keeps the stricter rule for two reasons the framework's
-/// normalisation does not cover: the precision that matters here is the
-/// **analysis version's** runtime `decimalPlaces`, not the compile-time
-/// `Quantity` declared precision the framework reconciles against; and a
-/// clinical reading submitted at a precision the method cannot support is a
-/// claim about the instrument, so silently reducing it would record a
-/// measurement the analyst never made. Rejecting is the one option that
-/// neither hides digits nor invents them.
-/// @param value The decoded reading.
-/// @param places The analysis version's declared decimal places.
-/// @return `true` when the value needs no rounding at that precision.
-[[nodiscard]] bool isExactAtDecimals(const ::morph::math::Rational& value, std::int32_t places) noexcept {
-    if (places < 0 || static_cast<std::uint32_t>(places) > ::morph::math::kMaxDecimalPlaces) {
-        return false;
-    }
-    return powerOfTen(static_cast<std::uint32_t>(places)) % value.denominator == 0;
 }
 
 /// @brief Loads one sample row by id.
@@ -438,13 +399,52 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
 
     auto qualifier = ResultQualifier::Measured;
     std::optional<::morph::math::Rational> stored;
+    bool outOfSpec = false;
     if (capture.value.hasValue()) {
         // Exact: the reported concentration accounts for the dilution, and it
         // does so through `Rational`, never a `double`.
         const auto reading = *capture.value * dilutionMultiplier;
-        if (!isExactAtDecimals(reading, version.decimalPlaces.Value())) {
-            throw ValidationError{"CaptureConcentration: the reading carries more precision than analysis version " +
-                                  std::to_string(*capture.analysisVersionId) + " declares"};
+
+        // One declaration, both jobs (upstream issue #164). This is the same
+        // `versionConstraints(...)` the catalogue built to decorate the served
+        // form's `x-decimalPlaces` / `x-minimum` / `x-maximum`, so the numbers
+        // the operator's renderer honoured are literally the numbers checked
+        // here — the two can no longer drift apart, which is what having a
+        // second app-private precision key beside the framework's could not
+        // promise.
+        //
+        // `checkValue`, not `checkAction`: the value governed by the version
+        // is the *reported* concentration, which is the submitted reading
+        // times the dilution factor and therefore not a member of the action
+        // at all.
+        const auto constraints =
+            versionConstraints(kResultValueField, version.decimalPlaces.Value(),
+                               makeBound(version.specLowNum.Value(), version.specLowDen.Value()),
+                               makeBound(version.specHighNum.Value(), version.specHighDen.Value()));
+        for (const auto& violation : constraints.checkValue(kResultValueField, reading)) {
+            switch (violation.kind) {
+                case ::morph::forms::ConstraintViolationKind::PrecisionExceeded:
+                    // Refused, never rounded. A reading submitted finer than
+                    // the method supports is a claim about the instrument, so
+                    // rounding it would record a measurement the analyst never
+                    // made -- and storing it unrounded would put a number in
+                    // the database that no display of it ever shows.
+                    throw ValidationError{
+                        "CaptureConcentration: the reading carries more precision than analysis version " +
+                        std::to_string(*capture.analysisVersionId) + " declares"};
+                case ::morph::forms::ConstraintViolationKind::BelowMinimum:
+                case ::morph::forms::ConstraintViolationKind::AboveMaximum:
+                    // Flagged, never refused: an out-of-specification result
+                    // is the finding a laboratory exists to report (SENAITE's
+                    // own model). Refusing it would destroy the observation;
+                    // accepting it silently -- which is what happened while no
+                    // framework vocabulary could name this bound -- loses it
+                    // just as completely.
+                    outOfSpec = true;
+                    break;
+                default:
+                    break;
+            }
         }
         stored = reading;
     } else {
@@ -476,6 +476,7 @@ ResultView SampleModel::applyCapture(SampleId sampleId, const CaptureConcentrati
     row.valueNum = stored ? std::optional{stored->numerator} : std::nullopt;
     row.valueDen = stored ? std::optional{stored->denominator} : std::nullopt;
     row.valueDp = stored ? static_cast<int>(stored->decimalPlaces.value) : 0;
+    row.outOfSpec = outOfSpec ? 1 : 0;
     row.capturedBy = Lightweight::SqlAnsiString<64>{author};
     row.capturedAt = nowMillis();
     mapper.Create(row);

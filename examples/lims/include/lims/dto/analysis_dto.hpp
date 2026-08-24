@@ -5,11 +5,13 @@
 
 #include <morph/core/model_key.hpp>
 #include <morph/forms/forms.hpp>
+#include <morph/forms/instance_constraints.hpp>
 #include <morph/util/rational.hpp>
 
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace lims {
@@ -27,6 +29,54 @@ struct AnalysisBound {
     /// @return `true` if the denominator is non-zero.
     [[nodiscard]] bool validate() const noexcept { return denominator != 0; }
 };
+
+/// @brief Rebuilds a bound from the nullable numerator/denominator pair a row
+///        stores it as.
+/// @param numerator The stored numerator, or null.
+/// @param denominator The stored denominator, or null.
+/// @return The bound, or `std::nullopt` when either half is absent.
+[[nodiscard]] inline std::optional<AnalysisBound> makeBound(const std::optional<std::int64_t>& numerator,
+                                                            const std::optional<std::int64_t>& denominator) {
+    if (!numerator.has_value() || !denominator.has_value()) {
+        return std::nullopt;
+    }
+    return AnalysisBound{.numerator = *numerator, .denominator = *denominator};
+}
+
+/// @brief The per-instance constraints a result-entry field inherits from one
+///        analysis version — the single declaration that both decorates the
+///        served schema and checks the submitted reading.
+///
+/// This is the rung's use of `morph::forms::InstanceConstraints` (upstream
+/// issue #164). Before it existed the version's precision had to be served as
+/// a second, app-private key beside the framework's `x-decimalPlaces` and the
+/// check re-implemented by hand in `SampleModel`, and the specification range
+/// could only be served as a key no code anywhere read.
+/// @param field The wire (JSON) field name the reading is submitted under.
+/// @param decimalPlaces The version's declared decimal places.
+/// @param specLow The version's inclusive lower specification bound, if any.
+/// @param specHigh The version's inclusive upper specification bound, if any.
+/// @return The constraint set for @p field.
+[[nodiscard]] inline ::morph::forms::InstanceConstraints versionConstraints(
+    std::string_view field, std::int32_t decimalPlaces, const std::optional<AnalysisBound>& specLow,
+    const std::optional<AnalysisBound>& specHigh) {
+    const auto places = static_cast<std::uint32_t>(decimalPlaces < 0 ? 0 : decimalPlaces);
+    const auto asRational =
+        [places](const std::optional<AnalysisBound>& bound) -> std::optional<::morph::math::Rational> {
+        if (!bound.has_value() || !bound->validate()) {
+            return std::nullopt;
+        }
+        return ::morph::math::Rational{::morph::math::Numerator{bound->numerator},
+                                       ::morph::math::Denominator{bound->denominator},
+                                       ::morph::math::DecimalPlaces{places}};
+    };
+    ::morph::forms::InstanceConstraints constraints;
+    constraints.declare(::morph::forms::FieldConstraint{.field = std::string{field},
+                                                        .decimalPlaces = places,
+                                                        .minimum = asRational(specLow),
+                                                        .maximum = asRational(specHigh)});
+    return constraints;
+}
 
 /// @brief Defines a new analysis, creating its version 1.
 struct DefineAnalysis {

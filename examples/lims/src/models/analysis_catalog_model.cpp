@@ -9,6 +9,7 @@
 #include <Lightweight/DataMapper/DataMapper.hpp>
 #include <Lightweight/SqlTransaction.hpp>
 #include <morph/forms/forms.hpp>
+#include <morph/forms/instance_constraints.hpp>
 #include <morph/session/session.hpp>
 
 #include <algorithm>
@@ -33,15 +34,6 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
     row.udlDen = action.upperDetectionLimit ? std::optional{action.upperDetectionLimit->denominator} : std::nullopt;
 }
 
-/// @brief Reads a nullable rational pair back off a row.
-[[nodiscard]] std::optional<AnalysisBound> readBound(const std::optional<std::int64_t>& num,
-                                                      const std::optional<std::int64_t>& den) {
-    if (!num.has_value() || !den.has_value()) {
-        return std::nullopt;
-    }
-    return AnalysisBound{.numerator = *num, .denominator = *den};
-}
-
 [[nodiscard]] AnalysisVersionView toView(const db::AnalysisVersionRecord& row, std::string name) {
     return AnalysisVersionView{
         .id = AnalysisVersionId{static_cast<std::int64_t>(row.id.Value())},
@@ -50,15 +42,20 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
         .version = row.version.Value(),
         .canonicalUnit = std::string{row.canonicalUnit.Value().ToStringView()},
         .decimalPlaces = static_cast<std::int32_t>(row.decimalPlaces.Value()),
-        .specLow = readBound(row.specLowNum.Value(), row.specLowDen.Value()),
-        .specHigh = readBound(row.specHighNum.Value(), row.specHighDen.Value()),
-        .limitOfDetection = readBound(row.lodNum.Value(), row.lodDen.Value()),
-        .upperDetectionLimit = readBound(row.udlNum.Value(), row.udlDen.Value()),
+        .specLow = makeBound(row.specLowNum.Value(), row.specLowDen.Value()),
+        .specHigh = makeBound(row.specHighNum.Value(), row.specHighDen.Value()),
+        .limitOfDetection = makeBound(row.lodNum.Value(), row.lodDen.Value()),
+        .upperDetectionLimit = makeBound(row.udlNum.Value(), row.udlDen.Value()),
     };
 }
 
-
-/// @brief Renders one bound as a `{"num":..,"den":..}` schema node.
+/// @brief Renders one detection limit as a `{"num":..,"den":..}` schema node.
+///
+/// Detection limits stay app-private keys, unlike the specification range
+/// below: they describe what the *instrument* can see, and the rung acts on
+/// them by offering the `belowLOD` / `aboveUDL` qualifiers rather than by
+/// checking a submitted number against them. A key no framework code enforces
+/// is the honest shape for that.
 /// @param bound The exact bound.
 /// @return The DOM node.
 [[nodiscard]] glz::generic_u64 boundNode(const AnalysisBound& bound) {
@@ -70,40 +67,34 @@ void applyBounds(db::AnalysisVersionRecord& row, const Action& action) {
 
 /// @brief Merges @p version's own data into the compiled result-entry form.
 ///
-/// This function is the whole of "clients render the version the result was
-/// captured with", and its shape is the finding: the *structure* of the form
-/// (which fields exist, which are required, the `x-rules` list, the field's
-/// `x-decimalPlaces` and `ExtUnits`) comes from the compiled
-/// `CaptureConcentration` struct and is the same for every version; only the
-/// values patched in below vary. A version that wanted a different *shape* —
-/// an extra field, a different rule — could not be served at all without
-/// recompiling, which is exactly the "schemas become data" boundary the
-/// README predicts.
+/// "Clients render the version the result was captured with" (README build
+/// order §4), and the *shape* of that form is still compiled: which fields
+/// exist, which are required, the `x-rules` list and the `ExtUnits` all come
+/// from the `CaptureConcentration` struct and are identical for every version.
+/// A version wanting a different shape — an extra field, a different rule —
+/// still could not be served without recompiling, which is the "schemas become
+/// data" boundary the README predicts.
 ///
-/// The per-version precision is emitted as `x-versionDecimalPlaces` rather
-/// than overwriting `x-decimalPlaces`: the latter is a contract the framework
-/// itself enforces on dispatch (`docs/spec/forms/forms.md`, "Advertised
-/// precision is enforced on dispatch") against the compiled
-/// `Quantity`'s declared decimals, so rewriting it would advertise a promise
-/// no code keeps. Both are served, and the disagreement is visible rather
-/// than hidden.
+/// What is no longer app-private is the part the framework has a vocabulary
+/// for. `morph::forms::InstanceConstraints` (upstream issue #164) carries the
+/// version's precision and specification range into `x-decimalPlaces`,
+/// `x-minimum` and `x-maximum` — the framework's own keys — and the same
+/// declaration is what `SampleModel` checks a submitted reading against, so
+/// the advertised bound and the enforced one cannot drift apart. The
+/// superseded `x-versionDecimalPlaces` is gone with it: serving two precision
+/// keys and leaving a renderer to guess which one was true was worse than
+/// either alone.
 /// @param version The version to render.
 /// @return The schema text a client renders.
 [[nodiscard]] std::string renderSchemaFor(const AnalysisVersionView& version) {
-    const auto base = ::morph::forms::schemaJson<CaptureConcentration>();
+    const auto base = ::morph::forms::instanceSchemaJson<CaptureConcentration>(
+        versionConstraints(kResultValueField, version.decimalPlaces, version.specLow, version.specHigh));
     // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) — glaze DOM requires operator[]
     glz::generic_u64 dom{};
     if (glz::read_json(dom, base)) {
         return base;  // not JSON we can patch; serve it verbatim rather than mangle it
     }
-    auto& value = dom["properties"]["value"];
-    value["x-versionDecimalPlaces"] = static_cast<std::int64_t>(version.decimalPlaces);
-    if (version.specLow) {
-        value["x-specLow"] = boundNode(*version.specLow);
-    }
-    if (version.specHigh) {
-        value["x-specHigh"] = boundNode(*version.specHigh);
-    }
+    auto& value = dom["properties"][std::string{kResultValueField}];
     if (version.limitOfDetection) {
         value["x-limitOfDetection"] = boundNode(*version.limitOfDetection);
     }
