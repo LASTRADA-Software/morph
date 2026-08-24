@@ -2141,6 +2141,9 @@ void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
 /// above it needs an exact companion the renderer can read instead.
 inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
 
+/// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
+inline constexpr std::int64_t kExactDoubleLimitSigned = 9007199254740992LL;
+
 /// @brief Adds an exact decimal-string companion for one numeric bound, when
 ///        the bound is too large for a double to hold exactly.
 ///
@@ -2159,20 +2162,23 @@ inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
 /// @param node    Schema node to annotate in place (a property or a `$defs` entry).
 /// @param key     Bound to read: `"minimum"` or `"maximum"`.
 /// @param textKey Companion key to write: `"x-exactMinimum"` or `"x-exactMaximum"`.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
 inline void annotateExactBound(glz::generic_u64& node, const std::string& key, const std::string& textKey) {
     if (!node.contains(key)) {
         return;
     }
     auto const& bound = node[key];
+    // std::cmp_* rather than a cast: the two bounds arrive in different
+    // signednesses and the limit is unsigned, so a cast would be the very
+    // sign-mismatch this comparison exists to get right.
     if (bound.template holds<std::uint64_t>()) {
         auto const value = bound.template get<std::uint64_t>();
-        if (value > kExactDoubleLimit) {
+        if (std::cmp_greater(value, kExactDoubleLimit)) {
             node[textKey] = std::to_string(value);
         }
     } else if (bound.template holds<std::int64_t>()) {
         auto const value = bound.template get<std::int64_t>();
-        if (value > static_cast<std::int64_t>(kExactDoubleLimit) ||
-            value < -static_cast<std::int64_t>(kExactDoubleLimit)) {
+        if (std::cmp_greater(value, kExactDoubleLimit) || std::cmp_less(value, -kExactDoubleLimitSigned)) {
             node[textKey] = std::to_string(value);
         }
     }
@@ -2187,6 +2193,7 @@ inline void annotateExactBound(glz::generic_u64& node, const std::string& key, c
 /// where `minimum`/`maximum` sit.
 ///
 /// @param node Node to walk; objects and arrays recurse, scalars are left alone.
+// NOLINTNEXTLINE(misc-no-recursion) -- walking a JSON tree is inherently recursive
 inline void annotateExactNumericBounds(glz::generic_u64& node) {
     if (node.is_object()) {
         annotateExactBound(node, "minimum", "x-exactMinimum");
@@ -2200,6 +2207,7 @@ inline void annotateExactNumericBounds(glz::generic_u64& node) {
         }
     }
 }
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
