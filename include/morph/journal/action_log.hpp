@@ -53,6 +53,27 @@ struct LogEntry {
     /// @brief JSON-encoded request (`ActionTraits<A>::toJson`).
     std::string payload;
 
+    /// @brief Structural fingerprint of the action payload's shape at the
+    ///        moment `payload` was encoded (`morph::model::payloadFingerprint`).
+    ///
+    /// `v` above versions the *line format*; this versions the *payload*. Without
+    /// it, replaying an entry written by an older build against a renamed field
+    /// is indistinguishable from replaying an entry that genuinely omitted the
+    /// field: the lenient decode drops the unknown key, default-constructs the
+    /// new one, and reconstruction reports a state that was never recorded. With
+    /// it, `replay()` compares this against the fingerprint the *current* build
+    /// computes for the same action and refuses rather than guessing — see
+    /// `journal::replay()` and `docs/spec/journal/journal.md`, "Payload schema
+    /// fingerprint".
+    ///
+    /// Stamped automatically by the two sites that execute an action
+    /// (`ActionDispatcher::registerAction`'s runner and `Bridge::executeVia`'s
+    /// local op). **Empty is a meaningful value**: it marks an *unstamped*
+    /// entry — one written before this field existed, or appended directly by
+    /// application code — whose payload shape is unknown and therefore
+    /// unverifiable. See `UnstampedPayloadPolicy` for what replay does with one.
+    std::string schema{};
+
     /// @brief JSON-encoded result (`ActionTraits<A>::resultToJson`), captured after
     ///        successful execution. Empty when `outcome == Outcome::Failed`.
     std::string result;

@@ -3,11 +3,15 @@
 #pragma once
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "action_log.hpp"
@@ -15,6 +19,136 @@
 #include "../core/registry.hpp"
 
 namespace morph::journal {
+
+/// @brief Thrown by `replay()` when a recorded entry's payload fingerprint
+///        (`LogEntry::schema`) disagrees with the fingerprint this build
+///        computes for the same action, and no migration covers the pair.
+///
+/// This is the signal the journal previously did not have. Before it, the same
+/// situation produced a successful reconstruction of a state that was never
+/// recorded — a renamed field decoding to its default, reported with as much
+/// confidence as a correct one. There is no "degraded" reconstruction to fall
+/// back to and no way to tell how much of the entry survived the decode, so
+/// this throws rather than warning: an audit trail that cannot be reconstructed
+/// faithfully must say so.
+///
+/// @par Who handles it
+/// The caller of `replay()` / `SessionLog::undoLast()` — application-level
+/// reconstruction code, not the framework. The three answers available to it
+/// are: register a migration for the pair (see `PayloadMigrationRegistry`),
+/// restore a build whose fingerprint matches, or surface the failure. The
+/// framework deliberately offers no fourth.
+struct SchemaMismatchError : std::runtime_error {
+    /// @brief Builds the message naming the action and both fingerprints.
+    /// @param modelType    `LogEntry::modelType` of the offending entry.
+    /// @param actionType   `LogEntry::actionType` of the offending entry.
+    /// @param recorded     Fingerprint stamped on the entry when it was written.
+    /// @param current      Fingerprint this build computes for that action.
+    SchemaMismatchError(std::string_view modelType, std::string_view actionType, std::string_view recorded,
+                        std::string_view current)
+        : std::runtime_error{"journal::replay: payload schema mismatch for " + std::string{modelType} + "/" +
+                             std::string{actionType} + ": entry was written with schema " + std::string{recorded} +
+                             ", this build decodes it as " + std::string{current} +
+                             " (register a migration for this pair, or replay with a build that matches)"} {}
+};
+
+/// @brief What `replay()` does with an entry carrying no payload fingerprint.
+///
+/// An entry has an empty `LogEntry::schema` when it was written before the
+/// field existed, or when application code appended it directly rather than
+/// through an action execution. Such an entry is not "known good" — it is
+/// *unverifiable*: there is no record of the shape that produced its payload,
+/// so no check can be performed at all.
+enum class UnstampedPayloadPolicy : std::uint8_t {
+    /// @brief Replay it, exactly as every morph build before this check did.
+    ///
+    /// The default, because it is the only choice that keeps journals written
+    /// by earlier builds replayable at all — refusing them by default would
+    /// turn an upgrade into a data-loss event for every retained journal, which
+    /// is precisely the failure this feature exists to prevent, inverted.
+    /// Choosing this is choosing to accept the *pre-existing* silent-default
+    /// risk for *pre-existing* entries; it grants no leniency to anything
+    /// written after the stamp exists.
+    Replay,
+
+    /// @brief Refuse: throw `SchemaMismatchError` on the first unstamped entry.
+    ///
+    /// For a caller whose correctness claim is "this reconstruction is
+    /// faithful" and who would rather have no answer than an unverifiable one —
+    /// a regulated audit trail, a conformance run, a test pinning that every
+    /// entry in a fixture really is stamped.
+    Refuse,
+};
+
+/// @brief Registry of payload migrations, keyed by `(actionType, fromSchema)`.
+///
+/// The escape hatch that makes "refuse on mismatch" a livable contract rather
+/// than a one-way door. A migration is a pure function over the recorded
+/// payload JSON: given the bytes an older build wrote, return the bytes this
+/// build's `ActionTraits<A>::fromJson` should see. Reconstruction applies it in
+/// memory only — the journal on disk is never rewritten, so the recorded
+/// history stays exactly what was recorded and the migration stays reviewable
+/// as code.
+///
+/// @par Thread safety
+/// None, matching `morph::model::detail::ActionDispatcher`: register every
+/// migration during start-up, before any `replay()` can run.
+///
+/// @code
+/// morph::journal::PayloadMigrationRegistry migrations;
+/// migrations.add("setState", oldFingerprint, [](std::string_view payload) {
+///     // rename "state" -> "stateCode"
+///     return rewriteKey(payload, "state", "stateCode");
+/// });
+/// auto holder = morph::journal::replay("Sample", log.entries(), registry, dispatcher, migrations);
+/// @endcode
+class PayloadMigrationRegistry {
+public:
+    /// @brief Rewrites one recorded payload JSON into the current shape.
+    using Migration = std::function<std::string(std::string_view)>;
+
+    /// @brief Registers @p migration for entries of @p actionType stamped with
+    ///        @p fromSchema. Replaces any migration already registered for that
+    ///        exact pair.
+    /// @param actionType `LogEntry::actionType` the migration applies to.
+    /// @param fromSchema `LogEntry::schema` value the migration reads.
+    /// @param migration  Payload rewriter.
+    void add(std::string_view actionType, std::string_view fromSchema, Migration migration) {
+        _migrations[Key{std::string{actionType}, std::string{fromSchema}}] = std::move(migration);
+    }
+
+    /// @brief Looks up the migration for `(actionType, fromSchema)`.
+    ///
+    /// Returns a pointer into the registry, valid until the entry is replaced
+    /// or the registry is destroyed (`std::unordered_map` does not invalidate
+    /// references to surviving elements on rehash).
+    /// @param actionType `LogEntry::actionType` to match.
+    /// @param fromSchema `LogEntry::schema` to match.
+    /// @return Pointer to the migration, or `nullptr` if none is registered.
+    [[nodiscard]] const Migration* find(std::string_view actionType, std::string_view fromSchema) const {
+        auto iter = _migrations.find(Key{std::string{actionType}, std::string{fromSchema}});
+        return iter == _migrations.end() ? nullptr : &iter->second;
+    }
+
+    /// @brief Removes every registered migration.
+    void clear() { _migrations.clear(); }
+
+    /// @brief Returns how many migrations are registered.
+    /// @return The registration count.
+    [[nodiscard]] std::size_t size() const noexcept { return _migrations.size(); }
+
+private:
+    using Key = std::pair<std::string, std::string>;
+    std::unordered_map<Key, Migration, ::morph::model::detail::PairKeyHash> _migrations;
+};
+
+/// @brief Returns the process-level migration registry `replay()` uses by
+///        default. Empty until an application adds to it.
+/// @return Reference to the process-wide registry.
+[[nodiscard]] inline PayloadMigrationRegistry& defaultPayloadMigrations() {
+    static PayloadMigrationRegistry registry;
+    return registry;
+}
 
 namespace detail {
 
@@ -90,17 +224,45 @@ class ScopedReplayFlag {
 /// ordinary top-level caller) once this function returns, so it never leaks
 /// into dispatches that happen after `replay()` completes.
 ///
+/// @par Payload-schema verification
+/// Before dispatching an entry, `replay()` compares the entry's
+/// `LogEntry::schema` against `ActionDispatcher::schemaFor(modelType,
+/// actionType)` — the fingerprint *this* build computes for that action:
+///
+/// - **Equal** — dispatch, unchanged.
+/// - **Different, with a migration registered** for `(actionType, entry.schema)`
+///   in @p migrations — the migration rewrites the payload JSON in memory, and
+///   the rewritten bytes are dispatched. The stored entry is untouched.
+/// - **Different, with no migration** — throw `SchemaMismatchError`. This is the
+///   case that used to reconstruct a state nobody ever recorded.
+/// - **Entry unstamped** (`schema` empty) — governed by @p unstamped; see
+///   `UnstampedPayloadPolicy`.
+///
+/// An entry naming an action this build has not registered is *not* rejected
+/// here (`schemaFor` returns empty for it); it falls through to `dispatch()`,
+/// which throws "unknown action" — the more precise diagnostic of the two.
+///
 /// @param modelTypeId String type-id of the model to reconstruct (`ModelTraits<M>::typeId()`).
 /// @param entries     Ordered entries to replay, typically from `IActionLog::entries()`. Entries
 ///                    with `outcome == Outcome::Failed` are skipped (see below).
 /// @param registry    Model factory registry; defaults to the process-level singleton.
 /// @param dispatcher  Action dispatcher; defaults to the process-level singleton.
+/// @param migrations  Payload migrations consulted on a fingerprint mismatch;
+///                    defaults to the process-level registry, which is empty
+///                    unless the application populated it.
+/// @param unstamped   What to do with an entry carrying no fingerprint;
+///                    defaults to `UnstampedPayloadPolicy::Replay`.
 /// @return A freshly created holder with @p entries replayed against it.
 /// @throws std::runtime_error if @p modelTypeId or any entry's action type is unregistered.
+/// @throws SchemaMismatchError if an entry's payload fingerprint disagrees with this
+///         build's and no migration covers it, or if an unstamped entry is met
+///         under `UnstampedPayloadPolicy::Refuse`.
 inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
     std::string_view modelTypeId, const std::vector<LogEntry>& entries,
     ::morph::model::detail::ModelRegistryFactory& registry = ::morph::model::detail::defaultRegistry(),
-    ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher()) {
+    ::morph::model::detail::ActionDispatcher& dispatcher = ::morph::model::detail::defaultDispatcher(),
+    const PayloadMigrationRegistry& migrations = defaultPayloadMigrations(),
+    UnstampedPayloadPolicy unstamped = UnstampedPayloadPolicy::Replay) {
     auto holder = registry.create(modelTypeId);
     // `registry.create` (via `ModelFactory::create`) auto-attaches the process
     // default action log. Detach it before replaying: reconstruction re-runs the
@@ -120,7 +282,26 @@ inline std::unique_ptr<::morph::model::detail::IModelHolder> replay(
         if (entry.outcome == Outcome::Failed) {
             continue;
         }
-        dispatcher.dispatch(entry.modelType, entry.actionType, *holder, entry.payload);
+        // Payload-schema gate. `current` is empty for an action this build never
+        // registered; leaving that to dispatch()'s "unknown action" keeps the
+        // two failures distinguishable instead of reporting the missing
+        // registration as a schema change.
+        const std::string current = dispatcher.schemaFor(entry.modelType, entry.actionType);
+        std::string_view payload{entry.payload};
+        std::string migrated;
+        if (entry.schema.empty()) {
+            if (unstamped == UnstampedPayloadPolicy::Refuse) {
+                throw SchemaMismatchError{entry.modelType, entry.actionType, "(unstamped)", current};
+            }
+        } else if (!current.empty() && entry.schema != current) {
+            const auto* migration = migrations.find(entry.actionType, entry.schema);
+            if (migration == nullptr) {
+                throw SchemaMismatchError{entry.modelType, entry.actionType, entry.schema, current};
+            }
+            migrated = (*migration)(entry.payload);
+            payload = migrated;
+        }
+        dispatcher.dispatch(entry.modelType, entry.actionType, *holder, payload);
     }
     return holder;
 }
@@ -190,6 +371,11 @@ public:
     /// re-forwards a coalesced-away, already-committed entry. Applications that
     /// need to durably reverse a checkpointed action must record a compensating
     /// action, not rely on `undoLast()`.
+    ///
+    /// Replays through `replay()` with its default payload-schema settings.
+    /// That gate cannot fire here in practice: the entries being replayed were
+    /// appended by this same process, so their fingerprints are this build's by
+    /// construction. Undo is not a cross-version path.
     ///
     /// @param modelTypeId String type-id of the model to reconstruct.
     /// @param registry    Model factory registry; defaults to the process-level singleton.
