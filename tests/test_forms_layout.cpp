@@ -276,6 +276,8 @@ TEST_CASE("Forms::SchemaJson::NoFieldSpansEmitsNoColspan", "[forms][layout]") {
 // removed entirely — only a generated fixture can fail for that reason.
 // ---------------------------------------------------------------------------
 
+// NOLINTBEGIN(misc-use-internal-linkage) -- see below: an anonymous namespace
+// is exactly what these types cannot have.
 // Deliberately *not* anonymous-namespaced: glaze's reflection takes the address
 // of an `extern const T`, which a type with no linkage cannot have, so an
 // anonymous-namespace action fails to compile. The SM prefix keeps these unique
@@ -295,25 +297,26 @@ struct SMOptedOutAction {
     std::string title;
     static constexpr bool explicitSubmit = false;
 };
+// NOLINTEND(misc-use-internal-linkage)
 
 TEST_CASE("schemaJson emits x-submitMode:\"explicit\" for an action that declares explicitSubmit",
           "[forms][submitmode]") {
     auto const schema = morph::forms::schemaJson<SMExplicitAction>();
     // Exact key/value text: a bare "explicit" substring would also match a
     // description or a field named for it.
-    CHECK(schema.find(R"("x-submitMode":"explicit")") != std::string::npos);
+    CHECK(schema.contains(R"("x-submitMode":"explicit")"));
 }
 
 TEST_CASE("schemaJson omits x-submitMode for an action that declares nothing", "[forms][submitmode]") {
     // Zero behaviour change for every existing action: this is what makes the
     // emitter safe to add without touching a single shipped schema.
     auto const schema = morph::forms::schemaJson<SMDefaultAction>();
-    CHECK(schema.find("x-submitMode") == std::string::npos);
+    CHECK_FALSE(schema.contains("x-submitMode"));
 }
 
 TEST_CASE("schemaJson omits x-submitMode when explicitSubmit is declared false", "[forms][submitmode]") {
     auto const schema = morph::forms::schemaJson<SMOptedOutAction>();
-    CHECK(schema.find("x-submitMode") == std::string::npos);
+    CHECK_FALSE(schema.contains("x-submitMode"));
 }
 
 TEST_CASE("x-submitMode is a top-level key, like x-layout", "[forms][submitmode]") {
@@ -325,7 +328,9 @@ TEST_CASE("x-submitMode is a top-level key, like x-layout", "[forms][submitmode]
     REQUIRE(parsed.has_value());
     auto const& root = parsed.value();
     REQUIRE(root.contains("x-submitMode"));
+    // NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
     CHECK(root["x-submitMode"].get<std::string>() == "explicit");
     REQUIRE(root.contains("properties"));
     CHECK_FALSE(root["properties"].contains("x-submitMode"));
+    // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
 }

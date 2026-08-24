@@ -2222,6 +2222,25 @@ inline void annotateExactNumericBounds(glz::generic_u64& node) {
     } else if (node.is_array()) {
         for (auto& child : node.get_array()) {
             annotateExactNumericBounds(child);
+/// @brief Stamps `x-submitMode` on @p dom when `A` opts out of auto-submit.
+///
+/// A top-level key sourced from a declaration on the action type, exactly as
+/// `x-layout` is (docs/spec/forms/forms.md, "Explicit submit mode"). Emitted
+/// only for `explicitSubmit = true`, so an action that declares nothing -- or
+/// declares it `false` -- keeps the renderer's auto-submit default and its
+/// schema is byte-for-byte unchanged.
+///
+/// A free function rather than a few lines inside `mergeSchemaExtras`: that
+/// function is already at the edge of clang-tidy's cognitive-complexity
+/// threshold, and every `if constexpr` added inline pushes it further.
+/// @tparam A Action type whose schema is being annotated.
+/// @param dom Schema DOM to stamp in place.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+template <typename A>
+void annotateSubmitMode(glz::generic_u64& dom) {
+    if constexpr (HasExplicitSubmit<A>) {
+        if constexpr (A::explicitSubmit) {
+            dom["x-submitMode"] = "explicit";
         }
     }
 }
@@ -2403,16 +2422,7 @@ template <typename A>
         dom["x-rules"] = xRules;
     }
 
-    // Submit mode (docs/spec/forms/forms.md, "Explicit submit mode"):
-    // a top-level key sourced from a declaration on the action type, exactly
-    // as `x-layout` is. Emitted only for `explicitSubmit = true`, so an action
-    // that declares nothing -- or declares it `false` -- keeps the renderer's
-    // auto-submit default and its schema is byte-for-byte unchanged.
-    if constexpr (HasExplicitSubmit<A>) {
-        if constexpr (A::explicitSubmit) {
-            dom["x-submitMode"] = "explicit";
-        }
-    }
+    annotateSubmitMode<A>(dom);
 
     // Exact companions for any bound a double cannot hold (morph#213). Last,
     // so it also covers nodes added by the passes above.
