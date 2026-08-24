@@ -167,6 +167,16 @@ jobs:
     name: Linux / ${{ matrix.preset }}
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # Only set on the self-hosted path: host.docker.internal does not
+      # resolve on a GitHub-hosted VM (it is not a Docker container), and an
+      # address that is merely unreachable rather than refusing the
+      # connection stalls fastcache-cc's TCP connect for up to ~2m30s per
+      # matrix leg (CompileCache.cmake's own measured worst case) instead of
+      # failing fast -- so this must stay empty on that path, not just
+      # "wrong but harmless".
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
     strategy:
       fail-fast: false
       matrix:
@@ -218,21 +228,25 @@ jobs:
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
 
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache here on purpose: leaving the
+      # launcher unset lets cmake/CompileCache.cmake's own auto-detection run,
+      # which prefers fastcache-cc (this job's FASTCACHE_ADDR, set above, only
+      # when running self-hosted) and falls back to the sccache install steps
+      # above when no daemon answers -- e.g. this exact job on the
+      # GitHub-hosted fallback runner, which never gets a FASTCACHE_ADDR to
+      # begin with. Setting the launcher explicitly, as every other Linux job
+      # still does, would make CompileCache.cmake bail out before it ever
+      # probes for fastcache-cc (see that file's own comment).
       - name: Configure (gcc)
         if: startsWith(matrix.preset, 'gcc-')
-        run: |
-          cmake --preset ${{ matrix.preset }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        run: cmake --preset ${{ matrix.preset }}
 
       - name: Configure (clang)
         if: startsWith(matrix.preset, 'clang-')
         run: |
           cmake --preset ${{ matrix.preset }} \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -270,6 +284,11 @@ jobs:
     name: Linux / ${{ matrix.preset }}
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why this is conditional
+      # rather than a blanket setting.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
     strategy:
       fail-fast: false
       matrix:
@@ -314,15 +333,16 @@ jobs:
       # silently skipped them. QML, the fuzzers, and the ladder stay out of
       # this matrix entirely — they are covered by linux-coverage and
       # linux-all-features, and "a GUI stack under TSan is mostly noise".
+      #
+      # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers' Configure
+      # steps for why leaving it unset is what lets fastcache-cc be selected.
       - name: Configure
         run: |
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_OFFLINE_SQLITE=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
@@ -1099,6 +1119,11 @@ jobs:
     name: Linux / all optional features (${{ matrix.compiler }})
     needs: probe-self-hosted
     runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
+    env:
+      # See linux-compilers' identical env block for why this is conditional
+      # rather than a blanket setting.
+      FASTCACHE_ADDR: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'host.docker.internal:6674' || '' }}
+      FASTCACHE_AUTO_INSTALL: ${{ contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted') && 'ON' || 'OFF' }}
     strategy:
       fail-fast: false
       matrix:
@@ -1198,6 +1223,9 @@ jobs:
           # engine-load smoke test were built by nothing at all. This job has
           # Qt ${{ env.QT_VERSION }} from aqtinstall, so here they are built,
           # and the smoke test runs, on every push.
+          # No -DCMAKE_..._COMPILER_LAUNCHER=sccache: see linux-compilers'
+          # Configure steps for why leaving it unset is what lets
+          # fastcache-cc be selected.
           cmake --preset ${{ matrix.preset }} \
             -DMORPH_BUILD_NET=ON \
             -DMORPH_BUILD_QT=ON \
@@ -1209,9 +1237,7 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=${{ matrix.fuzzers }} \
             -DMORPH_REQUIRE_VETTED_HMAC=ON \
-            $EXTRA \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+            $EXTRA
 
       # QT_QPA_PLATFORM=offscreen here too, not just on Test below: Catch2's
       # catch_discover_tests() runs each Qt-linked test binary once at BUILD
