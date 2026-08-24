@@ -99,13 +99,44 @@ Frame {
     }
 
     // Follow a $ref into $defs; attributes on the field win over the def's.
-    function resolveProp(prop) {
+    function resolveRef(prop) {
         if (prop && prop["$ref"] !== undefined) {
             const defName = prop["$ref"].split("/").pop()
             const def = opt((schema["$defs"] || {})[defName], {})
             return Object.assign({}, def, prop)
         }
         return opt(prop, {})
+    }
+
+    function resolveProp(prop) {
+        const p = resolveRef(prop)
+        // A nullable member whose type is itself a $ref (e.g. a bare
+        // std::optional<std::int64_t>, or std::optional<TagId>) emits
+        // {"anyOf": [{"$ref": ...}, {"type": "null"}]} with **no top-level
+        // "type" key**. Resolving only the top-level $ref left every kind flag
+        // below false, so the value fell through to the plain-text encoding and
+        // went out as a quoted JSON *string* that the server then rejected with
+        // parse_number_failure (morph#189). Resolve through the non-null branch
+        // so the field is typed by T. `oneOf` is handled the same way; glaze
+        // does not emit it today, but a hand-written or evolved schema may.
+        const branches = Array.isArray(p.anyOf) ? p.anyOf : (Array.isArray(p.oneOf) ? p.oneOf : null)
+        if (branches !== null) {
+            for (let i = 0; i < branches.length; ++i) {
+                const branch = resolveRef(branches[i])
+                if (branch.type === "null")
+                    continue
+                // Outer keys win over the branch's (an x-* extension declared
+                // beside the anyOf is the more specific statement), except that
+                // the outer object is precisely the one with no "type".
+                const merged = Object.assign({}, branch, p)
+                delete merged.anyOf
+                delete merged.oneOf
+                if (p.type === undefined)
+                    merged.type = branch.type
+                return merged
+            }
+        }
+        return p
     }
 
     // --- i18n: field-slot key derivation and resolution ------------------
@@ -213,6 +244,12 @@ Frame {
                     isQuantity: dp !== undefined,
                     decimals: opt(dp, 0),
                     isInteger: types.indexOf("integer") !== -1,
+                    // "boolean" -- a CheckBox, not the plain text field's
+                    // fall-through (which wrapped the typed text as a JSON
+                    // *string*: {"flag":"true"}, or {"flag":"banana"} for
+                    // anything at all, since a TextField applies no validation.
+                    // glaze rejects both with expected_true_or_false).
+                    isBoolean: types.indexOf("boolean") !== -1,
                     // "array" (glaze's std::vector<T> schema shape: {"type":
                     // "array", "items": {...}}) -- a comma-separated-with-
                     // validation control, not the plain text field's
@@ -690,6 +727,16 @@ Frame {
             // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
             return text.replace(/^(-?)0+(?=\d)/, "$1")
         }
+        if (f.isBoolean) {
+            // Emitted bare, never quoted. The CheckBox only ever stores these
+            // two spellings; any other retained value (a prefill from a stale
+            // payload, say) is invalid rather than silently coerced.
+            if (text === "true")
+                return "true"
+            if (text === "false")
+                return "false"
+            return null
+        }
         return JSON.stringify(text)
     }
 
@@ -1036,11 +1083,12 @@ Frame {
 
                 TextField {
                     id: entry
-                    objectName: fieldColumn.modelData.isArray ? "" : "field_" + fieldColumn.modelData.name
+                    objectName: (fieldColumn.modelData.isArray || fieldColumn.modelData.isBoolean)
+                                ? "" : "field_" + fieldColumn.modelData.name
                     visible: overrideLoader.sourceComponent === null
                              && !fieldColumn.modelData.isChoice && !fieldColumn.modelData.isDateTime
                              && !fieldColumn.modelData.isMultiline && !fieldColumn.modelData.isSlider
-                             && !fieldColumn.modelData.isArray
+                             && !fieldColumn.modelData.isArray && !fieldColumn.modelData.isBoolean
                     Layout.fillWidth: true
                     readOnly: fieldColumn.modelData.readOnly
                     placeholderText: fieldColumn.modelData.placeholder !== ""
@@ -1099,6 +1147,54 @@ Frame {
                     Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
                                              + fieldColumn.modelData.description
                                              + " Comma-separated list."
+                }
+
+                // "boolean" — a CheckBox. The plain TextField's fall-through
+                // encoded the typed text as a JSON *string* ({"flag":"true"}),
+                // and applied no validation at all, so "banana" was accepted
+                // and sent; glaze rejected both with expected_true_or_false
+                // (morph#189). A CheckBox can only produce the two valid
+                // spellings. Reuses the plain TextField's field_ objectName —
+                // the two are mutually exclusive per field (isBoolean), so
+                // exactly one claims it.
+                CheckBox {
+                    id: boolEntry
+                    objectName: fieldColumn.modelData.isBoolean ? "field_" + fieldColumn.modelData.name : ""
+                    visible: overrideLoader.sourceComponent === null && fieldColumn.modelData.isBoolean
+                    enabled: !fieldColumn.modelData.readOnly
+                    onToggled: form.setFieldValue(fieldColumn.modelData.name, checked ? "true" : "false")
+                    // Re-seed from the retained value whenever this delegate is
+                    // (re)created — see the plain TextField's comment above for
+                    // why (a tab switch destroys and rebuilds every control).
+                    //
+                    // A *required* boolean with no retained value is seeded
+                    // "false" rather than left blank: a checkbox always shows a
+                    // definite state, so an unchecked required box that blocked
+                    // `ready` would be a form the user cannot see how to
+                    // satisfy. An *optional* boolean is left unset and is
+                    // omitted from the payload until the user touches it, which
+                    // is what distinguishes "not answered" from an explicit
+                    // false for a std::optional<bool> member.
+                    Component.onCompleted: form.withoutAutoSubmit(function() {
+                        // Every field's delegate instantiates this CheckBox and
+                        // hides it unless the field is boolean, so this hook runs
+                        // for fields of every type -- without this guard it seeded
+                        // "false" into every *required* field, satisfying the
+                        // required gate for text fields the user had not filled in.
+                        if (!fieldColumn.modelData.isBoolean)
+                            return
+                        const retained = form.opt(form.fieldValues[fieldColumn.modelData.name], "")
+                        if (retained === "" && fieldColumn.modelData.required) {
+                            form.setFieldValue(fieldColumn.modelData.name, "false")
+                            boolEntry.checked = false
+                            return
+                        }
+                        boolEntry.checked = retained === "true"
+                    })
+                    Accessible.role: Accessible.CheckBox
+                    Accessible.name: fieldColumn.modelData.name
+                    Accessible.description: (fieldColumn.modelData.required ? "Required. " : "")
+                                             + fieldColumn.modelData.description
                 }
 
                 // x-widget: "textarea" (a Multiline field) — same wire string
