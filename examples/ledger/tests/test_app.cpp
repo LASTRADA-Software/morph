@@ -237,3 +237,46 @@ TEST_CASE("The App runs a job for every ledger, not only the first", "[ledger][a
     CHECK(model.execute(ledger::GetReportStatus{.jobId = firstJob}).status == ledger::ReportStatus::Done);
     CHECK(model.execute(ledger::GetReportStatus{.jobId = secondJob}).status == ledger::ReportStatus::Done);
 }
+
+TEST_CASE("A job whose ledger no longer exists settles Done with an empty report", "[ledger][app]") {
+    // Characterisation, not aspiration: this pins what the runner *actually*
+    // does with a job whose ledger is gone, which is not what one would guess.
+    // The aggregation does not fail -- it finds no accounts, produces `[]`,
+    // and the job settles Done. So the App's failure arm is not reachable this
+    // way, and a caller cannot tell "no such ledger" from "a ledger with no
+    // activity". Filed as morph#250; asserted here so the behaviour cannot
+    // change silently while that is open.
+    //
+    // The row is written directly rather than through `SubmitReport`, which
+    // would refuse a ledger it cannot find -- the shape under test is a row
+    // that was legal when written and is not legal now.
+    DbFixture fixture;
+    Lightweight::DataMapper mapper;
+    ledger::LedgerModel model;
+    const auto ledgerId = makeLedger(mapper, model);
+
+    ledger::db::ReportJobRecord orphan;
+    orphan.ledger = static_cast<std::uint64_t>(*ledgerId) + 9999U;  // no such ledger
+    orphan.jobId = Lightweight::SqlAnsiString<64>{"orphaned-job"};
+    orphan.kind = static_cast<int>(ledger::ReportKind::MonthlyStatement);
+    orphan.status = static_cast<int>(ledger::ReportStatus::Pending);
+    orphan.createdAtMs = 0;
+    mapper.Create(orphan);
+    const auto orphanId = ledger::ReportJobId{static_cast<std::int64_t>(orphan.id.Value())};
+
+    {
+        ledger::app::App app{kTimerOff};
+        // One job failing must not fail the pass, and one job whose ledger is
+        // missing must not either.
+        REQUIRE_NOTHROW(app.runPendingReportsOnce());
+        REQUIRE(pumpUntil([&app] { return !app.reportsInFlight(); }));
+    }
+
+    // Terminal either way: a row left Pending is what a poller spins on
+    // forever, and that is the property worth pinning regardless of which
+    // terminal state is chosen later.
+    const auto status = model.execute(ledger::GetReportStatus{.jobId = orphanId});
+    CHECK(status.status == ledger::ReportStatus::Done);
+    REQUIRE(status.result.has_value());
+    CHECK(*status.result == "[]");
+}
