@@ -173,9 +173,12 @@ dispatch time, so if `context` is reparented to a different thread after
 construction, subsequently posted tasks follow it to the new thread.
 
 Unlike `MainThreadExecutor`, `QtExecutor` needs no explicit `runFor()` drain —
-the running Qt event loop *is* the dispatcher. It is otherwise stateless: it
-owns no queue, spawns no thread, and holds only the `context` pointer, so it has
-no lifetime or shutdown concerns of its own beyond that pointer's validity.
+the running Qt event loop *is* the dispatcher. It owns no queue and spawns no
+thread, but it is **not** stateless and does have a shutdown concern of its own:
+besides the `context` pointer it holds an `_alive` control block, and a task
+still queued when the executor is destroyed is dropped rather than run — see
+[Teardown: queued tasks are dropped, not delivered](#teardown-queued-tasks-are-dropped-not-delivered)
+above.
 Because the context object is not owned by `QtExecutor`, Qt drops the queued
 invocation if **that object** (or the thread it lives on) is destroyed before
 the event is processed — for the default context this means application

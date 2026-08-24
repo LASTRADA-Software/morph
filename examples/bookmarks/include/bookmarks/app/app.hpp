@@ -142,9 +142,11 @@ class App : public QObject {
     /// *effect* of a pass (the titles are set) is not the same as the
     /// dispatches having settled, because the update happens on a worker
     /// thread while each call's completion callback is delivered later, on
-    /// the Qt event loop. Destroying the `App` in that window leaves those
-    /// callbacks queued against objects it owned. Pump on this until it is
-    /// `false`, then destroy.
+    /// the Qt event loop. Destroying the `App` in that window does not crash
+    /// -- the callback is dropped with `_fetchExecutor` rather than delivered
+    /// -- but the pass's result is then silently never observed, and
+    /// `_fetchInFlight` stays raised for a dispatch that will never complete.
+    /// Pump on this until it is `false`, then destroy.
     /// @return `true` while at least one dispatched `RecordMetadata` is outstanding.
     [[nodiscard]] bool fetchInFlight() const noexcept { return _fetchInFlight->load() != 0; }
 
@@ -170,15 +172,35 @@ class App : public QObject {
     // were still finishing dispatched work, and the next completion to
     // resolve would post through a dangling `IExecutor*`. Destroying `_pool`
     // (whose destructor joins its threads, so every in-flight completion has
-    // resolved) before the executor closes that window. `QtExecutor` holds no
-    // state and queues onto `QCoreApplication`, so callbacks it has already
-    // posted stay safe after `App` is gone.
+    // resolved) before the executor closes that window. That ordering is what
+    // makes this safe, and it is still load-bearing: `QtExecutor`'s `_alive`
+    // token guards *delivery of an already-queued event*, not a `post()` call
+    // on a freed `IExecutor*`, which would be a member call on destroyed
+    // memory. What `_alive` does mean is that a callback still queued when the
+    // executor dies is **dropped, not run** -- see `_fetchInFlight` below for
+    // the one consequence that has.
     ::morph::qt::QtExecutor _fetchExecutor;
     /// Outstanding dispatches from `fetchMetadataOnce()`. A `shared_ptr` so
     /// the completion callbacks that decrement it hold it by value rather
-    /// than through `this` — a callback delivered after the `App` is gone
-    /// (the very case `fetchInFlight()` exists to let callers avoid) must not
-    /// touch a destroyed member.
+    /// than through `this`, and so the count outlives the `App` safely.
+    ///
+    /// **Invariant: a dropped completion never decrements this counter.** The
+    /// decrement happens inside the `.then`/`.onError` body, and `QtExecutor`'s
+    /// `_alive` guard returns *before* invoking that body, so a callback still
+    /// queued when `_fetchExecutor` dies takes the counter's `shared_ptr` copy
+    /// with it without ever decrementing. The count is therefore only
+    /// meaningful while the `App` is alive -- which is exactly what
+    /// `fetchInFlight()`'s "pump until false, then destroy" contract already
+    /// requires of callers, and why the production drain
+    /// (`drainMetadataFetches`) runs strictly before `~App`.
+    ///
+    /// Should a dropped completion decrement instead? **No.** Dropping is
+    /// deliberate (`docs/spec/core/executor.md`, "Teardown: queued tasks are
+    /// dropped, not delivered": a chain being torn down has nobody left to
+    /// observe its result); a decrementing hook would have to run
+    /// application-supplied teardown code from inside framework teardown; and
+    /// no consumer could observe the difference, since the only reader of this
+    /// counter finishes before any drop can happen.
     std::shared_ptr<std::atomic<int>> _fetchInFlight{std::make_shared<std::atomic<int>>(0)};
     std::shared_ptr<::morph::journal::FileActionLog> _actionLog;
     ::morph::exec::ThreadPoolExecutor _pool;

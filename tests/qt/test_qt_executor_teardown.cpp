@@ -9,15 +9,12 @@
 
 #include <QCoreApplication>
 #include <QEventLoop>
-
+#include <atomic>
+#include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/core/completion.hpp>
 #include <morph/core/executor.hpp>
 #include <morph/qt/qt_executor.hpp>
-
-#include <catch2/catch_test_macros.hpp>
-
-#include <atomic>
-#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -52,8 +49,7 @@ TEST_CASE("QtExecutor drops a task still queued when it is destroyed", "[qt][exe
     CHECK(*ran == 0);
 }
 
-TEST_CASE("QtExecutor still runs a task posted and delivered while it is alive",
-          "[qt][executor][teardown]") {
+TEST_CASE("QtExecutor still runs a task posted and delivered while it is alive", "[qt][executor][teardown]") {
     // The guard must not be so eager that it drops ordinary work.
     morph::qt::QtExecutor executor;
     auto ran = std::make_shared<int>(0);
@@ -111,8 +107,8 @@ TEST_CASE("A nested Completion chain outliving its QtExecutor does not use it af
     }
     REQUIRE(outstanding.load() == 0);
 
-    workerPool.reset();   // joins: every post() so far has happened
-    qtExecutor.reset();   // freed with an undelivered post still queued
+    workerPool.reset();  // joins: every post() so far has happened
+    qtExecutor.reset();  // freed with an undelivered post still queued
 
     // Reaching the end of this test *is* the assertion: before the guard,
     // pumping here drove the queued callback's body into a freed executor and
@@ -121,4 +117,70 @@ TEST_CASE("A nested Completion chain outliving its QtExecutor does not use it af
 
     INFO("last chain link ran: " << *lastLinkRan);
     SUCCEED("pumped past executor teardown without a use-after-free");
+}
+
+// ── The consequence of dropping: in-flight counters ──────────────────────────
+//
+// The rung apps (bookmarks' `_fetchInFlight`, pastebin's `_sweepInFlight`)
+// track outstanding dispatches with a `shared_ptr<atomic<int>>` that each
+// completion callback decrements. Because the decrement lives *inside* the
+// `.then`/`.onError` body, and the `_alive` guard returns before invoking that
+// body, a dropped completion never decrements -- the queued lambda simply
+// releases its `shared_ptr` copy. The counter is therefore only meaningful
+// while its executor is alive, which is what those apps' "pump until false,
+// then destroy" contract already requires of callers (morph#194).
+//
+// This is documented as deliberate rather than fixed: see the invariant on
+// `bookmarks::app::App::_fetchInFlight`.
+
+TEST_CASE("A dropped completion never decrements an in-flight counter", "[qt][executor][teardown]") {
+    using morph::async::Completion;
+
+    // Exactly the apps' pattern: the counter is held by `shared_ptr` so it
+    // outlives the callback, and is raised before the dispatch.
+    auto inFlight = std::make_shared<std::atomic<int>>(0);
+
+    SECTION("a dropped .then leaves the counter raised") {
+        inFlight->fetch_add(1);
+        {
+            morph::qt::QtExecutor executor;
+            auto pending = std::make_shared<Pending<int>>(Completion<int>::makeSettleable(&executor));
+            pending->completion.then([inFlight](int) { inFlight->fetch_sub(1); });
+            // Settles now, so the delivery event is queued -- then the
+            // executor dies with it still on the queue.
+            pending->promise.resolve(1);
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        CHECK(inFlight->load() == 1);
+    }
+
+    SECTION("a dropped .onError leaves the counter raised") {
+        inFlight->fetch_add(1);
+        {
+            morph::qt::QtExecutor executor;
+            auto pending = std::make_shared<Pending<int>>(Completion<int>::makeSettleable(&executor));
+            pending->completion.onError([inFlight](const std::exception_ptr&) { inFlight->fetch_sub(1); });
+            pending->promise.reject(std::make_exception_ptr(std::runtime_error{"dropped"}));
+        }
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        CHECK(inFlight->load() == 1);
+    }
+}
+
+TEST_CASE("A delivered completion does decrement the in-flight counter", "[qt][executor][teardown]") {
+    // The control case. Without this, the test above would pass just as well
+    // against a counter nothing ever decrements.
+    using morph::async::Completion;
+
+    auto inFlight = std::make_shared<std::atomic<int>>(0);
+    inFlight->fetch_add(1);
+
+    morph::qt::QtExecutor executor;
+    auto pending = std::make_shared<Pending<int>>(Completion<int>::makeSettleable(&executor));
+    pending->completion.then([inFlight](int) { inFlight->fetch_sub(1); });
+    pending->promise.resolve(1);
+
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+
+    CHECK(inFlight->load() == 0);
 }

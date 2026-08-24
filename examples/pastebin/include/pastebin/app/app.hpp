@@ -83,10 +83,11 @@ class App : public QObject {
     /// gone) is not the same as the dispatches having settled: the reclaim
     /// happens on a worker thread, while each call's completion callback is
     /// delivered later, on the Qt event loop. Destroying the `App` in that
-    /// window leaves those callbacks queued against objects it owned, and
-    /// they detonate whenever some later `processEvents()` gets to them —
-    /// which is nowhere near the code that caused it. Pump on this until it
-    /// is `false`, then destroy.
+    /// window does not crash — `_sweepExecutor` dies with the `App`, so a
+    /// callback still queued against it is dropped rather than delivered — but
+    /// the sweep's result is then silently never observed, and `_sweepInFlight`
+    /// is left raised for a dispatch that will never complete. Pump on this
+    /// until it is `false`, then destroy.
     /// @return `true` while at least one dispatched `ExpirePaste` is
     ///         outstanding.
     [[nodiscard]] bool sweepInFlight() const noexcept { return _sweepInFlight->load() != 0; }
@@ -103,15 +104,32 @@ class App : public QObject {
     // segfault, reproduced by this rung's sweep tests, in whichever test
     // happened to be running when the late completion landed. Destroying
     // `_pool` (which joins its threads, so every in-flight completion has
-    // resolved) before the executor closes that window. `QtExecutor` itself
-    // holds no state and queues onto `QCoreApplication`, so the callbacks it
-    // has already posted stay safe after `App` is gone.
+    // resolved) before the executor closes that window. That ordering is what makes
+    // this safe, and it is still load-bearing: `QtExecutor`'s `_alive` token
+    // guards *delivery of an already-queued event*, not a `post()` call on a
+    // freed `IExecutor*`, which would be a member call on destroyed memory.
+    // What `_alive` does mean is that a callback still queued when the executor
+    // dies is **dropped, not run** -- see `_sweepInFlight` below.
     ::morph::qt::QtExecutor _sweepExecutor;
     /// Outstanding dispatches from `sweepExpiredOnce()`. A `shared_ptr` so the
     /// completion callbacks that decrement it hold it by value rather than
-    /// through `this` — a callback delivered after the `App` is gone (the very
-    /// case `sweepInFlight()` exists to let callers avoid) must not touch a
-    /// destroyed member.
+    /// through `this`, and so the count outlives the `App` safely.
+    ///
+    /// **Invariant: a dropped completion never decrements this counter.** The
+    /// decrement happens inside the `.then`/`.onError` body, and `QtExecutor`'s
+    /// `_alive` guard returns *before* invoking that body, so a callback still
+    /// queued when `_sweepExecutor` dies takes the counter's `shared_ptr` copy
+    /// with it without ever decrementing. The count is therefore only
+    /// meaningful while the `App` is alive -- exactly what `sweepInFlight()`'s
+    /// "pump until false, then destroy" contract already requires, and why the
+    /// production drain runs strictly before `~App`.
+    ///
+    /// Should a dropped completion decrement instead? **No.** Dropping is
+    /// deliberate (`docs/spec/core/executor.md`, "Teardown: queued tasks are
+    /// dropped, not delivered"); a decrementing hook would have to run
+    /// application-supplied teardown code from inside framework teardown; and
+    /// no consumer could observe the difference, since the only reader of this
+    /// counter finishes before any drop can happen.
     std::shared_ptr<std::atomic<int>> _sweepInFlight{std::make_shared<std::atomic<int>>(0)};
     std::shared_ptr<::morph::journal::FileActionLog> _actionLog;
     ::morph::exec::ThreadPoolExecutor _pool;
