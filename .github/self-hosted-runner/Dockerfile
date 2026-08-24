@@ -41,6 +41,24 @@ RUN apt-get update -q && apt-get install -y --no-install-recommends \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# clang (installed per-job from apt.llvm.org, not baked into this image)
+# uses libstdc++'s headers by default, not its own libc++. Stock
+# ubuntu:24.04's default libstdc++ is 13.x, which predates C++23 <print>
+# (needs GCC 14+) -- morph's headers use it unconditionally, so any
+# clang-only job leg (no gcc install step of its own) fails to compile
+# with "fatal error: 'print' file not found" unless a modern-enough
+# libstdc++ already exists on the box. ci.yml's own "Install GCC 15" step
+# pulls libstdc++-15-dev in as a side effect of gcc-15/g++-15 on legs that
+# run it, but clang-only legs (clang-release, clang-asan, ...) never do --
+# GitHub-hosted ubuntu-24.04 apparently ships a modern-enough libstdc++ by
+# default, which this doesn't unless it's here explicitly. Same PPA
+# ci.yml's own gcc-15 step uses, so this tracks that step's version rather
+# than diverging from it.
+RUN add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+    && apt-get update -q \
+    && apt-get install -y --no-install-recommends libstdc++-15-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN useradd -m -s /bin/bash runner \
     && usermod -aG sudo runner \
     && echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
