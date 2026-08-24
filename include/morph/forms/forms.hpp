@@ -1526,6 +1526,24 @@ template <typename... Rules>
 template <typename A>
 concept HasFormRules = requires { A::formRules; };
 
+/// @brief Concept: action `A` declares a `static constexpr bool
+///        explicitSubmit`, opting its form out of auto-submit-on-validity.
+///
+/// Opt-in, like `formLayout`/`fieldSpans`/`formRules`: an action that says
+/// nothing keeps the renderer's default (submit as soon as the form is valid),
+/// so adding this changes no existing schema. Declaring it `true` emits
+/// `x-submitMode: "explicit"`; declaring it `false` emits nothing, which is
+/// the same as not declaring it at all.
+///
+/// A side-effectful action wants this. Auto-submit fires on *every* keystroke
+/// that leaves the form valid, so a `CreatePaste` bound directly to a live
+/// controller stores one paste per typed character.
+/// @tparam A Action type to test.
+template <typename A>
+concept HasExplicitSubmit = requires {
+    { A::explicitSubmit } -> std::convertible_to<bool>;
+};
+
 namespace detail {
 
 /// @brief Evaluates @p rule against @p action, skipping presentation rules
@@ -2383,6 +2401,17 @@ template <typename A>
         // author mistake schema generation refuses to tolerate silently.
         rejectUnsatisfiableRules<A>(xRules, requiredMemberNames);
         dom["x-rules"] = xRules;
+    }
+
+    // Submit mode (docs/spec/forms/forms.md, "Explicit submit mode"):
+    // a top-level key sourced from a declaration on the action type, exactly
+    // as `x-layout` is. Emitted only for `explicitSubmit = true`, so an action
+    // that declares nothing -- or declares it `false` -- keeps the renderer's
+    // auto-submit default and its schema is byte-for-byte unchanged.
+    if constexpr (HasExplicitSubmit<A>) {
+        if constexpr (A::explicitSubmit) {
+            dom["x-submitMode"] = "explicit";
+        }
     }
 
     // Exact companions for any bound a double cannot hold (morph#213). Last,
