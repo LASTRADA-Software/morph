@@ -104,6 +104,81 @@ docker run -d \
 of the VM (Docker's own daemon is enabled by `get.docker.com` by default)
 without anything else to configure.
 
+That's the minimal path for one runner with no local cache daemon (it still
+gets `fastcache-cc` if `FASTCACHE_ADDR` reaches some *other* machine's
+`fastcached`, or falls back to `sccache`). To also run a `fastcached`
+daemon on the same box, sized dynamically for however many CPUs/RAM it
+actually has, use `bootstrap-cloud-node.sh` instead — see **Bootstrapping
+a cloud node with its own fastcached** below.
+
+## Bootstrapping a cloud node with its own fastcached
+
+`bootstrap-cloud-node.sh` sets up a fresh Linux VM (bare Ubuntu/Debian —
+this is what a Hetzner box ships) with both a `fastcached` daemon and N
+self-hosted runner containers, all sized from the machine's actual
+`nproc`/`/proc/meminfo` at run time — it does not hardcode a worker count
+or per-worker CPU/RAM the way earlier revisions of this doc did. Run as
+root (or with `sudo` available):
+
+```bash
+curl -fsSLo bootstrap-cloud-node.sh \
+  https://raw.githubusercontent.com/LASTRADA-Software/morph/master/.github/self-hosted-runner/bootstrap-cloud-node.sh
+chmod +x bootstrap-cloud-node.sh
+
+RUNNER_TOKEN="$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')" \
+  ./bootstrap-cloud-node.sh
+```
+
+(`gh api ...` needs to run wherever you have `gh` authenticated with repo
+admin — your laptop is fine; paste just the resulting token into
+`RUNNER_TOKEN` on the cloud box if `gh` isn't set up there too.)
+
+### The sizing rule
+
+- `fastcached` gets a **fixed** 2 GiB RAM / 10 GiB on-disk cap and 1 CPU,
+  regardless of machine size (`FASTCACHED_MEMORY_GB`/`FASTCACHED_DISK_GB`/
+  `FASTCACHED_CPUS` env vars override this) — deliberately not scaled with
+  the box, unlike the workers below.
+- A small OS/Docker-daemon reserve is held back too: `max(1 GiB, 10% of
+  total RAM)`, never handed to any container (`OS_RESERVE_MEM_GB`
+  overrides).
+- Whatever CPUs remain after fastcached's 1-CPU reservation are divided
+  into workers of **2 CPUs each** (`WORKER_CPUS` overrides) —
+  `worker_count = floor(remaining_cpus / 2)`. Each worker's RAM is the
+  remaining RAM (after fastcached + the OS reserve) split evenly across
+  that many workers.
+- The script refuses to proceed rather than start an undersized setup: a
+  box with fewer than 3 CPUs total (1 for fastcached + 2 for one worker)
+  or where the RAM split would leave a worker under 1 GiB exits with an
+  error instead of silently running something too small to compile C++
+  in. Confirmed by hand: a 2-CPU/4GiB box is genuinely too small under
+  this scheme (1 fastcached + one 2-CPU worker needs 3 CPUs minimum) —
+  provision at least 4 CPUs to get one real worker with headroom.
+
+### What it does, step by step
+
+1. Installs Docker if not already present (`get.docker.com`).
+2. Clones (or reuses) `morph` and `fastcached` checkouts.
+3. Builds `fastcached`'s own image from its Dockerfile and starts it,
+   capped per the sizing rule above, with persistent storage under
+   `/var/lib/fastcached` (`FASTCACHED_STORAGE_DIR` overrides).
+4. Builds this directory's runner image.
+5. Starts each worker with `FASTCACHE_ADDR=host.docker.internal:6674` and
+   `--add-host=host.docker.internal:host-gateway` — the latter is what
+   makes `host.docker.internal` resolve to the Docker host's own IP on
+   plain Linux Docker Engine (Docker Desktop provides this automatically;
+   a bare Linux Engine needs the explicit `--add-host`). Note this env var
+   only matters if `ci.yml`'s own job-level `FASTCACHE_ADDR` (see **ci.yml
+   integration** below) is ever changed to read from the runner's
+   environment instead of hardcoding the address — right now `ci.yml`
+   always sends the literal `host.docker.internal:6674` itself, so this is
+   what actually has to resolve on every runner host, cloud or otherwise.
+6. Each worker after the first mints its own fresh registration token via
+   `gh` (the one you passed in is single-use) — `gh` needs to be
+   installed and authenticated on the cloud box itself for `WORKER_COUNT
+   > 1`, or re-run per worker by hand with `WORKER_CPUS`/`FASTCACHED_CPUS`
+   adjusted so the computed count is 1.
+
 ## Stopping / deregistering
 
 ```bash
