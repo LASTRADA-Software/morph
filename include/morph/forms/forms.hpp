@@ -2135,6 +2135,80 @@ void rejectUnsatisfiableRules(const glz::generic_u64::array_t& xRules,
     }
 }
 
+/// @brief Largest magnitude an IEEE-754 double holds exactly: 2^53.
+///
+/// A JSON number beyond this cannot survive `JSON.parse` intact, so a bound
+/// above it needs an exact companion the renderer can read instead.
+inline constexpr std::uint64_t kExactDoubleLimit = 9007199254740992ULL;
+
+/// @brief Signed spelling of `kExactDoubleLimit`, for the negative bound.
+inline constexpr std::int64_t kExactDoubleLimitSigned = 9007199254740992LL;
+
+/// @brief Adds an exact decimal-string companion for one numeric bound, when
+///        the bound is too large for a double to hold exactly.
+///
+/// `minimum`/`maximum` are standard JSON-Schema vocabulary stamped by glaze,
+/// and `mergeSchemaExtras` reads the schema in u64 number mode precisely so
+/// they are not rounded on the C++ side. They are rounded anyway the moment a
+/// renderer does `JSON.parse(controller.schemasJson)`, which every shipped app
+/// does -- `INT64_MAX` becomes `9223372036854775808`, and a client-side gate
+/// comparing against it then admits `INT64_MAX + 1` as "not greater"
+/// (morph#213). The exact digits travel as a string, which `JSON.parse` cannot
+/// round.
+///
+/// Emitted only above `kExactDoubleLimit`: an ordinary bound loses nothing to a
+/// double, so schemas that do not need this are byte-for-byte unchanged.
+///
+/// @param node    Schema node to annotate in place (a property or a `$defs` entry).
+/// @param key     Bound to read: `"minimum"` or `"maximum"`.
+/// @param textKey Companion key to write: `"x-exactMinimum"` or `"x-exactMaximum"`.
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access) -- glaze DOM requires operator[]
+inline void annotateExactBound(glz::generic_u64& node, const std::string& key, const std::string& textKey) {
+    if (!node.contains(key)) {
+        return;
+    }
+    auto const& bound = node[key];
+    // std::cmp_* rather than a cast: the two bounds arrive in different
+    // signednesses and the limit is unsigned, so a cast would be the very
+    // sign-mismatch this comparison exists to get right.
+    if (bound.template holds<std::uint64_t>()) {
+        auto const value = bound.template get<std::uint64_t>();
+        if (std::cmp_greater(value, kExactDoubleLimit)) {
+            node[textKey] = std::to_string(value);
+        }
+    } else if (bound.template holds<std::int64_t>()) {
+        auto const value = bound.template get<std::int64_t>();
+        if (std::cmp_greater(value, kExactDoubleLimit) || std::cmp_less(value, -kExactDoubleLimitSigned)) {
+            node[textKey] = std::to_string(value);
+        }
+    }
+}
+
+/// @brief Walks a schema DOM, adding `x-exactMinimum`/`x-exactMaximum` wherever a
+///        bound is too large for a double.
+///
+/// Recursive over the whole document rather than over `properties` alone,
+/// because the bounds that actually matter live in `$defs`: a `std::int64_t`
+/// member is emitted as a `$ref` to `$defs/int64_t`, and that definition is
+/// where `minimum`/`maximum` sit.
+///
+/// @param node Node to walk; objects and arrays recurse, scalars are left alone.
+// NOLINTNEXTLINE(misc-no-recursion) -- walking a JSON tree is inherently recursive
+inline void annotateExactNumericBounds(glz::generic_u64& node) {
+    if (node.is_object()) {
+        annotateExactBound(node, "minimum", "x-exactMinimum");
+        annotateExactBound(node, "maximum", "x-exactMaximum");
+        for (auto& [childKey, child] : node.get_object()) {
+            annotateExactNumericBounds(child);
+        }
+    } else if (node.is_array()) {
+        for (auto& child : node.get_array()) {
+            annotateExactNumericBounds(child);
+        }
+    }
+}
+// NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
+
 /// @brief The DOM post-merge behind `schemaJson`: adds the derived `required`
 ///        array, `x-order`, `x-decimalPlaces`, and (for actions declaring
 ///        `computedFields`) `x-computed`/`x-readonly` to a glaze-produced schema.
@@ -2310,6 +2384,10 @@ template <typename A>
         rejectUnsatisfiableRules<A>(xRules, requiredMemberNames);
         dom["x-rules"] = xRules;
     }
+
+    // Exact companions for any bound a double cannot hold (morph#213). Last,
+    // so it also covers nodes added by the passes above.
+    annotateExactNumericBounds(dom);
 
     // value_or without a move: the copy is irrelevant (schemaJson memoises),
     // and keeping the fallback branch inside glaze's expected avoids an

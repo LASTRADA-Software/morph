@@ -188,11 +188,17 @@ TEST_CASE("Forms::SchemaJson::RangedFloatingBounds", "[forms][widget-hints]") {
 TEST_CASE("Forms::SchemaJson::PlainFieldsEmitNoWidgetHint", "[forms][widget-hints]") {
     // Regression guard: a plain field with no wrapper and no override emits
     // no x-widget/x-min/x-max/x-step at all — today's schema is unchanged.
+    //
+    // Matched as JSON keys (`"x-min":`) rather than bare substrings. The loose
+    // form also matched any *longer* key sharing the prefix, so an unrelated
+    // key named `x-min...` failed this test with a message pointing at the
+    // slider bounds — which is how `x-exactMinimum` was first named, before
+    // this caught it (morph#213).
     auto const schema = morph::forms::schemaJson<WHPlainAction>();
-    CHECK_FALSE(schema.contains("x-widget"));
-    CHECK_FALSE(schema.contains("x-min"));
-    CHECK_FALSE(schema.contains("x-max"));
-    CHECK_FALSE(schema.contains("x-step"));
+    CHECK_FALSE(schema.contains(R"("x-widget":)"));
+    CHECK_FALSE(schema.contains(R"("x-min":)"));
+    CHECK_FALSE(schema.contains(R"("x-max":)"));
+    CHECK_FALSE(schema.contains(R"("x-step":)"));
 }
 
 TEST_CASE("Forms::SchemaJson::FieldMetaOverrideWinsOverWrapper", "[forms][widget-hints]") {
