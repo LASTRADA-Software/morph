@@ -821,6 +821,11 @@ jobs:
           sudo apt-get install -y software-properties-common
           sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
           sudo apt-get update -q
+          # libsqlite3-dev: Lightweight's own CMakeLists.txt does
+          # find_package(SQLite3) as a system CONFIG package. GitHub-hosted
+          # ubuntu-24.04 ships it preinstalled; a bare self-hosted image does
+          # not, so configure fails with "Could NOT find SQLite3" the moment
+          # MORPH_BUILD_LADDER=ON pulls Lightweight in without it.
           # unixodbc-dev + libsqliteodbc: the application ladder fetches the
           # Lightweight ORM, whose CMake runs
           # `pkg_check_modules(ODBC REQUIRED odbc)`, and whose ladder fixtures
@@ -834,7 +839,7 @@ jobs:
           # Qt itself is installed by the aqtinstall step below, not apt: see
           # that step's comment for why the distro package is unusable here.
           sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 \
-            libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
+            libsqlite3-dev libyaml-cpp-dev libzip-dev libgl1-mesa-dev \
             unixodbc-dev libsqliteodbc
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
