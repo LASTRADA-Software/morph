@@ -6,6 +6,11 @@
 
 The framework is header-only (C++23, namespace `morph`), depends on Glaze for JSON reflection, and optionally integrates with Qt 6 via a separate target.
 
+> **New to morph?** `docs/GETTING-STARTED.md` is the step-by-step tutorial that
+> comes before this document: it builds one small app end to end
+> (`examples/pastebin`) and explains why each piece exists. This page assumes
+> you are already oriented. (Named, not linked, for the Doxygen reason below.)
+
 > **Design specs.** This document is the cross-cutting map. The authoritative,
 > per-subsystem reference lives in `docs/spec/` — one file per public type or
 > subsystem, capturing invariants, API surface, and the reasoning behind each

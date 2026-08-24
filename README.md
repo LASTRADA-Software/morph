@@ -6,6 +6,11 @@ You call a model from the UI and get the result back on the UI — without
 writing any concurrency, serialisation, or transport code, and without the call
 site caring whether the model runs in this process or across a socket.
 
+> **New here?** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) builds one
+> small app end to end — model, registration, call site, then the same call
+> site over a socket — using [`examples/pastebin`](examples/pastebin) as the
+> worked example. Start there; this page is the feature tour.
+
 Models may live **in-process** (local mode) or in a **remote server process**
 (remote mode). The GUI code is identical in both cases — only the backend
 implementation changes. Results come back as a `Completion<T>` whose callbacks
@@ -476,6 +481,9 @@ in [`docs/spec/`](docs/spec) before relying on any of these in production:
 
 ## Learn more
 
+- [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) — the step-by-step
+  tutorial: build one small app end to end and understand why each piece
+  exists. Read this before the two below.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — namespace map, layer diagram,
   wire protocol, deployment topologies, and design rationale.
 - [`docs/spec/`](docs/spec) — the authoritative per-type/subsystem design specs.
