@@ -165,7 +165,7 @@ Q_SLOT void&#160;</td><td class="memItemRight"><b>onDisconnected</b> ()</td></tr
 <dl class="section user"><dt>Bind address &amp; plaintext-exposure guard</dt><dd><span class="tt"><a class="el" href="#a60f2df58f77a6986c07463cd4bbbf13b" title="Starts listening for incoming WebSocket connections.">listen()</a></span> refuses — returns <span class="tt">false</span> and logs at <span class="tt">morph::log::LogLevel::error</span> — when <span class="tt">cfg.bindAddress</span> is not loopback, no TLS configuration was passed to the constructor, and <span class="tt">cfg.allowPlaintextExposure</span> is <span class="tt">false</span>. See <span class="tt"><a class="el" href="../../de/d9a/structmorph_1_1qt_1_1QtWebSocketServerConfig.html" title="Per-connection resource limits and bind/exposure policy enforced by QtWebSocketServer.">QtWebSocketServerConfig</a></span> and security.md's "Transport security" section.</dd></dl>
 <dl class="section user"><dt>Usage</dt><dd>Call <span class="tt"><a class="el" href="#a60f2df58f77a6986c07463cd4bbbf13b" title="Starts listening for incoming WebSocket connections.">listen()</a></span> to start accepting connections, and <span class="tt"><a class="el" href="#ae0c10d4515db3903e09bdd89a66e23b5" title="Returns the port the server is currently bound to.">port()</a></span> to discover the bound port (useful when <code class="param">port</code> was 0 — let the OS assign a free port). Call <span class="tt"><a class="el" href="#aaa1c8ceb2b58f6e6de7c950ddede71a1" title="Stops accepting new connections and closes the server socket.">close()</a></span> or destroy the object to stop the server. </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00106">106</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 </div><a name="doc-typedef-members" id="doc-typedef-members"></a><h2 id="header-doc-typedef-members" class="groupheader">Member Typedef Documentation</h2>
 <a id="afdc1754208a8fa5c1e2c56c10e68f669" name="afdc1754208a8fa5c1e2c56c10e68f669"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#afdc1754208a8fa5c1e2c56c10e68f669">&#9670;&#160;</a></span>Config</h2>
@@ -181,7 +181,7 @@ Q_SLOT void&#160;</td><td class="memItemRight"><b>onDisconnected</b> ()</td></tr
 
 <p>Alias for the per-connection limits configuration struct. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00110">110</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html#l00114">114</a> of file <a class="el" href="../../df/d74/qt__websocket__server_8hpp_source.html">qt_websocket_server.hpp</a>.</p>
 
 </div>
 </div>
