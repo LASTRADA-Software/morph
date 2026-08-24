@@ -90,12 +90,20 @@ schemas/layouts). Build order (each step is a usable milestone):
 6. **Field-level audit + undo** — EspoCRM's Stream / Frappe's Version
    rendered from the morph journal; undo last change per record.
 7. **Dynamic logic** — conditional required/visible/read-only encoded in
-   the served schema. **Round-5 correction: EspoCRM's condition *trees*
-   cannot be adopted as-is** — morph's `x-rules` vocabulary is closed
-   single-node conditions (no `and`/`or`/`not`, no `in`-lists, and lookup
-   fields support only `engaged`/`equals` — `Choice` has no ordering).
-   The rung maps EspoCRM logic onto the closed vocabulary and files
-   combinators as a framework proposal where the mapping fails.
+   the served schema. A round-5 correction here said EspoCRM's condition
+   *trees* "cannot be adopted as-is" because `x-rules` had no `and`/`or`/`not`
+   and combinators would have to be filed as a framework proposal. **The
+   combinators shipped** (morph#78): `And`, `Or` and `Not` with the
+   `andOf`/`orOf`/`notOf` builders (`include/morph/forms/forms.hpp`), and the
+   emitted vocabulary carries `and`/`or`/`not` alongside `engaged`,
+   `notEngaged`, `equals`, `greater` and `less`. Condition trees nest to any
+   depth, so EspoCRM's tree shape maps directly and no proposal is needed.
+
+   Two limits from that correction do still hold, and the rung must map around
+   them rather than assume they lapsed with the combinators: there is **no
+   `in`-list / set-membership kind**, and **`Choice` has no ordering** —
+   `greater`/`less` are defined over numeric fields, so a picklist comparison
+   has to be expressed as an `or` of `equals`.
 8. **Offline** — edit queue in `SqliteOfflineQueue`, replay with conflict
    surfacing; no CRM in this class does offline well — it is morph's chance
    to differentiate.
