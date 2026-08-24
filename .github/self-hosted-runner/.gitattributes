@@ -1,0 +1,3 @@
+# entrypoint.sh runs inside a Linux container via its shebang; CRLF line
+# endings (e.g. from Windows core.autocrlf=true checkouts) break that.
+*.sh text eol=lf
