@@ -134,8 +134,10 @@ runs on.
    on `QtWebSocketBackend`, with no `assignPrimaryAsync` anywhere in the
    tree. `CreatePoll` is a result-keyed *creating* action (the instance
    doesn't exist until the call returns and names it), so a WASM tab
-   dispatching it would still abort the page at the promote step — filed
-   as `docs/findings/032-assignprimary-has-no-async-path.md`. **Resolved
+   dispatching it would still abort the page at the promote step — filed as
+   the *assignPrimary has no async path* finding (recorded on the
+   `application-ladder` branch; not present in `docs/findings/` here).
+   **Resolved
    shape**: this matches Rallly's own anchor UX exactly (an organizer
    creates via the main app/site; participants open a shared link in
    whatever browser tab they have), so the rung's own design already wants
@@ -410,8 +412,9 @@ Known gaps:
   picker, via `PollBridge::submitVotes`/`updateVotes`.
 - **`BridgeHandler::executeJson` silently skips the payload-keyed attach
   step on an `AllowShared` handler** — a new finding this task surfaced,
-  filed as
-  [finding 034](../../docs/findings/034-executejson-skips-payload-keyed-attach-for-allowshared-handlers.md).
+  filed as the *executeJson skips payload-keyed attach for AllowShared
+  handlers* finding (recorded on the `application-ladder` branch; not present
+  in `docs/findings/` here).
   `ActionExecuteRegistry::registerAction<Model, Action>` (`morph/core/bridge.hpp`)
   closes its stored executor over the *plain* `BridgeHandler<Model>` overload
   of `execute<Action>()`, regardless of the real handler's `Sharing`
