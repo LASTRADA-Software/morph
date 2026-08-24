@@ -542,7 +542,7 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 |---|---|---|---|
 | `required` | top-level (object), and every nested-aggregate object schema (inlined property or `$defs` entry) — see [Nested aggregates (recursive, cycle-guarded)](#nested-aggregates-recursive-cycle-guarded) | array of strings | Names of members that must be engaged before submit. A member is listed unless it is a `std::optional<...>`, appears in `A::optionalFields`, or is a `computedFields` destination (see the [Required-ness rule](#required-ness-rule)). Always emitted (an explicit `[]` when nothing is required). The renderer blocks submission until every listed field has a value. |
 | `x-order` | property node (sibling of `$ref`) | non-negative integer | The member's 0-based **declaration index**. Renderers lay fields out in ascending `x-order`, not in JSON key order (object key order is not preserved across DOMs). |
-| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path retags each submitted `Quantity` to this precision before storing it (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
+| `x-decimalPlaces` | property node (sibling of `$ref`) | non-negative integer | The field's *declared* precision (`Quantity<U, Dec>::declaredDecimals`, unit default unless the type overrides it). The numeric input step / rounding granularity for entry in the canonical unit. **Enforced, not merely advisory:** the request/reply dispatch path *rounds* each submitted `Quantity` to this precision before storing it — the stored value, not just its tag, is reduced (see [Advertised precision is enforced on dispatch](#advertised-precision-is-enforced-on-dispatch)). |
 | `x-unitAlternatives` | property node (sibling of `$ref`) | array of objects | Convertible display/entry units for the field, derived from `UnitTraits<E>::relations`. **Omitted entirely** when the unit declares no convertible peers. Each element has the five subfields below. The renderer offers these as a unit selector and recomputes the entered value *exactly* on switch; the submitted payload is always in the canonical unit (the one named by `ExtUnits`). |
 | ↳ `id` | alternative entry | string | Stable ascii id of the alternative unit (`UnitMeta::id`). |
 | ↳ `display` | alternative entry | string | Human display text of the alternative unit (`UnitMeta::display`). |
@@ -1274,10 +1274,11 @@ struct LineItem {
   input is always considered engaged), resets the destination to its
   default-constructed (empty) value instead of computing from a missing
   operand. For a `Quantity` destination the result is converted to the
-  destination's own type and retagged to its declared precision
+  destination's own type and **rounded** to its declared precision
   (`Quantity::atDeclaredPrecision()`), so the stored value matches
   `x-decimalPlaces` regardless of what declared precision `fn`'s return type
-  happened to carry.
+  happened to carry, and regardless of how many decimals the derivation itself
+  produced — a product of two 2-decimal operands is exact to 4.
 - `fn` must be **pure** — a function of the action's own fields only, no side
   effects, no external state. The framework cannot check this; it is the
   author's contract. Anything impure (model state, a database lookup, the
@@ -1337,7 +1338,7 @@ validator check on every dispatch path.
 | `detail::declaredOptional<A>(name)` | constexpr function | `true` when `name` appears in `A::optionalFields`. |
 | `detail::forEachNamedMember(action, visitor)` | function template | Calls `visitor.operator()<I>(name, member)` for every reflected member of `action` (uses glaze pure reflection). |
 | `detail::mergeSchemaExtras<A>(raw)` | function | Post-processes a glaze-generated schema to inject `required`, `x-decimalPlaces`, `x-order`, `x-unitAlternatives`, `x-optionsAction`, `title`, `description`/`x-placeholder`/`x-readonly`/`x-hidden` etc. onto the property nodes. Called by `schemaJson<A>()`. |
-| `reconcileDeclaredPrecision<A>(action)` | function | Retags every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`), so a decoded wire value matches the schema's advertised `x-decimalPlaces`. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on the `executeJson` dispatch path (`bridge.hpp`). |
+| `reconcileDeclaredPrecision<A>(action)` | function | **Rounds** every `Quantity` member of `action` in place to its declared precision (`atDeclaredPrecision()`, an exact `Rational` re-rounding — not a retag), so a decoded wire value *equals* the schema's advertised `x-decimalPlaces`, not merely displays at it. Empty members stay empty. No-op for non-`Quantity` members and for action types glaze cannot reflect. Called on both wire dispatch paths (`bridge.hpp`, `registry.hpp`); not on the in-process `localOp` path, which decodes no JSON. |
 | `FieldMeta` | struct | Per-field presentation descriptor: `field`, `label`, `help`, `placeholder`, `widget` (control-selection override, see [Widget hints](#widget-hints--multiline--ranged)), `readOnly`, `hidden`, plus `withPlaceholder`/`withReadOnly`/`withHidden` fluent copies. See "Field metadata" above. |
 | `detail::HasFieldMetadata<A>` | concept | `true` when `A` has a `static constexpr`/`static const` iterable `fieldMetadata`. |
 | `detail::findFieldMeta<A>(name)` | function | Returns the `FieldMeta` entry naming `name`, or `nullptr`. |
@@ -1573,16 +1574,51 @@ Because `allRulesSatisfied` (above) is typically one of the two conjuncts of
 own runtime `dp`, which a client may set to anything. On the client bridge
 dispatch path (`executeJson` → `ActionExecuteRegistry`) these are **reconciled**:
 after decoding and before dispatch, `morph::forms::reconcileDeclaredPrecision`
-retags every `Quantity` member of the action to `declaredPrecision()` (an exact
-`Rational` re-rounding — an empty `Quantity` stays empty), so the value the
-handler stores is at the precision the schema advertised, not at the client's
-submitted `dp`. This makes `x-decimalPlaces` an enforced contract on that path
-rather than an advisory hint. The reconciliation is a no-op for actions with no
-`Quantity` members and for action types glaze cannot reflect.
-`ActionDispatcher::registerAction`'s runner performs the same reconciliation on
-the server-side wire path (see [registry.md](../core/registry.md)), so
-`x-decimalPlaces` is now an enforced contract on every dispatch path — local,
-client-bridge, and remote wire.
+**rounds** every `Quantity` member of the action to `declaredPrecision()`, so the
+value the handler stores is at the precision the schema advertised, not at the
+client's submitted `dp`. An empty `Quantity` stays empty. The reconciliation is a
+no-op for actions with no `Quantity` members and for action types glaze cannot
+reflect. `ActionDispatcher::registerAction`'s runner performs the same
+reconciliation on the server-side wire path (see
+[registry.md](../core/registry.md)), so `x-decimalPlaces` is an enforced contract
+on **both wire paths** — client-bridge and remote.
+
+**Rounding, not retagging — and why the difference is the whole point.**
+`Quantity::atDeclaredPrecision()` performs an exact `Rational` re-rounding
+(`math::roundToDecimalPlaces`, half away from zero, matching the decimal
+formatter — see
+[rational.md](../util/rational.md#roundtodecimalplaces--the-one-helper-that-stays-in-the-domain)).
+It does **not** merely move the `DecimalPlaces` tag. A tag-only change would
+leave a field declaring `dp = 1` holding exactly `1.23456` while rendering
+`1.2`: the report says one number and the database another, and an audit trail
+cannot say which one the operator saw when they signed off. For a framework whose
+premise is exact values for financial and lab data, that failure mode is worse
+than not enforcing at all — the value *looks* compliant. Enforcement therefore
+means the submitted precision beyond the declared amount is **discarded, not
+hidden**, and the reconciled value is by construction the value the form was
+already displaying.
+
+The operation normalises rather than rejecting an over-precise submission. Two
+reasons. A wire `dp` finer than the declared one is not by itself a protocol
+violation — `{"num":6,"den":5,"dp":5}` is exactly `1.2`, perfectly representable
+at `dp = 1`, and rejecting it would fail a payload with nothing wrong in it;
+detecting the genuinely over-precise case means testing the *value*, not the tag.
+More decisively, the same `atDeclaredPrecision()` call is what `recomputeOne`
+applies to **server-derived** values (see [Computed fields](#computed-fields)),
+which routinely carry more decimals than the destination field declares — a
+product of two 2-decimal operands is exact to 4. A reject-shaped contract would
+have the server reject its own arithmetic. Normalising is the only rule both call
+sites can share.
+
+**The in-process path is deliberately not reconciled.** `Bridge::executeVia`'s
+`localOp` decodes no JSON — it dispatches an already-typed `Action` a caller
+constructed in C++ — so there is no client-supplied `dp` to reconcile and no
+reconciliation step there (`bridge.hpp` says so at the call site; cross-ref
+[quantity_type.md](../util/quantity_type.md), which describes the same asymmetry
+for `enforceQuantityBounds`). A `Quantity` built by calling code keeps whatever
+precision the caller gave it. Computed fields *are* still normalised on that
+path, since `recomputeAll` runs there and `recomputeOne` rounds to the
+destination's declared precision.
 
 ### Pre-decode wire validation — `checkQuantityBounds`
 

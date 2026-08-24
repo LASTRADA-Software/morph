@@ -238,10 +238,8 @@ proposal); schemas-as-data render old versions but **validation always runs
 against the current compiled struct**; no per-caller schema shaping; nested
 aggregates get schemas but **no enforcement recursion and no child-table
 renderer**; no pre-decode wire validation seam (clamped `Rational`s reach
-`validate()` as plausible numbers); `reconcileDeclaredPrecision` **retags
-rather than rounds** (spec text and code disagree — rung 6 owns the
-decision); the shipped renderer **auto-fires on validity with no submit
-button** (explicit-submit mode needed before any side-effectful rung form).
+`validate()` as plausible numbers); the shipped renderer **auto-fires on
+validity with no submit button** (explicit-submit mode needed before any side-effectful rung form).
 
 ## Operations and security (binding conventions)
 

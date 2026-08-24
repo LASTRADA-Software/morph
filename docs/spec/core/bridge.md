@@ -364,10 +364,12 @@ normalisations, in order, so the request/reply path matches the schema and
 the reactive `set<>` path rather than trusting the raw wire body:
 
 - **Declared-precision reconciliation.** `morph::forms::reconcileDeclaredPrecision`
-  retags every `Quantity` field of the decoded action to its *declared* precision
-  (`Quantity<U, Dec>::declaredDecimals`), so the stored value's precision matches
-  the schema's advertised `x-decimalPlaces` instead of whatever runtime `dp` the
-  client sent. It is a no-op for actions with no `Quantity` members and for
+  **rounds** every `Quantity` field of the decoded action to its *declared*
+  precision (`Quantity<U, Dec>::declaredDecimals`), so the stored *value* — not
+  merely its precision tag — matches the schema's advertised `x-decimalPlaces`
+  instead of whatever runtime `dp` the client sent. Rounding rather than
+  retagging is what keeps the stored value and the displayed value the same
+  number. It is a no-op for actions with no `Quantity` members and for
   actions whose type glaze cannot reflect. See [forms.md](../forms/forms.md).
 - **Pre-decode wire validation.** `morph::forms::enforceQuantityBounds` rejects
   a `Quantity` field whose engaged value falls outside its unit's declared

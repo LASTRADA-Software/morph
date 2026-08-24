@@ -1648,13 +1648,15 @@ template <typename A>
 /// treatment of non-empty-capable members -- the destination member is
 /// overwritten with `field.fn(action)`. For a `Quantity` destination the
 /// result is first converted to the destination's own type (same unit, the
-/// destination's own `DeclaredDecimals`) and then retagged to that type's
+/// destination's own `DeclaredDecimals`) and then **rounded** to that type's
 /// declared precision (`Quantity::atDeclaredPrecision()`), so the stored value
 /// matches the field's advertised `x-decimalPlaces` regardless of what
-/// declared precision `Fn`'s return type happened to carry. If any declared
-/// input is unengaged, the destination is instead reset to its
-/// default-constructed (empty, for `Quantity`/`Choice`/`Timestamp`) value
-/// rather than computed from a missing operand.
+/// declared precision `Fn`'s return type happened to carry -- and regardless of
+/// how many decimals the derivation itself produced (a product of two 2-decimal
+/// operands is exact to 4). If any declared input is unengaged, the destination
+/// is instead reset to its default-constructed (empty, for
+/// `Quantity`/`Choice`/`Timestamp`) value rather than computed from a missing
+/// operand.
 /// @tparam A      Action type (a reflectable aggregate).
 /// @tparam Dst    Pointer-to-data-member of the destination field.
 /// @tparam Fn     Callable type of the derivation function.
@@ -2273,8 +2275,8 @@ template <auto MemberPtr>
     return FieldMeta{.field = detail::memberWireName<MemberPtr>(), .label = label, .help = help};
 }
 
-/// @brief Retags every `Quantity` member of @p action to its **declared**
-///        precision, so a stored value matches the precision the schema
+/// @brief Rounds every `Quantity` member of @p action to its **declared**
+///        precision, so the stored value matches the precision the schema
 ///        advertises via `x-decimalPlaces`.
 ///
 /// A wire payload carries each `Quantity` with its own runtime `dp`, which a
@@ -2282,16 +2284,22 @@ template <auto MemberPtr>
 /// `dp`, silently contradicting the schema's `x-decimalPlaces` (which is the
 /// field's compile-time *declared* precision, `Quantity<U, Dec>::declaredDecimals`).
 /// Calling this on the decode path — right after `ActionTraits<A>::fromJson` and
-/// before dispatch — re-tags each `Quantity` to `declaredPrecision()` so the two
-/// agree. `atDeclaredPrecision()` only changes the value's precision tag (an
-/// exact `Rational` re-rounding to the declared decimals); an empty `Quantity`
-/// is left empty. Non-`Quantity` members are untouched.
+/// before dispatch — rounds each `Quantity` to `declaredPrecision()` so the two
+/// agree. `atDeclaredPrecision()` performs an **exact `Rational` re-rounding**
+/// (half away from zero, the rule the decimal formatter uses), so the value a
+/// handler stores is the value the form displays — not a finer one hidden behind
+/// a coarser tag. An empty `Quantity` is left empty; non-`Quantity` members are
+/// untouched.
 ///
 /// This is the enforcement half of the `x-decimalPlaces` contract: the schema
-/// advertises the declared precision and the dispatch path now stores at that
-/// precision, rather than honouring whatever `dp` the client sent.
+/// advertises the declared precision and the dispatch path stores at that
+/// precision, rather than honouring whatever `dp` the client sent. Precision
+/// beyond the declared amount is therefore **discarded, not hidden** — that is
+/// the point, and it is why the operation normalises rather than rejects: the
+/// same call also lands on server-derived `Quantity` values (see `recomputeOne`),
+/// which routinely carry more decimals than the destination field declares.
 /// @tparam A     Action type (a reflectable aggregate).
-/// @param action Draft action whose `Quantity` members are retagged in place.
+/// @param action Draft action whose `Quantity` members are rounded in place.
 template <typename A>
 constexpr void reconcileDeclaredPrecision(A& action) {
     using Plain = std::remove_cvref_t<A>;

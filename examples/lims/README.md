@@ -148,11 +148,11 @@ transitions; journal as regulatory audit.
   redesign it** (round-5 correction): conversion carries the dp tag through
   unchanged, the renderer always submits in the canonical unit at the
   schema's `x-decimalPlaces`, and alternative-unit display rounds half-up.
-  What to test instead: (a) **retag-vs-round** — `x-decimalPlaces`
-  "enforcement" retags the tag without changing the value, so a hand-built
-  over-precise payload stores `1.23456` displayed as `1.2` (spec text and
-  code disagree; display ≠ stored is disqualifying in a LIMS — this rung
-  owns the decision test, review D1); (b) `x-unitAlternatives` lists
+  What to test instead: (a) **retag-vs-round** — resolved upstream in
+  issue #159, which made `reconcileDeclaredPrecision` re-round rather than
+  retag; this rung keeps its own stricter rejection because the governing
+  precision is the analysis version's runtime value, not the compile-time
+  declared one (review D1, §7 below); (b) `x-unitAlternatives` lists
   **direct relation edges only**, so InvenTree-style "enter in any
   compatible unit" needs a deliberately complete relations array; chained
   ratios are not cross-checked; (c) the shipped QML converter silently
@@ -266,14 +266,19 @@ fabricated claim rather than a parse failure.
 
 ### 7. Over-precise readings are rejected, not retagged (§3, review D1)
 
-`x-decimalPlaces` "enforcement" retags a value's precision tag without
-changing the value (upstream issue #159), so a hand-built payload of
-`1.23456` against a 3-dp analysis would be *stored* as `1.23456` while every
-display of it read `1.235`. Storage disagreeing with display is
-disqualifying in a LIMS, so this rung takes the third option: reject the
-payload. The check is exact and overflow-free — `Rational` keeps
-`gcd(num, den) == 1`, so a value is representable at `d` decimals exactly
-when `den` divides `10^d`.
+Upstream issue #159 asked whether `x-decimalPlaces` "enforcement" should
+round the value, be redocumented as advisory, or reject an over-precise
+submission. The framework took the first option: `reconcileDeclaredPrecision`
+now re-rounds on its wire dispatch paths, so storage and display agree there.
+
+This rung still takes the third. The precision that governs a reading here is
+the **analysis version's** runtime `decimalPlaces` — schema-versioned data the
+framework's compile-time `Quantity<mg_per_L, 3>` reconciliation knows nothing
+about — and a value submitted finer than the method supports is a claim about
+the instrument, not a formatting preference. Rounding it would record a
+measurement the analyst never made. The check is exact and overflow-free —
+`Rational` keeps `gcd(num, den) == 1`, so a value is representable at `d`
+decimals exactly when `den` divides `10^d`.
 
 ### 8. The action's unit is compile-time, so the definition's unit is checked (§3)
 

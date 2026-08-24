@@ -699,6 +699,10 @@ struct Quantity {
 
     /// @brief Retags the value's *runtime* precision (the exact value itself is
     ///        unchanged — precision only affects rounding and formatting).
+    ///
+    /// This is the **display-hint** half of the pair: after it, the value shown
+    /// at @p newPrecision and the value stored may differ. Use
+    /// `roundedToDecimalPlaces` when the stored value must be the one displayed.
     /// @param newPrecision Runtime precision; silently clamped to the valid range.
     /// @return The retagged quantity, or empty if this is empty.
     [[nodiscard]] Quantity withDecimalPlaces(math::DecimalPlaces newPrecision) const {
@@ -715,9 +719,41 @@ struct Quantity {
         return out;
     }
 
-    /// @brief Retags the value's runtime precision to the declared one.
-    /// @return The retagged quantity, or empty if this is empty.
-    [[nodiscard]] Quantity atDeclaredPrecision() const { return withDecimalPlaces(declaredPrecision()); }
+    /// @brief Rounds the value to a runtime precision, **changing the exact
+    ///        value** as well as the tag — unlike `withDecimalPlaces`, which
+    ///        retags only and leaves display and storage free to disagree.
+    ///
+    /// Delegates to `math::roundToDecimalPlaces`, and so shares its saturation
+    /// behaviour: a value whose scaled form leaves `int64` range clamps and logs
+    /// instead of overflowing. A value already representable at @p newPrecision
+    /// is unchanged apart from its tag.
+    /// @param newPrecision Runtime precision; silently clamped to the valid range.
+    /// @param mode Tie-breaking rule; defaults to half away from zero, matching
+    ///        the decimal display path.
+    /// @return The rounded quantity, or empty if this is empty.
+    [[nodiscard]] Quantity roundedToDecimalPlaces(
+        math::DecimalPlaces newPrecision,
+        math::RoundingMode mode = math::RoundingMode::HalfAwayFromZero) const {
+        if (!payload) {
+            return *this;
+        }
+        Quantity out;
+        out.payload = math::roundToDecimalPlaces(*payload, newPrecision, mode);
+#if MORPH_QUANTITY_PROVENANCE
+        out._ctx = _ctx;
+#endif
+        return out;
+    }
+
+    /// @brief Rounds the value to this field's **declared** precision — the one
+    ///        the generated schema advertises as `x-decimalPlaces`.
+    ///
+    /// The enforcement half of the `x-decimalPlaces` contract: the stored value
+    /// becomes the value that renders at the declared precision, so a handler
+    /// never persists digits the form does not show. Rounds half away from zero,
+    /// the rule the decimal formatter uses.
+    /// @return The rounded quantity, or empty if this is empty.
+    [[nodiscard]] Quantity atDeclaredPrecision() const { return roundedToDecimalPlaces(declaredPrecision()); }
 
     /// @brief Seals this value with a name: `equation()` shows the name instead
     ///        of expanding its derivation. Builds a fresh node (never mutates a
