@@ -25,6 +25,12 @@ on:
     branches: [main, master]
   pull_request:
 
+# Supersede a run a newer commit on the same ref has made obsolete -- see the
+# note in ci.yml. Cheap here, but the queue it shares is account-wide.
+concurrency:
+  group: drift-guard-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

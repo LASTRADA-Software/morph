@@ -15,6 +15,13 @@ on:
     # the gate instead of leaving a stale result.
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+# Supersede a run a newer commit on the same ref has made obsolete -- see the
+# note in ci.yml. This one is pull_request-only, so it supersedes on a force-push
+# or a re-label rather than on a merge burst.
+concurrency:
+  group: spec-sync-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

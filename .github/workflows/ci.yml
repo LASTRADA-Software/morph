@@ -5,6 +5,24 @@ on:
     branches: [main, master]
   pull_request:
 
+# Supersede a run that a newer commit on the same ref has already made
+# obsolete. Without this every push queued a *fresh* full run of the ~16 legs
+# below and left the previous one in the queue -- so a burst of six merges to
+# master queued six complete generations of CI, none of which could be
+# cancelled by the next.
+#
+# That is not only this repository's problem. GitHub's concurrency allowance is
+# per ACCOUNT, not per repository, so those generations sit in one queue shared
+# with every other repo in the org and starve them: `fastcached` had fifteen
+# jobs waiting behind this workflow with none running, and the oldest run here
+# had been queued for over five hours.
+#
+# `docs.yml`, `wasm-demo.yml` and `wasm-ladder.yml` already do this; `ci.yml` is
+# by far the largest workflow and was the one without it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
