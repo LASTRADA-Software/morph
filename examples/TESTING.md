@@ -687,10 +687,12 @@ managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
 
 ## Framework gaps this strategy exposes (candidate issues)
 
-1. Client-side execute deadline — no timeout on `Completion`; a
-   rate-limited/black-holed call hangs forever (`messagesPerSecond` drops
-   frames silently). Every polling helper must wrap its own timer until the
-   framework provides one.
+1. Client-side execute deadline — no timeout on `Completion`; a black-holed
+   call hangs forever. Every polling helper must wrap its own timer until the
+   framework provides one. (A frame refused by `messagesPerSecond` no longer
+   belongs on that list: the transport answers it with an `err "rate limited"`
+   addressed to the frame's own `callId`, so the caller's `Completion` fails
+   rather than hanging — morph#225.)
 2. `Bridge::pendingCalls()` (client-side quiescence observability) — makes
    `settle()` exact; today presenter-level counters substitute.
 3. `MainThreadExecutor::runOnce()/drain()` — a step, not a wall-clock pump.
