@@ -572,6 +572,8 @@ below) `DynamicForm.qml`'s `resolveProp` does exactly this dual read.
 | `x-widget` | property node (sibling of `$ref`) | string | The preferred control id: `"textarea"`, `"slider"`, `"radio"`, `"combo"`, `"password"`, `"checkbox"`, … A `fieldMetadata`-shaped override (a `.field`/`.widget` entry, read structurally — see [widget_hints.md](widget_hints.md)) wins; else the field type's own `widget()` (`Multiline`, `Ranged`). **Advisory** — a renderer that lacks the named control falls back to the type-default control (text area → text field, slider → numeric input, radio → combo). Omitted when neither a wrapper type nor an override supplies one. |
 | `x-min` | property node (sibling of `$ref`) | number | Slider lower bound, from `Ranged::min()`. Emitted only for a `Ranged` field. Distinct from glaze's schema `minimum` (a *validation* bound, when present) — `x-min` is the *control track* start and is never enforced. |
 | `x-max` | property node (sibling of `$ref`) | number | Slider upper bound, from `Ranged::max()`. Emitted only for a `Ranged` field. |
+| `x-exactMinimum` | wherever `minimum` sits (property node, or the `$def` reached through its `$ref`) | string | Exact decimal spelling of `minimum`, emitted **only** when the bound's magnitude exceeds 2^53 — i.e. when an IEEE-754 double cannot hold it. See [Exact numeric bounds](#exact-numeric-bounds--x-minimumtext--x-maximumtext). |
+| `x-exactMaximum` | wherever `maximum` sits | string | Exact decimal spelling of `maximum`, under the same condition. |
 | `x-step` | property node (sibling of `$ref`) | number | Slider / numeric increment, from `Ranged::step()`. Emitted only for a `Ranged` field. For a `Quantity` the entry granularity remains `x-decimalPlaces` (above); `x-step` is not emitted for `Quantity`. |
 | `x-minimum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive lower bound for the field's value, from a model's `InstanceConstraints` — an exact `Rational` in the same wire shape as the value it bounds, never a `double`. Emitted only for a decorated instance schema ([Per-instance constraints](#per-instance-constraints--values-that-live-in-data)); never by `schemaJson<A>()`. Distinct from `x-min` (a *slider track* start, which is never checked). |
 | `x-maximum` | property node (sibling of `$ref`) | object `{num,den,dp}` | Inclusive upper bound, same source and shape as `x-minimum`. |
@@ -694,6 +696,46 @@ constraints such as `minimum`/`maximum`. Integers on this path are emitted as
 bare, exact numbers — the payload is assembled as JSON *text*, never round-tripped
 through `JSON.parse`, so values beyond 2^53 (including `INT64_MAX`) survive
 intact.
+### Exact numeric bounds — `x-exactMinimum` / `x-exactMaximum`
+
+`minimum` and `maximum` are standard JSON-Schema vocabulary, stamped by glaze.
+They are JSON *numbers*, and a renderer reaches them by parsing the schema —
+every shipped app does `JSON.parse(controller.schemasJson)`. JavaScript numbers
+are IEEE-754 doubles, so any bound above 2^53 loses precision at that moment:
+
+```
+schema maximum for an int64_t field: 9223372036854775807
+       after JSON.parse into a JS number: 9223372036854775808   (rounded up)
+```
+
+That breaks the client-side gate at exactly the value it is closest to failing
+on. `INT64_MAX + 1` compared against a maximum rounded *up* to
+`9223372036854775808` is judged **equal, not greater**, so the renderer's own
+validation admits an out-of-range value. Nothing is corrupted — the payload is
+assembled as JSON text and keeps the exact digits, and the server rejects it
+with `parse_number_failure` — but the client claimed a value was valid that
+never was.
+
+`schemaJson<A>()` therefore also emits the bound as an exact decimal **string**,
+which `JSON.parse` cannot round. A renderer that validates integer input should
+prefer `x-exactMinimum`/`x-exactMaximum` when present and fall back to the numeric
+`minimum`/`maximum` otherwise. The shipped `DynamicForm.qml` compares digits
+directly in that case, since no JS number can hold the bound.
+
+Two deliberate limits:
+
+- **Emitted only above 2^53.** An ordinary bound (`int32_t`, a `Ranged` slider,
+  a hand-written `maximum: 10`) loses nothing to a double, so its schema is
+  byte-for-byte what it was before this key existed. Only the definitions that
+  genuinely need it — `$defs/int64_t`, `$defs/uint64_t` — carry the companion.
+- **The numeric bound stays.** The companion is additive: `minimum`/`maximum`
+  remain exactly as glaze emitted them, so a renderer that ignores the new keys
+  behaves precisely as it did before, per the versioning stance below.
+
+Note the companion sits **wherever the bound sits**. For a `std::int64_t`
+member that is the `$defs` entry the property's `$ref` points at, not the
+property node — a renderer reads it from the merged node after resolving the
+`$ref` (or the non-null `anyOf` branch), the same way it reads `type`.
 
 ### Versioning stance
 

@@ -98,6 +98,29 @@ Frame {
         return value === undefined ? fallback : value
     }
 
+    // Three-way compare of two integers held as decimal strings: -1, 0, 1.
+    // Needed because a JS number cannot hold an int64 bound exactly, so the
+    // comparison has to happen on digits (morph#213). Inputs are already
+    // /^-?\d+$/-validated by the caller.
+    function compareIntText(left, right) {
+        const leftNeg = left.charAt(0) === "-"
+        const rightNeg = right.charAt(0) === "-"
+        if (leftNeg !== rightNeg)
+            return leftNeg ? -1 : 1
+        // Strip sign and leading zeros so "007" and "7" compare equal.
+        const leftDigits = left.replace(/^-?0*/, "") || "0"
+        const rightDigits = right.replace(/^-?0*/, "") || "0"
+        let cmp = 0
+        if (leftDigits.length !== rightDigits.length)
+            cmp = leftDigits.length < rightDigits.length ? -1 : 1
+        else if (leftDigits < rightDigits)
+            cmp = -1
+        else if (leftDigits > rightDigits)
+            cmp = 1
+        // Both negative reverses the magnitude ordering.
+        return leftNeg ? -cmp : cmp
+    }
+
     // Follow a $ref into $defs; attributes on the field win over the def's.
     function resolveRef(prop) {
         if (prop && prop["$ref"] !== undefined) {
@@ -262,6 +285,16 @@ Frame {
                     required: required.indexOf(name) !== -1,
                     minimum: p.minimum,
                     maximum: p.maximum,
+                    // Exact decimal-string companions for a bound a double
+                    // cannot hold. `p.minimum`/`p.maximum` reached this object
+                    // through JSON.parse (every app does
+                    // `JSON.parse(controller.schemasJson)`), so an int64 bound
+                    // is already rounded by the time it gets here -- INT64_MAX
+                    // arrives as 9223372036854775808. These strings are not
+                    // (morph#213). Undefined for any bound a double holds
+                    // exactly, which is the overwhelmingly common case.
+                    exactMinimum: p["x-exactMinimum"],
+                    exactMaximum: p["x-exactMaximum"],
                     section: opt(raw["x-section"], p["x-section"]),
                     colspan: opt(opt(raw["x-colspan"], p["x-colspan"]), 1),
                     isMultiline: widget === "textarea",
@@ -719,13 +752,26 @@ Frame {
         if (f.isInteger) {
             if (!/^-?\d+$/.test(text))
                 return null
-            const value = parseInt(text)
-            if (f.minimum !== undefined && value < f.minimum)
-                return null
-            if (f.maximum !== undefined && value > f.maximum)
-                return null
             // Normalise "007" -> "7": JSON forbids leading zeros in numbers.
-            return text.replace(/^(-?)0+(?=\d)/, "$1")
+            const normalised = text.replace(/^(-?)0+(?=\d)/, "$1")
+            // Prefer the exact string bound when the schema carries one: a
+            // double-valued bound rounds at 2^53, and comparing INT64_MAX + 1
+            // against a maximum rounded *up* to 9223372036854775808 judges it
+            // "not greater" and lets it through the gate (morph#213).
+            const value = parseInt(text)
+            if (f.exactMinimum !== undefined) {
+                if (compareIntText(normalised, f.exactMinimum) < 0)
+                    return null
+            } else if (f.minimum !== undefined && value < f.minimum) {
+                return null
+            }
+            if (f.exactMaximum !== undefined) {
+                if (compareIntText(normalised, f.exactMaximum) > 0)
+                    return null
+            } else if (f.maximum !== undefined && value > f.maximum) {
+                return null
+            }
+            return normalised
         }
         if (f.isBoolean) {
             // Emitted bare, never quoted. The CheckBox only ever stores these
