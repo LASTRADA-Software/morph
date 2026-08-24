@@ -188,7 +188,17 @@ jobs:
           sudo apt-get install -y ninja-build catch2
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
+      # Skipped on the self-hosted path: CompileCache.cmake's
+      # FASTCACHE_AUTO_INSTALL only fetches fastcache-cc when NONE of
+      # fastcache-cc/sccache/ccache are already on PATH ("only when there is
+      # nothing else to use" -- see that file's own comment on the guard).
+      # Installing sccache unconditionally, as this job used to, permanently
+      # defeated auto-install regardless of FASTCACHE_AUTO_INSTALL=ON:
+      # sccache was always present, so the auto-install guard's `AND NOT
+      # SCCACHE` was always false. GitHub-hosted's fallback still gets
+      # sccache exactly as before.
       - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -196,6 +206,7 @@ jobs:
           restore-keys: sccache-compilers-${{ matrix.preset }}-
 
       - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
@@ -234,8 +245,13 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path (fastcache-cc is
+      # used there instead), so `sccache --show-stats` would just fail
+      # "command not found" there.
       - name: sccache stats
-        if: always()
+        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -247,7 +263,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
@@ -285,7 +301,11 @@ jobs:
           sudo apt-get install -y ninja-build catch2 libsqlite3-dev
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -293,6 +313,7 @@ jobs:
           restore-keys: sccache-sanitizers-${{ matrix.preset }}-
 
       - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
@@ -1143,7 +1164,11 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Skipped on the self-hosted path: see linux-compilers' identical
+      # Restore/Install sccache steps for why (installing sccache
+      # unconditionally would permanently defeat fastcache-cc auto-install).
       - name: Restore sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
@@ -1151,6 +1176,7 @@ jobs:
           restore-keys: sccache-all-features-${{ matrix.compiler }}-
 
       - name: Install sccache
+        if: "!contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: |
           curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
@@ -1237,8 +1263,11 @@ jobs:
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
       # one you have. `|| true` so a stats failure never fails the job.
+      #
+      # Guarded the same way as the Install/Restore sccache steps above:
+      # sccache is never installed on the self-hosted path.
       - name: sccache stats
-        if: always()
+        if: "always() && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')"
         run: sccache --show-stats || true
 
       # Save only on a push to master. Every run used to write a new
@@ -1250,7 +1279,7 @@ jobs:
       # collapsing the generations that actually blow the budget. Pull
       # requests still restore, read-only, and get the full benefit.
       - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && !contains(needs.probe-self-hosted.outputs.runs_on, 'self-hosted')
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
