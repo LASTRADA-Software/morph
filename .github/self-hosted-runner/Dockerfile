@@ -9,19 +9,20 @@ FROM ubuntu:24.04
 
 ARG RUNNER_VERSION=2.336.0
 ARG TARGETARCH=x64
+ARG CMAKE_VERSION=3.31.12
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # GitHub-hosted ubuntu-24.04 runner images bundle ~500 packages that
-# ci.yml's jobs rely on without installing themselves (cmake, perl,
-# python3, binutils' nm, a base gcc/g++/make toolchain, ...). A bare
-# ubuntu:24.04 Docker image has none of that, so it's listed out
-# explicitly here rather than discovered one "command not found" at a
-# time -- cmake (linux-compilers), python3 (clang-tidy, coverage
-# script), perl (deprecation-lint, test-type-name-lint scripts),
-# binutils' nm (ladder-sanitizers' instrumentation check), build-essential
-# for a base gcc/g++/make (ci.yml still installs its own pinned gcc-15/
-# clang versions on top).
+# ci.yml's jobs rely on without installing themselves (perl, python3,
+# binutils' nm, a base gcc/g++/make toolchain, ...). A bare ubuntu:24.04
+# Docker image has none of that, so it's listed out explicitly here
+# rather than discovered one "command not found" at a time -- python3
+# (clang-tidy, coverage script), perl (deprecation-lint,
+# test-type-name-lint scripts), binutils' nm (ladder-sanitizers'
+# instrumentation check), build-essential for a base gcc/g++/make
+# (ci.yml still installs its own pinned gcc-15/clang versions on top).
+# cmake is intentionally NOT installed from apt here -- see below.
 RUN apt-get update -q && apt-get install -y --no-install-recommends \
         curl \
         ca-certificates \
@@ -34,12 +35,28 @@ RUN apt-get update -q && apt-get install -y --no-install-recommends \
         wget \
         tar \
         gzip \
-        cmake \
         python3 \
         perl \
         binutils \
         build-essential \
     && rm -rf /var/lib/apt/lists/*
+
+# Ubuntu 24.04's apt package is CMake 3.28.3. GitHub-hosted ubuntu-24.04
+# ships a newer CMake from Kitware's own release archive rather than the
+# distro package, and that gap is not cosmetic: linux-all-features'
+# configure step failed here with "Impossible to link target ...
+# because the link item ... has already occurred with the feature
+# 'WHOLE_ARCHIVE', which is not allowed" on 3.28.3 -- a false positive in
+# $<LINK_LIBRARY:WHOLE_ARCHIVE,...> duplicate-feature detection, an area
+# CMake was still actively patching in the 3.28-3.30 range. The same
+# configure passes cleanly on GitHub-hosted ubuntu-24.04, confirming this
+# is a CMake-version gap, not a real target-graph conflict in
+# cmake/morph_add_rung.cmake. Installed directly from Kitware's binary
+# release rather than a PPA/apt repo, to pin an exact known-good version.
+RUN curl -fsSL -o cmake.tar.gz \
+        "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-x86_64.tar.gz" \
+    && tar -xzf cmake.tar.gz --strip-components=1 -C /usr/local \
+    && rm cmake.tar.gz
 
 # clang (installed per-job from apt.llvm.org, not baked into this image)
 # uses libstdc++'s headers by default, not its own libc++. Stock
