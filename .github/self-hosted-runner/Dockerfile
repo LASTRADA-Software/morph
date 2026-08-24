@@ -30,6 +30,12 @@ RUN useradd -m -s /bin/bash runner \
     && usermod -aG sudo runner \
     && echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
 
+# GitHub-hosted ubuntu-24.04 runners ship /usr/local/bin writable by the
+# runner user (ci.yml's "Install sccache" step untars straight into it,
+# with no sudo). Stock ubuntu:24.04 leaves it root:root 755, which makes
+# that same step fail with "Permission denied" here.
+RUN chown runner:runner /usr/local/bin
+
 USER runner
 WORKDIR /home/runner/actions-runner
 
