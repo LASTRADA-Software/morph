@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "callback_scope.hpp"
 #include "executor.hpp"
 #include "logger.hpp"
 
@@ -183,6 +184,16 @@ struct CompletionState {
 /// If a `Completion` is destroyed before an `onError()` handler is attached and
 /// the operation has already failed, the exception is logged as an orphan error.
 ///
+/// @par Lifetime and stop gating
+/// Because delivery always goes through an executor, the receiver can be
+/// destroyed — or simply lose interest — before the handler runs. Pass a
+/// `morph::async::CallbackScope` (or one of its `CallbackToken`s) as the first
+/// argument to `then()` / `onError()` and the handler is refused unless the
+/// scope is still alive and un-stopped at delivery time. `thenDetached()` /
+/// `onErrorDetached()` are the same ungated attachments as `then(fn)` /
+/// `onError(fn)`, spelled so a deliberately unmanaged callback says so.
+/// See `callback_scope.hpp` and docs/spec/core/callback_scope.md.
+///
 /// @tparam T Type of the success value.
 template <typename T>
 // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
@@ -239,6 +250,90 @@ public:
             _state->attachOnError(std::move(handler));
         }
         return *this;
+    }
+
+    /// @brief Registers a success callback gated on @p scope's lifetime and stop state.
+    ///
+    /// Identical to `then(handler)` except that @p handler is wrapped in a
+    /// `CallbackToken` gate at attach time: when the result is delivered, the
+    /// handler runs only if @p scope is still alive and has not been stopped or
+    /// `reset()`. Nothing else changes — the gate lives inside the stored
+    /// handler, so fan-out, the attach-after-ready fire-now path and executor
+    /// marshalling all behave exactly as they do for the ungated form.
+    ///
+    /// The scope is observed weakly; attaching does **not** extend its lifetime.
+    ///
+    /// @param scope   Receiver-owned gate. Only a token for its *current*
+    ///                generation is captured, so a later `reset()` retires this
+    ///                attachment.
+    /// @param handler Callable receiving the result by value.
+    /// @return `*this` for chaining.
+    Completion& then(const CallbackScope& scope, std::function<void(T)> handler) {
+        return then(scope.token(), std::move(handler));
+    }
+
+    /// @brief Registers a success callback gated on an already-issued @p token.
+    ///
+    /// The token-taking form of `then(const CallbackScope&, handler)`, for
+    /// callers that hold a token rather than the scope itself (a helper that
+    /// was handed one, or code that captured a token before dispatching).
+    ///
+    /// @param token   Gate observing some receiver's `CallbackScope`. A
+    ///                default-constructed token suppresses unconditionally.
+    /// @param handler Callable receiving the result by value.
+    /// @return `*this` for chaining.
+    Completion& then(CallbackToken token, std::function<void(T)> handler) {
+        return then(std::function<void(T)>{token.guard(std::move(handler))});
+    }
+
+    /// @brief Registers an error callback gated on @p scope's lifetime and stop state.
+    ///
+    /// Identical to `onError(handler)` except that @p handler is wrapped in a
+    /// `CallbackToken` gate at attach time.
+    ///
+    /// Orphan logging is unaffected: attaching a gated handler suppresses it
+    /// exactly as the ungated form does, and an error whose delivery the scope
+    /// then refuses still counts as **handled**. Suppression is a deliberate act
+    /// by the receiver, not a dropped error nobody asked about.
+    ///
+    /// @param scope   Receiver-owned gate; observed weakly.
+    /// @param handler Callable receiving the exception pointer.
+    /// @return `*this` for chaining.
+    Completion& onError(const CallbackScope& scope, std::function<void(std::exception_ptr)> handler) {
+        return onError(scope.token(), std::move(handler));
+    }
+
+    /// @brief Registers an error callback gated on an already-issued @p token.
+    ///
+    /// The token-taking form of `onError(const CallbackScope&, handler)`.
+    ///
+    /// @param token   Gate observing some receiver's `CallbackScope`. A
+    ///                default-constructed token suppresses unconditionally.
+    /// @param handler Callable receiving the exception pointer.
+    /// @return `*this` for chaining.
+    Completion& onError(CallbackToken token, std::function<void(std::exception_ptr)> handler) {
+        return onError(std::function<void(std::exception_ptr)>{token.guard(std::move(handler))});
+    }
+
+    /// @brief Registers a success callback whose lifetime is deliberately unmanaged.
+    ///
+    /// Exactly `then(handler)`, spelled so that "no scope gates this" is a
+    /// statement the author made on purpose and a reviewer can grep for. Use it
+    /// when the handler genuinely owns everything it touches — it captures only
+    /// values, or a `shared_ptr` it keeps alive itself.
+    ///
+    /// @param handler Callable receiving the result by value.
+    /// @return `*this` for chaining.
+    Completion& thenDetached(std::function<void(T)> handler) { return then(std::move(handler)); }
+
+    /// @brief Registers an error callback whose lifetime is deliberately unmanaged.
+    ///
+    /// The `onError` counterpart of `thenDetached()`.
+    ///
+    /// @param handler Callable receiving the exception pointer.
+    /// @return `*this` for chaining.
+    Completion& onErrorDetached(std::function<void(std::exception_ptr)> handler) {
+        return onError(std::move(handler));
     }
 
     /// @brief Returns the underlying shared state (for advanced / internal use).

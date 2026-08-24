@@ -18,6 +18,7 @@ sequence.
 - [The strand model — one strand per `ModelId`](#the-strand-model--one-strand-per-modelid)
 - [Completion callback marshalling](#completion-callback-marshalling)
 - [Destruction ordering — who must outlive whom](#destruction-ordering--who-must-outlive-whom)
+- [Gating callbacks on a receiver's lifetime — `CallbackScope`](#gating-callbacks-on-a-receivers-lifetime--callbackscope)
 - [Synchronisation specifics per subsystem](#synchronisation-specifics-per-subsystem)
 - [`Completion` / `CompletionState` thread-safety](#completion--completionstate-thread-safety)
 - [Quick cheat-sheet](#quick-cheat-sheet)
@@ -169,12 +170,13 @@ Declared as members, list the pool **first** so it is destroyed **last**.
 
 Normal operation still requires the `Bridge` to outlive its handlers: every
 `execute` / `set` call dereferences `_bridge`. But **teardown order no longer
-matters** (recent fix). Each `BridgeHandler` captures a `weak_ptr<const void>`
-liveness token from the `Bridge` (`Bridge::liveness()`). In
-`~BridgeHandler`, it locks the token first:
+matters** (recent fix). Each `BridgeHandler` captures a
+`morph::async::CallbackToken` from the `Bridge` (`Bridge::liveness()`, issued by
+the bridge's `CallbackScope _callbacks`). In `~BridgeHandler`, it checks the
+token first:
 
-- token still valid → the `Bridge` is alive → deregister normally.
-- token expired → the `Bridge` is already gone → **no-op**, skipping the
+- token active → the `Bridge` is alive → deregister normally.
+- token inactive → the `Bridge` is already gone → **no-op**, skipping the
   deregistration that would otherwise dereference a dangling `Bridge&`.
 
 Previously, destroying the `Bridge` before its handlers was a use-after-free.
@@ -239,6 +241,57 @@ the backend would deadlock. The `weak_ptr` tracking is what lets an already
 resolved-and-destroyed completion be skipped (its state is gone) rather than
 resurrected, and `setException` on a still-live-but-already-`ready` state is the
 idempotent no-op described below.
+
+## Gating callbacks on a receiver's lifetime — `CallbackScope`
+
+Destruction *ordering* (above) is about which objects must outlive which. This
+section is about the other half: a callback that has already been scheduled and
+whose receiver may not survive to see it delivered.
+
+Every `Completion<T>` callback is posted through an executor — even a
+`LocalBackend`'s immediate resolution
+([Completion callback marshalling](#completion-callback-marshalling)) — so the
+receiver can always be destroyed, or lose interest, between attaching a handler
+and the handler running. **The framework primitive for this is
+`morph::async::CallbackScope`** ([callback_scope.md](core/callback_scope.md)): a
+plain data member the receiver holds, from which it hands out weak
+`CallbackToken`s that gate delivery.
+
+```cpp
+completion.then(_callbacks, [this](Result r) { render(r); });   // gated
+_callbacks.requestStop();                                       // alive, but no longer interested
+```
+
+Three rules belong here rather than in the type's own spec, because they are
+about how it sits in *this* threading model:
+
+- **Declare the scope last.** Members are destroyed in reverse declaration
+  order, so a last-declared scope dies first and every gated callback is refused
+  before the fields it would have touched are torn down. This replaces the
+  per-class "token must stay last-declared" convention this document used to
+  teach as an incantation.
+- **A destructor that can pump must `requestStop()` first.** Members are
+  destroyed *after* the destructor body, so a body that blocks on a nested event
+  loop (`sendSync`-style, see
+  [`QtWebSocketBackend::sendSync`](#qtwebsocketbackendsendsync--a-disconnect-must-not-freeze-the-qt-thread))
+  can still deliver into a half-destroyed receiver.
+  `morph::flows::FlowSession` does exactly this.
+- **The guarantee is executor-affine; cross-thread stop is advisory.** When the
+  scope is destroyed or stopped on the delivery executor's own thread — the
+  normal GUI case — check-then-run is atomic with respect to that. Stopping from
+  a *different* thread than the one delivering leaves the same check-then-use
+  window the hand-rolled `weak_ptr` idiom always had, and external
+  synchronisation there is still the caller's job. Neither `requestStop()` nor
+  `~CallbackScope` blocks until in-flight callbacks drain: a GUI-thread
+  destructor waiting on a pool-thread callback that is itself posting back to
+  the GUI executor is exactly the self-join deadlock family this document warns
+  about throughout.
+
+Two framework types use it today: `Bridge` (as `_callbacks`, exposed to handlers
+and in-flight continuations through `liveness()`) and `morph::flows::FlowSession`.
+`morph::qt::QtExecutor`'s own `_alive` token is adjacent but distinct — it guards
+against *the executor* being destroyed with events still queued, not against the
+receiver going away.
 
 ## Synchronisation specifics per subsystem
 
@@ -308,10 +361,11 @@ dereference freed memory. Two layers prevent this:
   path. The clear is done **outside `Bridge::_mtx`** — `setReconnectHandler` only
   stores a callback and never re-enters the bridge, so there is no lock-ordering
   hazard with the handler body (which does take `_mtx`).
-- **The handler guards on the `_liveness` token.** It captures a
-  `weak_ptr<const void>` to the bridge's `_liveness` (the same token
-  `BridgeHandler` uses) and, on invocation, locks it *before* touching `this`. If
-  the token has expired the `Bridge` is gone and the handler returns immediately.
+- **The handler guards on a `_callbacks` token.** It captures a
+  `morph::async::CallbackToken` from the bridge's `CallbackScope` (the same
+  scope `BridgeHandler` observes) and, on invocation, checks it *before* touching
+  `this`. If the token is inactive the `Bridge` is gone and the handler returns
+  immediately.
   This covers the race the clear alone cannot: a reconnect already latched on the
   transport thread at the moment `~Bridge` runs. After the liveness check it also
   re-checks `pinned == loadBackend()` to ignore a reconnect for a backend the
@@ -465,6 +519,11 @@ One-liners to remember:
   returns.
 - Register all models/actions at static-init; treat the registries as read-only
   afterward.
+- Never attach a callback capturing a bare `this` to a `Completion` you cannot
+  prove outlives nothing — pass a `CallbackScope`, or say `thenDetached` on
+  purpose.
+- Declare a `CallbackScope` member **last**, and call `requestStop()` first in
+  any destructor body that can pump an event loop.
 
 ## Cross-references
 
@@ -473,6 +532,9 @@ One-liners to remember:
   detail.
 - [`completion.md`](core/completion.md) — `Completion<T>` / `CompletionState<T>`
   internals and orphan-error logging.
+- [`callback_scope.md`](core/callback_scope.md) — `CallbackScope` /
+  `CallbackToken`: gating a callback on its receiver's liveness *and* on an
+  explicit stop, and the exact boundary of that guarantee.
 - [`bridge.md`](core/bridge.md) — `Bridge`, `BridgeHandler`, `switchBackend`,
   `executeVia`, the liveness token.
 - [`backend.md`](core/backend.md) — `LocalBackend`, `RemoteServer`,

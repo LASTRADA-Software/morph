@@ -94,6 +94,7 @@ per-operation behaviour differences between local and remote, are in
 **Threading and lifetime**
 [`core/executor.md`](core/executor.md) ·
 [`concurrency_and_lifetimes.md`](concurrency_and_lifetimes.md) ·
+[`core/callback_scope.md`](core/callback_scope.md) ·
 [`core/shared_instances.md`](core/shared_instances.md)
 
 **When things go wrong**

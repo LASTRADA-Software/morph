@@ -212,6 +212,7 @@ target_sources(morph
         include/morph/core/executor.hpp
         include/morph/core/strand.hpp
         include/morph/core/completion.hpp
+        include/morph/core/callback_scope.hpp
         include/morph/core/timeout_scheduler.hpp
         include/morph/core/model.hpp
         include/morph/core/registry.hpp
