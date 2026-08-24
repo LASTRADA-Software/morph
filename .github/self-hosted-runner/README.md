@@ -1,26 +1,34 @@
 # Self-hosted Linux runner (Docker)
 
-Runs a repo-level GitHub Actions runner for `LASTRADA-Software/morph` inside
-a Docker container. Used by `.github/workflows/self-hosted-smoke.yml`
-(`runs-on: [self-hosted, Linux, X64, morph-docker]`) and by `ci.yml`'s
-`linux-compilers` job whenever one is online and idle (see **ci.yml
-integration** below).
+Runs repo-level GitHub Actions runners for `LASTRADA-Software/morph` inside
+Docker containers. Used by `ci.yml`'s `linux-compilers`, `linux-sanitizers`,
+and `linux-all-features` jobs whenever a runner is online and idle (see
+**ci.yml integration** below).
 
-Currently running on one host: the maintainer's Windows machine (Docker
-Desktop, Linux containers). A second registration briefly ran on a
-Hetzner Cloud VM (`morph-hetzner-hel1`) but that machine was torn down.
+Currently running as 4 containers on one host (the maintainer's Windows
+machine, Docker Desktop, Linux containers), each capped at 6 CPUs
+(`docker run --cpus=6`) on a 32-logical-processor box — 24 cores committed,
+8 left as headroom for the host OS and Docker Desktop itself. A Hetzner
+Cloud VM briefly ran a fifth registration but was torn down.
 
-A single runner can only execute one job at a time, so with just one box
-a matrix's legs queue behind each other on it instead of running in
-parallel the way separate GitHub-hosted VMs would. Adding a second host
-back (see **Running more than one runner** below) restores that
-parallelism; nothing else needs to change to support it.
+Multiple runners exist so a multi-leg matrix (`linux-compilers` has 4,
+`linux-sanitizers` has 3) actually runs its legs in parallel instead of
+queueing behind each other on one runner process — each container is a
+single runner that executes exactly one job at a time. The CPU cap exists
+so 4 concurrent compiles cannot each try to claim the whole machine at
+once (oversubscription would make every leg slower, not just share what's
+already scarce).
 
 The image is plain Ubuntu 24.04 with just the runner binary and enough
 packages (`sudo`, `curl`, `git`, build-essential-adjacent tooling) to
 bootstrap a toolchain — it does **not** prebake gcc/clang/sccache. Jobs
 install those themselves the same way `ci.yml`'s GitHub-hosted jobs do, so
-there is one place, not two, to keep compiler versions in sync.
+there is one place, not two, to keep compiler versions in sync. It does pin
+a specific CMake (Kitware release, not the Ubuntu 24.04 apt package — see
+the Dockerfile's own comment on a `$<LINK_LIBRARY:WHOLE_ARCHIVE,...>` false
+positive that apt's 3.28.3 hits and GitHub-hosted's newer CMake doesn't) and
+a modern `libstdc++-15-dev` (clang's default standard-library headers,
+needed for C++23 `<print>` regardless of which matrix leg runs first).
 
 ## Requirements
 
@@ -123,30 +131,59 @@ repos/LASTRADA-Software/morph/actions/runners/<id>`.
 ## Trust boundary
 
 A self-hosted runner executes arbitrary job code on whatever host runs the
-container — a cloud VM here, or your own machine. Never point
-`pull_request:` at this runner without restricting it to same-repo
-branches; forked-repo PRs must not be able to run jobs here. See the
-`if:` condition in `self-hosted-smoke.yml` for the pattern
-(`pull_request.head.repo.full_name == github.repository`) and mirror it
-in any new workflow that uses this runner.
+container — a cloud VM here, or your own machine. `linux-compilers`,
+`linux-sanitizers`, and `linux-all-features` inherit `ci.yml`'s top-level
+`on: pull_request:` trigger with no fork restriction of their own, but
+they cannot actually run on this runner from a forked PR: `probe-self-hosted`
+picks the runner by reading the `RUNNER_STATUS_TOKEN` repo secret (see
+**ci.yml integration** below), and a `pull_request` (not
+`pull_request_target`) event triggered from a fork never receives repo
+secrets at all — a GitHub platform guarantee, not something this
+workflow implements itself. `RUNNER_STATUS_TOKEN` therefore comes through
+empty for any forked PR, which the probe's own script already treats as
+"no runner available" and falls back to `ubuntu-24.04` — the fork's build
+still runs, just never on self-hosted hardware. No separate fork check is
+needed as long as every self-hosted job keeps going through
+`probe-self-hosted` rather than hardcoding `runs-on: [self-hosted, ...]`
+directly.
 
 ## Running more than one runner
 
-Each container is one runner process. To add capacity (e.g. one runner on
-this machine, another on a Hetzner box), repeat the Quick start on each
-host with a distinct `RUNNER_NAME` — no coordination between them is
-needed, they just both poll the same repo's job queue.
+Each container is one runner process. To add capacity (another container
+here, or a registration on a second machine), repeat the Quick start with
+a distinct `RUNNER_NAME` per container/host — no coordination between them
+is needed, they all just poll the same repo's job queue. This is exactly
+how the current 4 containers are set up:
+
+```bash
+for i in 1 2 3 4; do
+  RUNNER_TOKEN=$(gh api -X POST repos/LASTRADA-Software/morph/actions/runners/registration-token --jq '.token')
+  docker run -d \
+    --name "morph-runner-$i" \
+    --restart unless-stopped \
+    --cpus=6 \
+    -e RUNNER_TOKEN="$RUNNER_TOKEN" \
+    -e RUNNER_NAME="morph-docker-$i" \
+    morph-runner:latest
+done
+```
+
+`--cpus=N` is a plain `docker run` flag, not anything `entrypoint.sh` or
+the image needs to know about — size it to (host logical processors) ÷
+(number of runner containers you want), leaving some headroom for the host
+itself, and adjust down if the containers are still oversubscribing the
+box under load.
 
 ## ci.yml integration
 
-`ci.yml`'s `linux-compilers` job doesn't hardcode `runs-on:`. A
-`probe-self-hosted` job that runs first checks the runners API for an
-online, non-busy runner labeled `morph-docker` and outputs the label set
-`linux-compilers` should use — self-hosted if one is free, otherwise the
-plain `ubuntu-24.04` GitHub-hosted label. Nothing needs to be started or
-stopped by hand for this fallback to work; it's just naturally in effect
-whenever no morph-docker runner happens to be online or all of them are
-busy on another job.
+None of `linux-compilers`, `linux-sanitizers`, or `linux-all-features`
+hardcode `runs-on:`. A `probe-self-hosted` job that runs first checks the
+runners API for an online, non-busy runner labeled `morph-docker` and
+outputs the label set each of them should use — self-hosted if one is
+free, otherwise the plain `ubuntu-24.04` GitHub-hosted label. Nothing
+needs to be started or stopped by hand for this fallback to work; it's
+just naturally in effect whenever no morph-docker runner happens to be
+online or all of them are busy on another job.
 
 The one piece that doesn't come for free: `GITHUB_TOKEN` cannot call the
 runners API — `GET /repos/.../actions/runners` is a repo-admin operation
@@ -157,15 +194,47 @@ be a **fine-grained PAT scoped to this repo only, with the
 register, delete, or otherwise manage runners, and has no code access).
 Set it up once at **Settings → Secrets and variables → Actions → New
 repository secret**. Until that secret exists, the probe always falls
-back to `ubuntu-24.04` — nothing breaks, `linux-compilers` just never
-picks up the self-hosted path.
+back to `ubuntu-24.04` — nothing breaks, the jobs above just never pick up
+the self-hosted path.
 
 Forked-repo pull requests never receive repo secrets at all (GitHub
 withholds them for security), so `RUNNER_STATUS_TOKEN` reads as empty
 there and the probe falls back the same way — no separate handling
 needed for that case.
 
-Other Linux jobs (sanitizers, coverage, valgrind, Qt, ladder tests,
-clang-tidy) are intentionally left on `ubuntu-24.04` for now;
-`linux-compilers` is the first real (non-smoke-test) workload on this
-runner infrastructure.
+`linux-coverage` (split out of `linux-sanitizers`'s old 4th matrix leg) and
+the remaining Linux jobs (valgrind, Qt, ladder tests, clang-tidy) are
+intentionally left on `ubuntu-24.04` for now.
+
+## Compiler cache: fastcache-cc
+
+`linux-compilers`, `linux-sanitizers`, and `linux-all-features` each set
+`FASTCACHE_ADDR=host.docker.internal:6674` and `FASTCACHE_AUTO_INSTALL=ON`
+as job-level env — but **only** when `probe-self-hosted` chose the
+self-hosted path; both are left empty/OFF on the GitHub-hosted fallback,
+where `host.docker.internal` does not resolve (it isn't a Docker
+container) and morph's `cmake/CompileCache.cmake` has no daemon to reach
+anyway.
+
+`host.docker.internal:6674` is a Windows/Docker-Desktop-specific address:
+it resolves, from inside a Linux container, to whatever the Docker Desktop
+host's `127.0.0.1` would mean — i.e. this same Windows machine's own
+`fastcached` service (see `D:\caching` on that machine; **not** part of
+this repository). That service must be **running** and its
+`fastcached.yaml` must **bind `0.0.0.0`**, not the default `127.0.0.1`,
+or a container cannot reach it at all (`127.0.0.1` inside a container
+means the container itself). Moving this runner setup to a different host
+means either running a `fastcached` daemon reachable from that host's
+containers the same way, or leaving `FASTCACHE_ADDR` unset there — the
+module falls back to `sccache` (already installed by every job) with zero
+other changes needed; see `cmake/CompileCache.cmake`'s own header comment
+for the full fastcache-cc → sccache → ccache → none preference order.
+
+`FASTCACHE_AUTO_INSTALL=ON` is what lets this work without prebaking
+`fastcache-cc` into the runner image: on first configure, CMake downloads
+a prebuilt `fastcache-cc` binary from the `fastcached` project's own
+GitHub Releases (cached per-user, per-version, so this costs one download
+per container, not per build) — see
+`cmake/CompileCache.cmake`'s "Optional auto-install" section for exactly
+how, including its own SHA256 verification and total inability to fail a
+configure (a fetch that fails just falls through to sccache).
