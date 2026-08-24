@@ -1,5 +1,10 @@
 name: Drift guard
 
+# Gates for the "a list that stopped matching what it describes" class of bug.
+# Every job here is fast and dependency-free; none of them compiles anything.
+#
+# Sections below: the spec <-> code gates, then the ladder rung-list gate.
+#
 # Two independent gates for the "spec <-> code drift" class of bug (a
 # docs/spec/*.md file stating a mechanical fact -- an enum cardinality, a
 # constant, a canonical error string, a glaze parsing flag -- that silently
@@ -37,3 +42,29 @@ jobs:
 
       - name: Run prose-vs-manifest lint
         run: bash scripts/check_spec_citations.sh
+
+  # ── Ladder rung list <-> the CI filters that are supposed to track it ──
+  # examples/rungs.txt is the ladder's single authoritative rung list, and
+  # almost every consumer now derives from it at run time. Two cannot --
+  # wasm-ladder.yml's `on.*.paths` (GitHub reads them before any step exists to
+  # generate them) and codecov.yml (read by Codecov, not by us) -- so they are
+  # checked against it here.
+  #
+  # This job has no path filter, deliberately. The bug it guards against
+  # (morph#179) was a path filter that had gone stale; gating the guard on one
+  # would reproduce the failure mode it exists to catch.
+  rung-filter-lint:
+    name: Ladder rung list vs. CI path filters
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # The gate itself is tested first, on the same terms as ci.yml's
+      # deprecation-lint and test-type-name-lint jobs: a lint gate nobody tests
+      # reports green whether or not it still detects anything -- and a filter
+      # that detected nothing is precisely the defect this gate exists for.
+      - name: Self-test the rung-filter checker
+        run: bash scripts/test_check_rung_filters.sh
+
+      - name: Check every known rung appears in the filters that cannot generate it
+        run: bash scripts/check_rung_filters.sh

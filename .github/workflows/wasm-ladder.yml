@@ -13,6 +13,17 @@ name: WASM ladder gate
 # different path filter, and nothing here is deployed anywhere — this builds and
 # stops. Single-threaded Qt-for-WASM, same as that workflow.
 
+# The two `paths:` lists below are the one place in this repository where the
+# rung list still has to be written out by hand. GitHub evaluates `on.*.paths`
+# to decide whether to start the workflow at all, which happens before any step
+# of it can run -- so nothing here can read examples/rungs.txt, the list every
+# other consumer derives from. That is exactly how they fell a rung behind:
+# both stopped at kanban, so ledger and lims matched nothing (morph#179).
+#
+# They are therefore checked against examples/rungs.txt from the outside, by
+# scripts/check_rung_filters.sh in .github/workflows/drift-guard.yml, which
+# fails the build naming any rung missing from either list. Adding a rung means
+# adding two lines here; forgetting is caught on the same PR.
 on:
   push:
     branches:
@@ -23,7 +34,10 @@ on:
       - 'examples/bookmarks/**'
       - 'examples/polls/**'
       - 'examples/kanban/**'
+      - 'examples/ledger/**'
+      - 'examples/lims/**'
       - 'examples/CMakeLists.txt'
+      - 'examples/rungs.txt'
       - 'cmake/**'
       - 'include/morph/**'
       - 'src/qt/**'
@@ -38,7 +52,10 @@ on:
       - 'examples/bookmarks/**'
       - 'examples/polls/**'
       - 'examples/kanban/**'
+      - 'examples/ledger/**'
+      - 'examples/lims/**'
       - 'examples/CMakeLists.txt'
+      - 'examples/rungs.txt'
       - 'cmake/**'
       - 'include/morph/**'
       - 'src/qt/**'
@@ -126,34 +143,60 @@ jobs:
             -DMORPH_BUILD_TESTS=OFF \
             -DMORPH_BUILD_EXAMPLES=OFF
 
-      # The rung-0 spike and rungs 1-3's clients, built by name so a target
-      # that silently stops being generated (morph_add_rung() skips a rung's
-      # gui_wasm when its prerequisites are missing, announcing why) fails this
-      # job instead of passing it vacuously. The plain build that follows
-      # covers any further rung automatically, so this file does not need
-      # editing again just to add another named target.
+      # The rung-0 spike and every rung that has a gui_wasm/ directory, built
+      # by name so a target that silently stops being generated
+      # (morph_add_rung() skips a rung's gui_wasm when its prerequisites are
+      # missing, announcing why) fails this job instead of passing it
+      # vacuously. The plain build that follows covers everything else.
       #
-      # Each named target is gated on its rung's directory actually existing
-      # in the checkout: rungs land as their own PRs against the shared
-      # foundation this workflow lives in (see LADDER.md/the PR history for
-      # why), so a foundation-only checkout has none of them yet -- that is
-      # the "no rung exists" case morph_add_rung.cmake's own header comment
-      # already documents as a silent, expected no-target outcome, not the
-      # regression this tripwire exists to catch. Once a rung's directory is
-      # present, the tripwire is back in force: morph_add_rung() skipping its
-      # gui_wasm target for any *other* reason (missing gui_lib, missing QML
-      # module, MORPH_BUILD_FORMS_QML off) still fails this job, unchanged.
+      # The rungs are read from examples/rungs.txt rather than listed here --
+      # this loop used to name `pastebin bookmarks polls` literally, a third
+      # hand-copy of the rung list in this repository (morph#179).
+      #
+      # The gate is now the presence of `examples/<rung>/gui_wasm/`, not of
+      # `examples/<rung>/`. Two cases it has to tell apart, and the directory
+      # is what distinguishes them:
+      #
+      #   - The rung is not in this checkout at all. Rungs land as their own
+      #     PRs against the shared foundation this workflow lives in (see
+      #     LADDER.md), so a foundation-only checkout has none of them yet --
+      #     the "no rung exists" case morph_add_rung.cmake's header already
+      #     documents as an expected, silent no-target outcome.
+      #   - The rung exists but has no WASM client yet. True of kanban (rung
+      #     4), ledger (rung 5) and lims (rung 6) today: they ship gui/ but no
+      #     gui_wasm/, so there is no ladder_<rung>_gui_wasm target to build
+      #     and naming one would fail the job for a target that was never
+      #     supposed to exist.
+      #
+      # Where gui_wasm/ *is* present the tripwire is in full force, and now
+      # covers every such rung automatically: morph_add_rung() skipping the
+      # target for any other reason (missing gui_lib, missing QML module,
+      # MORPH_BUILD_FORMS_QML off) still fails this job, unchanged.
       - name: Build the WASM-remote spike and every rung's WASM client
         run: |
+          set -euo pipefail
           export EM_CACHE="$PWD/.emcache"
           cmake --build build-wasm-ladder --target morph_ladder_wasm_spike
-          for rung in pastebin bookmarks polls; do
-            if [ -d "examples/$rung" ]; then
+          # Substituted before the loop so a failing reader aborts the step
+          # rather than yielding an empty list to iterate over.
+          rungs="$(bash scripts/ladder_rungs.sh list)"
+          built=0
+          while IFS= read -r rung; do
+            [ -n "$rung" ] || continue
+            if [ -d "examples/$rung/gui_wasm" ]; then
               cmake --build build-wasm-ladder --target "ladder_${rung}_gui_wasm"
+              built=$((built + 1))
             else
-              echo "::notice::examples/$rung not present in this checkout -- skipping ladder_${rung}_gui_wasm (expected on the rung-0 foundation PR; see wasm-ladder.yml's comment)"
+              echo "::notice::examples/$rung/gui_wasm not present in this checkout -- skipping ladder_${rung}_gui_wasm (see wasm-ladder.yml's comment)"
             fi
-          done
+          done <<< "$rungs"
+          # A loop that named no target at all would pass this step while
+          # building nothing, which is the same shape of defect as the filter
+          # that started morph#179. At least one rung has a WASM client.
+          if [ "$built" -eq 0 ]; then
+            echo "::error::no ladder_<rung>_gui_wasm target was built -- the named-target tripwire matched nothing"
+            exit 1
+          fi
           # Catches any further rung's WASM client too, without editing this
           # file again -- closing the gap rung 1's own final review flagged.
           cmake --build build-wasm-ladder

@@ -1,0 +1,43 @@
+# The application ladder's rung list -- the single authority.
+#
+# One rung name per line, in ladder order (rung 1 first). A line whose first
+# non-blank character is `#` is a comment; blank lines are ignored. Every other
+# line must be a bare rung name, matching [A-Za-z0-9_]+ -- anything else is a
+# hard error in every reader, rather than a line quietly skipped.
+#
+# ASCII only, comments included. CMake's file(STRINGS) splits its input at
+# bytes outside printable ASCII, so a stray non-ASCII character in a comment
+# does not stay in the comment: the tail of the line reappears as its own
+# "line" and lands in front of the name validator.
+#
+# Why a plain data file rather than a CMake variable: every consumer below
+# needs this list, and half of them run on a bare checkout where no CMake
+# configure has happened (a GitHub Actions filter step, a coverage shell
+# script). A text file is the only representation all of them can read.
+#
+# Consumers, all derived from this file at run time:
+#   examples/CMakeLists.txt          which rungs add_subdirectory() considers
+#   scripts/ladder_rungs.sh          the reader; builds ci.yml's path regex
+#   .github/workflows/ci.yml         ladder-tests / ladder-sanitizers filters
+#   .github/workflows/wasm-ladder.yml  its named-target build loop
+#   scripts/coverage.sh              which rung test binaries are profiled
+#
+# Consumers that CANNOT read it, and are therefore checked against it by
+# scripts/check_rung_filters.sh (run by .github/workflows/drift-guard.yml):
+#   .github/workflows/wasm-ladder.yml  on.push.paths / on.pull_request.paths
+#                                      (GitHub evaluates these before any
+#                                      step runs, so they must be literal)
+#   codecov.yml                        per-rung components
+#
+# Adding a rung: add its name here, and nothing else needs a hand edit except
+# the two literal lists above -- which the guard will name explicitly if you
+# forget. Omitting a rung here while examples/<rung>/CMakeLists.txt calls
+# morph_add_rung() is a hard configure error, by design: this list is the one
+# whose staleness must fail loudly, because everything else derives from it.
+
+pastebin
+bookmarks
+polls
+kanban
+ledger
+lims
