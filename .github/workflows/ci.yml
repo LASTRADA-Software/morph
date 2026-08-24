@@ -27,21 +27,34 @@ permissions:
   contents: read
 
 env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  # vcpkg's x-gha binary caching backend has been removed upstream (confirmed
+  # live: every Windows CI run logged "warning: The 'x-gha' binary caching
+  # backend has been removed" and silently cached nothing, rebuilding every
+  # vcpkg dependency from source on every run). Replaced with the officially
+  # documented successor: a NuGet-based provider backed by GitHub Packages'
+  # own NuGet feed, which every repo already has -- no new secret, just the
+  # windows job's own GITHUB_TOKEN and packages: write (see that job's
+  # permissions: block and its "Add NuGet source" step, which is what
+  # actually defines the `github` source this string names).
+  VCPKG_BINARY_SOURCES: "clear;nuget,github,readwrite"
   SCCACHE_DIR: /home/runner/.cache/sccache
-  # Caps each leg's on-disk sccache blob. Note the budget arithmetic: there
-  # are **16** cache-writing legs once the matrices expand (4 linux-compilers
-  # + 4 linux-sanitizers + 2 linux-all-features + kanban-tsan + linux-qt +
-  # ladder-tests + ladder-sanitizers + valgrind + clang-tidy), not the ~11 an
-  # earlier revision of this comment assumed. At 1 GB apiece a *single*
-  # generation is 16 GB against GitHub's 10 GB per-repo actions-cache budget,
-  # so legs evict one another and entries often do not survive to be reused.
+  # Caps each cache family's on-disk sccache blob. Cache keys are scoped by
+  # preset name alone (gcc-debug, gcc-release, clang-debug, clang-release,
+  # clang-asan, clang-tsan, clang-ubsan, clang-coverage), not by job name --
+  # sccache disambiguates by the actual compiler invocation, so every job that
+  # builds a given preset (e.g. linux-compilers', linux-qt's, ladder-tests'
+  # and valgrind's gcc-debug legs) shares one cache family instead of keeping
+  # its own. That is 8 families total rather than one per job, so this cap
+  # times 8 stays comfortably inside GitHub's 10 GB per-repo actions-cache
+  # budget where 16 job-scoped 1 GB blobs did not, and every job's build now
+  # also warms the cache the next job's build reads from.
   #
-  # The write side is what fixes that (see each leg's "Save sccache" step):
-  # only a push to master writes, so generations stop multiplying. Whether
-  # 1 GB is then the right cap is a question for the `sccache --show-stats`
-  # output those steps now emit -- it is deliberately left unchanged here so
-  # the effect of the write-side change can be read on its own.
+  # The write side still only fires on a push to master (see each job's "Save
+  # sccache" step) so generations do not keep multiplying underneath this.
+  # Whether 1 GB is the right cap per family is a question for the
+  # `sccache --show-stats` output those steps emit -- deliberately left
+  # unchanged here so the effect of the cache-sharing change can be read on
+  # its own.
   SCCACHE_CACHE_SIZE: "1G"
   CLANG_VERSION: "22"
   # MORPH_BUILD_FORMS_QML needs Qt 6.5+; ubuntu-24.04 apt still ships 6.4.2.
@@ -52,6 +65,13 @@ jobs:
   windows:
     name: Windows / ${{ matrix.preset }}
     runs-on: windows-latest
+    # packages: write is what lets vcpkg push built binaries to this repo's
+    # GitHub Packages NuGet feed (see "Add NuGet source" below); nothing else
+    # in this job needs more than the default contents: read the workflow
+    # grants at the top level.
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -67,12 +87,20 @@ jobs:
         with:
           vcpkgGitCommitId: c3867e714dd3a51c272826eea77267876517ed99
 
-      - name: Export vcpkg GHA binary cache vars
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+      # Defines the `github` source VCPKG_BINARY_SOURCES (top-level env:)
+      # names. GITHUB_TOKEN is scoped to this repo and already carries
+      # packages: write from this job's permissions: block above -- no new
+      # secret needed. `dotnet nuget` rather than `nuget.exe`: it ships with
+      # the .NET SDK already on every GitHub-hosted Windows runner, so
+      # nothing extra needs installing.
+      - name: Add NuGet source (GitHub Packages, for vcpkg binary caching)
+        shell: pwsh
+        run: |
+          dotnet nuget add source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" `
+            --name github `
+            --username "${{ github.repository_owner }}" `
+            --password "${{ secrets.GITHUB_TOKEN }}" `
+            --store-password-in-clear-text
 
       - name: Configure
         run: cmake --preset ${{ matrix.preset }}
@@ -120,12 +148,19 @@ jobs:
           sudo apt-get install -y ninja-build catch2
           wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
 
+      # Keyed by preset alone, not this job's name: gcc-debug/clang-debug's
+      # object files are the same ones linux-qt, ladder-tests, valgrind (for
+      # gcc-debug) and clang-tidy (for clang-debug) compile with extra
+      # -DMORPH_BUILD_* flags layered on top. sccache disambiguates by the
+      # actual compiler invocation, not by this key, so sharing one cache
+      # entry per preset across jobs only raises the hit rate -- it cannot
+      # serve a wrong object for a different flag set.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-compilers-${{ matrix.preset }}-
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.preset }}-
 
       - name: Install sccache
         run: |
@@ -178,7 +213,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-compilers-${{ matrix.preset }}-${{ github.sha }}
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
   linux-sanitizers:
     name: Linux / ${{ matrix.preset }}
@@ -246,12 +281,18 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Keyed by preset alone, matching linux-compilers' cache above: this
+      # matrix's clang-asan/clang-tsan legs share the same preset name (and
+      # much of the same object set) as ladder-sanitizers and kanban-tsan
+      # respectively, which build the identical compiler+preset with extra
+      # -DMORPH_BUILD_* flags on top. See linux-compilers' identical comment
+      # for why sharing the key across jobs is safe.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: sccache-sanitizers-${{ matrix.preset }}-
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.preset }}-
 
       - name: Install sccache
         run: |
@@ -390,7 +431,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-sanitizers-${{ matrix.preset }}-${{ github.sha }}
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
   kanban-tsan:
     name: Kanban / ThreadSanitizer
@@ -439,12 +480,17 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Keyed by preset alone (clang-tsan), matching linux-sanitizers' cache:
+      # this job's clang-tsan+Qt+kanban build shares the same compiler and
+      # much of the same core-library object set as that job's clang-tsan
+      # leg, which builds plain clang-tsan+net+offline_sqlite. See
+      # linux-compilers' identical comment for why sharing the key is safe.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-kanban-tsan-${{ github.sha }}
-          restore-keys: sccache-kanban-tsan-
+          key: sccache-clang-tsan-${{ github.sha }}
+          restore-keys: sccache-clang-tsan-
 
       - name: Install sccache
         run: |
@@ -515,7 +561,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-kanban-tsan-${{ github.sha }}
+          key: sccache-clang-tsan-${{ github.sha }}
 
   linux-qt:
     name: Linux / Qt6 WebSockets
@@ -541,12 +587,17 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
+      # Keyed by preset alone (gcc-debug), matching linux-compilers' cache:
+      # this job's gcc-debug+Qt build shares the same core-library object set
+      # as linux-compilers' plain gcc-debug leg, ladder-tests' gcc-debug+Qt+
+      # ladder build, and valgrind's gcc-debug+net build. See linux-compilers'
+      # identical comment for why sharing the key across jobs is safe.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-qt-${{ github.sha }}
-          restore-keys: sccache-qt-
+          key: sccache-gcc-debug-${{ github.sha }}
+          restore-keys: sccache-gcc-debug-
 
       - name: Install sccache
         run: |
@@ -591,7 +642,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-qt-${{ github.sha }}
+          key: sccache-gcc-debug-${{ github.sha }}
 
   ladder-tests:
     name: Application ladder
@@ -678,13 +729,17 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Keyed by preset alone (gcc-debug), matching linux-qt's cache above:
+      # this job's gcc-debug+Qt+ladder build shares the same core-library
+      # objects as linux-compilers' plain gcc-debug leg and linux-qt's
+      # gcc-debug+Qt build.
       - name: Restore sccache
         if: steps.filter.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-ladder-${{ github.sha }}
-          restore-keys: sccache-ladder-
+          key: sccache-gcc-debug-${{ github.sha }}
+          restore-keys: sccache-gcc-debug-
 
       - name: Install sccache
         if: steps.filter.outputs.run == 'true'
@@ -768,7 +823,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-ladder-${{ github.sha }}
+          key: sccache-gcc-debug-${{ github.sha }}
 
   ladder-sanitizers:
     name: Application ladder / ASan+UBSan
@@ -838,13 +893,16 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Keyed by preset alone (clang-asan), matching linux-sanitizers' cache:
+      # this job's clang-asan+Qt+ladder build shares the same compiler and
+      # much of the same core-library object set as that job's clang-asan leg.
       - name: Restore sccache
         if: steps.filter.outputs.run == 'true'
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-ladder-asan-${{ github.sha }}
-          restore-keys: sccache-ladder-asan-
+          key: sccache-clang-asan-${{ github.sha }}
+          restore-keys: sccache-clang-asan-
 
       - name: Install sccache
         if: steps.filter.outputs.run == 'true'
@@ -945,7 +1003,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-ladder-asan-${{ github.sha }}
+          key: sccache-clang-asan-${{ github.sha }}
 
   linux-all-features:
     name: Linux / all optional features (${{ matrix.compiler }})
@@ -1012,12 +1070,17 @@ jobs:
           modules: qtwebsockets
           cache: true
 
+      # Keyed by preset alone, matching linux-compilers' cache: this matrix's
+      # gcc-debug/clang-debug legs (with every optional feature layered on
+      # top) share their core-library objects with linux-compilers' plain
+      # gcc-debug/clang-debug legs and every other job building the same
+      # preset (linux-qt, ladder-tests, valgrind for gcc-debug).
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
-          restore-keys: sccache-all-features-${{ matrix.compiler }}-
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: sccache-${{ matrix.preset }}-
 
       - name: Install sccache
         run: |
@@ -1121,7 +1184,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-all-features-${{ matrix.compiler }}-${{ github.sha }}
+          key: sccache-${{ matrix.preset }}-${{ github.sha }}
 
   valgrind:
     name: Valgrind memcheck
@@ -1146,12 +1209,15 @@ jobs:
           sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
           sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
 
+      # Keyed by preset alone (gcc-debug), matching linux-compilers' cache:
+      # this job's gcc-debug+net+offline_sqlite build shares its
+      # core-library objects with every other job building plain gcc-debug.
       - name: Restore sccache
         uses: actions/cache/restore@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-valgrind-${{ github.sha }}
-          restore-keys: sccache-valgrind-
+          key: sccache-gcc-debug-${{ github.sha }}
+          restore-keys: sccache-gcc-debug-
 
       - name: Install sccache
         run: |
@@ -1229,7 +1295,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /home/runner/.cache/sccache
-          key: sccache-valgrind-${{ github.sha }}
+          key: sccache-gcc-debug-${{ github.sha }}
 
   clang-tidy:
     name: clang-tidy-diff
@@ -1264,24 +1330,21 @@ jobs:
           modules: qtwebsockets
           cache: true
 
-      - name: Restore sccache
-        uses: actions/cache/restore@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy-${{ github.sha }}
-          restore-keys: sccache-clang-tidy-
-
-      - name: Install sccache
-        run: |
-          curl -sSL https://github.com/mozilla/sccache/releases/download/v0.9.1/sccache-v0.9.1-x86_64-unknown-linux-musl.tar.gz \
-            | tar -xz --strip-components=1 -C /usr/local/bin sccache-v0.9.1-x86_64-unknown-linux-musl/sccache
-
       # Every optional feature is ON here purely so its sources land in
       # compile_commands.json. clang-tidy only ever analyses *changed lines*, so
       # this costs a wider build, not a wider lint. Configured narrowly before,
       # the whole opt-in surface — morph::net, the Qt transport, the QML forms
       # renderer, the SQLite queue, the fuzz harnesses — was invisible to the
       # one gate in this workflow that reads code rather than running it.
+      # No Build step: clang-tidy-diff.py reads compile_commands.json (a
+      # configure-time artifact, CMAKE_EXPORT_COMPILE_COMMANDS=ON in the base
+      # preset) and runs clang-tidy itself per translation unit -- it neither
+      # needs the project actually compiled nor linked. pinned_facts.cmake's
+      # generated header is likewise a configure_file() (configure-time), not
+      # a build-time add_custom_command, so it's already on disk too. Compiler
+      # caching (sccache) accordingly has nothing to do in this job, unlike
+      # every other Linux job here -- so those steps, and the Build step that
+      # was their only reason to run, are gone rather than merely skipped.
       - name: Configure (generates compile_commands.json over every optional feature)
         run: |
           cmake --preset clang-debug \
@@ -1293,12 +1356,7 @@ jobs:
             -DMORPH_BUILD_HMAC_EXAMPLES=ON \
             -DMORPH_BUILD_FUZZERS=ON \
             -DCMAKE_C_COMPILER=clang-${{ env.CLANG_VERSION }} \
-            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }} \
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache \
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-
-      - name: Build
-        run: cmake --build --preset clang-debug
+            -DCMAKE_CXX_COMPILER=clang++-${{ env.CLANG_VERSION }}
 
       - name: Run clang-tidy-diff on changed lines
         run: |
@@ -1334,29 +1392,6 @@ jobs:
           path: clang-tidy-report.txt
 
   # ── Deprecation-marker format lint ────────────────────────────────────
-
-      # Cumulative hit/miss for this leg. Without it the cache is
-      # unfalsifiable: a thrashing cache and a working one look identical
-      # from the outside, and only the build-step duration hints at which
-      # one you have. `|| true` so a stats failure never fails the job.
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
-
-      # Save only on a push to master. Every run used to write a new
-      # per-commit entry, and with 16 cache-writing legs at 1 GB each one
-      # generation already exceeds GitHub's 10 GB per-repo budget -- so
-      # legs evicted each other and entries rarely survived to be reused.
-      # Restricting writes to master keeps morph#109's property (only one
-      # branch ever writes, so no branch can delete another's entry) while
-      # collapsing the generations that actually blow the budget. Pull
-      # requests still restore, read-only, and get the full benefit.
-      - name: Save sccache
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-        uses: actions/cache/save@v4
-        with:
-          path: /home/runner/.cache/sccache
-          key: sccache-clang-tidy-${{ github.sha }}
 
   deprecation-lint:
     name: Deprecation marker format
