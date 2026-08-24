@@ -135,13 +135,20 @@ field is specified to hold — that rounds, so use `withDecimalPlaces()` instead
 when the extra digits must survive and only the rendering should narrow.
 
 **Magnitude is bounded by `int64`.** The exact payload is a ratio of 64-bit
-integers, so `+`, `-`, `*`, and ratio composition can overflow when a reduced
-numerator or denominator exceeds `int64` range (roughly `9.2·10¹⁸`). This is a
-**documented limitation, not a handled case**: `Quantity` does not turn overflow
-into empty — it inherits `Rational`'s behaviour. Division by zero *is* handled
-(it yields empty); overflow is not. Domain values are expected to stay well
-within that range; a computation that could approach it should be scaled or
-reworked, not relied on to saturate or report.
+integers, so `+`, `-`, `*`, and ratio composition can exceed `int64` range
+(roughly `9.2·10¹⁸`) when a reduced numerator or denominator grows too large.
+`Quantity` inherits `Rational`'s behaviour there: the operator detects the
+overflow *before* forming it, saturates toward the correctly-signed
+`±INT64_MAX/1`, and logs the clamp at `error`. It is **not** undefined
+behaviour, and it does **not** turn the quantity empty — division by zero is the
+case that yields empty.
+
+A saturated result is still **wrong**, just wrong in a bounded, reported way:
+nothing in the return type distinguishes it from an exact one. Domain values are
+expected to stay well within the envelope; a computation that could approach it
+should be scaled or reworked, or use `Rational`'s
+`checkedAdd`/`checkedSub`/`checkedMul`, which report the overflow instead of
+clamping.
 
 ### Empty state — `std::nullopt` behavior
 

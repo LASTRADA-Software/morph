@@ -91,7 +91,7 @@ the canonical `(numerator, denominator)` pair and ignores `decimalPlaces`.
 
 | Operation | Returns | Notes |
 |---|---|---|
-| `operator+`, `operator-`, `operator*` (plain `Rational` × `Rational`) | `Rational` | `noexcept`, return a bare `Rational` — no error channel. This means *representable* results never fail; it does **not** mean the operation cannot go wrong. Reduced int64 cross-terms exceeding ~2^63 are **undefined behaviour**, not a reported error (see [Overflow & value-range envelope](#overflow--value-range-envelope)). Reduce-before-multiply (Knuth 4.5.1) to extend safe int64 range. Cross-cancellation before multiplication. |
+| `operator+`, `operator-`, `operator*` (plain `Rational` × `Rational`) | `Rational` | `noexcept`, return a bare `Rational` — no error channel. This means *representable* results never fail; it does **not** mean the operation cannot go wrong. Reduced int64 cross-terms exceeding ~2^63 **saturate** at `±INT64_MAX/1` and log at `error`; the result is clamped and inexact, and the return type does not say so (see [Overflow & value-range envelope](#overflow--value-range-envelope)). Reduce-before-multiply (Knuth 4.5.1) to extend safe int64 range. Cross-cancellation before multiplication. |
 | `operator/`, `dividedBy` (plain `Rational` ÷ `Rational`) | `expected<Rational, RationalError>` | `DivisionByZero` when divisor's numerator is zero. Implemented by multiplying `*this` by the reciprocal built directly (`den/num`, sign carried onto the numerator), so it **also propagates `max` precision** — the division inherits the max-precision rule through its internal `*=` even though it returns `expected`. |
 | `operator-` (unary) | `Rational` | Negates numerator. Precision preserved. **Negating `INT64_MIN` overflows.** |
 | `reciprocal` | `expected<Rational, RationalError>` | Multiplicative inverse. `DivisionByZero` when the value is zero. **Precision is the operand's own `decimalPlaces`, not `max`** (it is a unary operation with no second operand to widen against). |
@@ -107,9 +107,11 @@ type a hard value-range envelope that the `noexcept` signatures do not advertise
 **`operator+` / `operator-` / `operator*` are `noexcept` and return a bare
 `Rational` — but they can still be wrong.** The reduce-before-multiply and
 cross-cancellation steps (Knuth 4.5.1) push the point at which the intermediate
-products overflow, but they do not eliminate it. When a reduced cross-term
-exceeds ~2^63 the signed multiplication/addition is **undefined behaviour**, not
-a trapped or reported error:
+products would overflow, but they do not eliminate it. When a reduced cross-term
+would exceed ~2^63 the operator detects that *before* forming the product or
+sum, saturates toward the correctly-signed `±INT64_MAX/1`, and logs the clamp at
+`error`. It is **not** undefined behaviour — but the result is clamped and
+inexact, and nothing in the return type distinguishes it from an exact one:
 
 - `operator+=` / `operator-=` compute `numerator * rightDenominatorScaled ±
   rhs.numerator * leftDenominatorScaled` and `denominator *
@@ -120,12 +122,16 @@ a trapped or reported error:
   (`reducedLeftNumerator * reducedRightNumerator`, likewise the denominators)
   still overflows.
 
-Because these operators have no error channel, an overflow here is **silent** —
-the result is a garbage `Rational` (or a sanitizer trap under UBSan), never a
-`RationalError`. Contrast the *only* fallible plain operator, `operator/`
-(division), whose sole failure mode is a trivial divisor-is-zero check yet which
-returns `std::expected`. The fallibility is inverted: the operation that almost
-cannot fail is the one that reports, and the ones that carry real UB do not (see
+Because these operators have no error channel, a saturated result is **not
+distinguishable from an exact one by the caller** — it is a clamped `Rational`,
+never a `RationalError`. It is not silent to the *operator*, though: every clamp
+logs at `error` naming the operation, and `checkedAdd` / `checkedSub` /
+`checkedMul` return `std::expected` for a caller that needs to branch on it.
+Contrast the *only* fallible plain operator, `operator/` (division), whose sole
+failure mode is a trivial divisor-is-zero check yet which returns
+`std::expected`. The fallibility is still inverted: the operation that almost
+cannot fail is the one that reports through the type system, while the ones that
+can genuinely go out of envelope report through the log (see
 [Limitations](#limitations)).
 
 **`dp` → approximate maximum representable magnitude.** A value scaled to
@@ -504,13 +510,17 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 
 ## Limitations
 
-- **Fixed-width `int64`, not a bignum — with silent overflow UB in the
-  "safe-looking" operators.** `+`, `-`, and `*` are `noexcept` and hand back a
-  bare `Rational`, which reads as "infallible" but means the opposite for
-  out-of-envelope inputs: a reduced cross-term past ~2^63 is undefined
-  behaviour, produced *silently*. The fallibility is inverted — `operator/`,
-  whose only failure is a trivial divisor-is-zero check, returns
-  `std::expected`, while the genuinely dangerous `+`/`-`/`*` do not. See
+- **Fixed-width `int64`, not a bignum — the "safe-looking" operators saturate
+  rather than report.** `+`, `-`, and `*` are `noexcept` and hand back a bare
+  `Rational`, which reads as "infallible" but means something narrower for
+  out-of-envelope inputs: a reduced cross-term past ~2^63 is clamped to
+  `±INT64_MAX/1` and logged at `error`, so the value is inexact and the caller
+  cannot tell from the return type. (This is *not* undefined behaviour; an
+  earlier revision of this document said it was, contradicting "The operators
+  saturate; they never overflow" a few dozen lines above.) The fallibility is
+  inverted — `operator/`, whose only failure is a trivial divisor-is-zero check,
+  returns `std::expected`, while `+`/`-`/`*` report through the log and leave
+  `checkedAdd`/`checkedSub`/`checkedMul` for callers that must branch. See
   [Overflow & value-range envelope](#overflow--value-range-envelope) for the
   `dp` → magnitude table.
 - **`setWire` clamps hostile input rather than rejecting it.** `den == 0`
