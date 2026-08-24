@@ -84,10 +84,61 @@ jobs:
         if: matrix.preset == 'cl-debug' || matrix.preset == 'clangcl-debug'
         run: ctest --preset ${{ matrix.preset }}
 
+  # Picks the self-hosted morph-docker runner for linux-compilers when one is
+  # registered, online, and idle; falls back to the GitHub-hosted label
+  # otherwise. GITHUB_TOKEN can't call the runners API (it's a repo-admin
+  # operation regardless of the permissions: block below), so this needs
+  # RUNNER_STATUS_TOKEN -- a PAT with Administration: Read-only on this repo,
+  # stored as a repo secret. Forked-repo PRs don't get repo secrets at all
+  # (the token comes through empty), which this treats the same as "no
+  # runner online": fall back to GitHub-hosted. See
+  # .github/self-hosted-runner/README.md for the runner itself.
+  probe-self-hosted:
+    name: Probe self-hosted runner
+    runs-on: ubuntu-24.04
+    outputs:
+      runs_on: ${{ steps.probe.outputs.runs_on }}
+    steps:
+      - name: Check for an idle morph-docker runner
+        id: probe
+        env:
+          RUNNER_STATUS_TOKEN: ${{ secrets.RUNNER_STATUS_TOKEN }}
+        run: |
+          set -euo pipefail
+          fallback='["ubuntu-24.04"]'
+
+          if [ -z "${RUNNER_STATUS_TOKEN}" ]; then
+            echo "No RUNNER_STATUS_TOKEN (e.g. a forked-repo PR) -- using GitHub-hosted."
+            echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          runners=$(curl -fsSL \
+            -H "Authorization: Bearer ${RUNNER_STATUS_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runners") || {
+              echo "Runners API call failed -- using GitHub-hosted."
+              echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+              exit 0
+            }
+
+          online=$(echo "${runners}" | jq '[.runners[] |
+            select(.status == "online" and .busy == false and
+                   (.labels | map(.name) | contains(["morph-docker"])))] | length')
+
+          if [ "${online}" -gt 0 ]; then
+            echo "Found an idle morph-docker runner -- using self-hosted."
+            echo 'runs_on=["self-hosted", "Linux", "X64", "morph-docker"]' >> "$GITHUB_OUTPUT"
+          else
+            echo "No idle morph-docker runner -- using GitHub-hosted."
+            echo "runs_on=${fallback}" >> "$GITHUB_OUTPUT"
+          fi
+
   # ── Linux: GCC and Clang plain builds ────────────────────────────────
   linux-compilers:
     name: Linux / ${{ matrix.preset }}
-    runs-on: ubuntu-24.04
+    needs: probe-self-hosted
+    runs-on: ${{ fromJSON(needs.probe-self-hosted.outputs.runs_on) }}
     strategy:
       fail-fast: false
       matrix:
