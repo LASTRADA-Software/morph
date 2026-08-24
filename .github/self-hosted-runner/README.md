@@ -2,7 +2,19 @@
 
 Runs a repo-level GitHub Actions runner for `LASTRADA-Software/morph` inside
 a Docker container. Used by `.github/workflows/self-hosted-smoke.yml`
-(`runs-on: [self-hosted, Linux, X64, morph-docker]`).
+(`runs-on: [self-hosted, Linux, X64, morph-docker]`) and by `ci.yml`'s
+`linux-compilers` job whenever one is online and idle (see **ci.yml
+integration** below).
+
+Currently running on two hosts, each a separate registration of the same
+image:
+
+- the maintainer's Windows machine (Docker Desktop, Linux containers)
+- a Hetzner Cloud VM (`morph-hetzner-hel1`)
+
+Having more than one matters for `linux-compilers`: it's a 4-leg matrix,
+and a single runner can only execute one job at a time, so with just one
+box the legs queue behind each other instead of running in parallel.
 
 The image is plain Ubuntu 24.04 with just the runner binary and enough
 packages (`sudo`, `curl`, `git`, build-essential-adjacent tooling) to
@@ -124,3 +136,36 @@ Each container is one runner process. To add capacity (e.g. one runner on
 this machine, another on a Hetzner box), repeat the Quick start on each
 host with a distinct `RUNNER_NAME` — no coordination between them is
 needed, they just both poll the same repo's job queue.
+
+## ci.yml integration
+
+`ci.yml`'s `linux-compilers` job doesn't hardcode `runs-on:`. A
+`probe-self-hosted` job that runs first checks the runners API for an
+online, non-busy runner labeled `morph-docker` and outputs the label set
+`linux-compilers` should use — self-hosted if one is free, otherwise the
+plain `ubuntu-24.04` GitHub-hosted label. Nothing needs to be started or
+stopped by hand for this fallback to work; it's just naturally in effect
+whenever no morph-docker runner happens to be online or all of them are
+busy on another job.
+
+The one piece that doesn't come for free: `GITHUB_TOKEN` cannot call the
+runners API — `GET /repos/.../actions/runners` is a repo-admin operation
+regardless of what the workflow's `permissions:` block grants. The probe
+job instead reads a repo secret named `RUNNER_STATUS_TOKEN`, which must
+be a **fine-grained PAT scoped to this repo only, with the
+"Administration: Read-only" permission** (nothing else — it cannot
+register, delete, or otherwise manage runners, and has no code access).
+Set it up once at **Settings → Secrets and variables → Actions → New
+repository secret**. Until that secret exists, the probe always falls
+back to `ubuntu-24.04` — nothing breaks, `linux-compilers` just never
+picks up the self-hosted path.
+
+Forked-repo pull requests never receive repo secrets at all (GitHub
+withholds them for security), so `RUNNER_STATUS_TOKEN` reads as empty
+there and the probe falls back the same way — no separate handling
+needed for that case.
+
+Other Linux jobs (sanitizers, coverage, valgrind, Qt, ladder tests,
+clang-tidy) are intentionally left on `ubuntu-24.04` for now;
+`linux-compilers` is the first real (non-smoke-test) workload on this
+runner infrastructure.
