@@ -163,7 +163,7 @@ Protected Member Functions</h2></td></tr>
 <div class="textblock"><p>Interface for durable storage of actions that could not be delivered. </p>
 <p>Items accumulate while the system is offline and are replayed by <span class="tt"><a class="el" href="../../d3/d55/classmorph_1_1offline_1_1SyncWorker.html" title="Replays queued actions from an IOfflineQueue on reconnect.">SyncWorker</a></span> on reconnect. The interface is intentionally minimal so that implementations can range from in-memory (<span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span>) to SQLite or file-backed stores. </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00096">96</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00104">104</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 </div><a name="doc-func-members" id="doc-func-members"></a><h2 id="header-doc-func-members" class="groupheader">Member Function Documentation</h2>
 <a id="a580ca19c41a025fd3a6f45f2f7fb9490" name="a580ca19c41a025fd3a6f45f2f7fb9490"></a>
 <h2 class="memtitle"><span class="permalink"><a href="#a580ca19c41a025fd3a6f45f2f7fb9490">&#9670;&#160;</a></span>enqueue() <span class="overload">[1/2]</span></h2>
@@ -229,7 +229,17 @@ Protected Member Functions</h2></td></tr>
 </div><div class="memdoc">
 
 <p>Appends <code class="param">payload</code> carrying the cross-subsystem <code class="param">idempotencyKey</code>. </p>
-<p>The key is stored on the resulting <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></span> so a replay consumer can dedup this op against ones the journal (or a prior replay) already applied (see <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></span> and <span class="tt">docs/spec/offline.md</span>). The queue neither interprets nor enforces uniqueness on the key.</p>
+<p>The key is stored on the resulting <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></span> so a replay consumer can dedup this op against ones the journal (or a prior replay) already applied (see <span class="tt"><a class="el" href="../../d0/df8/structmorph_1_1offline_1_1QueueItem.html#a9b525b5ce116f5bbd180838032295d6c" title="Optional caller-supplied idempotency key that is stable across subsystems and process restarts for on...">QueueItem::idempotencyKey</a></span> and <span class="tt">docs/spec/offline/offline.md</span>).</p>
+<dl class="section user"><dt>Uniqueness is a floor, not a prohibition</dt><dd>The queue never interprets the key, and this interface does not <em>require</em> uniqueness enforcement: a conforming implementation may store the same non-empty key twice, so a replay consumer must dedup on the key regardless. Enqueue-time dedup is an allowed <b>strengthening</b>, not a contract violation. Of the implementations morph ships, <span class="tt"><a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html" title="Thread-safe in-memory implementation of IOfflineQueue.">InMemoryOfflineQueue</a></span> never dedups, while <span class="tt"><a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html" title="Reference append-only, NDJSON-backed IOfflineQueue that persists payload, idempotencyKey,...">FileOfflineQueue</a></span> (linear scan) and <span class="tt"><a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html" title="Reference SQLite-backed IOfflineQueue: persists payload, idempotencyKey, and attempts across process ...">SqliteOfflineQueue</a></span> (partial unique index) both do.</dd></dl>
+<dl class="section user"><dt>What a dedup hit does, in every implementation that dedups</dt><dd><ul>
+<li>It applies only to a <b>non-empty</b> key already carried by a <em>pending</em> item. An empty key is never a dedup token — two empty-key enqueues always produce two distinct items, in every implementation.</li>
+<li>The call <b>succeeds</b> and returns the <b>existing</b> item's id rather than a fresh one, so the return value is not a reliable signal that anything was stored.</li>
+<li>It is <b>first-write-wins with silent payload loss</b>: <code class="param">payload</code> is discarded, the pending item keeps the payload it already had, and no error is raised and nothing is reported to the caller. A caller that re-enqueues a <em>corrected</em> payload under an unchanged key therefore loses the correction — mint a new key when the payload changes.</li>
+<li><span class="tt"><a class="el" href="#a1399eda29916d144d93c728f1e0d06e5" title="Removes the item identified by itemId.">markDone()</a></span> releases the key: once the pending item is gone, the same key enqueues normally again.</li>
+<li>It survives a restart in a durable queue — re-enqueuing a key that a pending persisted item still carries is a hit after a reopen.</li>
+</ul>
+</dd></dl>
+<p>These guarantees are pinned for every shipped implementation by <span class="tt">tests/offline_queue_conformance.hpp</span>, which is told which policy each implementation has and asserts it.</p>
 <p>The default implementation delegates to <span class="tt">enqueue(std::move(payload))</span> and then stamps the key via <span class="tt"><a class="el" href="#ab3e24454f2625fcd447f76d9ed0fd820" title="Stamps an idempotency key onto an already-enqueued item.">setIdempotencyKey</a></span>, so existing <span class="tt"><a class="el" href="../../d0/dc5/structmorph_1_1offline_1_1IOfflineQueue.html" title="Interface for durable storage of actions that could not be delivered.">IOfflineQueue</a></span> implementations keep working without overriding it. </p><dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">payload</td><td>Serialised action to persist. </td></tr>
@@ -241,7 +251,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#afa95d94e2a430047b9252c0f52d65fce">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a09bb85941338ca833b3815a9e77f2380">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#aa3342ce935ef2cae8b2c7390c00d9175">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00121">121</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00158">158</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -338,7 +348,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af96a2cf6553f3a44390fe07629b2d4a2">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a60f482c2c96bcedf88298b9f4357d9f0">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a6ba81485a0911150f8aa9919869fa67c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00148">148</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00185">185</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -370,7 +380,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#a1fdfff80a8b535fb2c19621d6cf13d4e">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#af3f1c800c9e4e8030dc28ffc0fc3cdf3">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a502fb36fc3b6d06d0b71562886764d70">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00155">155</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00192">192</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -412,7 +422,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#ae9a56e0f6a28daa3e4047ae8ecc052f5">morph::offline::FileOfflineQueue</a>, <a class="el" href="../../d6/d5e/classmorph_1_1offline_1_1InMemoryOfflineQueue.html#a5c7f807ec5cddac608f8da633188b40d">morph::offline::InMemoryOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a85ca32148c89705c70d9f1ac6d4fca91">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00169">169</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00206">206</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
@@ -454,7 +464,7 @@ Protected Member Functions</h2></td></tr>
 
 <p>Reimplemented in <a class="el" href="../../df/d07/classmorph_1_1offline_1_1FileOfflineQueue.html#af6a72b2805560d317866b924d4cb8039">morph::offline::FileOfflineQueue</a>, and <a class="el" href="../../df/d53/classmorph_1_1offline_1_1SqliteOfflineQueue.html#a158cd872caa3d353fd4a7a04e0327b5c">morph::offline::SqliteOfflineQueue</a>.</p>
 
-<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00180">180</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html#l00217">217</a> of file <a class="el" href="../../d3/d1c/offline__queue_8hpp_source.html">offline_queue.hpp</a>.</p>
 
 </div>
 </div>
