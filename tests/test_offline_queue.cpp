@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <catch2/catch_test_macros.hpp>
+#include <memory>
 #include <morph/core/observability.hpp>
 #include <morph/offline/offline_queue.hpp>
 #include <optional>
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "offline_queue_conformance.hpp"
 
 TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue returns a unique id per item", "[queue]") {
     morph::offline::InMemoryOfflineQueue queue;
@@ -272,4 +275,16 @@ TEST_CASE("morph::offline::InMemoryOfflineQueue: enqueue at maxDepth emits queue
 
     REQUIRE(samples.size() == 1);
     REQUIRE(samples[0] == 1.0);
+}
+
+// ── IOfflineQueue conformance ─────────────────────────────────────────────────
+//
+// `InMemoryOfflineQueue` never deduplicates a repeated idempotency key; the
+// durable implementations do. That split is a permitted strengthening (see
+// `docs/spec/offline/offline.md`), so the shared suite is told which policy to expect
+// and asserts it, rather than accepting either.
+
+TEST_CASE("morph::offline::InMemoryOfflineQueue: IOfflineQueue idempotency-key conformance", "[offline_queue]") {
+    morph::test::checkIdempotencyKeyContract("InMemoryOfflineQueue", morph::test::KeyDedup::never,
+                                             [] { return std::make_unique<morph::offline::InMemoryOfflineQueue>(); });
 }

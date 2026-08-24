@@ -5,12 +5,15 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <morph/core/file_io_ops.hpp>
 #include <morph/core/observability.hpp>
 #include <morph/offline/file_offline_queue.hpp>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "offline_queue_conformance.hpp"
 
 namespace {
 
@@ -301,9 +304,10 @@ TEST_CASE("morph::offline::FileOfflineQueue: setAttempts on an unknown id is a n
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: setIdempotencyKey via the base IOfflineQueue default stamps an "
-          "already-enqueued item",
-          "[file_queue]") {
+TEST_CASE(
+    "morph::offline::FileOfflineQueue: setIdempotencyKey via the base IOfflineQueue default stamps an "
+    "already-enqueued item",
+    "[file_queue]") {
     // FileOfflineQueue overrides the two-arg enqueue(payload, key) itself, so
     // an ordinary call -- through any reference type -- always resolves to
     // that override, never to IOfflineQueue's default (which delegates to the
@@ -379,9 +383,10 @@ TEST_CASE("morph::offline::FileOfflineQueue: load() skips a blank line in the ND
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: load() rethrows on a malformed line that is NOT the last "
-          "(genuine corruption)",
-          "[file_queue]") {
+TEST_CASE(
+    "morph::offline::FileOfflineQueue: load() rethrows on a malformed line that is NOT the last "
+    "(genuine corruption)",
+    "[file_queue]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
@@ -496,9 +501,8 @@ TEST_CASE(
     std::filesystem::remove(path);
 }
 
-TEST_CASE(
-    "morph::offline::FileOfflineQueue: a failing fflush() during construction-time compaction throws",
-    "[file_queue][fault-injection]") {
+TEST_CASE("morph::offline::FileOfflineQueue: a failing fflush() during construction-time compaction throws",
+          "[file_queue][fault-injection]") {
     auto path = tempQueuePath();
     {
         std::ofstream out{path};
@@ -527,8 +531,7 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth throws OfflineQ
     std::filesystem::remove(path);
 }
 
-TEST_CASE("morph::offline::FileOfflineQueue: maxDepth() is std::nullopt when unbounded",
-          "[file_queue][overflow]") {
+TEST_CASE("morph::offline::FileOfflineQueue: maxDepth() is std::nullopt when unbounded", "[file_queue][overflow]") {
     auto path = tempQueuePath();
     std::filesystem::remove(path);
     {
@@ -608,5 +611,34 @@ TEST_CASE("morph::offline::FileOfflineQueue: enqueue at maxDepth emits queueOver
         REQUIRE(samples.size() == 1);
         REQUIRE(samples[0] == 1.0);
     }
+    std::filesystem::remove(path);
+}
+
+// ── IOfflineQueue conformance ─────────────────────────────────────────────────
+//
+// `FileOfflineQueue` deduplicates a non-empty idempotency key already carried by
+// a pending item (linear scan). That is a permitted strengthening of the
+// `IOfflineQueue` contract, declared here so the shared suite asserts it rather
+// than tolerating either behaviour.
+
+TEST_CASE("morph::offline::FileOfflineQueue: IOfflineQueue idempotency-key conformance", "[file_queue]") {
+    std::vector<std::filesystem::path> created;
+    morph::test::checkIdempotencyKeyContract("FileOfflineQueue", morph::test::KeyDedup::onPendingItems, [&created] {
+        auto path = tempQueuePath();
+        std::filesystem::remove(path);
+        created.push_back(path);
+        return std::make_unique<morph::offline::FileOfflineQueue>(path);
+    });
+    for (auto const& path : created) {
+        std::filesystem::remove(path);
+    }
+}
+
+TEST_CASE("morph::offline::FileOfflineQueue: the idempotency-key contract survives a reopen", "[file_queue]") {
+    auto path = tempQueuePath();
+    std::filesystem::remove(path);
+    morph::test::checkIdempotencyKeyContractAcrossReopen(
+        "FileOfflineQueue", morph::test::KeyDedup::onPendingItems,
+        [&path] { return std::make_unique<morph::offline::FileOfflineQueue>(path); });
     std::filesystem::remove(path);
 }
