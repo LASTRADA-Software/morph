@@ -45,6 +45,7 @@ add_executable(morph_tests
     test_switch_backend.cpp
     test_async_registration.cpp
     test_network_monitor.cpp
+    test_forms_boolean_anyof_wire.cpp
     test_offline_queue.cpp
     test_file_offline_queue.cpp
     test_sync_worker.cpp

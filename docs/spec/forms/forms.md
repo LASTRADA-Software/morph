@@ -646,6 +646,51 @@ encodes to a genuine empty array `[]`, not `null`; a `required` array field
 is satisfied by engagement (non-blank text), not by having at least one
 surviving entry.
 
+### Boolean fields — `type: "boolean"`
+
+glaze emits `{"type": "boolean"}` for a `bool` member, and
+`{"type": ["boolean", "null"]}` for a `std::optional<bool>`. The shipped
+`DynamicForm.qml` renderer gives both a `CheckBox` (`objectName: "field_" +
+name`, mutually exclusive per field with the scalar and array controls, so
+exactly one claims that name) rather than letting them fall through to the
+plain-text control. The fallback there (`JSON.stringify(text)`) wrapped the
+value as a JSON *string* — `{"flag":"true"}` — and, because a `TextField`
+applies no validation of its own, accepted literally any text, so
+`{"flag":"banana"}` was submitted just as readily. glaze rejects both with
+`expected_true_or_false`; it does not coerce.
+
+The control emits a bare `true` or `false`, never quoted. A `bool` member is
+**required** (it has no null branch), and a checkbox always displays a definite
+state, so a required boolean with no retained value is seeded `false` at
+delegate creation rather than left blank — otherwise the form would show an
+unchecked box while the required-field gate silently withheld submission, with
+nothing on screen indicating what was missing. An *optional* boolean is left
+unseeded and is omitted from the request body until the user touches it, which
+is what distinguishes "not answered" from an explicit `false` for a
+`std::optional<bool>` member.
+
+### Nullable fields whose type is a `$ref` — `anyOf`
+
+A nullable member whose underlying type is emitted as a definition rather than
+inline — `std::optional<std::int64_t>`, or a `std::optional<T>` over a strong id
+— produces neither a `type` key nor a top-level `$ref`:
+
+```json
+"optI64": {"anyOf": [{"$ref": "#/$defs/int64_t"}, {"type": "null"}]}
+```
+
+A renderer that resolves only a *top-level* `$ref` sees no type at all here, so
+every field-kind flag is false and the value takes the plain-text path — a
+quoted string the server rejects with `parse_number_failure`. `DynamicForm.qml`
+therefore resolves through `anyOf` (and `oneOf`, which glaze does not currently
+emit but a hand-written or evolved schema may): it takes the first branch whose
+type is not `"null"`, follows a `$ref` inside it, and merges the result under
+the property's own keys, so the field is typed by `T` and picks up `T`'s
+constraints such as `minimum`/`maximum`. Integers on this path are emitted as
+bare, exact numbers — the payload is assembled as JSON *text*, never round-tripped
+through `JSON.parse`, so values beyond 2^53 (including `INT64_MAX`) survive
+intact.
+
 ### Versioning stance
 
 The emitted schema is **unversioned**. There is no `$id`, `$schema` version
@@ -665,7 +710,7 @@ renderer for it, Qt/QML, as a reusable component rather than example code.
 - **`src/qt/forms`** builds the QML module `MorphForms` (CMake target
   `morph_forms_module`, `qt_add_qml_module(... URI MorphForms VERSION 1.0)`):
   `DynamicForm.qml` (the `Repeater`-over-`fields` form renderer: `$ref`
-  resolution/dual-read, the exact rational digit arithmetic, the unit
+  and `anyOf` resolution/dual-read, the exact rational digit arithmetic, the unit
   selector, the required-field submit gate, the options-fetch, layout/
   grouping into sections/tabs, the widget-hint controls — textarea, slider,
   radio group — the comma-separated-with-validation `"array"`-typed field
