@@ -1,0 +1,51 @@
+name: Self-hosted smoke test
+
+# Opt-in proving ground for the morph-docker self-hosted Linux runner
+# (see .github/self-hosted-runner/). Deliberately excludes pull_request
+# from forks: a self-hosted runner executes arbitrary job code on a real
+# machine, and a forked PR is not trusted for that. Same-repo PRs, direct
+# pushes, and manual dispatch are all first-party and considered trusted.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: self-hosted-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Linux (self-hosted)
+    runs-on: [self-hosted, Linux, X64, morph-docker]
+    # pull_request.head.repo.full_name equals the base repo only for
+    # same-repo branches; forks report their own fork's full_name here.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report runner identity
+        run: |
+          echo "Running on: $(hostname)"
+          uname -a
+          nproc
+          free -h
+
+      - name: Configure + build (gcc-debug)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y software-properties-common
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -q
+          sudo apt-get install -y gcc-15 g++-15 ninja-build catch2 cmake
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 15
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-15 15
+          cmake --preset gcc-debug
+          cmake --build --preset gcc-debug
+
+      - name: Test
+        run: ctest --preset gcc-debug
