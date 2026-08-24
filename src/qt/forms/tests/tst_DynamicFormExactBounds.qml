@@ -60,6 +60,29 @@ TestCase {
         required: ["n"]
     })
 
+    // The anyOf shape: a bare std::optional<std::int64_t>. Before morph#189 this
+    // had no resolved type at all, so no bounds applied and the gate never ran.
+    // Now that resolveProp follows the non-null anyOf branch, the field inherits
+    // $defs/int64_t's bounds -- including the exact companions (morph#213).
+    property var anyOfI64Schema: ({
+        "$defs": {
+            "int64_t": {
+                type: "integer",
+                minimum: -9223372036854775808,
+                maximum: 9223372036854775807,
+                "x-exactMinimum": "-9223372036854775808",
+                "x-exactMaximum": "9223372036854775807"
+            }
+        },
+        properties: { optId: { anyOf: [{ "$ref": "#/$defs/int64_t" }, { type: "null" }], "x-order": 0 } },
+        required: []
+    })
+
+    Component {
+        id: anyOfI64Form
+        DynamicForm { actionType: "T_AnyOfI64"; schema: testCase.anyOfI64Schema; controller: mockController }
+    }
+
     Component {
         id: i64Form
         DynamicForm { actionType: "T_I64"; schema: testCase.i64Schema; controller: mockController }
@@ -145,5 +168,23 @@ TestCase {
         compare(form.ready, true)
         typeInto(form, "field_n", "-11")
         compare(form.ready, false)
+    }
+
+    // ── the two fixes composing ──────────────────────────────────────────────
+
+    function test_anyOf_field_inherits_the_exact_bounds_and_rejects_past_them() {
+        var form = createTemporaryObject(anyOfI64Form, testCase)
+        // Measured on morph#189's branch before this fix: an anyOf int64 field
+        // admitted INT64_MAX + 1, because the bound it compared against had been
+        // rounded up by JSON.parse to exactly that value.
+        typeInto(form, "field_optId", "9223372036854775808")
+        compare(form.ready, false)
+    }
+
+    function test_anyOf_field_still_accepts_int64_max_exactly() {
+        var form = createTemporaryObject(anyOfI64Form, testCase)
+        typeInto(form, "field_optId", "9223372036854775807")
+        compare(form.ready, true)
+        verify(form.previewLine.indexOf('"optId":9223372036854775807') !== -1)
     }
 }
