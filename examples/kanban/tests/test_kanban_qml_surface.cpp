@@ -24,11 +24,20 @@
 // 7 properties or 5), because a count cannot describe a surface that changes
 // shape.
 //
-// The audit needs no such branch, and that is the point of a per-name check
-// rather than a count: it reads the metaobject that was actually built, so in a
-// configure without the switch the two properties simply are not there.
+// The audit needs no branch to *find* the surface -- it reads the metaobject
+// that was actually built, so in a configure without the switch the two
+// properties simply are not there. But the exemption list below does need one,
+// because `queueDepth` is unbound in the configure where it exists: BoardView.qml
+// binds `deadLetterCount` and nothing reads `queueDepth`. An exemption for a
+// member the bridge does not have is itself a finding, so that entry has to be
+// compiled in only when the member is.
 //
-// What *did* need work is the other direction. `BoardView.qml` reads
+// This was found by CI, not locally. An earlier draft of this file asserted the
+// two configures produce identical findings; they do not, and the check behind
+// that claim had a grep that silently dropped half the audit's output. The
+// per-configure verification below is what should have been done first.
+//
+// What *also* needed work is the other direction. `BoardView.qml` reads
 // `deadLetterCount` unconditionally-looking but guards it with
 // `!== undefined`, precisely so the dead-letter banner stays hidden in an OFF
 // build. The audit used to report that as "reads a property the bridge has no
@@ -95,6 +104,25 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
                                "syncStatusChanged", "getRules", "refresh", "setAttachmentServerUrl"}) {
         audit.allowUnbound(QStringLiteral("boardBridge"), QString::fromLatin1(member), backlog);
     }
+#ifdef MORPH_BUILD_OFFLINE_SQLITE
+    // Only exists in this configure, and unbound in it: BoardView.qml binds
+    // `deadLetterCount` and reads `queueDepth` nowhere. Guarded by the same
+    // macro as the property, because the audit rejects an exemption naming a
+    // member the bridge does not have -- so an unguarded entry would fail the
+    // OFF configure exactly as its absence failed the ON one.
+    //
+    // Deliberately keyed off the macro rather than off
+    // `metaObject()->indexOfProperty("queueDepth") >= 0`, which would also work
+    // and is tempting because it cannot go stale. That is exactly why it is the
+    // worse choice here: asking the metaobject makes this test agree with
+    // whatever was built, including a build where the two disagree. A
+    // reconfigure from OFF to ON does not reliably re-run AUTOMOC, so the
+    // bridge can carry the macro on its compile line while its metaobject still
+    // lacks the property -- and this assertion is one of the few places that
+    // notices. Keyed off the macro it fails loudly on such a tree; keyed off the
+    // metaobject it would pass and let the stale build through.
+    audit.allowUnbound(QStringLiteral("boardBridge"), QStringLiteral("queueDepth"), backlog);
+#endif
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());
