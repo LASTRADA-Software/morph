@@ -26,7 +26,10 @@
 /// carries that text byte-for-byte, so an emitter change cannot leave a stale
 /// schema in the corpus.
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <morph/forms/forms.hpp>
 #include <morph/util/quantity.hpp>
@@ -34,6 +37,8 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 // The fixtures below are file-scope, not anonymous-namespaced: glaze's

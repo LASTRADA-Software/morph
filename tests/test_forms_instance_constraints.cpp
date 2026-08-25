@@ -10,8 +10,10 @@
 // anywhere in the framework able to name the bound it broke.
 
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <map>
 #include <morph/forms/forms.hpp>

@@ -30,14 +30,17 @@
 
 #include <algorithm>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
+#include <functional>
 #include <glaze/glaze.hpp>
 #include <map>
 #include <set>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "forms_rule_corpus.hpp"
