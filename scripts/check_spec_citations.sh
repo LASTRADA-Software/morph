@@ -13,6 +13,11 @@
 #      "N-part protocol" wording the JSON Envelope superseded (see
 #      docs/spec/core/wire.md, "Envelope").
 #
+#   3. Dangling-reference check: every docs/spec/*.md path and every
+#      morph/*.hpp path mentioned anywhere in the tree must resolve to a file
+#      that exists. Checks 1 and 2 run from a hand-maintained list outward and
+#      so cannot fail for a citation pointing at nothing (morph#251, morph#235).
+#
 # This is a prose lint, not a value check: it does not parse
 # docs/spec/pinned_facts.toml or re-derive expected values (that is
 # tests/test_pinned_facts.cpp's job, checked at compile/run time). It only
@@ -90,6 +95,68 @@ if [ -n "$hits" ]; then
     fail=1
 fi
 
+# ---------------------------------------------------------------------------
+# 3. Dangling-reference check
+# ---------------------------------------------------------------------------
+# Checks 1 and 2 both run *from* a hand-maintained list outward: check 1 asks
+# whether a pinned fact is still mentioned in its spec, check 2 asks whether a
+# banned phrase reappeared. Neither ever asks the reverse question -- does a
+# path cited *by* the code resolve to a file that exists? So this job's name
+# promised citation checking while nothing here could fail for a dangling
+# citation, and six of them accumulated (morph#251): spec files that moved when
+# docs/spec/ was reorganised into per-subsystem directories, plus every
+# `#include <morph/...>` in README.md naming a header that never existed at
+# that path (morph#235).
+#
+# A cross-reference's entire value is that it resolves. This check walks every
+# `docs/spec/**.md` and `morph/**.hpp` path mentioned anywhere in the tree and
+# asserts the file is really there.
+#
+# Dated plans under docs/superpowers/plans/ are excluded: they are historical
+# records of what was planned on a date, not reference documentation, and
+# correcting a path inside a finished plan would rewrite the record.
+refs_checked=0
+
+while IFS=: read -r file line ref; do
+    [ -n "$ref" ] || continue
+    refs_checked=$((refs_checked + 1))
+    if [ ! -f "$ref" ]; then
+        echo "::error file=${file},line=${line}::dangling reference: ${ref} does not exist"
+        fail=1
+    fi
+done < <(
+    git ls-files -z '*.md' '*.hpp' '*.cpp' '*.sh' '*.yml' '*.qml' \
+      | grep -zv '^docs/superpowers/plans/' \
+      | xargs -0 grep -noE 'docs/spec/[A-Za-z0-9_/.-]+\.md' 2>/dev/null || true
+)
+
+# `morph/<path>.hpp` resolves relative to include/, and may carry an `include/`
+# prefix when the prose names the repo-relative path.
+while IFS=: read -r file line ref; do
+    [ -n "$ref" ] || continue
+    resolved="include/${ref#include/}"
+    refs_checked=$((refs_checked + 1))
+    if [ ! -f "$resolved" ]; then
+        echo "::error file=${file},line=${line}::dangling reference: ${ref} does not resolve to a header (looked for ${resolved})"
+        fail=1
+    fi
+done < <(
+    git ls-files -z '*.md' \
+      | grep -zv '^docs/superpowers/plans/' \
+      | xargs -0 grep -noE '(include/)?morph/[A-Za-z0-9_/]+\.hpp' 2>/dev/null || true
+)
+
+# Without this the check passes silently when the scan matches nothing -- a
+# broken glob, a moved directory, a grep that errored -- which is the exact
+# failure mode that let the dangling citations accumulate under a job named
+# for checking them.
+if [ "$refs_checked" -lt 50 ]; then
+    echo "::error::dangling-reference check only scanned ${refs_checked} references -- expected at least 50; the scan is not finding files and would pass vacuously"
+    fail=1
+else
+    echo "Dangling-reference check: ${refs_checked} references scanned."
+fi
+
 if [ "$fail" -ne 0 ]; then
     echo ""
     echo "Prose lint failed. Either restore the missing citation or remove the"
@@ -99,4 +166,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "Prose lint OK: every pinned fact is still cited; no banned terminology found."
+echo "Prose lint OK: every pinned fact is still cited; no banned terminology found; every cited path resolves."

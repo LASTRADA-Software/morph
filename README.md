@@ -68,7 +68,7 @@ struct MyModel {
 Register the model and its actions once, in the `.cpp` that owns the model:
 
 ```cpp
-#include <morph/registry.hpp>
+#include <morph/core/registry.hpp>
 
 BRIDGE_REGISTER_MODEL (MyModel,            "MyModel")
 BRIDGE_REGISTER_ACTION(MyModel, MyAction,  "MyAction")
@@ -85,9 +85,9 @@ BRIDGE_REGISTER_ACTION(MyModel, MyAction,  "MyAction")
 Then drive it from the GUI — **the same code works local or remote**:
 
 ```cpp
-#include <morph/bridge.hpp>
-#include <morph/backend.hpp>
-#include <morph/executor.hpp>
+#include <morph/core/bridge.hpp>
+#include <morph/core/backend.hpp>
+#include <morph/core/executor.hpp>
 
 morph::exec::ThreadPoolExecutor pool{4};        // worker pool that runs models
 morph::exec::MainThreadExecutor guiExecutor;    // stands in for your GUI event loop
@@ -160,7 +160,7 @@ maintain:
 ```cpp
 // orders_model.cpp
 #include "orders_model.hpp"
-#include <morph/registry.hpp>
+#include <morph/core/registry.hpp>
 
 OrderId OrdersModel::execute(const PlaceOrder& a) { /* ... */ return OrderId{/* ... */}; }
 
@@ -287,7 +287,7 @@ action type can describe itself as a JSON Schema — enough for a client to rend
 its form at runtime:
 
 ```cpp
-#include <morph/forms.hpp>   // pulls in quantity.hpp + rational.hpp
+#include <morph/forms/forms.hpp>   // pulls in quantity.hpp + rational.hpp
 
 // The application defines its unit system: an enum, its metadata, and a
 // consteval algebra (see examples/forms/lab_units.hpp for the full pattern).

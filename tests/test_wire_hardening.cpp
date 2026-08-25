@@ -118,7 +118,7 @@ TEST_CASE("decode's size guard fires even for deeply nested body JSON", "[wire][
 // duplicate object keys and keeps the LAST occurrence. There is no glz::opts
 // flag to error on duplicates, so decode() cannot reject them via options. These
 // tests document the true behavior; callers MUST NOT rely on duplicate-key
-// rejection as a security boundary (see docs/spec/wire.md, docs/spec/security.md).
+// rejection as a security boundary (see docs/spec/core/wire.md, docs/spec/security.md).
 
 TEST_CASE("decode accepts a duplicate top-level key and keeps the last value", "[wire][hardening]") {
     const std::string json = R"({"kind":"execute","kind":"register"})";

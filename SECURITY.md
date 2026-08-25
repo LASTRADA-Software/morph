@@ -9,7 +9,7 @@ advisories for this repository:
 issue for a suspected vulnerability.
 
 A useful report names the affected header or spec
-(e.g. `include/morph/session_auth.hpp`, `docs/spec/wire.md`), includes a
+(e.g. `include/morph/session/session_auth.hpp`, `docs/spec/core/wire.md`), includes a
 minimal reproduction (a wire envelope or token payload where relevant), and
 sketches the impact. We aim to acknowledge reports within a few business days
 and ask for coordinated disclosure until a fix ships.

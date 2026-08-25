@@ -406,7 +406,7 @@ struct MyModel {
 2. Specialise traits and register (in a `.cpp` that owns the model):
 
 ```cpp
-#include <morph/registry.hpp>
+#include <morph/core/registry.hpp>
 
 BRIDGE_REGISTER_MODEL (MyModel,  "MyModel")
 BRIDGE_REGISTER_ACTION(MyModel, MyAction, "MyAction")

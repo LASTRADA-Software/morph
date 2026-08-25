@@ -201,7 +201,7 @@ validated by the action, not by the schema.
 ## Usage example
 
 ```cpp
-#include <morph/choice.hpp>
+#include <morph/forms/choice.hpp>
 #include <cstdint>
 
 struct SampleInfo { std::int64_t id = 0; std::string name; };

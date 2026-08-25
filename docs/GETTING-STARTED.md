@@ -493,7 +493,7 @@ Three things that bite:
   `registry.hpp`. Omit it and you get an unresolved external symbol at link
   time, not a compile error. (Note the `core/` — headers live under
   `include/morph/<subsystem>/`, and several documents still show a flat
-  `<morph/bridge.hpp>` that does not exist:
+  `<morph/core/bridge.hpp>` that does not exist:
   [#235](https://github.com/LASTRADA-Software/morph/issues/235).)
 - **If your models live in a static library, force-link it**
   (`--whole-archive` / `-force_load` / `WHOLE_ARCHIVE`). The initialiser object

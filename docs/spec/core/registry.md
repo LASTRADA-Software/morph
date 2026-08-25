@@ -628,7 +628,7 @@ switches, and completions behave exactly as for hand-written call sites.
 
 Unlike `ActionDispatcher` and `ModelRegistryFactory` (which live in
 `morph::model::detail` in `registry.hpp`), the whole `ActionExecuteRegistry`
-class is declared in `morph/bridge.hpp` in namespace `morph::bridge` — it depends
+class is declared in `morph/core/bridge.hpp` in namespace `morph::bridge` — it depends
 on `BridgeHandler`, which `registry.hpp` cannot see. `Completion` here is
 `morph::async::Completion`.
 
@@ -728,7 +728,7 @@ Expands to:
   — always emitted, `MORPH_CLIENT_ONLY` or not.
 
 **Hard requirement:** Every translation unit invoking `BRIDGE_REGISTER_ACTION`
-must include `<morph/bridge.hpp>` (directly or transitively) because
+must include `<morph/core/bridge.hpp>` (directly or transitively) because
 `registerActionExecutorOnce` is only defined there. Without it, the link fails
 with an unresolved external symbol.
 
@@ -1082,8 +1082,8 @@ testing obligation, not a compile-time guarantee.
 ## Cross-references
 
 - **[bridge.md](bridge.md)** — defines `BridgeHandler<Model>`, `Bridge`, and the
-  `ActionExecuteRegistry` class itself (declared in `<morph/bridge.hpp>`, not
-  `registry.hpp`). Explains the **hard `#include <morph/bridge.hpp>` requirement**
+  `ActionExecuteRegistry` class itself (declared in `<morph/core/bridge.hpp>`, not
+  `registry.hpp`). Explains the **hard `#include <morph/core/bridge.hpp>` requirement**
   for any TU using `BRIDGE_REGISTER_ACTION` (`registerActionExecutorOnce` is only
   *defined* there), the parallel executor path this spec's
   `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s

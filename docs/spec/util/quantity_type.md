@@ -941,7 +941,7 @@ arithmetic, a dimensionless ratio, and a computed value explaining itself.
 ### The unit system (application side)
 
 ```cpp
-#include <morph/quantity.hpp>
+#include <morph/util/quantity.hpp>
 #include <format>
 
 using morph::units::Quantity;

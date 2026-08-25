@@ -66,7 +66,7 @@ QtWebSocketBackend::QtWebSocketBackend(QUrl serverUrl, ::morph::model::detail::A
         // outstanding). Without this the nested QEventLoop in sendSync never
         // quits, freezing the Qt thread forever. We clear _pendingReply first so
         // the woken sendSync observes an empty reply and reports a failure rather
-        // than acting on a stale one. See docs/spec/backend.md (QtWebSocketBackend).
+        // than acting on a stale one. See docs/spec/core/backend.md (QtWebSocketBackend).
         if (_syncLoop != nullptr) {
             _pendingReply.clear();
             _syncLoop->quit();

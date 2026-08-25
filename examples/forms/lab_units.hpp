@@ -4,7 +4,7 @@
 /// @file
 /// The demo's unit system: a plain enum, its `UnitTraits` metadata, and the
 /// consteval algebra that lets `Quantity` deduce result units at compile
-/// time. This is the application-side half of `morph/quantity.hpp` — morph
+/// time. This is the application-side half of `morph/util/quantity.hpp` — morph
 /// itself ships no units.
 ///
 /// Naming convention: composition is explicit in the enumerator (`kg_per_m3`,

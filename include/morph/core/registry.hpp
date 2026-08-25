@@ -559,7 +559,7 @@ inline bool registerActionOnce(std::string_view modelId, std::string_view action
 ///
 /// HARD REQUIREMENT: `BRIDGE_REGISTER_ACTION_4` calls this function unconditionally, but only
 /// declares it here — it does NOT define it. Any translation unit that invokes
-/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/bridge.hpp>` (directly or transitively)
+/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/core/bridge.hpp>` (directly or transitively)
 /// somewhere in the same translation unit, or the build will fail to link with an unresolved
 /// external symbol for this function.
 template <typename Model, typename Action>
@@ -674,8 +674,8 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 ///
 /// HARD REQUIREMENT: this macro's expansion unconditionally calls
 /// `morph::model::detail::registerActionExecutorOnce<M, A>`, which is only *declared* in
-/// `registry.hpp` and *defined* in `<morph/bridge.hpp>`. Every translation unit that invokes
-/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/bridge.hpp>` (directly or transitively) in
+/// `registry.hpp` and *defined* in `<morph/core/bridge.hpp>`. Every translation unit that invokes
+/// `BRIDGE_REGISTER_ACTION` MUST include `<morph/core/bridge.hpp>` (directly or transitively) in
 /// that same translation unit, or the build will fail to link with an unresolved external
 /// symbol for `registerActionExecutorOnce<M, A>`.
 ///
