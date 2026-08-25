@@ -1,0 +1,11 @@
+# Revisions that changed formatting only. `git blame` skips these by default
+# once you point it at this file:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# CI does not read this file -- it is per-clone configuration. GitHub's blame
+# view picks it up automatically.
+
+# format: apply .clang-format to every tracked C++ file (morph#210)
+# 471 files, whitespace only; all four suites unchanged.
+4f465fd170485370fd6217c03f58a48d99c0f304

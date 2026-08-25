@@ -1272,70 +1272,6 @@ jobs:
           done
           exit "$status"
 
-  # ── clang-format-diff (changed lines only) ────────────────────────────
-  #
-  # .clang-format has always been in the tree, and nothing enforced it: 472 of
-  # 676 tracked .hpp/.cpp files did not match it (morph#210). An unenforced
-  # config is worse than none, because every editor with format-on-save obeys it
-  # faithfully -- so touching one file rewrites parts the author never meant to
-  # change, and the reviewer's job becomes separating intent from churn.
-  #
-  # Changed lines only, deliberately. Reformatting the tree would be one commit
-  # of ~12,000 changed lines across 472 files, ruining `git blame` for most of
-  # the codebase and conflicting with every open PR. This converges the tree as
-  # files are touched instead, and needs no agreement on the existing style.
-  #
-  # Pinned to the same CLANG_VERSION as clang-tidy-diff: clang-format output is
-  # not stable across major versions, so an unpinned check would disagree with
-  # itself between runners.
-  clang-format:
-    name: clang-format-diff
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # need full history for git diff against base
-
-      - name: Install clang-format ${{ env.CLANG_VERSION }}
-        run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
-          sudo apt-get install -y clang-format-${{ env.CLANG_VERSION }}
-
-      - name: Run clang-format-diff on changed lines
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          else
-            BASE_SHA="${{ github.event.before }}"
-          fi
-          SCRIPT="$(find /usr/lib/llvm-${{ env.CLANG_VERSION }}/share/clang /usr/share/clang \
-            -name 'clang-format-diff.py' 2>/dev/null | head -1)"
-          if [ -z "$SCRIPT" ]; then
-            echo "::error::clang-format-diff.py not found"
-            exit 1
-          fi
-          echo "Base SHA: $BASE_SHA"
-          git diff -U0 "$BASE_SHA" -- '*.hpp' '*.cpp' \
-            | python3 "$SCRIPT" -p1 -binary clang-format-${{ env.CLANG_VERSION }} \
-            | tee clang-format-report.diff
-          # tee preserves the script's own output for the artifact; the report
-          # being non-empty is the failure, so test it rather than $? (which is
-          # tee's).
-          if [ -s clang-format-report.diff ]; then
-            echo "::error::changed lines do not match .clang-format -- apply the diff above"
-            exit 1
-          fi
-
-      - name: Upload clang-format report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: clang-format-report
-          path: clang-format-report.diff
-          if-no-files-found: ignore
-
-  # ── clang-tidy-diff (changed lines only) ──────────────────────────────
-
       # Cumulative hit/miss for this leg. Without it the cache is
       # unfalsifiable: a thrashing cache and a working one look identical
       # from the outside, and only the build-step duration hints at which
@@ -1358,6 +1294,64 @@ jobs:
         with:
           path: /home/runner/.cache/sccache
           key: sccache-gcc-debug-${{ github.sha }}
+
+  # ── clang-format (whole tree) ─────────────────────────────────────────
+  #
+  # .clang-format has always been in the tree, and nothing enforced it: 471 of
+  # 677 tracked .hpp/.cpp files did not match it (morph#210). An unenforced
+  # config is worse than none, because every editor with format-on-save obeys it
+  # faithfully -- so touching one file rewrites parts the author never meant to
+  # change, and the reviewer's job becomes separating intent from churn.
+  #
+  # Whole tree, not changed lines. A changed-lines check passes as long as
+  # nobody touches the non-conforming lines, so it would have reported success
+  # over a tree that was 70% non-conforming -- a control that measures almost
+  # nothing. The tree was reformatted wholesale first (see
+  # .git-blame-ignore-revs), which is what makes the wider check possible.
+  #
+  # Pinned to the same CLANG_VERSION as clang-tidy-diff: clang-format output is
+  # not stable across major versions, so an unpinned check would disagree with
+  # itself between runners.
+  clang-format:
+    name: clang-format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format ${{ env.CLANG_VERSION }}
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- ${{ env.CLANG_VERSION }}
+          sudo apt-get install -y clang-format-${{ env.CLANG_VERSION }}
+
+      - name: Check every tracked C++ file against .clang-format
+        run: |
+          git ls-files -z '*.hpp' '*.cpp' > cpp-files.z
+          COUNT=$(tr -cd '\0' < cpp-files.z | wc -c)
+          # An empty or truncated file list would make this job pass while
+          # checking nothing, which is the exact failure it exists to prevent.
+          # Refuse rather than report a vacuous success.
+          if [ "$COUNT" -lt 100 ]; then
+            echo "::error::only $COUNT C++ files matched -- the check would be vacuous"
+            exit 1
+          fi
+          echo "Checking $COUNT files"
+          xargs -0 clang-format-${{ env.CLANG_VERSION }} --dry-run -Werror \
+            < cpp-files.z 2> clang-format-report.txt || true
+          if [ -s clang-format-report.txt ]; then
+            cat clang-format-report.txt
+            echo "::error::tree does not match .clang-format -- run: git ls-files -z '*.hpp' '*.cpp' | xargs -0 clang-format -i"
+            exit 1
+          fi
+
+      - name: Upload clang-format report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clang-format-report
+          path: clang-format-report.txt
+          if-no-files-found: ignore
+
+  # ── clang-tidy-diff (changed lines only) ──────────────────────────────
 
   clang-tidy:
     name: clang-tidy-diff
