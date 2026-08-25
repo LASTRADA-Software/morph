@@ -168,6 +168,23 @@ sweep covers only what the bound class declares itself.
 only locally, in a `-DMORPH_BUILD_BANK_EXAMPLE=ON -DMORPH_BUILD_BANK_GUI=ON`
 configure.
 
+`bank` is also the one place a *third* binary exists, `bank_gui_qml_tests`,
+and the reason is worth stating because no rung needs it. The audit proves a
+name written in a `.qml` file resolves against the metaobject; it cannot prove
+the binding behaves. `MoveMoneyPage.qml`'s account picker was the case that
+forced the distinction (morph#296): the controller was self-consistent under
+every C++ drive, and the defect was a `ComboBox` whose `currentIndex` nothing
+restored after its `model` was replaced. So `bank_gui_qml_tests` loads the
+shipped `.qml` from the source tree by URL — the `BankGui` QML module lives
+inside the `bank_gui` executable and cannot be linked, and QML's implicit
+import of a component's own directory resolves the sibling types with no
+`qmldir` — wires the real controllers as context properties, and reads
+property values back off the items the engine created. It is not Qt Quick Test
+and it synthesizes no mouse events (rule 6); its only reproduced gesture is the
+two lines `QQuickComboBoxPrivate::itemClicked` runs. Keeping it out of
+`bank_gui_tests` is what preserves that binary's `Qt6::Core`-only,
+no-platform-plugin property.
+
 ## The dual-mode fixture
 
 `examples/common/testkit/backend_rig.hpp` provides
