@@ -4,7 +4,10 @@ A typed, asynchronous bridge between your UI and business-object models.
 
 You call a model from the UI and get the result back on the UI — without
 writing any concurrency, serialisation, or transport code, and without the call
-site caring whether the model runs in this process or across a socket.
+site caring whether the model runs in this process or across a socket. The
+places where that transparency is not absolute — authorization, exception
+typing, subscriptions and nine others — are tabulated in
+[`docs/spec/core/locality.md`](docs/spec/core/locality.md).
 
 > **New here?** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md) builds one
 > small app end to end — model, registration, call site, then the same call
