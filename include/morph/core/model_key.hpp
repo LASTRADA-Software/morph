@@ -280,8 +280,12 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// ```
 ///
 /// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&LoadAccount::id`) whose
-/// type satisfies `morph::model::ModelKey`. Must appear at global scope, in
-/// exactly one translation unit, like the other `BRIDGE_REGISTER_*` macros.
+/// type satisfies `morph::model::ModelKey`. Must appear at global scope; a
+/// header included by several translation units is fine, like the other
+/// `BRIDGE_REGISTER_*` macros — this macro emits only explicit specialisations,
+/// which `[basic.def.odr]` permits in multiple translation units when the
+/// definitions are token-identical. See docs/spec/core/registry.md, "Header
+/// placement is legal".
 // clang-format off -- public macro surface: hand-aligned on purpose.
 // These definitions are the framework's documented API; contributors read them
 // as reference, and the continuation backslashes line up so the body is legible
@@ -309,7 +313,9 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// established by the model's one `BRIDGE_MODEL_KEY` line, and an explicit
 /// specialisation cannot be repeated.
 ///
-/// Must appear at global scope, in exactly one translation unit.
+/// Must appear at global scope; a header included by several translation units
+/// is fine (only explicit specialisations are emitted — see
+/// docs/spec/core/registry.md, "Header placement is legal").
 // clang-format off -- public macro surface: hand-aligned on purpose.
 // These definitions are the framework's documented API; contributors read them
 // as reference, and the continuation backslashes line up so the body is legible
@@ -332,7 +338,9 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// its generated primary key. `MEMBER` is a pointer-to-data-member of `A`'s
 /// result type (e.g. `&AccountInfo::id`).
 ///
-/// Must appear at global scope, in exactly one translation unit.
+/// Must appear at global scope; a header included by several translation units
+/// is fine (only explicit specialisations are emitted — see
+/// docs/spec/core/registry.md, "Header placement is legal").
 // clang-format off -- public macro surface: hand-aligned on purpose.
 // These definitions are the framework's documented API; contributors read them
 // as reference, and the continuation backslashes line up so the body is legible
@@ -360,7 +368,9 @@ concept ResultKeyed = ActionKeyTraits<A>::hasKey && ActionKeyTraits<A>::fromResu
 /// The companion to `BRIDGE_MODEL_KEY_FROM_RESULT`, for a second creating
 /// action on a model whose key type is already established.
 ///
-/// Must appear at global scope, in exactly one translation unit.
+/// Must appear at global scope; a header included by several translation units
+/// is fine (only explicit specialisations are emitted — see
+/// docs/spec/core/registry.md, "Header placement is legal").
 // clang-format off -- public macro surface: hand-aligned on purpose.
 // These definitions are the framework's documented API; contributors read them
 // as reference, and the continuation backslashes line up so the body is legible

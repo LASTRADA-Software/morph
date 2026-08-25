@@ -74,13 +74,13 @@ BRIDGE_REGISTER_MODEL (MyModel,            "MyModel")
 BRIDGE_REGISTER_ACTION(MyModel, MyAction,  "MyAction")
 ```
 
-> **Registration is per–translation-unit.** Put each `BRIDGE_REGISTER_*` call in
-> exactly one `.cpp` (the one that owns the model), never in a header — the
-> macros emit an explicit template specialisation plus a file-scope initialiser,
-> so a header invocation is an ODR violation. If your models live in a **static
-> library**, force-link it (`--whole-archive` / `-force_load` /
-> `WHOLE_ARCHIVE`), or the linker will drop the unreferenced registration object
-> and the model silently never registers.
+> **Registration must reach the link.** A `BRIDGE_REGISTER_*` call may live in a
+> `.cpp` or in a header — a header included by many `.cpp` files is well-formed,
+> and just registers the model once per including translation unit, which the
+> registry absorbs by reassigning the same factory. What does bite is linking:
+> if your models live in a **static library**, force-link it (`--whole-archive` /
+> `-force_load` / `WHOLE_ARCHIVE`), or the linker will drop the unreferenced
+> registration object and the model silently never registers.
 
 Then drive it from the GUI — **the same code works local or remote**:
 
