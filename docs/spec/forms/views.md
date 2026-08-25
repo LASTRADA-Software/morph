@@ -351,6 +351,25 @@ target-action type does not have is silently accepted (a bare column, or a
 throw `std::runtime_error` only for a wholly unregistered view/action id, not
 for a malformed reference within an otherwise-valid one.
 
+## Row ids larger than 2^53
+
+A row id is carried exactly, whatever its magnitude — in the rendered cell, in
+the `objectName` that identifies a row, and in the body of any action bound to
+that row. `CollectionView` parses its query reply with `JsonExact.parse`
+(`src/qt/forms/qml/JsonExact.js`), which keeps an integer literal a double
+cannot represent as its exact digits, and `bindBodyJson` emits those digits
+verbatim rather than re-serialising a rounded double.
+
+The failure this prevents is silent and destructive. JavaScript numbers are
+IEEE-754 doubles and round to even above 2^53, so neighbouring ids collapse onto
+one value: two rows became indistinguishable, and a confirmed `Delete` on one
+built a body naming the other (morph#191). Nothing downstream could notice — the
+server side is exact throughout, so the action decoded cleanly, validated, and
+deleted precisely the wrong row.
+
+The same guarantee for `Choice` option ids is in
+[choice.md](choice.md#option-ids-larger-than-253).
+
 ## Limitations
 
 Every limitation `choice.md` documents for its "a query action serves rows"

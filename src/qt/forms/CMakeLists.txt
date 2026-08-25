@@ -20,6 +20,7 @@ qt_add_qml_module(morph_forms_module
     URI MorphForms
     VERSION 1.0
     QML_FILES
+        qml/JsonExact.js
         qml/DynamicForm.qml
         qml/DateTimePicker.qml
         qml/SlotRegistry.qml

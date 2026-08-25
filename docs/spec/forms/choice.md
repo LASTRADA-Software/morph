@@ -257,6 +257,26 @@ system cannot check, because the strings are opaque NTTPs:
 
 ## Failure modes
 
+### Option ids larger than 2^53
+
+An option id is carried exactly, whatever its magnitude. The renderer parses an
+`OptionsAction` reply with `JsonExact.parse` (`src/qt/forms/qml/JsonExact.js`),
+which keeps an integer literal a double cannot represent as its exact digits,
+and emits those digits verbatim into the submitted body.
+
+This is a guarantee, not an implementation note, because the alternative is
+silent: JavaScript numbers are IEEE-754 doubles, so a plain `JSON.parse` rounds
+an id above 2^53 on the way in, and re-serialising the rounded number submits a
+*different* id than the app sent. Doubles round to even in that range, so a
+dense id sequence collapses pairwise — two option rows reduce to the same
+`valueJson`, the combo box shows two entries the UI cannot tell apart, and the
+staleness guard matches happily against either. A sparse id usually rounds to a
+value naming no row at all, which either throws in the model or is stored as
+garbage, depending on whether the action looks the id up (morph#190).
+
+Values a double *does* hold exactly — the overwhelmingly common case — remain
+ordinary JSON numbers, so nothing about the wire shape changes for them.
+
 ### Validation & staleness
 
 `Choice` participates in `morph::forms` required-field validation only through
