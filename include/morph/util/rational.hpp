@@ -50,6 +50,13 @@
 /// return `expected`; `operator+`, `operator-`, `operator*` on plain
 /// `Rational` pairs cannot fail and return a bare `Rational`.
 ///
+/// Overflow is *not* one of the conditions those channels report: all four
+/// operations saturate at `±INT64_MAX/1` and log, and `operator/`'s `expected`
+/// reports a zero divisor only — an overflowing quotient still comes back as a
+/// success holding a clamped value. `checkedAdd`, `checkedSub`, `checkedMul`
+/// and `checkedDiv` are the exact-or-nothing forms for callers that must
+/// branch on it.
+///
 /// @par Mixed-type expressions
 /// Whenever an arithmetic expression contains an
 /// `std::expected<Rational, RationalError>` sub-expression or a
@@ -164,7 +171,10 @@ enum class RationalError : std::uint8_t {
     DivisionByZero,  ///< Divisor numerator is zero (operator/, reciprocal, From).
     NotFinite,       ///< Floating-point input was NaN or +/-Inf (fromFloat only).
     Overflow,        ///< Result or an intermediate term exceeds int64_t range
-                     ///< (`fromFloat`, and the `checked*` arithmetic helpers).
+                     ///< (`fromFloat`, and the `checked*` arithmetic helpers
+                     ///< `checkedAdd`/`checkedSub`/`checkedMul`/`checkedDiv`).
+                     ///< Never produced by `dividedBy`/`operator/`, which
+                     ///< saturate on overflow and report only `DivisionByZero`.
 };
 
 /// @brief Rule for resolving a value sitting exactly halfway between the two
@@ -543,7 +553,7 @@ struct Rational {
     /// @return `*this`.
     constexpr Rational& operator+=(const Rational& rhs) noexcept {
         if (addWouldOverflow(rhs)) {
-            reportOverflow("operator+=");
+            reportOverflow("operator+=", "checkedAdd");
             saturateToward(compareForSaturation(rhs, true), rhs.decimalPlaces);
             return *this;
         }
@@ -558,7 +568,7 @@ struct Rational {
     /// @return `*this`.
     constexpr Rational& operator-=(const Rational& rhs) noexcept {
         if (subWouldOverflow(rhs)) {
-            reportOverflow("operator-=");
+            reportOverflow("operator-=", "checkedSub");
             saturateToward(compareForSaturation(rhs, false), rhs.decimalPlaces);
             return *this;
         }
@@ -573,29 +583,33 @@ struct Rational {
     ///
     /// Saturates rather than overflowing; see `operator+=`.
     constexpr Rational& operator*=(const Rational& rhs) noexcept {
-        if (mulWouldOverflow(rhs)) {
-            reportOverflow("operator*=");
-            // Sign of a product is the product of the signs; zero operands
-            // cannot overflow, so neither sign is zero here.
-            const bool negative = (numerator < 0) != (rhs.numerator < 0);
-            saturateToward(negative ? -1 : 1, rhs.decimalPlaces);
-            return *this;
-        }
-        mulAssignUnchecked(rhs);
+        mulAssignSaturating(rhs, "operator*=", "checkedMul");
         return *this;
     }
 
     /// @brief Non-throwing division. Result precision becomes `max` of the two.
+    ///
+    /// **Reports a zero divisor; saturates on overflow.** The `expected` says
+    /// *only* whether @p rhs was zero. Division is multiplication by the
+    /// divisor's reciprocal, and that product saturates exactly like
+    /// `operator*=`: a quotient too large for `int64_t` clamps to
+    /// `±INT64_MAX/1`, logs at `error`, and is still returned as a
+    /// **successful** `expected`. `INT64_MAX / (1/1000000)` is such a case.
+    /// A caller that must not absorb a clamped quotient uses `checkedDiv`,
+    /// which routes both failure modes through the one channel.
     /// @param rhs Divisor.
-    /// @return `*this / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
+    /// @return `*this / rhs` — possibly saturated — or
+    ///         `unexpected(DivisionByZero)` if @p rhs is zero.
     [[nodiscard]] constexpr std::expected<Rational, RationalError> dividedBy(const Rational& rhs) const noexcept {
-        if (rhs.numerator == 0) {
-            return std::unexpected(RationalError::DivisionByZero);
+        auto const divisorReciprocal = rhs.reciprocal();
+        if (!divisorReciprocal.has_value()) {
+            return std::unexpected(divisorReciprocal.error());
         }
         auto leftCopy = *this;
-        auto const reciprocalNumerator = rhs.numerator > 0 ? rhs.denominator : -rhs.denominator;
-        auto const reciprocalDenominator = rhs.numerator > 0 ? rhs.numerator : -rhs.numerator;
-        leftCopy *= Rational{Numerator{reciprocalNumerator}, Denominator{reciprocalDenominator}, rhs.decimalPlaces};
+        // Named for the caller's site, not `operator*=`: the divide is an
+        // implementation detail the caller never invoked, and `checkedMul` is
+        // not the remedy they can reach for.
+        leftCopy.mulAssignSaturating(*divisorReciprocal, "dividedBy", "checkedDiv");
         return leftCopy;
     }
 
@@ -672,14 +686,40 @@ private:
     /// is `noexcept` (`docs/spec/core/logger.md`), so an arithmetic operator
     /// cannot start failing because logging failed. This function carried that
     /// workaround until morph#158 moved the guarantee into the logging layer.
-    /// @param where Which operator saturated.
-    static constexpr void reportOverflow(std::string_view where) noexcept {
+    /// The site and the remedy are both supplied by the caller rather than
+    /// hardcoded: `dividedBy` saturates *through* `operator*=`'s arithmetic,
+    /// and naming that as the site pointed a division caller at a function it
+    /// never called, alongside three remedies none of which is a division
+    /// (morph#206).
+    /// @param where  Which operation saturated, as the caller spells it.
+    /// @param remedy The `checked*` helper that reports this case instead.
+    static constexpr void reportOverflow(std::string_view where, std::string_view remedy) noexcept {
         if (!std::is_constant_evaluated()) {
             ::morph::log::logError(
                 "[Rational] {} overflowed int64 and saturated; the result is clamped, "
-                "not exact. Use checkedAdd/checkedSub/checkedMul to detect this instead.",
-                where);
+                "not exact. Use {} to detect this instead.",
+                where, remedy);
         }
+    }
+
+    /// @brief `operator*=`'s arithmetic, saturating and logging under a
+    ///        caller-chosen site and remedy name.
+    ///
+    /// Shared by `operator*=` and `dividedBy` so the two cannot drift: one
+    /// overflow predicate, one saturation rule, two log attributions.
+    /// @param rhs    Value to multiply by.
+    /// @param where  Operation name for the overflow log.
+    /// @param remedy The `checked*` helper named as the remedy in that log.
+    constexpr void mulAssignSaturating(const Rational& rhs, std::string_view where, std::string_view remedy) noexcept {
+        if (mulWouldOverflow(rhs)) {
+            reportOverflow(where, remedy);
+            // Sign of a product is the product of the signs; zero operands
+            // cannot overflow, so neither sign is zero here.
+            const bool negative = (numerator < 0) != (rhs.numerator < 0);
+            saturateToward(negative ? -1 : 1, rhs.decimalPlaces);
+            return;
+        }
+        mulAssignUnchecked(rhs);
     }
 
     /// @brief Logs an `INT64_MIN` component clamped by `canonicalise`.
@@ -724,8 +764,9 @@ private:
     /// throwing would change their contract for every existing caller, while
     /// leaving the overflow undefined is what this whole change exists to
     /// stop. A clamped value is wrong, but it is *defined* wrong, it is
-    /// logged, and `checkedAdd`/`checkedSub`/`checkedMul` remain available for
-    /// callers that need to detect the condition rather than absorb it.
+    /// logged, and `checkedAdd`/`checkedSub`/`checkedMul`/`checkedDiv` remain
+    /// available for callers that need to detect the condition rather than
+    /// absorb it.
     /// @param sign  Direction to clamp toward; `0` yields zero.
     /// @param other The other operand's precision, folded in as usual.
     constexpr void saturateToward(int sign, DecimalPlaces other) noexcept {
@@ -1000,9 +1041,13 @@ static_assert(std::is_standard_layout_v<Rational>);
 }
 
 /// @brief Divides two Rationals. Result precision is `max` of the two.
+///
+/// Saturates on overflow and still reports success; see `Rational::dividedBy`,
+/// and `checkedDiv` for the exact-or-nothing form.
 /// @param lhs Dividend.
 /// @param rhs Divisor.
-/// @return `lhs / rhs`, or `unexpected(DivisionByZero)` if @p rhs is zero.
+/// @return `lhs / rhs` — possibly saturated — or `unexpected(DivisionByZero)`
+///         if @p rhs is zero.
 [[nodiscard]] constexpr std::expected<Rational, RationalError> operator/(const Rational& lhs,
                                                                          const Rational& rhs) noexcept {
     return lhs.dividedBy(rhs);
@@ -1065,6 +1110,35 @@ static_assert(std::is_standard_layout_v<Rational>);
     auto result = lhs;
     result.mulAssignChecked(rhs);
     return result;
+}
+
+/// @brief Divides two Rationals, reporting overflow instead of saturating.
+///
+/// The escape hatch division was missing (morph#206). `dividedBy` and
+/// `operator/` already return `std::expected`, but they spend it on the zero
+/// divisor alone: an overflowing quotient saturates and comes back as a
+/// *successful* `expected` holding a clamp, so a caller doing the right thing
+/// and checking the result is told the division succeeded. This reports both
+/// failure modes through the one channel.
+///
+/// Division is multiplication by the divisor's reciprocal, so this is exactly
+/// `checkedMul` against `rhs.reciprocal()` — the same operand pair
+/// `dividedBy` forms internally, checked by the same `mulWouldOverflow`
+/// predicate the operator uses. The operators and the checked forms therefore
+/// cannot disagree about which quotients fit.
+///
+/// @param lhs Dividend.
+/// @param rhs Divisor.
+/// @return The exact quotient; `unexpected(RationalError::DivisionByZero)` if
+///         @p rhs is zero; `unexpected(RationalError::Overflow)` if the
+///         quotient is not representable.
+[[nodiscard]] constexpr std::expected<Rational, RationalError> checkedDiv(const Rational& lhs,
+                                                                          const Rational& rhs) noexcept {
+    auto const divisorReciprocal = rhs.reciprocal();
+    if (!divisorReciprocal.has_value()) {
+        return std::unexpected(divisorReciprocal.error());
+    }
+    return checkedMul(lhs, *divisorReciprocal);
 }
 
 // ---------------------------------------------------------------------------

@@ -92,7 +92,7 @@ the canonical `(numerator, denominator)` pair and ignores `decimalPlaces`.
 | Operation | Returns | Notes |
 |---|---|---|
 | `operator+`, `operator-`, `operator*` (plain `Rational` × `Rational`) | `Rational` | `noexcept`, return a bare `Rational` — no error channel. This means *representable* results never fail; it does **not** mean the operation cannot go wrong. Reduced int64 cross-terms exceeding ~2^63 **saturate** at `±INT64_MAX/1` and log at `error`; the result is clamped and inexact, and the return type does not say so (see [Overflow & value-range envelope](#overflow--value-range-envelope)). Reduce-before-multiply (Knuth 4.5.1) to extend safe int64 range. Cross-cancellation before multiplication. |
-| `operator/`, `dividedBy` (plain `Rational` ÷ `Rational`) | `expected<Rational, RationalError>` | `DivisionByZero` when divisor's numerator is zero. Implemented by multiplying `*this` by the reciprocal built directly (`den/num`, sign carried onto the numerator), so it **also propagates `max` precision** — the division inherits the max-precision rule through its internal `*=` even though it returns `expected`. |
+| `operator/`, `dividedBy` (plain `Rational` ÷ `Rational`) | `expected<Rational, RationalError>` | `DivisionByZero` when divisor's numerator is zero — and **that is the only error it reports.** Implemented by multiplying `*this` by the reciprocal (`den/num`, sign carried onto the numerator), so it **also propagates `max` precision**, and so it **saturates on overflow exactly like `operator*`**: an out-of-envelope quotient clamps to `±INT64_MAX/1`, logs at `error`, and is still returned as a *successful* `expected`. Use `checkedDiv` to have that reported. |
 | `operator-` (unary) | `Rational` | Negates numerator. Precision preserved. **Negating `INT64_MIN` overflows.** |
 | `reciprocal` | `expected<Rational, RationalError>` | Multiplicative inverse. `DivisionByZero` when the value is zero. **Precision is the operand's own `decimalPlaces`, not `max`** (it is a unary operation with no second operand to widen against). |
 | `operator+=`, `-=`, `*=` (in-place) | `Rational&` | Mutate `*this`, widen precision to `max`, canonicalise. |
@@ -125,14 +125,22 @@ inexact, and nothing in the return type distinguishes it from an exact one:
 Because these operators have no error channel, a saturated result is **not
 distinguishable from an exact one by the caller** — it is a clamped `Rational`,
 never a `RationalError`. It is not silent to the *operator*, though: every clamp
-logs at `error` naming the operation, and `checkedAdd` / `checkedSub` /
-`checkedMul` return `std::expected` for a caller that needs to branch on it.
-Contrast the *only* fallible plain operator, `operator/` (division), whose sole
-failure mode is a trivial divisor-is-zero check yet which returns
-`std::expected`. The fallibility is still inverted: the operation that almost
-cannot fail is the one that reports through the type system, while the ones that
-can genuinely go out of envelope report through the log (see
-[Limitations](#limitations)).
+logs at `error` naming the operation *and the one `checked*` helper that
+reports it*, and `checkedAdd` / `checkedSub` / `checkedMul` / `checkedDiv`
+return `std::expected` for a caller that needs to branch on it.
+
+**`operator/` is not the exception it looks like.** It returns
+`std::expected`, but it spends that channel on the divisor-is-zero check
+alone: division is multiplication by the reciprocal, and that multiplication
+saturates like any other, so an overflowing quotient comes back as a
+*successful* `expected` holding a clamp. `INT64_MAX ÷ (1/1000000)` is such a
+case — the exact quotient is `9223372036854775807000000`, and the returned
+value is `INT64_MAX/1` with `has_value() == true`. All four operations
+therefore follow one policy (saturate, log, offer a `checked*` opt-out); the
+`expected` on `/` narrows what "success" means rather than widening it. The
+fallibility is still inverted: the operation that almost cannot fail is the one
+that reports through the type system, while the ones that can genuinely go out
+of envelope report through the log (see [Limitations](#limitations)).
 
 **`dp` → approximate maximum representable magnitude.** A value scaled to
 precision `dp` (as `fromFloat` builds it) has denominator `10^dp`, so the
@@ -228,7 +236,7 @@ whose result is `INT64_MIN`). Such a component is now clamped to `-INT64_MAX`
 and logged, matching what `setWire` already did for the same values arriving
 off the wire.
 
-`checkedAdd`, `checkedSub` and `checkedMul` return
+`checkedAdd`, `checkedSub`, `checkedMul` and `checkedDiv` return
 `std::expected<Rational, RationalError>`, yielding `RationalError::Overflow`
 rather than saturating. That is the division of labour: the operators stay
 usable and defined for code that can absorb a clamped value, while the checked
@@ -251,9 +259,30 @@ multiplies, not the raw operands: cross-cancelling is what keeps most products
 in range, so checking beforehand would reject pairs that multiply perfectly
 well (`INT64_MAX/2 * 2/1` reduces to `INT64_MAX/1`).
 
-Both share one set of predicates (`addWouldOverflow`, `subWouldOverflow`,
-`mulWouldOverflow`), so the operators and the checked forms cannot disagree
-about what overflows.
+`checkedDiv` is the division member of the family, and it exists because
+division was the one operation with no exact-or-nothing form: `dividedBy`
+already returns `std::expected`, but only for the zero divisor, so a caller who
+checked the result was told a clamped quotient had succeeded (morph#206). It is
+`checkedMul` against `rhs.reciprocal()` — the same operand pair `dividedBy`
+forms internally — and it folds both failure modes into the one channel:
+`DivisionByZero` propagated from `reciprocal`, `Overflow` from `checkedMul`.
+`dividedBy` itself is unchanged and still saturates: `Quantity` already folds a
+failed division to `nullopt` (`docs/spec/error_handling.md`), and making `/` the
+sole operation that refuses to saturate would impose "overflow is fatal" on
+every caller, in-tree and out.
+
+All four share one set of predicates (`addWouldOverflow`, `subWouldOverflow`,
+`mulWouldOverflow` — the last of which `checkedDiv` reaches through
+`checkedMul`), so the operators and the checked forms cannot disagree about
+what overflows.
+
+**The saturation log names its own site and its own remedy.** `dividedBy`
+reaches saturation through `operator*=`'s arithmetic, so the clamp used to be
+logged as `operator*=` — a function the division caller never invoked —
+alongside a fixed remedy list of `checkedAdd`/`checkedSub`/`checkedMul`, none
+of which is a division. Each site now supplies both strings: `dividedBy`
+reports itself and names `checkedDiv`, and `operator+=`/`-=`/`*=` name
+`checkedAdd`/`checkedSub`/`checkedMul` respectively.
 
 ## Mixed-type expressions (expected propagation)
 
@@ -453,6 +482,7 @@ through `setWire`.
 | `checkedAdd(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact sum, or `Overflow`. |
 | `checkedSub(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact difference, or `Overflow`. |
 | `checkedMul(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact product, or `Overflow`. |
+| `checkedDiv(a, b)` | `constexpr expected<Rational, RationalError> noexcept` — exact quotient, or `DivisionByZero`, or `Overflow`. `checkedMul` against `b.reciprocal()`; the form `dividedBy`/`operator/` do not provide, since those saturate and report success. |
 | `setWire(Wire)` | `void noexcept` — rebuilds through the canonicalising constructor, clamping what it cannot represent and counting the clamp. |
 | `Wire::validate()` | `constexpr bool noexcept` — whether these raw values decode without being clamped. |
 | `WireClampScope` | Scoped observer: how many `Rational` values were clamped while decoding. |
@@ -494,7 +524,7 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
 | Comparison ignores precision | **Value-only `<=>` and `==`** | Two values equal in magnitude should compare equal regardless of how many decimals they claim. Precision is a display/rounding concern, not a value property. |
 | Max-precision propagation | **Result precision = max of operands** | A computation is never less precise than its most precise input. There is no in-place retag helper; a caller needing a different tag constructs a fresh `Rational` with the desired `DecimalPlaces`. |
 | Rounding mode is a parameter, defaulting to half away from zero | **`RoundingMode{HalfAwayFromZero, HalfEven}`, `HalfAwayFromZero` default** | A mode had to become visible once rounding became a *storage* operation rather than an implementation detail of display. The default follows morph's own formatter rather than the standards' `HALF_EVEN`, because the point of rounding on the dispatch path is that the stored value equals the displayed one; a `HalfEven` default would break that for every tie until the formatter learned the same mode. |
-| No `checkedRound` | **`roundToDecimalPlaces` saturates and logs** | Consistent with `+`/`-`/`*`: the `checked*` family covers the operations a caller is likely to drive with unbounded inputs. Rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. |
+| No `checkedRound` | **`roundToDecimalPlaces` saturates and logs** | Consistent with `+`/`-`/`*`/`/`: the `checked*` family covers the operations a caller is likely to drive with unbounded inputs. Rounding a value already representable at the target scale — the overwhelmingly common case, and every integer — takes a fast path that cannot overflow at all. |
 | 128-bit cross-product comparison | **`detail::mulU64`** | Exact ordering over the full int64 range without overflow. Uses `unsigned __int128` when available (GCC/Clang), portable 32-bit limb decomposition on MSVC. |
 | Negation limitation | **`INT64_MIN` overflows** | Documented limitation. The wire codec clamps `INT64_MIN` components away for untrusted input. |
 | `fromFloat` not `constexpr` | **Uses `std::llround` / `std::isfinite`** | These standard library functions are not `constexpr`. The `fromFloat` overloads are `inline` out-of-class, `noexcept` but not `constexpr`. |
@@ -518,9 +548,11 @@ expected<Rational, RationalError> operator+(Left const&, Right const&) noexcept;
   cannot tell from the return type. (This is *not* undefined behaviour; an
   earlier revision of this document said it was, contradicting "The operators
   saturate; they never overflow" a few dozen lines above.) The fallibility is
-  inverted — `operator/`, whose only failure is a trivial divisor-is-zero check,
-  returns `std::expected`, while `+`/`-`/`*` report through the log and leave
-  `checkedAdd`/`checkedSub`/`checkedMul` for callers that must branch. See
+  inverted — `operator/`, whose only *reported* failure is a trivial
+  divisor-is-zero check, returns `std::expected` yet saturates on overflow just
+  like the others, while `+`/`-`/`*` report through the log; all four leave
+  `checkedAdd`/`checkedSub`/`checkedMul`/`checkedDiv` for callers that must
+  branch. See
   [Overflow & value-range envelope](#overflow--value-range-envelope) for the
   `dp` → magnitude table.
 - **`setWire` clamps hostile input rather than rejecting it.** `den == 0`
