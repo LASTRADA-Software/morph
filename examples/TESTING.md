@@ -695,13 +695,22 @@ CI tiers (grounded in the existing workflows; unmanaged, the ladder
 dominates CI minutes by rung 3). No separate nightly schedule: everything
 below that isn't in the weekly tier runs in the ordinary per-push/per-PR
 `ladder-tests` job, same as the rest of this repo's CI — a rung's cost is
-managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
-`examples/<rung>/**` → that rung; `examples/common/**` or
-`include/morph/**` → all rungs), not by deferring work to an off-hours run:
+managed by a changed-paths filter, not by deferring work to an off-hours run.
+
+That filter is a **boolean**, not a per-rung selection: `ladder-tests` and
+`ladder-sanitizers` each diff the changed paths and decide whether to run the
+ladder *at all*. When they do run, both pass `-DMORPH_LADDER_RUNGS=all` and
+build every rung. `MORPH_LADDER_RUNGS` is never computed from changed paths —
+every occurrence in `.github/workflows/ci.yml` is a literal, either `all` or
+the deliberately pinned `kanban` in `kanban-tsan`.
+
+Per-rung scoping (`examples/<rung>/**` → that rung; `examples/common/**` or
+`include/morph/**` → all rungs) is a plausible next step, and was described
+here as though it already existed, but it has never been built (morph#255):
 
 1. **CI (every push/PR)**: one `ladder-tests` job (clone of `linux-qt`:
-   gcc-debug, offscreen, sccache), path-filtered per the `MORPH_LADDER_RUNGS`
-   rule above. `ctest -L ladder -LE stress` — full ladder, all modes. The
+   gcc-debug, offscreen, sccache), gated by the boolean changed-paths filter
+   above — it either runs the whole ladder or is skipped entirely. `ctest -L ladder -LE stress` — full ladder, all modes. The
    `-LE stress` clause is currently a no-op (no ctest label named `stress`
    exists anywhere in this repo's CMake — Catch2 tags are never translated
    into ctest labels, as noted above), so this job also runs kanban's
@@ -711,7 +720,9 @@ managed by path-filtering (`MORPH_LADDER_RUNGS` computed from changed paths:
    builds and runs the full ladder — again without `AF_SANITIZER` — so it
    runs the same test a second uninstrumented time. One Playwright browser
    smoke also runs here. One Windows compile-only build (never 8 rungs × 4
-   MSVC presets) runs alongside it. ASan is scoped to changed rungs. Real
+   MSVC presets) runs alongside it. ASan is **not** scoped to changed
+   rungs: `ladder-sanitizers` uses the same boolean filter and the same
+   `MORPH_LADDER_RUNGS=all`, so whenever it runs it instruments every rung. Real
    ThreadSanitizer coverage of that same test comes from a separate,
    dedicated job (`kanban-tsan`, sibling to `linux-sanitizers`): it builds
    `MORPH_LADDER_RUNGS=kanban` alone under the `clang-tsan` preset and runs
