@@ -229,10 +229,11 @@ Functions</h2></td></tr>
 <div class="line">second.execute(LoadAccount{.id = 32});   <span class="comment">// attaches to it; constructs nothing</span></div>
 <div class="line">first .execute(Deposit{.amount = 100});  <span class="comment">// keyless -&gt; instance 32</span></div>
 <div class="line">second.execute(GetBalance{});            <span class="comment">// keyless -&gt; instance 32, sees the 100</span></div>
-<div class="ttc" id="amodel__key_8hpp_html_a79a6fa314d058ddd9e12101c176394cf"><div class="ttname"><a href="#a79a6fa314d058ddd9e12101c176394cf">BRIDGE_KEY_FROM</a></div><div class="ttdeci">#define BRIDGE_KEY_FROM(A, MEMBER)</div><div class="ttdoc">Declares that action A also carries its model&#39;s primary key in MEMBER.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00319">model_key.hpp:319</a></div></div>
-</div><!-- fragment --><p><span class="tt">MEMBER</span> is a pointer-to-data-member of <span class="tt">A</span> (e.g. <span class="tt">&amp;LoadAccount::id</span>) whose type satisfies <span class="tt"><a class="el" href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html" title="Key types a model may declare as its PrimaryKey.">morph::model::ModelKey</a></span>. Must appear at global scope, in exactly one translation unit, like the other <span class="tt">BRIDGE_REGISTER_*</span> macros. </p>
+<div class="ttc" id="amodel__key_8hpp_html_a79a6fa314d058ddd9e12101c176394cf"><div class="ttname"><a href="#a79a6fa314d058ddd9e12101c176394cf">BRIDGE_KEY_FROM</a></div><div class="ttdeci">#define BRIDGE_KEY_FROM(A, MEMBER)</div><div class="ttdoc">Declares that action A also carries its model&#39;s primary key in MEMBER.</div><div class="ttdef"><b>Definition</b> <a href="../../d1/dd8/model__key_8hpp_source.html#l00325">model_key.hpp:325</a></div></div>
+</div><!-- fragment --><p><span class="tt">MEMBER</span> is a pointer-to-data-member of <span class="tt">A</span> (e.g. <span class="tt">&amp;LoadAccount::id</span>) whose type satisfies <span class="tt"><a class="el" href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html" title="Key types a model may declare as its PrimaryKey.">morph::model::ModelKey</a></span>. Must appear at global scope; a header included by several translation units is fine, like the other <span class="tt">BRIDGE_REGISTER_*</span> macros — this macro emits only explicit specialisations, which <span class="tt">[basic.def.odr]</span> permits in multiple translation units when the definitions are token-identical. See docs/spec/core/registry.md, "Header
+    placement is legal". </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00291">291</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00295">295</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 
 </div>
 </div>
@@ -263,9 +264,9 @@ Functions</h2></td></tr>
 </div><!-- fragment -->
 <p>Declares that action <span class="tt">A</span> also carries its model's primary key in <span class="tt">MEMBER</span>. </p>
 <p>The companion to <span class="tt"><a class="el" href="#a28cbd851334147678a680d1057cadcd3" title="Declares that action A is the one that defines model M&#39;s primary key.">BRIDGE_MODEL_KEY</a></span>, for the <em>other</em> actions that name the same entity — <span class="tt">CloseAccount{.id = ...}</span> alongside <span class="tt">GetAccount{.id = ...}</span>. It records only that <span class="tt">A</span> carries the key; the key's type has already been established by the model's one <span class="tt"><a class="el" href="#a28cbd851334147678a680d1057cadcd3" title="Declares that action A is the one that defines model M&#39;s primary key.">BRIDGE_MODEL_KEY</a></span> line, and an explicit specialisation cannot be repeated.</p>
-<p>Must appear at global scope, in exactly one translation unit. </p>
+<p>Must appear at global scope; a header included by several translation units is fine (only explicit specialisations are emitted — see docs/spec/core/registry.md, "Header placement is legal"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00319">319</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00325">325</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 
 </div>
 </div>
@@ -308,9 +309,9 @@ Functions</h2></td></tr>
 </div><!-- fragment -->
 <p>Declares that action <span class="tt">A</span>'s <em>result</em> establishes its model's primary key. </p>
 <p>For actions that create the entity rather than name it: the key is not in the request, it is generated and returned, exactly as a database insert returns its generated primary key. <span class="tt">MEMBER</span> is a pointer-to-data-member of <span class="tt">A</span>'s result type (e.g. <span class="tt">&amp;AccountInfo::id</span>).</p>
-<p>Must appear at global scope, in exactly one translation unit. </p>
+<p>Must appear at global scope; a header included by several translation units is fine (only explicit specialisations are emitted — see docs/spec/core/registry.md, "Header placement is legal"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00342">342</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00350">350</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 
 </div>
 </div>
@@ -344,9 +345,9 @@ Functions</h2></td></tr>
 </div><!-- fragment -->
 <p>Declares that action <span class="tt">A</span>'s result also establishes its model's key. </p>
 <p>The companion to <span class="tt"><a class="el" href="#af5e54ba674bd5c947b94a8199d662d60" title="Declares that action A&#39;s result establishes its model&#39;s primary key.">BRIDGE_MODEL_KEY_FROM_RESULT</a></span>, for a second creating action on a model whose key type is already established.</p>
-<p>Must appear at global scope, in exactly one translation unit. </p>
+<p>Must appear at global scope; a header included by several translation units is fine (only explicit specialisations are emitted — see docs/spec/core/registry.md, "Header placement is legal"). </p>
 
-<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00370">370</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
+<p class="definition">Definition at line <a class="el" href="../../d1/dd8/model__key_8hpp_source.html#l00380">380</a> of file <a class="el" href="../../d1/dd8/model__key_8hpp_source.html">model_key.hpp</a>.</p>
 
 </div>
 </div>

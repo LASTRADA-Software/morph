@@ -615,7 +615,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de4/wire_8h
 <div class="line"><a id="l00483" name="l00483"></a><span class="lineno">  483</span><span class="comment">/// reject duplicate JSON object keys: a duplicated key is accepted and the last</span></div>
 <div class="line"><a id="l00484" name="l00484"></a><span class="lineno">  484</span><span class="comment">/// occurrence wins. There is no glaze option to change this, so `decode` cannot</span></div>
 <div class="line"><a id="l00485" name="l00485"></a><span class="lineno">  485</span><span class="comment">/// enforce rejection; callers must not treat duplicate-key rejection as a</span></div>
-<div class="line"><a id="l00486" name="l00486"></a><span class="lineno">  486</span><span class="comment">/// security boundary (see docs/spec/wire.md).</span></div>
+<div class="line"><a id="l00486" name="l00486"></a><span class="lineno">  486</span><span class="comment">/// security boundary (see docs/spec/core/wire.md).</span></div>
 <div class="line"><a id="l00487" name="l00487"></a><span class="lineno">  487</span><span class="comment">///</span></div>
 <div class="line"><a id="l00488" name="l00488"></a><span class="lineno">  488</span><span class="comment">/// @param json Serialized envelope JSON to decode.</span></div>
 <div class="line"><a id="l00489" name="l00489"></a><span class="lineno">  489</span><span class="comment">/// @return The decoded `Envelope`.</span></div>
@@ -630,7 +630,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('dc/de4/wire_8h
 <div class="line"><a id="l00498" name="l00498"></a><span class="lineno">  498</span>    <span class="comment">// Ignore unknown keys so the envelope is forward-compatible: a newer peer may</span></div>
 <div class="line"><a id="l00499" name="l00499"></a><span class="lineno">  499</span>    <span class="comment">// add fields a older peer does not know, and vice versa, without a hard parse</span></div>
 <div class="line"><a id="l00500" name="l00500"></a><span class="lineno">  500</span>    <span class="comment">// failure. Duplicate keys are still accepted last-wins (glaze offers no reject</span></div>
-<div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>    <span class="comment">// option) — see docs/spec/wire.md &quot;Parsing guarantees and hardening&quot;.</span></div>
+<div class="line"><a id="l00501" name="l00501"></a><span class="lineno">  501</span>    <span class="comment">// option) — see docs/spec/core/wire.md &quot;Parsing guarantees and hardening&quot;.</span></div>
 <div class="line"><a id="l00502" name="l00502"></a><span class="lineno">  502</span>    <span class="comment">// `null_terminated = false` is required, not cosmetic: `json` is a caller-supplied</span></div>
 <div class="line"><a id="l00503" name="l00503"></a><span class="lineno">  503</span>    <span class="comment">// `string_view` with no guarantee of a trailing &#39;\0&#39; (e.g. a raw socket read).</span></div>
 <div class="line"><a id="l00504" name="l00504"></a><span class="lineno">  504</span>    <span class="comment">// Left at glaze&#39;s default (true), `skip_ws` assumes it can scan past `end`</span></div>

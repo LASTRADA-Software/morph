@@ -156,9 +156,9 @@ requires (OtherDecimals != DeclaredDecimals)</td></tr>
 <tr class="memitem:a71c5b40c2b3ee9b1dea894405b837ff6" id="r_a71c5b40c2b3ee9b1dea894405b837ff6"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#a71c5b40c2b3ee9b1dea894405b837ff6">atDeclaredPrecision</a> () const</td></tr>
 <tr class="memdesc:a71c5b40c2b3ee9b1dea894405b837ff6"><td class="mdescLeft">&#160;</td><td class="mdescRight">Rounds the value to this field's <b>declared</b> precision — the one the generated schema advertises as <span class="tt">x-decimalPlaces</span>.  <br /></td></tr>
 <tr class="memitem:a161651d7fca578b928901cdac557051a" id="r_a161651d7fca578b928901cdac557051a"><td class="memItemLeft"><a class="el" href="#a5acf452c24051557d3b28eabbc6bfd5b">Quantity</a>&#160;</td><td class="memItemRight"><a class="el" href="#a161651d7fca578b928901cdac557051a">named</a> (std::string label) const</td></tr>
-<tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/quantity_type.md).">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
+<tr class="memdesc:a161651d7fca578b928901cdac557051a"><td class="mdescLeft">&#160;</td><td class="mdescRight">Seals this value with a name: <span class="tt"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/util/quantity_type.md).">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off.  <br /></td></tr>
 <tr class="memitem:ac4899dbe76c9b39a724a0e8073257c73" id="r_ac4899dbe76c9b39a724a0e8073257c73"><td class="memItemLeft">std::vector&lt; std::string &gt;&#160;</td><td class="memItemRight"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73">equation</a> () const</td></tr>
-<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <span class="tt">docs/spec/quantity_type.md</span>).  <br /></td></tr>
+<tr class="memdesc:ac4899dbe76c9b39a724a0e8073257c73"><td class="mdescLeft">&#160;</td><td class="mdescRight">The worked derivation as print-ready lines (see <span class="tt">docs/spec/util/quantity_type.md</span>).  <br /></td></tr>
 <tr class="memitem:a5252c3cebbc4708d242bcee514b55869" id="r_a5252c3cebbc4708d242bcee514b55869"><td class="memTemplParams" colspan="2">template&lt;auto To&gt; <br />
 requires Convertible&lt;U, To&gt;</td></tr>
 <tr class="memitem:a5252c3cebbc4708d242bcee514b55869 template"><td class="memItemLeft">&#160;</td><td class="memItemRight"><a class="el" href="#a5252c3cebbc4708d242bcee514b55869">operator Quantity&lt; To &gt;</a> () const</td></tr>
@@ -796,7 +796,7 @@ template&lt;auto U, std::uint32_t DeclaredDecimals&gt; </div>
 </table>
 </div><div class="memdoc">
 
-<p>Seals this value with a name: <span class="tt"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/quantity_type.md).">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off. </p>
+<p>Seals this value with a name: <span class="tt"><a class="el" href="#ac4899dbe76c9b39a724a0e8073257c73" title="The worked derivation as print-ready lines (see docs/spec/util/quantity_type.md).">equation()</a></span> shows the name instead of expanding its derivation. Builds a fresh node (never mutates a shared one); a no-op returning empty on empty or with tracing off. </p>
 <dl class="params"><dt>Parameters</dt><dd>
   <table class="params">
     <tr><td class="paramname">label</td><td>The symbol name. </td></tr>
@@ -835,7 +835,7 @@ requires UnitEnum&lt;decltype(U)&gt;</div>
 </table>
 </div><div class="memdoc">
 
-<p>The worked derivation as print-ready lines (see <span class="tt">docs/spec/quantity_type.md</span>). </p>
+<p>The worked derivation as print-ready lines (see <span class="tt">docs/spec/util/quantity_type.md</span>). </p>
 <dl class="section return"><dt>Returns</dt><dd><span class="tt">[0]</span> formula, <span class="tt">[1]</span> substitution, <span class="tt">[2]</span> result, <span class="tt">[3..]</span> <span class="tt">where</span> legend; a single formatted-value element for a degenerate root (empty, named root, bare leaf, or tracing off). </dd></dl>
 
 <p class="definition">Definition at line <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html#l00229">229</a> of file <a class="el" href="../../d4/dc4/quantity__equation_8hpp_source.html">quantity_equation.hpp</a>.</p>

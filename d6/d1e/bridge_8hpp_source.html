@@ -1720,7 +1720,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d1e/bridge_
 <div class="line"><a id="l01538" name="l01538"></a><span class="lineno"> 1538</span>                <span class="comment">// where ThreadPoolExecutor swallows it (the outer completion would</span></div>
 <div class="line"><a id="l01539" name="l01539"></a><span class="lineno"> 1539</span>                <span class="comment">// then hang forever) and QtExecutor lets it reach the event loop</span></div>
 <div class="line"><a id="l01540" name="l01540"></a><span class="lineno"> 1540</span>                <span class="comment">// and std::terminate. Mirrors the forwarding guard in remote.hpp&#39;s</span></div>
-<div class="line"><a id="l01541" name="l01541"></a><span class="lineno"> 1541</span>                <span class="comment">// SimulatedRemoteBackend::execute. See docs/spec/bridge.md.</span></div>
+<div class="line"><a id="l01541" name="l01541"></a><span class="lineno"> 1541</span>                <span class="comment">// SimulatedRemoteBackend::execute. See docs/spec/core/bridge.md.</span></div>
 <div class="line"><a id="l01542" name="l01542"></a><span class="lineno"> 1542</span>                <span class="comment">//</span></div>
 <div class="line"><a id="l01543" name="l01543"></a><span class="lineno"> 1543</span>                <span class="comment">// A backend completion can in principle resolve after the</span></div>
 <div class="line"><a id="l01544" name="l01544"></a><span class="lineno"> 1544</span>                <span class="comment">// Bridge is gone (see liveness()&#39;s doc comment): the backend</span></div>
@@ -2488,7 +2488,7 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d6/d1e/bridge_
 <div class="line"><a id="l02275" name="l02275"></a><span class="lineno"> 2275</span>                <span class="comment">// Retag any Quantity fields to their declared precision so the stored</span></div>
 <div class="line"><a id="l02276" name="l02276"></a><span class="lineno"> 2276</span>                <span class="comment">// value matches the schema&#39;s advertised `x-decimalPlaces`, rather than</span></div>
 <div class="line"><a id="l02277" name="l02277"></a><span class="lineno"> 2277</span>                <span class="comment">// silently keeping whatever runtime `dp` the client sent. No-op for</span></div>
-<div class="line"><a id="l02278" name="l02278"></a><span class="lineno"> 2278</span>                <span class="comment">// actions with no Quantity members. See docs/spec/forms.md.</span></div>
+<div class="line"><a id="l02278" name="l02278"></a><span class="lineno"> 2278</span>                <span class="comment">// actions with no Quantity members. See docs/spec/forms/forms.md.</span></div>
 <div class="line"><a id="l02279" name="l02279"></a><span class="lineno"> 2279</span>                <a class="code hl_function" href="../../d4/d11/forms_8hpp.html#a6a9c6b0f07868b9478b18542088f5003">::morph::forms::reconcileDeclaredPrecision</a>(action);</div>
 <div class="line"><a id="l02280" name="l02280"></a><span class="lineno"> 2280</span>                <span class="comment">// Pre-decode wire validation seam: reject a Quantity field whose</span></div>
 <div class="line"><a id="l02281" name="l02281"></a><span class="lineno"> 2281</span>                <span class="comment">// engaged value falls outside its unit&#39;s declared bounds</span></div>

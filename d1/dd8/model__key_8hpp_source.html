@@ -410,114 +410,124 @@ document.addEventListener('DOMContentLoaded',() => { initNavTree('d1/dd8/model__
 <div class="line"><a id="l00280" name="l00280"></a><span class="lineno">  280</span><span class="comment">/// ```</span></div>
 <div class="line"><a id="l00281" name="l00281"></a><span class="lineno">  281</span><span class="comment">///</span></div>
 <div class="line"><a id="l00282" name="l00282"></a><span class="lineno">  282</span><span class="comment">/// `MEMBER` is a pointer-to-data-member of `A` (e.g. `&amp;LoadAccount::id`) whose</span></div>
-<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span><span class="comment">/// type satisfies `morph::model::ModelKey`. Must appear at global scope, in</span></div>
-<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span><span class="comment">/// exactly one translation unit, like the other `BRIDGE_REGISTER_*` macros.</span></div>
-<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
-<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
-<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
-<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
-<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
-<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
-<div class="foldopen" id="foldopen00291" data-start="" data-end="">
-<div class="line"><a id="l00291" name="l00291"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3">  291</a></span><span class="preprocessor">#define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                \</span></div>
-<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
-<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                                         \</span></div>
-<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="preprocessor">        static constexpr bool hasKey = true;                                                          \</span></div>
-<div class="line"><a id="l00295" name="l00295"></a><span class="lineno">  295</span><span class="preprocessor">        static constexpr bool fromResult = false;                                                     \</span></div>
-<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="preprocessor">        static std::string key(const A&amp; action) { return morph::model::keyToString(action.*MEMBER); } \</span></div>
-<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="preprocessor">    };                                                                                                \</span></div>
-<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
-<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="preprocessor">    struct morph::model::ModelKeyTraits&lt;M&gt; {                                                          \</span></div>
-<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span><span class="preprocessor">        using PrimaryKey = morph::model::detail::MemberTypeOf&lt;decltype(MEMBER)&gt;;                      \</span></div>
-<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span><span class="preprocessor">    }</span></div>
+<div class="line"><a id="l00283" name="l00283"></a><span class="lineno">  283</span><span class="comment">/// type satisfies `morph::model::ModelKey`. Must appear at global scope; a</span></div>
+<div class="line"><a id="l00284" name="l00284"></a><span class="lineno">  284</span><span class="comment">/// header included by several translation units is fine, like the other</span></div>
+<div class="line"><a id="l00285" name="l00285"></a><span class="lineno">  285</span><span class="comment">/// `BRIDGE_REGISTER_*` macros — this macro emits only explicit specialisations,</span></div>
+<div class="line"><a id="l00286" name="l00286"></a><span class="lineno">  286</span><span class="comment">/// which `[basic.def.odr]` permits in multiple translation units when the</span></div>
+<div class="line"><a id="l00287" name="l00287"></a><span class="lineno">  287</span><span class="comment">/// definitions are token-identical. See docs/spec/core/registry.md, &quot;Header</span></div>
+<div class="line"><a id="l00288" name="l00288"></a><span class="lineno">  288</span><span class="comment">/// placement is legal&quot;.</span></div>
+<div class="line"><a id="l00289" name="l00289"></a><span class="lineno">  289</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
+<div class="line"><a id="l00290" name="l00290"></a><span class="lineno">  290</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
+<div class="line"><a id="l00291" name="l00291"></a><span class="lineno">  291</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
+<div class="line"><a id="l00292" name="l00292"></a><span class="lineno">  292</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
+<div class="line"><a id="l00293" name="l00293"></a><span class="lineno">  293</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
+<div class="line"><a id="l00294" name="l00294"></a><span class="lineno">  294</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
+<div class="foldopen" id="foldopen00295" data-start="" data-end="">
+<div class="line"><a id="l00295" name="l00295"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a28cbd851334147678a680d1057cadcd3">  295</a></span><span class="preprocessor">#define BRIDGE_MODEL_KEY(M, A, MEMBER)                                                                \</span></div>
+<div class="line"><a id="l00296" name="l00296"></a><span class="lineno">  296</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
+<div class="line"><a id="l00297" name="l00297"></a><span class="lineno">  297</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                                         \</span></div>
+<div class="line"><a id="l00298" name="l00298"></a><span class="lineno">  298</span><span class="preprocessor">        static constexpr bool hasKey = true;                                                          \</span></div>
+<div class="line"><a id="l00299" name="l00299"></a><span class="lineno">  299</span><span class="preprocessor">        static constexpr bool fromResult = false;                                                     \</span></div>
+<div class="line"><a id="l00300" name="l00300"></a><span class="lineno">  300</span><span class="preprocessor">        static std::string key(const A&amp; action) { return morph::model::keyToString(action.*MEMBER); } \</span></div>
+<div class="line"><a id="l00301" name="l00301"></a><span class="lineno">  301</span><span class="preprocessor">    };                                                                                                \</span></div>
+<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
+<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span><span class="preprocessor">    struct morph::model::ModelKeyTraits&lt;M&gt; {                                                          \</span></div>
+<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span><span class="preprocessor">        using PrimaryKey = morph::model::detail::MemberTypeOf&lt;decltype(MEMBER)&gt;;                      \</span></div>
+<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span><span class="preprocessor">    }</span></div>
 </div>
-<div class="line"><a id="l00302" name="l00302"></a><span class="lineno">  302</span><span class="comment">// clang-format on</span></div>
-<div class="line"><a id="l00303" name="l00303"></a><span class="lineno">  303</span><span class="comment"></span> </div>
-<div class="line"><a id="l00304" name="l00304"></a><span class="lineno">  304</span><span class="comment">/// @brief Declares that action `A` also carries its model&#39;s primary key in `MEMBER`.</span></div>
-<div class="line"><a id="l00305" name="l00305"></a><span class="lineno">  305</span><span class="comment">///</span></div>
-<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span><span class="comment">/// The companion to `BRIDGE_MODEL_KEY`, for the *other* actions that name the</span></div>
-<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span><span class="comment">/// same entity — `CloseAccount{.id = ...}` alongside `GetAccount{.id = ...}`.</span></div>
-<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span><span class="comment">/// It records only that `A` carries the key; the key&#39;s type has already been</span></div>
-<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span><span class="comment">/// established by the model&#39;s one `BRIDGE_MODEL_KEY` line, and an explicit</span></div>
-<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span><span class="comment">/// specialisation cannot be repeated.</span></div>
-<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span><span class="comment">///</span></div>
-<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment">/// Must appear at global scope, in exactly one translation unit.</span></div>
-<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
-<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
-<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
-<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
-<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
-<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
-<div class="foldopen" id="foldopen00319" data-start="" data-end="">
-<div class="line"><a id="l00319" name="l00319"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf">  319</a></span><span class="preprocessor">#define BRIDGE_KEY_FROM(A, MEMBER)                                                                    \</span></div>
-<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
-<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                                         \</span></div>
-<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="preprocessor">        static constexpr bool hasKey = true;                                                          \</span></div>
-<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span><span class="preprocessor">        static constexpr bool fromResult = false;                                                     \</span></div>
-<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span><span class="preprocessor">        static std::string key(const A&amp; action) { return morph::model::keyToString(action.*MEMBER); } \</span></div>
-<div class="line"><a id="l00325" name="l00325"></a><span class="lineno">  325</span><span class="preprocessor">    }</span></div>
+<div class="line"><a id="l00306" name="l00306"></a><span class="lineno">  306</span><span class="comment">// clang-format on</span></div>
+<div class="line"><a id="l00307" name="l00307"></a><span class="lineno">  307</span><span class="comment"></span> </div>
+<div class="line"><a id="l00308" name="l00308"></a><span class="lineno">  308</span><span class="comment">/// @brief Declares that action `A` also carries its model&#39;s primary key in `MEMBER`.</span></div>
+<div class="line"><a id="l00309" name="l00309"></a><span class="lineno">  309</span><span class="comment">///</span></div>
+<div class="line"><a id="l00310" name="l00310"></a><span class="lineno">  310</span><span class="comment">/// The companion to `BRIDGE_MODEL_KEY`, for the *other* actions that name the</span></div>
+<div class="line"><a id="l00311" name="l00311"></a><span class="lineno">  311</span><span class="comment">/// same entity — `CloseAccount{.id = ...}` alongside `GetAccount{.id = ...}`.</span></div>
+<div class="line"><a id="l00312" name="l00312"></a><span class="lineno">  312</span><span class="comment">/// It records only that `A` carries the key; the key&#39;s type has already been</span></div>
+<div class="line"><a id="l00313" name="l00313"></a><span class="lineno">  313</span><span class="comment">/// established by the model&#39;s one `BRIDGE_MODEL_KEY` line, and an explicit</span></div>
+<div class="line"><a id="l00314" name="l00314"></a><span class="lineno">  314</span><span class="comment">/// specialisation cannot be repeated.</span></div>
+<div class="line"><a id="l00315" name="l00315"></a><span class="lineno">  315</span><span class="comment">///</span></div>
+<div class="line"><a id="l00316" name="l00316"></a><span class="lineno">  316</span><span class="comment">/// Must appear at global scope; a header included by several translation units</span></div>
+<div class="line"><a id="l00317" name="l00317"></a><span class="lineno">  317</span><span class="comment">/// is fine (only explicit specialisations are emitted — see</span></div>
+<div class="line"><a id="l00318" name="l00318"></a><span class="lineno">  318</span><span class="comment">/// docs/spec/core/registry.md, &quot;Header placement is legal&quot;).</span></div>
+<div class="line"><a id="l00319" name="l00319"></a><span class="lineno">  319</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
+<div class="line"><a id="l00320" name="l00320"></a><span class="lineno">  320</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
+<div class="line"><a id="l00321" name="l00321"></a><span class="lineno">  321</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
+<div class="line"><a id="l00322" name="l00322"></a><span class="lineno">  322</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
+<div class="line"><a id="l00323" name="l00323"></a><span class="lineno">  323</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
+<div class="line"><a id="l00324" name="l00324"></a><span class="lineno">  324</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
+<div class="foldopen" id="foldopen00325" data-start="" data-end="">
+<div class="line"><a id="l00325" name="l00325"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a79a6fa314d058ddd9e12101c176394cf">  325</a></span><span class="preprocessor">#define BRIDGE_KEY_FROM(A, MEMBER)                                                                    \</span></div>
+<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span><span class="preprocessor">    template &lt;&gt;                                                                                       \</span></div>
+<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                                         \</span></div>
+<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span><span class="preprocessor">        static constexpr bool hasKey = true;                                                          \</span></div>
+<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span><span class="preprocessor">        static constexpr bool fromResult = false;                                                     \</span></div>
+<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="preprocessor">        static std::string key(const A&amp; action) { return morph::model::keyToString(action.*MEMBER); } \</span></div>
+<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="preprocessor">    }</span></div>
 </div>
-<div class="line"><a id="l00326" name="l00326"></a><span class="lineno">  326</span><span class="comment">// clang-format on</span></div>
-<div class="line"><a id="l00327" name="l00327"></a><span class="lineno">  327</span><span class="comment"></span> </div>
-<div class="line"><a id="l00328" name="l00328"></a><span class="lineno">  328</span><span class="comment">/// @brief Declares that action `A`&#39;s *result* establishes its model&#39;s primary key.</span></div>
-<div class="line"><a id="l00329" name="l00329"></a><span class="lineno">  329</span><span class="comment">///</span></div>
-<div class="line"><a id="l00330" name="l00330"></a><span class="lineno">  330</span><span class="comment">/// For actions that create the entity rather than name it: the key is not in the</span></div>
-<div class="line"><a id="l00331" name="l00331"></a><span class="lineno">  331</span><span class="comment">/// request, it is generated and returned, exactly as a database insert returns</span></div>
-<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span><span class="comment">/// its generated primary key. `MEMBER` is a pointer-to-data-member of `A`&#39;s</span></div>
-<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment">/// result type (e.g. `&amp;AccountInfo::id`).</span></div>
-<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">///</span></div>
-<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">/// Must appear at global scope, in exactly one translation unit.</span></div>
-<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
-<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
-<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
-<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
-<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
-<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
-<div class="foldopen" id="foldopen00342" data-start="" data-end="">
-<div class="line"><a id="l00342" name="l00342"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#af5e54ba674bd5c947b94a8199d662d60">  342</a></span><span class="preprocessor">#define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                               \</span></div>
-<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="preprocessor">    template &lt;&gt;                                                                  \</span></div>
-<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                    \</span></div>
-<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span><span class="preprocessor">        static constexpr bool hasKey = true;                                     \</span></div>
-<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="preprocessor">        static constexpr bool fromResult = true;                                 \</span></div>
-<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="preprocessor">        template &lt;typename R&gt;                                                    \</span></div>
-<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="preprocessor">        static std::string keyOfResult(const R&amp; result) {                        \</span></div>
-<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="preprocessor">            return morph::model::keyToString(result.*MEMBER);                    \</span></div>
-<div class="line"><a id="l00350" name="l00350"></a><span class="lineno">  350</span><span class="preprocessor">        }                                                                        \</span></div>
-<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="preprocessor">    };                                                                           \</span></div>
-<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="preprocessor">    template &lt;&gt;                                                                  \</span></div>
-<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="preprocessor">    struct morph::model::ModelKeyTraits&lt;M&gt; {                                     \</span></div>
-<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="preprocessor">        using PrimaryKey = morph::model::detail::MemberTypeOf&lt;decltype(MEMBER)&gt;; \</span></div>
-<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="preprocessor">    }</span></div>
+<div class="line"><a id="l00332" name="l00332"></a><span class="lineno">  332</span><span class="comment">// clang-format on</span></div>
+<div class="line"><a id="l00333" name="l00333"></a><span class="lineno">  333</span><span class="comment"></span> </div>
+<div class="line"><a id="l00334" name="l00334"></a><span class="lineno">  334</span><span class="comment">/// @brief Declares that action `A`&#39;s *result* establishes its model&#39;s primary key.</span></div>
+<div class="line"><a id="l00335" name="l00335"></a><span class="lineno">  335</span><span class="comment">///</span></div>
+<div class="line"><a id="l00336" name="l00336"></a><span class="lineno">  336</span><span class="comment">/// For actions that create the entity rather than name it: the key is not in the</span></div>
+<div class="line"><a id="l00337" name="l00337"></a><span class="lineno">  337</span><span class="comment">/// request, it is generated and returned, exactly as a database insert returns</span></div>
+<div class="line"><a id="l00338" name="l00338"></a><span class="lineno">  338</span><span class="comment">/// its generated primary key. `MEMBER` is a pointer-to-data-member of `A`&#39;s</span></div>
+<div class="line"><a id="l00339" name="l00339"></a><span class="lineno">  339</span><span class="comment">/// result type (e.g. `&amp;AccountInfo::id`).</span></div>
+<div class="line"><a id="l00340" name="l00340"></a><span class="lineno">  340</span><span class="comment">///</span></div>
+<div class="line"><a id="l00341" name="l00341"></a><span class="lineno">  341</span><span class="comment">/// Must appear at global scope; a header included by several translation units</span></div>
+<div class="line"><a id="l00342" name="l00342"></a><span class="lineno">  342</span><span class="comment">/// is fine (only explicit specialisations are emitted — see</span></div>
+<div class="line"><a id="l00343" name="l00343"></a><span class="lineno">  343</span><span class="comment">/// docs/spec/core/registry.md, &quot;Header placement is legal&quot;).</span></div>
+<div class="line"><a id="l00344" name="l00344"></a><span class="lineno">  344</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
+<div class="line"><a id="l00345" name="l00345"></a><span class="lineno">  345</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
+<div class="line"><a id="l00346" name="l00346"></a><span class="lineno">  346</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
+<div class="line"><a id="l00347" name="l00347"></a><span class="lineno">  347</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
+<div class="line"><a id="l00348" name="l00348"></a><span class="lineno">  348</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
+<div class="line"><a id="l00349" name="l00349"></a><span class="lineno">  349</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
+<div class="foldopen" id="foldopen00350" data-start="" data-end="">
+<div class="line"><a id="l00350" name="l00350"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#af5e54ba674bd5c947b94a8199d662d60">  350</a></span><span class="preprocessor">#define BRIDGE_MODEL_KEY_FROM_RESULT(M, A, MEMBER)                               \</span></div>
+<div class="line"><a id="l00351" name="l00351"></a><span class="lineno">  351</span><span class="preprocessor">    template &lt;&gt;                                                                  \</span></div>
+<div class="line"><a id="l00352" name="l00352"></a><span class="lineno">  352</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                                    \</span></div>
+<div class="line"><a id="l00353" name="l00353"></a><span class="lineno">  353</span><span class="preprocessor">        static constexpr bool hasKey = true;                                     \</span></div>
+<div class="line"><a id="l00354" name="l00354"></a><span class="lineno">  354</span><span class="preprocessor">        static constexpr bool fromResult = true;                                 \</span></div>
+<div class="line"><a id="l00355" name="l00355"></a><span class="lineno">  355</span><span class="preprocessor">        template &lt;typename R&gt;                                                    \</span></div>
+<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="preprocessor">        static std::string keyOfResult(const R&amp; result) {                        \</span></div>
+<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="preprocessor">            return morph::model::keyToString(result.*MEMBER);                    \</span></div>
+<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="preprocessor">        }                                                                        \</span></div>
+<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="preprocessor">    };                                                                           \</span></div>
+<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span><span class="preprocessor">    template &lt;&gt;                                                                  \</span></div>
+<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span><span class="preprocessor">    struct morph::model::ModelKeyTraits&lt;M&gt; {                                     \</span></div>
+<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span><span class="preprocessor">        using PrimaryKey = morph::model::detail::MemberTypeOf&lt;decltype(MEMBER)&gt;; \</span></div>
+<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span><span class="preprocessor">    }</span></div>
 </div>
-<div class="line"><a id="l00356" name="l00356"></a><span class="lineno">  356</span><span class="comment">// clang-format on</span></div>
-<div class="line"><a id="l00357" name="l00357"></a><span class="lineno">  357</span><span class="comment"></span> </div>
-<div class="line"><a id="l00358" name="l00358"></a><span class="lineno">  358</span><span class="comment">/// @brief Declares that action `A`&#39;s result also establishes its model&#39;s key.</span></div>
-<div class="line"><a id="l00359" name="l00359"></a><span class="lineno">  359</span><span class="comment">///</span></div>
-<div class="line"><a id="l00360" name="l00360"></a><span class="lineno">  360</span><span class="comment">/// The companion to `BRIDGE_MODEL_KEY_FROM_RESULT`, for a second creating</span></div>
-<div class="line"><a id="l00361" name="l00361"></a><span class="lineno">  361</span><span class="comment">/// action on a model whose key type is already established.</span></div>
-<div class="line"><a id="l00362" name="l00362"></a><span class="lineno">  362</span><span class="comment">///</span></div>
-<div class="line"><a id="l00363" name="l00363"></a><span class="lineno">  363</span><span class="comment">/// Must appear at global scope, in exactly one translation unit.</span></div>
-<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
-<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
-<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
-<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
-<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
-<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
-<div class="foldopen" id="foldopen00370" data-start="" data-end="">
-<div class="line"><a id="l00370" name="l00370"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a510036b6edf43c7f7a692d7c527175b5">  370</a></span><span class="preprocessor">#define BRIDGE_KEY_FROM_RESULT(A, MEMBER)                     \</span></div>
-<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span><span class="preprocessor">    template &lt;&gt;                                               \</span></div>
-<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                 \</span></div>
-<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="preprocessor">        static constexpr bool hasKey = true;                  \</span></div>
-<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="preprocessor">        static constexpr bool fromResult = true;              \</span></div>
-<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="preprocessor">        template &lt;typename R&gt;                                 \</span></div>
-<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="preprocessor">        static std::string keyOfResult(const R&amp; result) {     \</span></div>
-<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="preprocessor">            return morph::model::keyToString(result.*MEMBER); \</span></div>
-<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="preprocessor">        }                                                     \</span></div>
-<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="preprocessor">    }</span></div>
+<div class="line"><a id="l00364" name="l00364"></a><span class="lineno">  364</span><span class="comment">// clang-format on</span></div>
+<div class="line"><a id="l00365" name="l00365"></a><span class="lineno">  365</span><span class="comment"></span> </div>
+<div class="line"><a id="l00366" name="l00366"></a><span class="lineno">  366</span><span class="comment">/// @brief Declares that action `A`&#39;s result also establishes its model&#39;s key.</span></div>
+<div class="line"><a id="l00367" name="l00367"></a><span class="lineno">  367</span><span class="comment">///</span></div>
+<div class="line"><a id="l00368" name="l00368"></a><span class="lineno">  368</span><span class="comment">/// The companion to `BRIDGE_MODEL_KEY_FROM_RESULT`, for a second creating</span></div>
+<div class="line"><a id="l00369" name="l00369"></a><span class="lineno">  369</span><span class="comment">/// action on a model whose key type is already established.</span></div>
+<div class="line"><a id="l00370" name="l00370"></a><span class="lineno">  370</span><span class="comment">///</span></div>
+<div class="line"><a id="l00371" name="l00371"></a><span class="lineno">  371</span><span class="comment">/// Must appear at global scope; a header included by several translation units</span></div>
+<div class="line"><a id="l00372" name="l00372"></a><span class="lineno">  372</span><span class="comment">/// is fine (only explicit specialisations are emitted — see</span></div>
+<div class="line"><a id="l00373" name="l00373"></a><span class="lineno">  373</span><span class="comment">/// docs/spec/core/registry.md, &quot;Header placement is legal&quot;).</span></div>
+<div class="line"><a id="l00374" name="l00374"></a><span class="lineno">  374</span><span class="comment">// clang-format off -- public macro surface: hand-aligned on purpose.</span></div>
+<div class="line"><a id="l00375" name="l00375"></a><span class="lineno">  375</span><span class="comment">// These definitions are the framework&#39;s documented API; contributors read them</span></div>
+<div class="line"><a id="l00376" name="l00376"></a><span class="lineno">  376</span><span class="comment">// as reference, and the continuation backslashes line up so the body is legible</span></div>
+<div class="line"><a id="l00377" name="l00377"></a><span class="lineno">  377</span><span class="comment">// as a block. Leaving them to the formatter means any unrelated edit nearby</span></div>
+<div class="line"><a id="l00378" name="l00378"></a><span class="lineno">  378</span><span class="comment">// re-wraps the whole definition, and in one case it broke a token-paste</span></div>
+<div class="line"><a id="l00379" name="l00379"></a><span class="lineno">  379</span><span class="comment">// invocation apart. Freeze them; realign by hand if a body changes.</span></div>
+<div class="foldopen" id="foldopen00380" data-start="" data-end="">
+<div class="line"><a id="l00380" name="l00380"></a><span class="lineno"><a class="line" href="../../d1/dd8/model__key_8hpp.html#a510036b6edf43c7f7a692d7c527175b5">  380</a></span><span class="preprocessor">#define BRIDGE_KEY_FROM_RESULT(A, MEMBER)                     \</span></div>
+<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span><span class="preprocessor">    template &lt;&gt;                                               \</span></div>
+<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span><span class="preprocessor">    struct morph::model::ActionKeyTraits&lt;A&gt; {                 \</span></div>
+<div class="line"><a id="l00383" name="l00383"></a><span class="lineno">  383</span><span class="preprocessor">        static constexpr bool hasKey = true;                  \</span></div>
+<div class="line"><a id="l00384" name="l00384"></a><span class="lineno">  384</span><span class="preprocessor">        static constexpr bool fromResult = true;              \</span></div>
+<div class="line"><a id="l00385" name="l00385"></a><span class="lineno">  385</span><span class="preprocessor">        template &lt;typename R&gt;                                 \</span></div>
+<div class="line"><a id="l00386" name="l00386"></a><span class="lineno">  386</span><span class="preprocessor">        static std::string keyOfResult(const R&amp; result) {     \</span></div>
+<div class="line"><a id="l00387" name="l00387"></a><span class="lineno">  387</span><span class="preprocessor">            return morph::model::keyToString(result.*MEMBER); \</span></div>
+<div class="line"><a id="l00388" name="l00388"></a><span class="lineno">  388</span><span class="preprocessor">        }                                                     \</span></div>
+<div class="line"><a id="l00389" name="l00389"></a><span class="lineno">  389</span><span class="preprocessor">    }</span></div>
 </div>
-<div class="line"><a id="l00380" name="l00380"></a><span class="lineno">  380</span><span class="comment">// clang-format on</span></div>
-<div class="line"><a id="l00381" name="l00381"></a><span class="lineno">  381</span> </div>
-<div class="line"><a id="l00382" name="l00382"></a><span class="lineno">  382</span><span class="comment">// NOLINTEND(cppcoreguidelines-macro-usage)</span></div>
+<div class="line"><a id="l00390" name="l00390"></a><span class="lineno">  390</span><span class="comment">// clang-format on</span></div>
+<div class="line"><a id="l00391" name="l00391"></a><span class="lineno">  391</span> </div>
+<div class="line"><a id="l00392" name="l00392"></a><span class="lineno">  392</span><span class="comment">// NOLINTEND(cppcoreguidelines-macro-usage)</span></div>
 <div class="ttc" id="aconceptmorph_1_1model_1_1KeyedModel_html"><div class="ttname"><a href="../../d8/dcb/conceptmorph_1_1model_1_1KeyedModel.html">morph::model::KeyedModel</a></div><div class="ttdoc">Satisfied by model types that have a primary key, however it was named.</div><div class="ttdef"><b>Definition</b> <a href="#l00118">model_key.hpp:118</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1model_1_1ModelKey_html"><div class="ttname"><a href="../../de/d45/conceptmorph_1_1model_1_1ModelKey.html">morph::model::ModelKey</a></div><div class="ttdoc">Key types a model may declare as its PrimaryKey.</div><div class="ttdef"><b>Definition</b> <a href="#l00074">model_key.hpp:74</a></div></div>
 <div class="ttc" id="aconceptmorph_1_1model_1_1RawModelKey_html"><div class="ttname"><a href="../../dc/d43/conceptmorph_1_1model_1_1RawModelKey.html">morph::model::RawModelKey</a></div><div class="ttdoc">Key types that are themselves a wire-encodable scalar.</div><div class="ttdef"><b>Definition</b> <a href="#l00041">model_key.hpp:41</a></div></div>
