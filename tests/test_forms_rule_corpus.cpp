@@ -95,18 +95,18 @@ struct Corpus {
             CorpusCase row{};
             row.id = entry["id"].as<std::string>();
             row.action = entry["action"].as<std::string>();
-            row.ready = entry["ready"].as<bool>();
+            row.ready = entry["ready"].get<bool>();
             for (const auto& [field, value] : entry["state"].get<glz::generic_u64::object_t>()) {
                 row.state.emplace(field, value.as<std::string>());
             }
             if (entry.contains("visible")) {
                 for (const auto& [field, value] : entry["visible"].get<glz::generic_u64::object_t>()) {
-                    row.visible.emplace(field, value.as<bool>());
+                    row.visible.emplace(field, value.get<bool>());
                 }
             }
             if (entry.contains("readonly")) {
                 for (const auto& [field, value] : entry["readonly"].get<glz::generic_u64::object_t>()) {
-                    row.readonly.emplace(field, value.as<bool>());
+                    row.readonly.emplace(field, value.get<bool>());
                 }
             }
             result.cases.push_back(std::move(row));
@@ -195,8 +195,12 @@ TEST_CASE("every corpus schema is the current schemaJson output, byte for byte",
     // would be about a fossil.
     for (const auto& action : corpusActions()) {
         const auto found = corpus().schemas.find(action.name);
-        INFO("corpus is missing a schema for " << action.name);
-        REQUIRE(found != corpus().schemas.end());
+        {
+            // Scoped so this note does not also ride along on the byte-equality
+            // failure below, which has nothing to do with a missing entry.
+            INFO("corpus is missing a schema for " << action.name);
+            REQUIRE(found != corpus().schemas.end());
+        }
         INFO("stale corpus schema for " << action.name << "\nregenerate it from:\n" << action.schema());
         CHECK(found->second == action.schema());
     }
@@ -212,8 +216,10 @@ TEST_CASE("the corpus names no action this build does not have", "[forms][rules]
 TEST_CASE("every corpus row's compiled verdict is the one the corpus records", "[forms][rules][corpus]") {
     for (const auto& row : corpus().cases) {
         const auto* action = findAction(row.action);
-        INFO("row " << row.id << " names an unknown action " << row.action);
-        REQUIRE(action != nullptr);
+        {
+            INFO("row " << row.id << " names an unknown action " << row.action);
+            REQUIRE(action != nullptr);
+        }
         INFO("row " << row.id << ": allRulesSatisfied disagrees with the corpus");
         CHECK(action->satisfied(row.state) == row.ready);
     }

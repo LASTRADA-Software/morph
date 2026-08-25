@@ -385,7 +385,7 @@ struct BoundsCorpus {
             result.cases.push_back({.id = entry["id"].as<std::string>(),
                                     .schema = entry["schema"].as<std::string>(),
                                     .value = entry["state"]["value"].as<std::string>(),
-                                    .ready = entry["ready"].as<bool>()});
+                                    .ready = entry["ready"].get<bool>()});
         }
         // NOLINTEND(cppcoreguidelines-pro-bounds-avoid-unchecked-container-access)
         REQUIRE_FALSE(result.cases.empty());
