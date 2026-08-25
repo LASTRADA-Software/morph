@@ -233,6 +233,24 @@ QmlScanResult scanQml(const QString& source, const QString& fileName, const QStr
             while (after < text.size() && text.at(after).isSpace()) {
                 ++after;
             }
+
+            // Is this read a *probe* -- `x.y !== undefined`, `x.y === undefined`,
+            // or `typeof x.y` -- rather than a use? A probe is how QML asks
+            // whether a conditionally-compiled member exists in this build, so
+            // the answer "it does not" is the expected one, not a defect.
+            {
+                const QString tail = text.mid(after, 20);
+                const bool comparedToUndefined =
+                    (tail.startsWith(QStringLiteral("!==")) || tail.startsWith(QStringLiteral("==="))
+                     || tail.startsWith(QStringLiteral("!=")) || tail.startsWith(QStringLiteral("==")))
+                    && tail.contains(QStringLiteral("undefined"));
+                const qsizetype before = match.capturedStart(0);
+                const bool typeofApplied =
+                    before >= 7 && text.mid(before - 7, 7) == QStringLiteral("typeof ");
+                if (comparedToUndefined || typeofApplied) {
+                    result.optionalProbes.insert(alias + QLatin1Char('.') + reference.member);
+                }
+            }
             if (after < text.size() && text.at(after) == QLatin1Char('(')) {
                 qsizetype close = 0;
                 reference.kind = QmlReferenceKind::Call;
@@ -452,6 +470,20 @@ QStringList QmlSurfaceAudit::run() const {
                         readProperties.insert(reference.member);
                     } else if (surface.methodArities.contains(reference.member)) {
                         calledMethods.insert(reference.member);  // a method reference, not a call
+                    } else if (byFile.value(reference.file)
+                                   .optionalProbes.contains(reference.alias + QLatin1Char('.') + reference.member)) {
+                        // This file probes the member for existence, so it is
+                        // written to cope with the member being absent -- see
+                        // QmlScanResult::optionalProbes. Nothing to report: the
+                        // QML is correct precisely *because* the member is
+                        // missing in this configure.
+                        //
+                        // Scoped to the probing file, not the whole audit: a
+                        // guard in one view says nothing about an unguarded read
+                        // in another. It does excuse every read of that member
+                        // within the file, which is deliberate -- the guard is
+                        // normally written once, on the `visible:` binding that
+                        // gates the rest.
                     } else {
                         findings.append(QStringLiteral("%1 reads '%2.%3' but %4 has no such property")
                                             .arg(site, reference.alias, reference.member, cls));

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QMap>
+#include <QSet>
 #include <QObject>
 #include <QString>
 #include <QStringList>
@@ -125,6 +126,18 @@ struct QmlScanResult {
     /// `<id>.<alias>` shape every ladder rung writes. Used to notice a bridge
     /// the QML consumes signals from that the audit was never handed.
     QStringList connectionsTargets;
+    /// `alias.member` for every member this file *probes* for existence, by
+    /// comparing it against `undefined` or applying `typeof` to it.
+    ///
+    /// Such a read is a question, not a use: it is how QML asks whether a
+    /// conditionally-compiled member is present in this build. kanban's
+    /// `BoardView.qml` guards its dead-letter banner exactly this way, because
+    /// `BoardBridge::deadLetterCount` exists only under
+    /// `MORPH_BUILD_OFFLINE_SQLITE`. Reporting that as "reads a property the
+    /// bridge does not have" would be backwards -- the QML is handling the
+    /// absence correctly, and the only way to satisfy the audit would be to
+    /// delete the guard that makes it safe.
+    QSet<QString> optionalProbes;
 };
 
 /// @brief Strips comments and string-literal bodies from @p source, keeping
