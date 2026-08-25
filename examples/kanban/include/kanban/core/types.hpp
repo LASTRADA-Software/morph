@@ -124,8 +124,9 @@ struct BoardEventId {
     /// @throws KanbanError if @p rowId is `0`.
     [[nodiscard]] static BoardEventId fromRowId(std::int64_t rowId) {
         if (rowId == 0) {
-            throw KanbanError{"BoardEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
-                              "type's \"not entered\" sentinel (morph#215)"};
+            throw KanbanError{
+                "BoardEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
         }
         return BoardEventId{.value = rowId};
     }

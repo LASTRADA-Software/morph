@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
+#include <catch2/catch_test_macros.hpp>
+
 #include "kanban/core/errors.hpp"
 #include "kanban/core/types.hpp"
 #include "kanban/dto/board_dto.hpp"
-
-#include <catch2/catch_test_macros.hpp>
 
 TEST_CASE("OpenBoard requires an engaged projectId", "[kanban][dto]") {
     CHECK_FALSE(kanban::OpenBoard{.projectId = {}}.validate());
@@ -51,7 +51,6 @@ TEST_CASE("AddComment requires an engaged taskId and non-empty body", "[kanban][
     CHECK_FALSE(kanban::AddComment{.taskId = kanban::TaskId{1}, .body = ""}.validate());
     CHECK(kanban::AddComment{.taskId = kanban::TaskId{1}, .body = "hi"}.validate());
 }
-
 
 TEST_CASE("kanban::BoardEventId: fromRowId rejects the one value it cannot represent", "[kanban][types]") {
     // 0 is BoardEventId's "not entered" sentinel, so an event id of 0 would

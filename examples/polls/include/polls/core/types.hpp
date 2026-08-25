@@ -79,8 +79,9 @@ struct OptionId {
     /// @throws PollsError if @p rowId is `0`.
     [[nodiscard]] static OptionId fromRowId(std::int64_t rowId) {
         if (rowId == 0) {
-            throw PollsError{"OptionId::fromRowId: an option row id of 0 is unrepresentable -- 0 is this "
-                             "type's \"not entered\" sentinel (morph#215)"};
+            throw PollsError{
+                "OptionId::fromRowId: an option row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
         }
         return OptionId{.value = rowId};
     }
@@ -125,8 +126,9 @@ struct PollEventId {
     /// @throws PollsError if @p rowId is `0`.
     [[nodiscard]] static PollEventId fromRowId(std::int64_t rowId) {
         if (rowId == 0) {
-            throw PollsError{"PollEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
-                             "type's \"not entered\" sentinel (morph#215)"};
+            throw PollsError{
+                "PollEventId::fromRowId: an event row id of 0 is unrepresentable -- 0 is this "
+                "type's \"not entered\" sentinel (morph#215)"};
         }
         return PollEventId{.value = rowId};
     }

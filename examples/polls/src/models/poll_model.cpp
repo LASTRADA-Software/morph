@@ -464,7 +464,7 @@ GetPollStateResult PollModel::applyVotes(const std::string& participantName, con
     previousVotes.reserve(priorVotes.size());
     for (const auto& v : priorVotes) {
         previousVotes.push_back({.optionId = OptionId::fromRowId(static_cast<std::int64_t>(v.option.Value())),
-                                  .choice = static_cast<VoteChoice>(v.choice.Value())});
+                                 .choice = static_cast<VoteChoice>(v.choice.Value())});
     }
     const std::string previousVotesJson = encodeVotesJson(previousVotes);
 
@@ -731,8 +731,8 @@ GetEventsSinceResult PollModel::execute(const GetEventsSince& action) {
     result.events.reserve(rows.size());
     for (const auto& row : rows) {
         result.events.push_back({.id = PollEventId::fromRowId(static_cast<std::int64_t>(row.id.Value())),
-                                  .kind = textOf(row.kind.Value()),
-                                  .summary = textOf(row.summary.Value())});
+                                 .kind = textOf(row.kind.Value()),
+                                 .summary = textOf(row.summary.Value())});
     }
     return result;
 }

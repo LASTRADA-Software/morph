@@ -1060,8 +1060,8 @@ GetEventsSinceResult BoardModel::execute(const GetEventsSince& action) {
     result.events.reserve(rows.size());
     for (const auto& row : rows) {
         result.events.push_back({.id = BoardEventId::fromRowId(static_cast<std::int64_t>(row.id.Value())),
-                                  .kind = std::string{row.kind.Value()},
-                                  .summary = std::string{row.summary.Value()}});
+                                 .kind = std::string{row.kind.Value()},
+                                 .summary = std::string{row.summary.Value()}});
     }
     return result;
 }
