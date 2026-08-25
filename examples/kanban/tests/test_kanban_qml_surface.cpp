@@ -101,8 +101,8 @@ TEST_CASE("Every kanban bridge exposes exactly the surface gui/qml binds, and no
     CHECK(findings.isEmpty());
 
     // The audit is only as good as the files it found: the seven gui/qml ships.
-    CHECK(audit.scannedFiles()
-          == QStringList{QStringLiteral("BoardView.qml"), QStringLiteral("LoginView.qml"), QStringLiteral("Main.qml"),
-                         QStringLiteral("MembersView.qml"), QStringLiteral("ProjectListView.qml"),
-                         QStringLiteral("RulesView.qml"), QStringLiteral("TaskDetailPopup.qml")});
+    CHECK(audit.scannedFiles() == QStringList{QStringLiteral("BoardView.qml"), QStringLiteral("LoginView.qml"),
+                                              QStringLiteral("Main.qml"), QStringLiteral("MembersView.qml"),
+                                              QStringLiteral("ProjectListView.qml"), QStringLiteral("RulesView.qml"),
+                                              QStringLiteral("TaskDetailPopup.qml")});
 }
