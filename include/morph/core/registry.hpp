@@ -617,6 +617,11 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)
 #define MORPH_DETAIL_REGISTER_ACTION_LOCAL(M, A, NAME)
 #else
+// clang-format off
+// Hand-aligned: clang-format pulls the short registerModelOnce() call up onto the
+// BRIDGE_DETAIL_CAT line and then breaks *inside* the token-paste invocation, which
+// also splits the pair apart visually -- MORPH_DETAIL_REGISTER_ACTION_LOCAL has a
+// longer right-hand side and so survives untouched. Keep the two parallel by hand.
 #define MORPH_DETAIL_REGISTER_MODEL_LOCAL(M, NAME)                                                       \
     namespace {                                                                                          \
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_model_reg_, __COUNTER__) =                      \
@@ -627,6 +632,7 @@ bool registerActionExecutorOnce(std::string_view modelId, std::string_view actio
     [[maybe_unused]] const bool BRIDGE_DETAIL_CAT(bridge_action_reg_, __COUNTER__) =                     \
         morph::model::detail::registerActionOnce<M, A>(morph::model::ModelTraits<M>::typeId(), NAME);    \
     }
+// clang-format on
 #endif
 
 /// @brief Registers model type @p M with the string id @p NAME.
