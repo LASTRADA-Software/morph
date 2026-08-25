@@ -40,8 +40,9 @@ namespace ledger::gui {
 ///        as a Qt signal.
 ///
 /// `BridgeHandler<LedgerModel, AllowShared>`, not a plain handler:
-/// `LedgerModel` is keyed per ledger (its hand-written `ModelKeyTraits`, see
-/// `ledger_model.hpp`), so a second client opening the same ledger must join
+/// `LedgerModel` is keyed per ledger (`LedgerModel::PrimaryKey` and the
+/// `BRIDGE_KEY_FROM` lines in `ledger_model.hpp`), so a second client opening
+/// the same ledger must join
 /// the same shared-instance directory the keyed attach relies on. A
 /// `NoSharing` handler registers its own private instance eagerly and never
 /// attaches to another's, which would give every client a private ledger --

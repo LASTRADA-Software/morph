@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <morph/core/bridge.hpp>
 #include <morph/core/executor.hpp>
@@ -64,6 +65,25 @@ namespace ledger {
 ///        explicitly.
 class LedgerModel {
 public:
+    /// @brief This model's primary-key type, declared rather than deduced.
+    ///
+    ///        `morph::model::PrimaryKeyOf` prefers a nested alias over
+    ///        anything a `BRIDGE_MODEL_KEY` line would deduce (model_key.hpp's
+    ///        `KeyTypeOf`), which is the documented way to say the key type is
+    ///        not simply the type of some action's field. It is not, here: six
+    ///        of this model's seven keyed actions carry a `LedgerId`, but
+    ///        `GetReportStatus` carries a `ReportJobId` (report_dto.hpp), so
+    ///        no single strong id is *the* key type. Both unwrap to the same
+    ///        `std::int64_t`, which is what the directory has always keyed on,
+    ///        and declaring it keeps `primary()`/`instances()` returning a
+    ///        plain integer instead of claiming a `LedgerId` that would be
+    ///        wrong for a handler attached through `GetReportStatus`.
+    ///
+    ///        Each action still uses `BRIDGE_KEY_FROM` (below this class), so
+    ///        the strong-id unwrapping is `morph::model::keyToString`'s and
+    ///        not restated per action.
+    using PrimaryKey = std::int64_t;
+
     /// @brief The ordinary shape: owns a one-thread `ThreadPoolExecutor` for
     ///        `execute(SubmitReport)`'s worker, per `_reportExecutor`'s own
     ///        default. This is the constructor the bridge registry uses --
@@ -93,10 +113,10 @@ public:
     explicit LedgerModel(std::shared_ptr<::morph::exec::IExecutor> reportExecutor);
 
     /// @brief Creates an account in the ledger named by `action.ledgerId`.
-    ///        The model's first keyed action -- see the hand-written
-    ///        `ModelKeyTraits`/`ActionKeyTraits` specialisations below this
-    ///        class (not the `BRIDGE_MODEL_KEY` macro -- see their own
-    ///        comment for why).
+    ///        The model's first keyed action -- see the `BRIDGE_KEY_FROM`
+    ///        lines below this class, and `PrimaryKey` above for why the key
+    ///        type is declared there rather than deduced by a
+    ///        `BRIDGE_MODEL_KEY`.
     ///
     ///        Returns the freshly created account's info rather than
     ///        `void`: `ActionTraits<A>::Result` deduces from
@@ -349,50 +369,32 @@ BRIDGE_REGISTER_MODEL(ledger::LedgerModel, "LedgerModel")
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::OpenAccount, "OpenAccount")
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetLedger, "GetLedger", ::morph::model::Loggable::No)
 
-// Hand-written ModelKeyTraits/ActionKeyTraits instead of BRIDGE_MODEL_KEY/
-// BRIDGE_KEY_FROM: those macros route the key through
-// morph::model::keyToString<K>, which is constrained by the
-// morph::model::ModelKey concept (std::integral or std::string only --
-// model_key.hpp). ledger::LedgerId (like every LEDGER_DEFINE_STRONG_ID type,
-// types.hpp) wraps std::optional<std::int64_t>, so it satisfies neither arm
-// and BRIDGE_MODEL_KEY(LedgerModel, OpenAccount, &OpenAccount::ledgerId)
-// fails to compile (confirmed by a real build: "ledger::LedgerId does not
-// satisfy ModelKey"). No existing rung's keyed model (bank::AccountModel/
-// CustomerModel, polls::PollModel) hits this: their key fields are plain
-// std::int64_t/std::string, never a strong-id struct. Rather than widen
-// morph::model::ModelKey itself (a core, already-shipped framework concept
-// also load-bearing for bank/polls -- out of this ledger-only task's scope),
-// PrimaryKey is declared std::int64_t directly here and key() unwraps
-// LedgerId's payload by hand. This is the plain, non-macro customisation
-// point model_key.hpp's own doc comments already anticipate ("Specialise
-// via BRIDGE_KEY_FROM ... or by hand").
-template <>
-struct morph::model::ActionKeyTraits<ledger::OpenAccount> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::OpenAccount& action) { return morph::model::keyToString(*action.ledgerId); }
-};
-template <>
-struct morph::model::ModelKeyTraits<ledger::LedgerModel> {
-    using PrimaryKey = std::int64_t;
-};
-template <>
-struct morph::model::ActionKeyTraits<ledger::GetLedger> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::GetLedger& action) { return morph::model::keyToString(*action.ledgerId); }
-};
+// `BRIDGE_KEY_FROM` per keyed action, and no `BRIDGE_MODEL_KEY` at all: the
+// model's key *type* is declared in its own class body (`LedgerModel::
+// PrimaryKey`, see that alias's comment for why it stays the raw scalar), and
+// a nested alias wins over any deduced type (model_key.hpp's `KeyTypeOf`).
+// Each of these lines records only that the action carries the key, and
+// routes the value through `morph::model::keyToString`.
+//
+// Until morph#183 these were seven hand-written `ActionKeyTraits`
+// specialisations plus a `ModelKeyTraits<LedgerModel>`, because
+// `morph::model::ModelKey` admitted only `std::integral`/`std::string` and
+// `ledger::LedgerId` (like every `LEDGER_DEFINE_STRONG_ID` type, types.hpp)
+// wraps a `std::optional<std::int64_t>`. morph#163 widened the concept to
+// admit a strong id, so the macros work on these fields now -- and each
+// hand-written body's `*action.ledgerId` is gone with them. That dereference
+// was `operator*` on a possibly-disengaged `std::optional`: undefined
+// behaviour for an action carrying an empty id, which handed back whatever
+// the union held and routed the caller to an arbitrary instance.
+// `keyToString` refuses an empty strong id instead, and
+// `BridgeHandler::execute`'s `catch (...)` around key extraction turns the
+// refusal into a rejected `Completion`.
+BRIDGE_KEY_FROM(ledger::OpenAccount, &ledger::OpenAccount::ledgerId);
+BRIDGE_KEY_FROM(ledger::GetLedger, &ledger::GetLedger::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::StoreTransaction, "StoreTransaction")
 
-template <>
-struct morph::model::ActionKeyTraits<ledger::StoreTransaction> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::StoreTransaction& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
-};
+BRIDGE_KEY_FROM(ledger::StoreTransaction, &ledger::StoreTransaction::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SetCategory, "SetCategory")
 
@@ -405,47 +407,24 @@ BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SetCategory, "SetCategory")
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::UndoTransaction, "UndoTransaction")
 
-template <>
-struct morph::model::ActionKeyTraits<ledger::UndoTransaction> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::UndoTransaction& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
-};
+BRIDGE_KEY_FROM(ledger::UndoTransaction, &ledger::UndoTransaction::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::ImportLedgerChunk, "ImportLedgerChunk")
 
-template <>
-struct morph::model::ActionKeyTraits<ledger::ImportLedgerChunk> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::ImportLedgerChunk& action) {
-        return morph::model::keyToString(*action.ledgerId);
-    }
-};
+BRIDGE_KEY_FROM(ledger::ImportLedgerChunk, &ledger::ImportLedgerChunk::ledgerId);
 
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::SubmitReport, "SubmitReport")
 BRIDGE_REGISTER_ACTION(ledger::LedgerModel, ledger::GetReportStatus, "GetReportStatus", ::morph::model::Loggable::No)
 
-template <>
-struct morph::model::ActionKeyTraits<ledger::SubmitReport> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::SubmitReport& action) { return morph::model::keyToString(*action.ledgerId); }
-};
+BRIDGE_KEY_FROM(ledger::SubmitReport, &ledger::SubmitReport::ledgerId);
 
 // GetReportStatus carries no ledgerId, only jobId -- resolving its key by
 // looking up the job row's own ledger_id would repeat Task 14's already-
 // rejected DB-lookup-inside-key() pattern, so it keys directly on jobId
-// itself. ModelKeyTraits<LedgerModel>::PrimaryKey is already declared
-// std::int64_t, and a ReportJobId's own underlying integer is just as valid
-// a value for that key type as a LedgerId's: nothing requires every keyed
-// action on one model to key by the same semantic field, only that the key
-// type matches.
-template <>
-struct morph::model::ActionKeyTraits<ledger::GetReportStatus> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::GetReportStatus& action) { return morph::model::keyToString(*action.jobId); }
-};
+// itself. This is the action that keeps `LedgerModel::PrimaryKey` a raw
+// `std::int64_t`: a ReportJobId's underlying integer is just as valid a value
+// for that key type as a LedgerId's, but the two are different *types*, so
+// there is no single strong id `BRIDGE_MODEL_KEY` could deduce that would be
+// honest for both. Nothing requires every keyed action on one model to key by
+// the same semantic field, only that the key type matches.
+BRIDGE_KEY_FROM(ledger::GetReportStatus, &ledger::GetReportStatus::jobId);

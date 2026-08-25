@@ -60,20 +60,17 @@ BRIDGE_REGISTER_MODEL(ledger::RuleModel, "RuleModel")
 BRIDGE_REGISTER_ACTION(ledger::RuleModel, ledger::CreateRule, "CreateRule")
 BRIDGE_REGISTER_ACTION(ledger::RuleModel, ledger::UpdateRule, "UpdateRule")
 
-// Hand-written ModelKeyTraits/ActionKeyTraits, per Task 7's real,
-// verified discovery: LedgerId fails morph::model::ModelKey's
-// std::integral/std::string constraint, so BRIDGE_MODEL_KEY/
-// BRIDGE_KEY_FROM cannot be used.
-template <>
-struct morph::model::ModelKeyTraits<ledger::RuleModel> {
-    using PrimaryKey = std::int64_t;
-};
-template <>
-struct morph::model::ActionKeyTraits<ledger::CreateRule> {
-    static constexpr bool hasKey = true;
-    static constexpr bool fromResult = false;
-    static std::string key(const ledger::CreateRule& action) { return morph::model::keyToString(*action.ledgerId); }
-};
+// The one ledger model whose keyed actions all name the same entity, so
+// `BRIDGE_MODEL_KEY`'s deduced type is the right one and nothing overrides it:
+// `PrimaryKeyOf<RuleModel>` is `ledger::LedgerId` itself, the strong id
+// examples/IMPLEMENTATION.md rule 3 asks for, rather than the unwrapped
+// `std::int64_t` this model declared by hand while `morph::model::ModelKey`
+// still admitted only raw scalars (morph#163 widened it, morph#183 migrated
+// this). The `*action.ledgerId` the hand-written body performed -- `operator*`
+// on a possibly-disengaged `std::optional`, undefined behaviour for an empty
+// id -- is gone with it: `morph::model::keyToString` refuses an empty strong
+// id, which `BridgeHandler::execute` turns into a rejected `Completion`.
+BRIDGE_MODEL_KEY(ledger::RuleModel, ledger::CreateRule, &ledger::CreateRule::ledgerId);
 
 // UpdateRule carries a ruleId, not a ledgerId, so it cannot share
 // CreateRule's key type -- and per model_key.hpp's real primary-template

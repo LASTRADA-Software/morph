@@ -219,14 +219,17 @@ TEST_CASE("An action carrying an empty id fails key extraction instead of routin
 TEST_CASE("An engaged key round-trips back through keyFromString", "[ledger][model][key]") {
     // `primary()` and `instances()` decode with
     // `keyFromString<PrimaryKeyOf<M>>`, so the encoding has to be reversible
-    // into whichever type each model declared.
+    // into whichever type each model declared. Spelled with the concrete
+    // types rather than `PrimaryKeyOf<M>` so this compiles against the
+    // pre-migration headers too -- the type identity itself is asserted
+    // separately above, where it can be seen to fail.
     for (const std::int64_t raw : kIds) {
         const ledger::CreateRule createRule{.ledgerId = ledger::LedgerId{raw}};
-        CHECK(morph::model::keyFromString<morph::model::PrimaryKeyOf<ledger::RuleModel>>(
+        CHECK(morph::model::keyFromString<ledger::LedgerId>(
                   morph::model::ActionKeyTraits<ledger::CreateRule>::key(createRule)) == ledger::LedgerId{raw});
 
         const ledger::OpenAccount openAccount{.ledgerId = ledger::LedgerId{raw}};
-        CHECK(morph::model::keyFromString<morph::model::PrimaryKeyOf<ledger::LedgerModel>>(
+        CHECK(morph::model::keyFromString<std::int64_t>(
                   morph::model::ActionKeyTraits<ledger::OpenAccount>::key(openAccount)) == raw);
     }
 }
