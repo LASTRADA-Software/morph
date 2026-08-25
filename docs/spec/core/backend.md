@@ -33,6 +33,8 @@ and react to backend changes.
 - [`LocalBackend` — in-process execution](#localbackend--in-process-execution)
 - [`RemoteServer` — server-side message handler](#remoteserver--server-side-message-handler)
 - [Server-side observability](#server-side-observability)
+- [Serving action schemas](#serving-action-schemas)
+- [`PayloadCompleteness` — enforcing the action-evolution policy](#payloadcompleteness--enforcing-the-action-evolution-policy)
 - [`LimitPolicy` — opt-in resource limits](#limitpolicy--opt-in-resource-limits)
 - [Connection scopes](#connection-scopes)
 - [`SimulatedRemoteBackend` — adapter for testing](#simulatedremotebackend--adapter-for-testing)
@@ -325,6 +327,7 @@ server.
 | `deregister` | `modelId` | `ok` or `err` | Consults `authorizeInstance` against the recorded owner (denied → `err "unauthorized"`); otherwise erases the model and its owner entry from the registry. |
 | `execute` | `modelId`, `modelType`, `actionType`, `body`, `session` | `ok` with `body` or `err` | See the execute flow below. |
 | `hello` | `protocolVersion` | `ok` with `body` = `ProtocolRange`, or `err "protocol version unsupported"` | Protocol-version negotiation, exchanged once per connection before any `register`/`execute`. Carries no `session` and is not authorized — orthogonal to `IAuthorizer`. See [wire.md](wire.md#protocol-version-negotiation). |
+| `schemas` | `typeId`, `session` | `ok` with `body` = `{actionType: schema}`, or `err` | Empty `typeId` → `err "schemas requires a typeId"` (checked before authorization). Authenticates, then consults `_authorizer->authorize(env.session, typeId, {})` — the same type-level read hook `instances` uses; denied → `err "unauthorized"`. Answers from `ActionDispatcher::schemasJson(typeId)`; a type with no registered actions yields `{}`, not an error. See [Serving action schemas](#serving-action-schemas). |
 
 **Execute flow (`dispatchExecute`).** In order:
 
@@ -458,6 +461,46 @@ clients that opt into sending `"hello"` in the first place. Throws
 for the full negotiation story, including how `SimulatedRemoteBackend` and
 `QtWebSocketBackend` each expose an opt-in `negotiateProtocolVersion()` built
 on their existing synchronous control path.
+
+### Serving action schemas
+
+`RemoteServer` answers the `"schemas"` kind with
+`ActionDispatcher::schemasJson(typeId)` — the `{actionType: schema}` document
+for every action registered under that model type, each schema carrying the
+action's `x-payloadFingerprint` and `x-payloadShape`. It is the only way a
+client that is not linked against the model's C++ can learn an action's shape.
+
+The gate is `authorize(session, typeId, {})`, deliberately the same hook
+`"instances"` uses: a description discloses field names, bounds, rules and the
+payload fingerprint of every action on the type, so it must not be reachable by
+a caller the server would not let execute — while still letting a deployer
+refuse *describing* a type without refusing *using* it.
+
+`SimulatedRemoteBackend::fetchActionSchemas(typeId)` is the client-side
+accessor, built on the same synchronous `handleInline` path as
+`registerModel`/`negotiateProtocolVersion` and opt-in in the same sense. See
+[wire.md, "Serving action schemas"](wire.md#serving-action-schemas).
+
+### `PayloadCompleteness` — enforcing the action-evolution policy
+
+`RemoteServer::setPayloadCompleteness(PayloadCompleteness)` chooses whether an
+`execute` body must carry every field the action's served schema marks
+`required`:
+
+| Value | Behaviour |
+|---|---|
+| `Lenient` (default) | Today's behaviour exactly: the action codec's lenient decode is the only gate, and a missing field is a default-constructed one. |
+| `RequireDeclaredFields` | An `execute` whose `body` carries no key for a `required` field is refused with `err "payload missing required field(s): <names>"`, before the in-flight slot is reserved and before `Model::execute` runs. |
+
+The check runs **after** authorization (its diagnostic names the action's own
+field, which is exactly what `"schemas"` discloses and so is owed the same
+gate) and **before** the in-flight reservation, so a payload that will not be
+dispatched never consumes a slot. It costs one extra parse of `body`, which is
+part of why it is not on by default; the deciding reason is that enabling it by
+default would itself be the non-additive wire change the policy it enforces
+forbids without a `kProtocolVersion` bump. Read the full derivation — including
+what is *not* mechanically checkable — in
+[wire.md, "Enforcing the policy"](wire.md#enforcing-the-policy).
 
 ### `LimitPolicy` — opt-in resource limits
 

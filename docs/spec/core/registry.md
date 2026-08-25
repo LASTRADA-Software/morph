@@ -528,6 +528,9 @@ class ActionDispatcher {
                          IModelHolder& holder, std::string_view payload);
     bool coalesce(std::string_view modelId, std::string_view actionId) const;
     std::string schemaFor(std::string_view modelId, std::string_view actionId) const;
+    std::string schemasJson(std::string_view modelId) const;
+    const std::vector<std::string>* requiredFieldsFor(std::string_view modelId,
+                                                      std::string_view actionId) const;
     static ActionDispatcher& instance();
 };
 ```
@@ -568,6 +571,58 @@ class ActionDispatcher {
   not an error — an entry naming an unregistered action fails at `dispatch()`
   with "unknown action" a moment later, which is the better diagnostic for that
   case.
+- `schemasJson` returns the `{actionType: schema}` document for every action
+  registered under `modelId`, action ids emitted in sorted order so the output
+  is byte-identical across calls and across servers built from the same
+  sources. `{}` for a model type with no registered actions. This is what
+  `RemoteServer` serves for the `"schemas"` envelope kind — see
+  [wire.md, "Serving action schemas"](wire.md#serving-action-schemas).
+- `requiredFieldsFor` returns the wire names the pair's served schema lists in
+  `required`, or `nullptr`. `nullptr` means *nothing to check* (the pair is
+  unregistered, or its schema could not be generated), never *nothing is
+  required*. Read by `RemoteServer`'s opt-in
+  `PayloadCompleteness::RequireDeclaredFields` gate, so the rule the server
+  enforces is by construction the rule the schema published.
+
+#### `ActionDescription` — what `registerAction` files for the wire
+
+Alongside the runner, `registerAction` files a **thunk** returning `A`'s
+`ActionDescription`:
+
+```cpp
+struct ActionDescription {
+    std::string schema;                 // forms::schemaJson<A>() + two x- keys
+    std::vector<std::string> required;  // read back out of that schema
+};
+```
+
+`schema` is `morph::forms::schemaJson<A>()` with `x-payloadFingerprint`
+(`payloadFingerprint<A>()`) and `x-payloadShape` (`payloadShapeString<A>()`)
+merged in over a `glz::generic_u64` DOM — `u64` number mode for the same
+reason `mergeSchemaExtras` uses it, so `int64`/`uint64` bounds in `$defs`
+survive the round trip exactly. On a DOM read failure the raw schema text is
+served unannotated and `required` stays empty: a description facility degrades,
+it does not throw.
+
+`required` is read back **out of** the served document rather than recomputed,
+so a field the completeness gate insists on is exactly a field the schema told
+the client about.
+
+Three deliberate properties:
+
+- **A thunk, not the value.** Registration runs at static-init time, where
+  `forms::schemaJson<A>()`'s `UnsatisfiableFormError` throw path would abort
+  the process before `main` rather than surface as an `err` reply.
+- **Cached in a function-local `static`** (`actionDescription<A>()`), like
+  `forms::schemaJson<A>()`'s own cache: `RemoteServer` may answer `"schemas"`
+  on any pool thread, and every map `ActionDispatcher` fills is read-only by
+  then, so the one piece of mutable state involved is the one C++ already
+  guarantees is initialised exactly once. A throw leaves it uninitialised and a
+  later call retries.
+- **Not built for a hand-written `ActionTraits`' benefit.** The description
+  describes the *reflected struct*, exactly as `forms::schemaJson` always has;
+  an action whose codec maps to different JSON is described by what its struct
+  reflects, the same caveat `payloadFingerprint` carries.
 
 ### `ModelRegistryFactory`
 
@@ -979,7 +1034,9 @@ correctly under `MORPH_CLIENT_ONLY`.
 
 | Symbol | Kind | Purpose |
 |---|---|---|
-| `ActionDispatcher` | class | Maps `(modelId, actionId)` → type-erased runner; server-side dispatch. |
+| `ActionDispatcher` | class | Maps `(modelId, actionId)` → type-erased runner; server-side dispatch. Also files one `ActionDescription` thunk per action, behind `schemasJson()`/`requiredFieldsFor()`. |
+| `ActionDescription` | struct | `{schema, required}` for one action: `forms::schemaJson<A>()` plus `x-payloadFingerprint`/`x-payloadShape`, and the `required` names read back out of it. |
+| `actionDescription<A>()` | function template | The process-lifetime `ActionDescription` for `A`; `buildActionDescription<A>()` is the uncached builder behind it. |
 | `ModelRegistryFactory` | class | Maps `modelId` → factory; server-side model instantiation. |
 | `ActionExecuteRegistry` | class | Maps `(modelId, actionId)` → type-erased executor through `BridgeHandler`; client/schema-driven execute. |
 
