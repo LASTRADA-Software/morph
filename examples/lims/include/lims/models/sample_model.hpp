@@ -28,8 +28,8 @@ namespace lims {
 
 /// @brief One sample: its registration and its position in the lab workflow.
 ///
-/// Keyed by sample id (the hand-written `ModelKeyTraits`/`ActionKeyTraits`
-/// specialisations below). Holds no connection of its own — each `execute()`
+/// Keyed by `SampleId` (the `BRIDGE_MODEL_KEY`/`BRIDGE_KEY_FROM` lines below
+/// this class). Holds no connection of its own — each `execute()`
 /// opens a `Lightweight::DataMapper` for its own duration, which is safe
 /// because morph serialises every call on one instance onto its own strand.
 ///
@@ -379,79 +379,33 @@ BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::VerifyResult, "VerifyResult")
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::ListVerifications, "ListVerifications", ::morph::model::Loggable::No)
 BRIDGE_REGISTER_ACTION(lims::SampleModel, lims::GetAuditTrail, "GetAuditTrail", ::morph::model::Loggable::No)
 
-// Hand-written ModelKeyTraits/ActionKeyTraits rather than
-// BRIDGE_MODEL_KEY/BRIDGE_KEY_FROM: those macros deduce the model's
-// `PrimaryKey` as the *type* of the named member and route the value through
-// `morph::model::keyToString`, whose `ModelKey` concept admits only
-// `std::integral` or `std::string` (include/morph/core/model_key.hpp).
-// `lims::SampleId` wraps `std::optional<std::int64_t>` and satisfies neither,
-// so `BRIDGE_MODEL_KEY(SampleModel, OpenSample, &OpenSample::sampleId)` does
-// not compile. `ledger::LedgerModel` and `kanban::BoardModel` already carry
-// the identical hand-written workaround for the identical reason; this is the
-// third rung to need it, which is exactly the trigger
-// examples/IMPLEMENTATION.md's rule-of-three names — see the rung README's
-// findings section.
-template <>
-struct morph::model::ActionKeyTraits<lims::OpenSample> {
-    /// @brief This action carries its model's key.
-    static constexpr bool hasKey = true;
-
-    /// @brief The key is in the payload, not the result.
-    static constexpr bool fromResult = false;
-
-    /// @brief Unwraps `OpenSample::sampleId` to the wire-canonical integer.
-    /// @param action The action carrying the key.
-    /// @return The key's canonical string form.
-    /// @throws std::bad_optional_access if the id is disengaged. Key
-    ///         extraction runs *before* `SampleModel::execute`'s own
-    ///         `validate()` check ever sees the action
-    ///         (`BridgeHandler::execute`, include/morph/core/bridge.hpp), so
-    ///         throwing here is the sanctioned rejection point — that call
-    ///         site's own `catch (...)` resolves the `Completion` with the
-    ///         error rather than letting it escape.
-    static std::string key(const lims::OpenSample& action) { return morph::model::keyToString(*action.sampleId); }
-};
-
-template <>
-struct morph::model::ModelKeyTraits<lims::SampleModel> {
-    /// @brief The key type, in its unwrapped wire-canonical form.
-    using PrimaryKey = std::int64_t;
-};
+// `OpenSample` is the action that names a sample, so it defines the model's
+// key. `BRIDGE_MODEL_KEY` deduces the key *type* from the member it is handed,
+// which makes `PrimaryKeyOf<SampleModel>` `lims::SampleId` itself -- the strong
+// id examples/IMPLEMENTATION.md rule 3 requires -- rather than the unwrapped
+// `std::int64_t` this rung declared by hand while `morph::model::ModelKey`
+// still admitted only `std::integral`/`std::string`. That restriction is what
+// forced the hand-written specialisations here, in `ledger::LedgerModel` and
+// in `kanban::BoardModel`; morph#163 widened the concept to admit a strong id
+// wrapping a raw key, and morph#183 deleted all three rungs' blocks.
+//
+// Their bodies did `keyToString(*action.sampleId)` -- `operator*` on a
+// possibly-disengaged `std::optional`, undefined behaviour for an action
+// carrying an empty id, which handed back whatever the union held and routed
+// the caller to an arbitrary instance. `morph::model::keyToString` refuses an
+// empty strong id instead. Key extraction runs *before* `SampleModel::execute`
+// ever sees the action (`BridgeHandler::execute`, include/morph/core/
+// bridge.hpp), so this is the only place that rejection can happen -- and that
+// call site's own `catch (...)` resolves the `Completion` with the error
+// rather than letting it escape.
+BRIDGE_MODEL_KEY(lims::SampleModel, lims::OpenSample, &lims::OpenSample::sampleId);
 
 // A queued update names its own sample: it was prepared on a device that was
 // not attached to anything, and by the time it replays the handler draining
 // the queue may be attached to a different sample entirely.
-template <>
-struct morph::model::ActionKeyTraits<lims::QueuedCapture> {
-    /// @brief This action carries its model's key.
-    static constexpr bool hasKey = true;
+BRIDGE_KEY_FROM(lims::QueuedCapture, &lims::QueuedCapture::sampleId);
 
-    /// @brief The key is in the payload, not the result.
-    static constexpr bool fromResult = false;
-
-    /// @brief Unwraps `QueuedCapture::sampleId` to the wire-canonical integer.
-    /// @param action The action carrying the key.
-    /// @return The key's canonical string form.
-    /// @throws std::bad_optional_access if the id is disengaged — see
-    ///         `ActionKeyTraits<lims::OpenSample>` for why throwing here is the
-    ///         sanctioned rejection point.
-    static std::string key(const lims::QueuedCapture& action) { return morph::model::keyToString(*action.sampleId); }
-};
-
-template <>
-struct morph::model::ActionKeyTraits<lims::RegisterSample> {
-    /// @brief This action establishes its model's key.
-    static constexpr bool hasKey = true;
-
-    /// @brief The key is generated, so it comes from the result.
-    static constexpr bool fromResult = true;
-
-    /// @brief Reads the freshly generated sample id off the result.
-    /// @tparam R The action's result type (`SampleView`).
-    /// @param result The registration's result.
-    /// @return The new key's canonical string form.
-    template <typename R>
-    static std::string keyOfResult(const R& result) {
-        return morph::model::keyToString(*result.id);
-    }
-};
+// Registration generates the id rather than naming it, so its key comes off
+// the `SampleView` it returns -- the result-keyed path, which promotes the
+// instance the action already ran on instead of attaching before dispatch.
+BRIDGE_KEY_FROM_RESULT(lims::RegisterSample, &lims::SampleView::id);
