@@ -39,7 +39,6 @@
 #include <filesystem>
 #include <initializer_list>
 #include <string>
-#include <utility>
 
 #include "BankClient.hpp"
 #include "controllers/AccountController.hpp"
@@ -106,37 +105,16 @@ TEST_CASE("Every bank controller exposes exactly the surface gui/qml binds, and 
         audit.allowUnbound(QString::fromLatin1(alias), QStringLiteral("refresh"), dynamic);
     }
 
-    // ── The pre-existing backlog, recorded rather than swallowed ──────────
-    // The first run of this audit reported four members these six controllers
-    // publish that no file under gui/qml/ binds — over and above the five
-    // dynamic `refresh` calls above. The other direction was clean: no QML file
-    // binds a name its controller lacks, so no screen is broken. Each is either
-    // dead surface or a missing control, and deciding which is per-member work
-    // this file does not do. They are listed here so the guard goes live now
-    // and catches the *next* drift in either direction, with the backlog
-    // itemised instead of hidden behind a lowered bar.
-    //
-    // The list is checked in both directions too: an exemption for a member
-    // that has since been deleted, or one QML has since bound, fails this test
-    // (testkit/qml_surface.hpp). It can only shrink deliberately.
-    //
-    // Same shape as ledger's (morph#239), lims' (morph#287) and kanban's
-    // (morph#291).
-    const QString backlog = QStringLiteral("unbound controller surface, tracked in morph#296");
-    for (const auto& [alias, member] : std::initializer_list<std::pair<const char*, const char*>>{
-             // `txns.selectAccount(id)` is called, but the property it writes
-             // is never read back, so the account picker cannot reflect a
-             // selection the controller made itself (TransactionController.cpp
-             // auto-selects the first account on refresh).
-             {"txns", "selectedAccount"},
-             {"txns", "selectedChanged"},
-             // Emitted on every deposit/withdraw/transfer, and on every bill
-             // payment — no QML handles either.
-             {"txns", "posted"},
-             {"payees", "paid"},
-         }) {
-        audit.allowUnbound(QString::fromLatin1(alias), QString::fromLatin1(member), backlog);
-    }
+    // ── No backlog ────────────────────────────────────────────────────────
+    // The five `refresh` invokables above are the whole exemption list. The
+    // first run of this audit also reported four members no file under gui/qml/
+    // bound — `txns.selectedAccount` with its `selectedChanged`, `txns.posted`
+    // and `payees.paid` — recorded here as morph#296 and since resolved by
+    // binding all four rather than deleting any: MoveMoneyPage.qml now reads
+    // the picker's selection back out of the controller (which is what stops a
+    // deposit landing in an account the screen no longer names) and Main.qml
+    // handles both success signals as a toast, opposite the `onError` toast
+    // that was already there. Nothing else is exempt, in either direction.
 
     const QStringList findings = audit.run();
     INFO(findings.join(QStringLiteral("\n")).toStdString());

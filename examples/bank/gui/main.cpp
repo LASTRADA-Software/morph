@@ -18,42 +18,13 @@
 #include <string>
 
 #include "BankClient.hpp"
+#include "Theme.hpp"
 #include "controllers/AccountController.hpp"
 #include "controllers/AppController.hpp"
 #include "controllers/CardController.hpp"
 #include "controllers/LoanController.hpp"
 #include "controllers/PayeeController.hpp"
 #include "controllers/TransactionController.hpp"
-
-namespace {
-
-/// The warm, "Claude-inspired" palette, handed to QML as the `theme` object.
-QVariantMap makeTheme() {
-    return QVariantMap{
-        {QStringLiteral("paper"), QStringLiteral("#FAF9F5")},
-        {QStringLiteral("surface"), QStringLiteral("#FFFFFF")},
-        {QStringLiteral("surfaceAlt"), QStringLiteral("#F2F0E9")},
-        {QStringLiteral("ink"), QStringLiteral("#1F1E1D")},
-        {QStringLiteral("inkSoft"), QStringLiteral("#6B6862")},
-        {QStringLiteral("border"), QStringLiteral("#E7E4DB")},
-        {QStringLiteral("accent"), QStringLiteral("#C96442")},
-        {QStringLiteral("accentHover"), QStringLiteral("#B5572F")},
-        {QStringLiteral("sidebar"), QStringLiteral("#262624")},
-        {QStringLiteral("sidebarText"), QStringLiteral("#C9C6BE")},
-        {QStringLiteral("sidebarHover"), QStringLiteral("#34322F")},
-        {QStringLiteral("good"), QStringLiteral("#2F9E66")},
-        {QStringLiteral("warn"), QStringLiteral("#C96442")},
-        {QStringLiteral("bad"), QStringLiteral("#C0392B")},
-        {QStringLiteral("goodBg"), QStringLiteral("#E5F4EC")},
-        {QStringLiteral("warnBg"), QStringLiteral("#FBEDE8")},
-        {QStringLiteral("badBg"), QStringLiteral("#FBEDEB")},
-        {QStringLiteral("neutralBg"), QStringLiteral("#F2F0E9")},
-        {QStringLiteral("dangerBorder"), QStringLiteral("#E7C9C5")},
-        {QStringLiteral("radius"), 12},
-    };
-}
-
-}  // namespace
 
 int main(int argc, char* argv[]) {
     QGuiApplication app{argc, argv};
@@ -72,7 +43,7 @@ int main(int argc, char* argv[]) {
 
     QQmlApplicationEngine engine;
     auto* ctx = engine.rootContext();
-    ctx->setContextProperty(QStringLiteral("theme"), makeTheme());
+    ctx->setContextProperty(QStringLiteral("theme"), bankgui::makeTheme());
     ctx->setContextProperty(QStringLiteral("app"), &appController);
     ctx->setContextProperty(QStringLiteral("accounts"), &accountController);
     ctx->setContextProperty(QStringLiteral("txns"), &transactionController);

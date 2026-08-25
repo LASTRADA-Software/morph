@@ -172,6 +172,60 @@ if(MORPH_BUILD_TESTS)
             apply_bigobj(bank_gui_tests)
 
             catch_discover_tests(bank_gui_tests DISCOVERY_MODE PRE_TEST)
+
+            # ── bank_gui_qml_tests: the QML layer, with a live engine ────────
+            # A third binary, and the reason is the second one's defining
+            # property: bank_gui_tests links Qt6::Core and nothing else, needs
+            # no platform plugin and no display, and its own file header says
+            # so -- that is what lets the surface audit run in any configure
+            # that can compile a QObject. Linking Qt6::Quick into it to gain
+            # one test would cost that, for every run of the audit, forever.
+            #
+            # This target exists because some of bank's GUI logic is *in* the
+            # QML and is invisible from C++. MoveMoneyPage's account picker is
+            # the worked example (morph#296): the controller is entirely
+            # self-consistent when driven directly, and the defect is a
+            # ComboBox whose `currentIndex` no binding restores after its model
+            # is replaced. Only a live engine over the shipped .qml file can
+            # see that, so only a live engine can hold the regression.
+            #
+            # The .qml files are loaded from the source tree by URL rather than
+            # from the BankGui QML module, which lives inside the bank_gui
+            # *executable* and cannot be linked. QML's implicit import of a
+            # component's own directory resolves the sibling types (Panel,
+            # Picker, Field, AppButton) with no qmldir, so this is the same
+            # file the desktop client ships, not a copy.
+            find_package(Qt6 REQUIRED COMPONENTS Gui Qml Quick QuickControls2)
+            add_executable(bank_gui_qml_tests
+                tests/gui/test_bank_gui_qml_behaviour.cpp
+                # The Qt-owning Catch2 main, in place of Catch2WithMain, with
+                # MORPH_LADDER_TESTKIT_GUI_APP below upgrading its owned
+                # application object to QGuiApplication. Two reasons, both
+                # load-bearing: Qt Quick cannot instantiate an item without a
+                # platform integration, and BankClient's QtExecutor captures
+                # `QCoreApplication::instance()` when it is *constructed*, so
+                # the application has to exist before the first BankClient.
+                ${PROJECT_SOURCE_DIR}/examples/common/testkit/testkit_main.cpp
+            )
+            target_include_directories(bank_gui_qml_tests PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests
+                ${PROJECT_SOURCE_DIR}/examples/common)
+            target_link_libraries(bank_gui_qml_tests PRIVATE
+                bank_gui_lib Catch2::Catch2
+                Qt6::Gui Qt6::Qml Qt6::Quick Qt6::QuickControls2)
+            target_compile_features(bank_gui_qml_tests PRIVATE cxx_std_23)
+            target_compile_definitions(bank_gui_qml_tests PRIVATE
+                MORPH_LADDER_SOURCE_ROOT="${PROJECT_SOURCE_DIR}"
+                MORPH_LADDER_TESTKIT_GUI_APP)
+            apply_bigobj(bank_gui_qml_tests)
+
+            # offscreen, because the runner may have no display and this suite
+            # never looks at a pixel -- it reads property values off the items
+            # the engine created. The same variable the ladder's own GUI legs
+            # set for ctest (examples/TESTING.md).
+            catch_discover_tests(bank_gui_qml_tests
+                DISCOVERY_MODE PRE_TEST
+                PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         endif()
     endif()
 endif()

@@ -24,10 +24,22 @@ ColumnLayout {
                 Text { text: "Account"; color: theme.inkSoft }
                 Picker {
                     id: account
+                    objectName: "accountPicker"
                     Layout.fillWidth: true
                     model: txns.accounts
                     textRole: "label"
                     valueRole: "id"
+                    // The controller owns the selection; this picker only
+                    // displays it. Without the read-back a ComboBox silently
+                    // resets to index 0 every time its model is replaced --
+                    // which is what refresh() does after each deposit,
+                    // withdrawal and transfer -- while txns keeps the account
+                    // the user chose, so the next deposit went somewhere the
+                    // screen no longer named (morph#296).
+                    //
+                    // refresh() emits accountsChanged before selectedChanged,
+                    // so this re-runs against the list that is already in place.
+                    currentIndex: indexOfValue(txns.selectedAccount)
                     onActivated: txns.selectAccount(currentValue)
                 }
             }
