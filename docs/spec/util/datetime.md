@@ -341,6 +341,19 @@ learns only that the string was not a valid canonical UTC timestamp.
   within one binary, or that need two different simulated instants live at
   once, are outside what this seam provides.
 
+## Payload shape tag
+
+`DateTime` specialises `morph::model::PayloadShapeTag` and renders as
+`datetime`.
+
+`DateTime` serialises through a custom codec (it travels as an ISO-8601
+string), so the journal's payload fingerprint has no reflected members to
+decompose and would otherwise render it as the same opaque placeholder as every
+other custom-codec type. That would make a retype between two of them invisible
+to `replay()`'s fingerprint check (morph#245).
+
+See [`journal/journal.md`](../journal/journal.md) for the fingerprint itself.
+
 ## Cross-references
 
 - **`forms.md`** — `Timestamp` satisfies the `EmptyCapableField` concept via
