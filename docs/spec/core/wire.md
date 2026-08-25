@@ -26,6 +26,9 @@ their `kind` needs and leave the rest as default-constructed values.
 | `kind`       | Direction | Purpose | Key fields |
 |---|---|---|---|
 | `"register"` | request   | Client requests model creation. | `typeId`, `contextKey` (optional stable identity, also carried on `"attach"`) |
+| `"attach"`   | request   | Client re-points at a different `primary` of `typeId`, releasing `modelId` if non-zero. Replies `ok` with the target instance's id in `modelId`. | `typeId`, `primary`, `modelId` (optional), `contextKey` (optional) |
+| `"assign"`   | request   | Client files a live `modelId` under `primary` of `typeId`. | `typeId`, `primary`, `modelId` |
+| `"instances"` | request  | Client asks for the live shared primary keys of `typeId`. Replies `ok` with a JSON array of key strings in `body`. | `typeId` |
 | `"deregister"` | request | Client destroys an instance. | `modelId` |
 | `"execute"`  | request   | Client dispatches an action. | `callId`, `modelId`, `modelType`, `actionType`, `body`, `session` |
 | `"hello"`    | request   | Client announces its protocol version, once per connection, before any `register`/`execute`. See [Protocol version negotiation](#protocol-version-negotiation). | `protocolVersion` |
@@ -56,12 +59,16 @@ session — they round-trip it verbatim; enforcement lives in the server.
 
 ## Factory functions
 
-Five free functions construct `Envelope` instances with the correct `kind` and
+Nine free functions construct `Envelope` instances with the correct `kind` and
 relevant fields. Callers never set `kind` manually.
 
 | Function | `kind` | Parameters |
 |---|---|---|
 | `makeRegister(typeId, contextKey = {})` | `"register"` | Model type id, optional stable identity. |
+| `makeRegisterShared(typeId, primary, contextKey = {})` | `"register"` | Model type id, primary key, optional stable identity. Sets `shared`, making the request a register-or-attach against the shared directory. |
+| `makeAttach(typeId, primary, modelId = 0, contextKey = {})` | `"attach"` | Model type id, primary key to attach to, instance id to release (`0` for none), optional stable identity. |
+| `makeAssign(typeId, primary, modelId)` | `"assign"` | Model type id, primary key to file under, live instance id. |
+| `makeInstances(typeId)` | `"instances"` | Model type id whose live shared primary keys are wanted. |
 | `makeDeregister(modelId)` | `"deregister"` | Instance id to destroy. |
 | `makeHello(protocolVersion = kProtocolVersion)` | `"hello"` | Protocol version the sender speaks. See [Protocol version negotiation](#protocol-version-negotiation). |
 | `makeOk(callId = 0, body = {}, modelId = 0)` | `"ok"` | Correlation id, serialized result (stored in the `body` field), optional model id (for register-replies). |
@@ -354,7 +361,9 @@ is:
 | `callId` | `uint64_t` | `0` | `"execute"`, `"ok"`, `"err"` — correlation id for async matching. |
 | `typeId` | `std::string` | `""` | `"register"` — model type id. |
 | `contextKey` | `std::string` | `""` | `"register"`, `"attach"` — stable identity for the new instance. |
-| `modelId` | `uint64_t` | `0` | `"deregister"`, `"execute"`, `"ok"(register)` — instance id. |
+| `primary` | `std::string` | `""` | `"register"` (when `shared`), `"attach"`, `"assign"` — canonical string encoding of the instance's primary key. Empty means "no primary": the instance is anonymous and cannot be shared. Ignored on every other kind. |
+| `shared` | `bool` | `false` | `"register"` — whether the register joins the shared instance directory. When set, the server returns the live instance for `(typeId, primary)` if one exists, otherwise creates it and enters it in the directory. |
+| `modelId` | `uint64_t` | `0` | `"deregister"`, `"execute"`, `"ok"(register)`, `"attach"`, `"assign"` — instance id. |
 | `modelType` | `std::string` | `""` | `"execute"` — routing key for `ActionDispatcher`. |
 | `actionType` | `std::string` | `""` | `"execute"` — second routing key. |
 | `body` | `std::string` | `""` | `"execute"`, `"ok"` — serialized JSON payload. |
@@ -367,6 +376,10 @@ is:
 | Symbol | Signature |
 |---|---|
 | `makeRegister` | `Envelope makeRegister(std::string typeId, std::string contextKey = {})` |
+| `makeRegisterShared` | `Envelope makeRegisterShared(std::string typeId, std::string primary, std::string contextKey = {})` |
+| `makeAttach` | `Envelope makeAttach(std::string typeId, std::string primary, uint64_t modelId = 0, std::string contextKey = {})` |
+| `makeAssign` | `Envelope makeAssign(std::string typeId, std::string primary, uint64_t modelId)` |
+| `makeInstances` | `Envelope makeInstances(std::string typeId)` |
 | `makeDeregister` | `Envelope makeDeregister(uint64_t modelId)` |
 | `makeHello` | `Envelope makeHello(uint32_t protocolVersion = kProtocolVersion)` |
 | `makeOk` | `Envelope makeOk(uint64_t callId = 0, std::string body = {}, uint64_t modelId = 0)` |

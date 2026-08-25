@@ -17,6 +17,10 @@
 #      morph/*.hpp path mentioned anywhere in the tree must resolve to a file
 #      that exists. Checks 1 and 2 run from a hand-maintained list outward and
 #      so cannot fail for a citation pointing at nothing (morph#251, morph#235).
+#   4. wire.md table-completeness: every Envelope field, every discriminator
+#      kind dispatchMessage handles, and every make* factory must appear as a
+#      row in docs/spec/core/wire.md, whose tables claim to be exhaustive and
+#      are what a third-party protocol implementer reads (morph#233).
 #
 # This is a prose lint, not a value check: it does not parse
 # docs/spec/pinned_facts.toml or re-derive expected values (that is
@@ -155,6 +159,73 @@ if [ "$refs_checked" -lt 50 ]; then
     fail=1
 else
     echo "Dangling-reference check: ${refs_checked} references scanned."
+fi
+
+# ---------------------------------------------------------------------------
+# 4. wire.md table-completeness check
+# ---------------------------------------------------------------------------
+# docs/spec/core/wire.md presents itself as the authoritative protocol
+# reference -- "Every field is present in the struct so the JSON shape is
+# fixed" -- and a third-party client implementer reads its tables as
+# exhaustive. They were not: the Envelope table omitted `primary` and `shared`,
+# the discriminator table omitted "attach"/"assign"/"instances", and the
+# factory tables omitted four factories (morph#233).
+#
+# Nothing could notice, because morph's own client and server both read
+# wire.hpp -- so neither can observe that the *spec* disagrees with it. Only a
+# check that reads both can. Each Envelope field, each kind dispatchMessage
+# handles, and each make* factory must appear as a table row in wire.md.
+wire_hpp="include/morph/core/wire.hpp"
+wire_md="docs/spec/core/wire.md"
+remote_hpp="include/morph/core/remote.hpp"
+field_count=0
+kind_count=0
+factory_count=0
+
+if [ ! -f "$wire_hpp" ] || [ ! -f "$wire_md" ] || [ ! -f "$remote_hpp" ]; then
+    echo "::error::wire table check: expected $wire_hpp, $wire_md and $remote_hpp to exist"
+    fail=1
+else
+    # Envelope struct fields -> rows of the `wire::Envelope` field table.
+    for field in $(awk '/^struct Envelope/,/^};/' "$wire_hpp" \
+                     | grep -E '^ +[A-Za-z0-9_:]+ [a-z][A-Za-z]*( = .*)?;' \
+                     | sed -E 's/^ +[A-Za-z0-9_:]+ +([a-zA-Z]+).*/\1/'); do
+        field_count=$((field_count + 1))
+        grep -qE "^\| *\`${field}\`" "$wire_md" || {
+            echo "::error file=${wire_md}::wire::Envelope field \`${field}\` is not a row in wire.md's field table"
+            fail=1
+        }
+    done
+
+    # Discriminator kinds dispatchMessage handles -> rows of the kind table.
+    for kind in $(grep -oE 'kind == "[a-z]+"' "$remote_hpp" | grep -oE '"[a-z]+"' | tr -d '"' | sort -u); do
+        kind_count=$((kind_count + 1))
+        grep -qE "^\| *\`\"${kind}\"\`" "$wire_md" || {
+            echo "::error file=${wire_md}::discriminator \"${kind}\" is handled by dispatchMessage but is not a row in wire.md's discriminator table"
+            fail=1
+        }
+    done
+
+    # Envelope factories -> rows of both factory tables.
+    for fn in $(grep -oE '^inline Envelope make[A-Za-z]+' "$wire_hpp" | awk '{print $3}' | sort -u); do
+        factory_count=$((factory_count + 1))
+        rows="$(grep -cE "^\| *\`${fn}[\`(]" "$wire_md" || true)"
+        if [ "$rows" -lt 2 ]; then
+            echo "::error file=${wire_md}::factory ${fn}() appears in ${rows} of wire.md's 2 factory tables (prose + API reference)"
+            fail=1
+        fi
+    done
+
+    # Floors are per category, not on the total: a lumped count lets one
+    # category parse to nothing while the other two carry it over the line.
+    # That is how `uint64_t` fields were silently skipped while this check
+    # reported green -- the type contains digits, and the field pattern did not.
+    if [ "$field_count" -lt 13 ] || [ "$kind_count" -lt 8 ] || [ "$factory_count" -lt 9 ]; then
+        echo "::error::wire table check parsed ${field_count} fields (>=13), ${kind_count} kinds (>=8), ${factory_count} factories (>=9) -- a category came up short, so the check would pass while ignoring it"
+        fail=1
+    else
+        echo "wire.md table check: ${field_count} fields, ${kind_count} kinds, ${factory_count} factories all present."
+    fi
 fi
 
 if [ "$fail" -ne 0 ]; then
