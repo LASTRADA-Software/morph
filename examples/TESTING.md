@@ -471,12 +471,15 @@ three-layer answer, per rung:
 
 Open framework facts every rung must respect (verified):
 
-- Bank's WASM build is **local-only** — a WASM client over
-  `QtWebSocketBackend` has still never been *run*. Rung 0 wrote the spike and
-  rung 1 wrote a real client over it (`examples/pastebin/gui_wasm`), but
-  neither was ever compiled: no Emscripten toolchain existed in either
-  authoring environment. The compile gate above is what will change this
-  sentence; until it has run green, treat both as unverified.
+- A WASM client over `QtWebSocketBackend` has still never been *run* — but it
+  is now **compiled** on every qualifying PR. Rung 0 wrote the spike and rung 1
+  wrote a real client over it (`examples/pastebin/gui_wasm`); neither could be
+  compiled when this bullet was written, because no Emscripten toolchain existed
+  in either authoring environment. The compile gate anticipated here has since
+  landed: `.github/workflows/wasm-ladder.yml`'s "Build the ladder's WASM
+  clients" job builds the spike and rungs 1–3's clients by name under
+  `-DMORPH_LADDER_RUNGS=all`, and runs green. So "does it build" is answered;
+  "does it work in a browser" is still not.
 - The plain registration path is only WASM-safe with
   **`asyncRegistrationEnabled = true`, which is opt-in and off by
   default**; with defaults, the first `registerModel` aborts the page.
@@ -485,10 +488,15 @@ Open framework facts every rung must respect (verified):
   `waitForConnected()` recipe is for *native* tests only.
 - The **synchronous shared/keyed attach path
   (`registerModelShared`/`attachModel`) nests an event loop that aborts the
-  page on WASM** — `registerModelAsync` does not cover it. Async attach is
-  a framework prerequisite for rung 3's WASM story — **and pulls forward to
-  rung 1 if pastebin resolves burn atomicity via a shared keyed instance**
-  (the coupling is called out in the pastebin README).
+  page on WASM** — that part still holds, and a WASM client must not call it.
+  What has changed is the remedy: async attach is **no longer a missing
+  framework prerequisite**. `IBackend::registerModelSharedAsync` and
+  `IBackend::attachModelAsync` (`include/morph/core/backend.hpp`) ship the
+  non-blocking counterparts, `Bridge::ensureBoundAsync`/`attachHandlerAsync`
+  dispatch to them, and `QtWebSocketBackend` implements both. A rung's WASM
+  story uses those rather than waiting on the framework. (The rung-1 coupling
+  the pastebin README calls out — burn atomicity via a shared keyed instance —
+  is likewise no longer gated on this.)
 
 ## Build system and CI (proven by rung 0)
 
