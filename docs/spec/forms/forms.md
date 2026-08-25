@@ -1468,7 +1468,7 @@ contract is *defer*:
 | Is this `requiredWhen` field required right now? | **No.** Only a definitely-true condition makes a field required. |
 | Is this `visibleWhen` field shown? | **Yes.** Never hide a field over a condition you could not judge. |
 | Is this `readonlyWhen` field frozen? | **No.** Leave it editable. |
-| What is `and`/`or`/`not` of it? | "Cannot evaluate" **propagates**: `and` is false if any child is false and unevaluable otherwise; `or` is true if any child is true and unevaluable otherwise; `not` of unevaluable is unevaluable. |
+| What is `and`/`or`/`not` of it? | "Cannot evaluate" **propagates**: `and` is false if any child is false, unevaluable if none is false but some is unevaluable, true otherwise; `or` is true if any child is true, unevaluable if none is true but some is unevaluable, false otherwise; `not` of unevaluable is unevaluable. |
 
 The reason is forward compatibility, and it is the whole point of a vocabulary
 that is closed but extensible. Every key here is additive: a server that gains
