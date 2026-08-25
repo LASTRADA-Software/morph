@@ -1483,3 +1483,26 @@ jobs:
       # diagnoses, and which resolves link-order-dependently per build.
       - name: Check for file-scope struct/class name collisions across tests/
         run: bash scripts/check_test_type_names.sh
+
+  # ── Journal payload-fingerprint stamp lint ─────────────────────────────
+  journal-stamp-lint:
+    name: Hand-rolled LogEntry stamps its payload fingerprint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # See scripts/test_check_journal_stamps.sh's own comment: a lint gate
+      # nobody tests reports green whether or not it still detects anything.
+      # This checker has two specific ways to go blind, and the self-test
+      # pins both.
+      - name: Self-test the journal-stamp checker
+        run: bash scripts/test_check_journal_stamps.sh
+
+      # Catches issue #244's bug class: a model that hand-rolls its own
+      # journaling records entries with no `LogEntry::schema`, which
+      # `journal::replay()` can only replay unverified -- so a later renamed
+      # field decodes to its default and the reconstruction is confidently
+      # wrong, which is precisely the failure the fingerprint exists to make
+      # loud. See docs/spec/journal/journal.md, "Payload schema fingerprint".
+      - name: Check hand-rolled LogEntry constructions stamp schema
+        run: bash scripts/check_journal_stamps.sh examples

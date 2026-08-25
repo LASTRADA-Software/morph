@@ -5,6 +5,7 @@
 #include <charconv>
 #include <chrono>
 #include <cstdint>
+#include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/session/session.hpp>
 #include <vector>
@@ -79,6 +80,9 @@ void BudgetModel::logAction(const Action& action, const Result& result, std::str
     entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    // See LedgerModel::logAction's identical comment for why an unstamped
+    // entry is an unverifiable one.
+    entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
     entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
     entry.outcome = ::morph::journal::Outcome::Succeeded;
     if (const auto* ctx = ::morph::session::current()) {

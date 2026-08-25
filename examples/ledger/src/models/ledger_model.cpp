@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <morph/core/logger.hpp>
+#include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
 #include <morph/session/session.hpp>
@@ -435,6 +436,15 @@ void LedgerModel::logAction(const Action& action, const Result& result, std::str
     entry.entityKey = _entityKeyStr.value_or(std::string{});
     entry.actionType = std::string{::morph::model::ActionTraits<Action>::typeId()};
     entry.payload = ::morph::model::ActionTraits<Action>::toJson(action);
+    // Stamp the payload's shape fingerprint, the same value morph's own two
+    // execution sites stamp on the entries they append. Without it every entry
+    // this rung records is *unstamped*, and `journal::replay()`'s default
+    // `UnstampedPayloadPolicy::Replay` would replay it unverified -- a later
+    // build with a renamed field would decode it to a default and report a
+    // state nobody ever recorded. Empty for an action whose `ActionTraits` is
+    // hand-written; see docs/spec/journal/journal.md, "Payload schema
+    // fingerprint".
+    entry.schema = ::morph::model::detail::actionPayloadSchema<Action>();
     entry.result = ::morph::model::ActionTraits<Action>::resultToJson(result);
     entry.outcome = ::morph::journal::Outcome::Succeeded;
     if (const auto* ctx = ::morph::session::current()) {
