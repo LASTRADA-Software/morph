@@ -483,7 +483,7 @@ inline std::string encode(const Envelope& env, const WireCodecOps& ops = default
 /// reject duplicate JSON object keys: a duplicated key is accepted and the last
 /// occurrence wins. There is no glaze option to change this, so `decode` cannot
 /// enforce rejection; callers must not treat duplicate-key rejection as a
-/// security boundary (see docs/spec/wire.md).
+/// security boundary (see docs/spec/core/wire.md).
 ///
 /// @param json Serialized envelope JSON to decode.
 /// @return The decoded `Envelope`.
@@ -498,7 +498,7 @@ inline Envelope decode(std::string_view json) {
     // Ignore unknown keys so the envelope is forward-compatible: a newer peer may
     // add fields a older peer does not know, and vice versa, without a hard parse
     // failure. Duplicate keys are still accepted last-wins (glaze offers no reject
-    // option) — see docs/spec/wire.md "Parsing guarantees and hardening".
+    // option) — see docs/spec/core/wire.md "Parsing guarantees and hardening".
     // `null_terminated = false` is required, not cosmetic: `json` is a caller-supplied
     // `string_view` with no guarantee of a trailing '\0' (e.g. a raw socket read).
     // Left at glaze's default (true), `skip_ws` assumes it can scan past `end`

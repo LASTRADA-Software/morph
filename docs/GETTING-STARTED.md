@@ -493,7 +493,7 @@ Three things that bite:
   `registry.hpp`. Omit it and you get an unresolved external symbol at link
   time, not a compile error. (Note the `core/` — headers live under
   `include/morph/<subsystem>/`, and several documents still show a flat
-  `<morph/bridge.hpp>` that does not exist:
+  `<morph/core/bridge.hpp>` that does not exist:
   [#235](https://github.com/LASTRADA-Software/morph/issues/235).)
 - **If your models live in a static library, force-link it**
   (`--whole-archive` / `-force_load` / `WHOLE_ARCHIVE`). The initialiser object
@@ -503,17 +503,19 @@ Three things that bite:
   re-creates instances from the string type id through the registry and cannot
   use an ad-hoc factory closure the way `LocalBackend` can.
 
-> **Where to put the macros — currently contested.** `README.md` and
-> [`docs/spec/core/registry.md`](spec/core/registry.md) say to put each
-> invocation in exactly one `.cpp` and never in a header. `examples/`
-> does the opposite: all 33 ladder model headers invoke the macros in the
-> model header, as `examples/IMPLEMENTATION.md` rule 1 prescribes, so every
-> call site sees the `ActionTraits` specialisation. pastebin's own
-> `paste_model.hpp` is included by seven translation units, several of which
-> link into one binary, and it builds and passes. The contradiction is tracked
-> in [#231](https://github.com/LASTRADA-Software/morph/issues/231); until it is
-> resolved, follow the examples, since that is what the tree is actually built
-> and tested as.
+> **Where to put the macros.** Either place works. Put the invocation in the
+> model header when several translation units need the `ActionTraits`
+> specialisation — which is what `examples/IMPLEMENTATION.md` rule 1 prescribes
+> and what 40 headers under `examples/` do — or in a single `.cpp` when only one
+> TU needs it. A header included by many `.cpp` files registers the model once
+> per including TU, which the registry absorbs by reassigning an equivalent
+> factory over the same key.
+>
+> This used to be documented as contested, because `README.md` and
+> [`docs/spec/core/registry.md`](spec/core/registry.md) called header placement
+> an ODR violation. That legal claim was false and has been withdrawn — see
+> ["Header placement is legal"](spec/core/registry.md#header-placement-is-legal)
+> for the standard citation and the two-compiler reproduction.
 
 ## 8. The bridge: `Completion<T>` and the executor
 

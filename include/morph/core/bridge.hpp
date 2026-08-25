@@ -1538,7 +1538,7 @@ public:
                 // where ThreadPoolExecutor swallows it (the outer completion would
                 // then hang forever) and QtExecutor lets it reach the event loop
                 // and std::terminate. Mirrors the forwarding guard in remote.hpp's
-                // SimulatedRemoteBackend::execute. See docs/spec/bridge.md.
+                // SimulatedRemoteBackend::execute. See docs/spec/core/bridge.md.
                 //
                 // A backend completion can in principle resolve after the
                 // Bridge is gone (see liveness()'s doc comment): the backend
@@ -2275,7 +2275,7 @@ inline void ActionExecuteRegistry::registerAction(std::string_view modelId, std:
                 // Retag any Quantity fields to their declared precision so the stored
                 // value matches the schema's advertised `x-decimalPlaces`, rather than
                 // silently keeping whatever runtime `dp` the client sent. No-op for
-                // actions with no Quantity members. See docs/spec/forms.md.
+                // actions with no Quantity members. See docs/spec/forms/forms.md.
                 ::morph::forms::reconcileDeclaredPrecision(action);
                 // Pre-decode wire validation seam: reject a Quantity field whose
                 // engaged value falls outside its unit's declared bounds

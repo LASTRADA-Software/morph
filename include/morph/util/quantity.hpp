@@ -11,7 +11,7 @@
 /// of precision, and `std::nullopt` as a real "not entered" state), and **how
 /// it was computed** — its derivation, exposed through `equation()`.
 ///
-/// See `docs/spec/quantity_type.md` for the full design. The essentials:
+/// See `docs/spec/util/quantity_type.md` for the full design. The essentials:
 ///
 /// - **Units are types.** `Quantity<Unit::kg>` and `Quantity<Unit::m3>` cannot
 ///   be mixed; `operator*` / `operator/` deduce the result unit from the
@@ -787,7 +787,7 @@ struct Quantity {
         return out;
     }
 
-    /// @brief The worked derivation as print-ready lines (see `docs/spec/quantity_type.md`).
+    /// @brief The worked derivation as print-ready lines (see `docs/spec/util/quantity_type.md`).
     /// @return `[0]` formula, `[1]` substitution, `[2]` result, `[3..]` `where`
     ///         legend; a single formatted-value element for a degenerate root
     ///         (empty, named root, bare leaf, or tracing off).

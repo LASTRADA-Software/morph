@@ -78,9 +78,9 @@ flowchart LR
 
 `SimulatedRemoteBackend` exercises the *same* serialise/dispatch path as the
 socket transport without a socket, which is why a bug that only appears
-remotely is usually reproducible in a plain unit test. Details, including the
-per-operation behaviour differences between local and remote, are in
-[`core/backend.md`](core/backend.md).
+remotely is usually reproducible in a plain unit test. Per-backend API details are in [`core/backend.md`](core/backend.md); the
+behavioural differences between the two, collected in one table, are in
+[`core/locality.md`](core/locality.md).
 
 ## Start here — specs by the question they answer
 
@@ -89,7 +89,8 @@ per-operation behaviour differences between local and remote, are in
 [`core/backend.md`](core/backend.md) ·
 [`core/registry.md`](core/registry.md) ·
 [`core/completion.md`](core/completion.md) ·
-[`core/wire.md`](core/wire.md)
+[`core/wire.md`](core/wire.md) ·
+[`core/locality.md`](core/locality.md)
 
 **Threading and lifetime**
 [`core/executor.md`](core/executor.md) ·
@@ -144,8 +145,9 @@ constrains the field types you may use. Then
 for the concrete steps.
 
 **Debugging a dispatch that misbehaves.** Establish which side ran the action
-([`core/backend.md`](core/backend.md), whose local-vs-remote tables list the
-behaviour differences that produce most of these bugs) → then
+([`core/locality.md`](core/locality.md) tabulates the behaviour differences
+that produce most of these bugs; [`core/backend.md`](core/backend.md) has the
+per-backend detail) → then
 [`core/executor.md`](core/executor.md) and
 [`concurrency_and_lifetimes.md`](concurrency_and_lifetimes.md) if the symptom
 is a race, a use-after-free, or a callback on an unexpected thread →

@@ -96,7 +96,7 @@ validators, so models guard their own preconditions.
 `qml/DynamicForm.qml` renders any action schema at runtime (same rules as the
 HTML renderer). The Qt Quick renderer dispatches actions through `morph::bridge::Bridge` +
 `BridgeHandler<LabModel>` — the same client API `examples/bank`'s GUI uses — via a generic,
-JSON-in/JSON-out `executeJson` path (see `BridgeHandler::executeJson` in `morph/bridge.hpp`).
+JSON-in/JSON-out `executeJson` path (see `BridgeHandler::executeJson` in `morph/core/bridge.hpp`).
 Forms have no submit button: each form fires automatically the moment its assembled body
 passes client-side validation, and re-fires on every subsequent edit. Because each keystroke
 can trigger a fresh dispatch with no coalescing, rapid edits may produce out-of-order replies

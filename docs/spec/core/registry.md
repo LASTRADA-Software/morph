@@ -74,7 +74,7 @@ or action to any target other than a single executable** — the most common
 failure (a model that silently never registers) is a linking problem, not a code
 problem, and produces no diagnostic.
 
-### One macro invocation per translation unit
+### What the macros emit
 
 `BRIDGE_REGISTER_MODEL` and `BRIDGE_REGISTER_ACTION` each emit two things at
 namespace scope:
@@ -89,14 +89,39 @@ namespace scope:
 specialisation. It performs no static-init registration (there is no singleton
 of validators; `ActionValidator` is consulted purely by template lookup).
 
-Because of (1), a macro must be invoked in **exactly one translation unit**.
-Placing a `BRIDGE_REGISTER_*` invocation in a header that is included by more
-than one `.cpp` defines the same explicit specialisation in multiple translation
-units — an **ODR violation** (ill-formed, no diagnostic required). The anonymous
-namespace makes the *initialiser* objects internal to each TU, so it does not
-save you: it would register the model once per including TU while the duplicated
-specialisation remains ill-formed. Register each type in one `.cpp` (or a header
-that is guaranteed to be compiled into exactly one TU).
+### Header placement is legal
+
+Placing a `BRIDGE_REGISTER_*` invocation in a header included by many `.cpp`
+files is **well-formed**, and is the ladder's standard practice — 40 headers under
+`examples/` invoke a `BRIDGE_REGISTER_*` macro.
+
+This document previously called it an ODR violation. That legal claim was
+false. Item (1) is an explicit specialisation — a class definition — and
+[basic.def.odr] expressly *permits* a class to be defined in more than one
+translation unit when the definitions are token-identical, which a shared
+header `#include`d unchanged guarantees. It is the same rule that makes any
+ordinary header-defined class legal; no special exception is being threaded.
+The claim was checked empirically as well as read from the standard: a two-TU
+reproduction (a header invoking `BRIDGE_REGISTER_MODEL`/`BRIDGE_REGISTER_ACTION`,
+included by `tu_a.cpp` and `tu_b.cpp`, both resolving the model through
+`ModelRegistryFactory`) compiles, links and runs clean with **zero
+diagnostics** on Clang 22.1.8 and GCC 15.3.0, and on Clang 22.1.3 and
+MSVC 19.51 in morph#231.
+
+Item (2) is what actually differs, and the cost is small. The anonymous
+namespace makes each initialiser object internal to its TU, so the model is
+registered once per *including* TU rather than once per program. That is
+redundant work, not a defect: `registerModelOnce` forwards to
+`ModelRegistryFactory::registerModel`, which does `insert_or_assign`, so the
+repeat calls reassign an equivalent factory closure over the same key. The
+observable end state is identical.
+
+So choose placement on ordinary grounds — a header when several TUs need the
+registration (see
+[`BRIDGE_REGISTER_ACTION_FOR_CLIENT`](#bridge_register_action_for_client--a-header-seam-for-morph_client_only),
+which prescribes exactly that), a `.cpp` when only one does and you would
+rather not pay N static initialisers. What is *not* optional is that the
+registration reaches the link: see the next section.
 
 ### Static initialisation only fires in linked translation units
 
@@ -628,7 +653,7 @@ switches, and completions behave exactly as for hand-written call sites.
 
 Unlike `ActionDispatcher` and `ModelRegistryFactory` (which live in
 `morph::model::detail` in `registry.hpp`), the whole `ActionExecuteRegistry`
-class is declared in `morph/bridge.hpp` in namespace `morph::bridge` — it depends
+class is declared in `morph/core/bridge.hpp` in namespace `morph::bridge` — it depends
 on `BridgeHandler`, which `registry.hpp` cannot see. `Completion` here is
 `morph::async::Completion`.
 
@@ -728,7 +753,7 @@ Expands to:
   — always emitted, `MORPH_CLIENT_ONLY` or not.
 
 **Hard requirement:** Every translation unit invoking `BRIDGE_REGISTER_ACTION`
-must include `<morph/bridge.hpp>` (directly or transitively) because
+must include `<morph/core/bridge.hpp>` (directly or transitively) because
 `registerActionExecutorOnce` is only defined there. Without it, the link fails
 with an unresolved external symbol.
 
@@ -1082,8 +1107,8 @@ testing obligation, not a compile-time guarantee.
 ## Cross-references
 
 - **[bridge.md](bridge.md)** — defines `BridgeHandler<Model>`, `Bridge`, and the
-  `ActionExecuteRegistry` class itself (declared in `<morph/bridge.hpp>`, not
-  `registry.hpp`). Explains the **hard `#include <morph/bridge.hpp>` requirement**
+  `ActionExecuteRegistry` class itself (declared in `<morph/core/bridge.hpp>`, not
+  `registry.hpp`). Explains the **hard `#include <morph/core/bridge.hpp>` requirement**
   for any TU using `BRIDGE_REGISTER_ACTION` (`registerActionExecutorOnce` is only
   *defined* there), the parallel executor path this spec's
   `ActionExecuteRegistry` section summarises, and `Bridge::executeVia`'s
