@@ -469,12 +469,12 @@ Frame {
     // *true*, so a requiredWhen keyed on it started demanding a field for a
     // reason the renderer had just admitted it could not judge.
     //
-    // `undefined` propagates: `and` is false if any child is false and
-    // `undefined` if any surviving child is unevaluable, `or` is true if any
-    // child is true and `undefined` otherwise if any is unevaluable, `not`
-    // of `undefined` is `undefined`. Each caller then decides what
-    // "unevaluable" means for its own question -- see testRule (defer),
-    // fieldVisible (show) and fieldReadonly (leave editable).
+    // `undefined` propagates. `and` is `false` if any child is false, and
+    // `undefined` if none is false but some is unevaluable. `or` is `true` if
+    // any child is true, and `undefined` if none is true but some is
+    // unevaluable. `not` of `undefined` is `undefined`. Each caller then
+    // decides what "unevaluable" means for its own question -- see testRule
+    // (defer), fieldVisible (show) and fieldReadonly (leave editable).
     function testCondition(cond) {
         const kind = cond.kind
         const names = cond.fields || []
