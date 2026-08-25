@@ -14,6 +14,7 @@
 // remains for an unstamped (pre-fingerprint) entry, and the throw that now
 // replaces it for a stamped one.
 
+#include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstdint>
 #include <glaze/glaze.hpp>
@@ -25,6 +26,10 @@
 #include <morph/core/registry.hpp>
 #include <morph/journal/action_log.hpp>
 #include <morph/journal/journal.hpp>
+#include <morph/util/datetime.hpp>
+#include <morph/util/quantity.hpp>
+#include <morph/util/rational.hpp>
+#include <morph/util/tagged.hpp>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -96,6 +101,97 @@ struct PEShapeNested {
     std::map<std::string, std::int32_t> lookup;
 };
 
+// ── Custom-codec fixtures (issue #245) ───────────────────────────────────────
+//
+// A unit system of this file's own: `UnitTraits` is specialised per enum, and
+// two test translation units linking into one binary must not both specialise
+// it for the same enum type.
+
+namespace pe_units {
+
+enum class Unit : std::uint16_t { gram, litre };
+
+}  // namespace pe_units
+
+/// @brief Unit metadata for this file's fixture unit enum.
+template <>
+struct morph::units::UnitTraits<pe_units::Unit> {
+    /// @brief Static description of @p unit.
+    /// @param unit The unit to describe.
+    /// @return Its ascii id, display text, and default decimals.
+    static constexpr morph::units::UnitMeta meta(pe_units::Unit unit) noexcept {
+        switch (unit) {
+            case pe_units::Unit::gram:
+                return {"g", "g", 3};
+            case pe_units::Unit::litre:
+                return {"litre", "L", 3};
+            default:
+                return {"?", "?", 3};
+        }
+    }
+
+    /// @brief No within-dimension conversions are needed by these fixtures.
+    static constexpr std::array<morph::units::UnitRelation<pe_units::Unit>, 0> relations{};
+
+    /// @brief No alternative spellings are needed by these fixtures.
+    static constexpr std::array<morph::units::UnitAlternative<pe_units::Unit>, 0> alternatives{};
+};
+
+struct PESpecialFields {
+    morph::math::Rational amount;
+    morph::time::Timestamp at;
+    morph::time::DateTime when;
+    morph::util::Tagged<std::string, "acct"> id;
+};
+
+// The retype #245 filed: two custom-codec fields swapped for one another.
+struct PESpecialFieldsRetyped {
+    morph::time::Timestamp amount;
+    morph::math::Rational at;
+    morph::time::DateTime when;
+    morph::util::Tagged<std::string, "acct"> id;
+};
+
+struct PEGrams {
+    morph::units::Quantity<pe_units::Unit::gram> mass;
+};
+struct PELitres {
+    morph::units::Quantity<pe_units::Unit::litre> mass;
+};
+
+struct PETaggedAcct {
+    morph::util::Tagged<std::string, "acct"> id;
+};
+struct PETaggedUser {
+    morph::util::Tagged<std::string, "user"> id;
+};
+struct PETaggedAcctInt {
+    morph::util::Tagged<std::int64_t, "acct"> id;
+};
+
+struct PEPlainAmount {
+    std::string amount;
+};
+struct PERationalAmount {
+    morph::math::Rational amount;
+};
+
+// A custom-codec type that declares no PayloadShapeTag: the residual boundary.
+struct PEOpaqueBlob {
+    std::string bytes;
+};
+
+struct PEUndeclaredCodec {
+    PEOpaqueBlob blob;
+};
+
+/// @brief A custom codec for `PEOpaqueBlob`, so it is not reflected over.
+template <>
+struct glz::meta<PEOpaqueBlob> {
+    /// @brief The single wire field, named as a value rather than an object.
+    static constexpr auto value = &PEOpaqueBlob::bytes;
+};
+
 namespace {
 
 /// Builds the entry a *previous* build of this program would have written for
@@ -160,7 +256,7 @@ TEST_CASE("payloadFingerprint: renders nested shape and carries the scheme prefi
     // process and identical on every build of these sources.
     const std::string& fingerprint = payloadFingerprint<PEShapeNested>();
     REQUIRE(fingerprint.size() == 18);
-    REQUIRE(fingerprint.substr(0, 2) == "1:");
+    REQUIRE(fingerprint.substr(0, 2) == "2:");
     REQUIRE(fingerprint == payloadFingerprint<PEShapeNested>());
 }
 
@@ -352,4 +448,74 @@ TEST_CASE("journal::replay: a migration never rewrites the stored entry", "[jour
     // History is read, never upgraded on read.
     REQUIRE(entries.front().payload == recordedPayload);
     REQUIRE(entries.front().schema == recordedSchema);
+}
+
+// ── Custom-codec types are distinguished from one another (issue #245) ───────
+//
+// Every type carrying its own `glz::meta` used to render as the single opaque
+// tag `x`, so swapping `Rational` for `Timestamp` in a recorded action changed
+// nothing about the fingerprint and `replay()`'s gate could not fire. Each
+// such type now declares a stable name via `morph::model::PayloadShapeTag`
+// (`core/payload_shape_tag.hpp`), spelled in these sources rather than derived
+// from `glz::name_v`, which is compiler-dependent.
+
+TEST_CASE("payloadShapeString: a custom-codec type renders its declared name, not the bare opaque tag",
+          "[journal][payload_evolution][issue245]") {
+    REQUIRE(payloadShapeString<PESpecialFields>() ==
+            "(amount:x{rational},at:x{timestamp},id:x{tagged.acct:s},when:x{datetime})");
+}
+
+TEST_CASE("payloadFingerprint: a retype between two custom-codec types is caught",
+          "[journal][payload_evolution][issue245]") {
+    // `Rational` and `Timestamp` swapped. Both encode as a custom Glaze codec,
+    // so before this the two structs rendered identically -- `(amount:x,at:x,
+    // id:x,when:x)` -- and a journal recorded by one build replayed silently
+    // against the other.
+    REQUIRE(payloadShapeString<PESpecialFields>() != payloadShapeString<PESpecialFieldsRetyped>());
+    REQUIRE(payloadFingerprint<PESpecialFields>() != payloadFingerprint<PESpecialFieldsRetyped>());
+}
+
+TEST_CASE("payloadFingerprint: a Quantity unit swap is caught, and nothing else can catch it",
+          "[journal][payload_evolution][issue245]") {
+    // Neither the unit nor the declared precision travels on the wire (a
+    // Quantity *is* its nullable Rational payload), so these two produce
+    // byte-identical JSON. No decode can tell them apart; the fingerprint is
+    // the only place the swap is visible at all.
+    REQUIRE(payloadShapeString<PEGrams>() == "(mass:x{quantity.g.3})");
+    REQUIRE(payloadShapeString<PELitres>() == "(mass:x{quantity.litre.3})");
+    REQUIRE(payloadFingerprint<PEGrams>() != payloadFingerprint<PELitres>());
+}
+
+TEST_CASE("payloadFingerprint: Tagged carries both its tag text and the wrapped shape",
+          "[journal][payload_evolution][issue245]") {
+    // The tag never travels either, so `Tagged<std::string, "acct">` and
+    // `Tagged<std::string, "user">` are the same bytes on the wire. The
+    // wrapped type, on the other hand, genuinely changes them -- so it is
+    // rendered inside the tag rather than hidden behind it.
+    REQUIRE(payloadShapeString<PETaggedAcct>() == "(id:x{tagged.acct:s})");
+    REQUIRE(payloadShapeString<PETaggedUser>() == "(id:x{tagged.user:s})");
+    REQUIRE(payloadShapeString<PETaggedAcctInt>() == "(id:x{tagged.acct:i8})");
+    REQUIRE(payloadFingerprint<PETaggedAcct>() != payloadFingerprint<PETaggedUser>());
+    REQUIRE(payloadFingerprint<PETaggedAcct>() != payloadFingerprint<PETaggedAcctInt>());
+}
+
+TEST_CASE("payloadShapeString: a type that declares no tag still renders as the bare opaque tag",
+          "[journal][payload_evolution][issue245]") {
+    // The seam is opt-in, and therefore incomplete by construction: this is
+    // the residual boundary the spec states, pinned so that it is a recorded
+    // decision rather than an assumption.
+    REQUIRE(payloadShapeString<PEUndeclaredCodec>() == "(blob:x)");
+    // A custom-codec type swapped for a plain one was always caught, and
+    // still is: a declared name versus `s`, not `x` versus `x`.
+    REQUIRE(payloadFingerprint<PEPlainAmount>() != payloadFingerprint<PERationalAmount>());
+}
+
+TEST_CASE("payloadFingerprint: the scheme prefix marks the rendering change, so an old stamp reads as one",
+          "[journal][payload_evolution][issue245]") {
+    // Rendering a declared name where scheme 1 rendered `x` changes the
+    // fingerprint of every payload with such a member. That is what the scheme
+    // prefix is for: an entry stamped `1:` is legibly the product of a
+    // different algorithm, not of a different payload.
+    REQUIRE(morph::model::kPayloadFingerprintScheme == 2);
+    REQUIRE(payloadFingerprint<PESpecialFields>().substr(0, 2) == "2:");
 }

@@ -99,6 +99,7 @@
 #include <glaze/glaze.hpp>
 #include <limits>
 #include <morph/core/logger.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <numeric>
 #include <stdexcept>
 #include <string>
@@ -1361,6 +1362,22 @@ struct to_json_schema<morph::math::Rational> {
 };
 
 }  // namespace glz::detail
+
+/// @brief Stable shape tag for `Rational`, so a payload fingerprint can tell a
+///        `Rational` field from a `Timestamp` or a `Quantity` one.
+///
+/// Its `glz::meta` above routes serialisation through `setWire`/`getWire`, so
+/// there are no reflected members for `payloadShape` to decompose and the
+/// field would otherwise render as the bare opaque tag — making a retype
+/// between two such types invisible to `journal::replay()`'s mismatch gate.
+/// The name is spelled here rather than derived from `glz::name_v`, which is
+/// compiler-dependent. See `morph/core/payload_shape_tag.hpp`.
+template <>
+struct morph::model::PayloadShapeTag<morph::math::Rational> {
+    /// @brief This type's stable shape name.
+    /// @return `"rational"`.
+    static constexpr std::string_view name() noexcept { return "rational"; }
+};
 
 // ---------------------------------------------------------------------------
 // std::format support.

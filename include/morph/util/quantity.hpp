@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <format>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -1225,3 +1226,28 @@ struct to_json_schema<morph::units::Quantity<U, Dec>> {
 };
 
 }  // namespace glz::detail
+
+/// @brief Stable shape tag for `Quantity<U, Dec>`, carrying the unit's ascii id
+///        and the declared decimals.
+///
+/// This is the one place a `Quantity` retype can be caught at all. Neither the
+/// unit nor the declared precision travels on the wire (see the `glz::meta`
+/// above — a `Quantity` *is* its nullable `Rational` payload), so swapping
+/// `Quantity<Unit::Gram>` for `Quantity<Unit::Litre>` in a recorded action
+/// produces byte-identical JSON: no decode can notice, and before this tag no
+/// fingerprint could either. `UnitMeta::id` is an author-declared ascii
+/// identifier that is already part of the protocol vocabulary, so it is stable
+/// across compilers in a way `glz::name_v` is not. See
+/// `morph/core/payload_shape_tag.hpp`.
+/// @tparam U   Unit enumerator.
+/// @tparam Dec Declared decimals.
+template <auto U, std::uint32_t Dec>
+struct morph::model::PayloadShapeTag<morph::units::Quantity<U, Dec>> {
+    /// @brief This type's stable shape name, e.g. `"quantity.gram.3"`.
+    /// @return The name; the referenced storage lives for the whole process.
+    static std::string_view name() {
+        static const std::string kName =
+            "quantity." + std::string{morph::units::UnitTraits<decltype(U)>::meta(U).id} + '.' + std::to_string(Dec);
+        return kName;
+    }
+};

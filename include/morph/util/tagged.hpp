@@ -39,6 +39,8 @@
 #include <compare>
 #include <cstddef>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
+#include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -148,3 +150,32 @@ struct to_json_schema<morph::util::Tagged<T, Tag>> {
 };
 
 }  // namespace glz::detail
+
+/// @brief Stable shape tag for `Tagged<T, Tag>`, carrying both the tag text
+///        and the wrapped type's own shape.
+///
+/// `Tagged` is a transparent wrapper — its JSON simply *is* `T`'s — so hiding
+/// `T` behind the wrapper's name would lose real information: retyping
+/// `Tagged<std::string, "acct">` to `Tagged<std::int64_t, "acct">` genuinely
+/// changes the recorded JSON. `Inner` keeps that visible, and the tag text
+/// separates two wrappers that are structurally identical but semantically
+/// different (`"acct"` versus `"user"`), which is the swap nothing else in the
+/// system can see: the tag never travels on the wire.
+///
+/// `Tag.view()` is a `FixedString` NTTP spelled at the use site in these
+/// sources, so it is stable across compilers in a way `glz::name_v` is not.
+/// See `morph/core/payload_shape_tag.hpp`.
+/// @tparam T   The wrapped scalar type.
+/// @tparam Tag The compile-time tag.
+template <typename T, morph::detail::FixedString Tag>
+struct morph::model::PayloadShapeTag<morph::util::Tagged<T, Tag>> {
+    /// @brief The wrapped type, rendered inside this tag.
+    using Inner = T;
+
+    /// @brief This type's stable shape name, e.g. `"tagged.acct"`.
+    /// @return The name; the referenced storage lives for the whole process.
+    static std::string_view name() {
+        static const std::string kName = "tagged." + std::string{Tag.view()};
+        return kName;
+    }
+};

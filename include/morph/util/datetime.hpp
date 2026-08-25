@@ -36,6 +36,7 @@
 #include <format>
 #include <functional>
 #include <glaze/glaze.hpp>
+#include <morph/core/payload_shape_tag.hpp>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -477,6 +478,34 @@ struct to_json_schema<morph::time::DateTime> {
 };
 
 }  // namespace glz::detail
+
+/// @brief Stable shape tag for `DateTime`.
+///
+/// Its codec is the hand-written `glz::from`/`glz::to` pair above (an ISO-8601
+/// string), so `payloadShape` has no reflected members to decompose and would
+/// otherwise render the field as the bare opaque tag — indistinguishable from
+/// a `Rational` or a `Timestamp` field, which is the retype
+/// `journal::replay()`'s mismatch gate could not see. See
+/// `morph/core/payload_shape_tag.hpp`.
+template <>
+struct morph::model::PayloadShapeTag<morph::time::DateTime> {
+    /// @brief This type's stable shape name.
+    /// @return `"datetime"`.
+    static constexpr std::string_view name() noexcept { return "datetime"; }
+};
+
+/// @brief Stable shape tag for `Timestamp`.
+///
+/// Distinct from `DateTime`'s: the two are the pair most easily swapped for
+/// one another, and on the wire both are a single scalar, so nothing but this
+/// name separates them in a fingerprint. See
+/// `morph/core/payload_shape_tag.hpp`.
+template <>
+struct morph::model::PayloadShapeTag<morph::time::Timestamp> {
+    /// @brief This type's stable shape name.
+    /// @return `"timestamp"`.
+    static constexpr std::string_view name() noexcept { return "timestamp"; }
+};
 
 // ---------------------------------------------------------------------------
 // std::format support.
